@@ -1,0 +1,2370 @@
+{
+  "ads": {
+    "description": "الإعلانات الخارجية (بانرات) في التطبيق",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "description",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "image_url",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "link_url",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "placement",
+        "type": "public.ad_placement",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "display_order",
+        "type": "integer",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "is_active",
+        "type": "boolean",
+        "required": true,
+        "default": true,
+        "description": ""
+      },
+      {
+        "name": "impressions_count",
+        "type": "integer",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "clicks_count",
+        "type": "integer",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "starts_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "ends_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "created_by",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "ambassador_rewards": {
+    "description": "مكافآت السفراء على الاستثمارات الأولى للمحالين",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "ambassador_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `ambassadors.id`.<fk table='ambassadors' column='id'/>"
+      },
+      {
+        "name": "referral_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `referrals.id`.<fk table='referrals' column='id'/>"
+      },
+      {
+        "name": "deal_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `deals.id`.<fk table='deals' column='id'/>"
+      },
+      {
+        "name": "project_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `projects.id`.<fk table='projects' column='id'/>"
+      },
+      {
+        "name": "investment_amount",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "reward_percentage",
+        "type": "numeric",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "reward_shares",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "status",
+        "type": "public.reward_status",
+        "required": true,
+        "default": "pending",
+        "description": ""
+      },
+      {
+        "name": "notes",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "granted_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "ambassadors": {
+    "description": "السفراء المعتمدون للمنصة",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "user_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "application_status",
+        "type": "public.ambassador_application_status",
+        "required": true,
+        "default": "pending",
+        "description": ""
+      },
+      {
+        "name": "is_active",
+        "type": "boolean",
+        "required": true,
+        "default": false,
+        "description": ""
+      },
+      {
+        "name": "reward_percentage",
+        "type": "numeric",
+        "required": true,
+        "default": 1,
+        "description": ""
+      },
+      {
+        "name": "application_reason",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "application_experience",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "social_media_links",
+        "type": "jsonb",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "approved_by",
+        "type": "uuid",
+        "required": false,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "approved_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "revoked_by",
+        "type": "uuid",
+        "required": false,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "revoked_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "revoke_reason",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "admin_notes",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "total_referrals",
+        "type": "integer",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "successful_referrals",
+        "type": "integer",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "total_rewards_earned",
+        "type": "bigint",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "applied_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "audit_log": {
+    "description": "سجل جميع الإجراءات المهمة في النظام",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "user_id",
+        "type": "uuid",
+        "required": false,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "action",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "entity_type",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "entity_id",
+        "type": "uuid",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "metadata",
+        "type": "jsonb",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "ip_address",
+        "type": "inet",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "user_agent",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "deal_messages": {
+    "description": "رسائل غرفة الصفقة (دردشة البائع والمشتري)",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "deal_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `deals.id`.<fk table='deals' column='id'/>"
+      },
+      {
+        "name": "sender_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "message_type",
+        "type": "public.message_type",
+        "required": true,
+        "default": "text",
+        "description": ""
+      },
+      {
+        "name": "content",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "attachment_url",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "is_read",
+        "type": "boolean",
+        "required": true,
+        "default": false,
+        "description": ""
+      },
+      {
+        "name": "read_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "deals": {
+    "description": "الصفقات بين المشترين والبائعين",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "buyer_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "seller_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "project_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `projects.id`.<fk table='projects' column='id'/>"
+      },
+      {
+        "name": "listing_id",
+        "type": "uuid",
+        "required": false,
+        "description": "Note:\nThis is a Foreign Key to `listings.id`.<fk table='listings' column='id'/>"
+      },
+      {
+        "name": "deal_type",
+        "type": "public.deal_type",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "shares",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "price_per_share",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "total_amount",
+        "type": "bigint",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "fee_percentage",
+        "type": "numeric",
+        "required": false,
+        "default": 1,
+        "description": ""
+      },
+      {
+        "name": "fee_amount",
+        "type": "bigint",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "status",
+        "type": "public.deal_status",
+        "required": true,
+        "default": "pending_seller_approval",
+        "description": ""
+      },
+      {
+        "name": "buyer_notes",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "seller_notes",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "cancellation_reason",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "accepted_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "payment_submitted_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "completed_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "expires_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "(now() + '48:00:00'::interval)",
+        "description": ""
+      }
+    ]
+  },
+  "disputes": {
+    "description": "النزاعات بين البائع والمشتري",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "deal_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `deals.id`.<fk table='deals' column='id'/>"
+      },
+      {
+        "name": "opened_by",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "reason",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "evidence_urls",
+        "type": "text[]",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "status",
+        "type": "public.dispute_status",
+        "required": true,
+        "default": "open",
+        "description": ""
+      },
+      {
+        "name": "admin_notes",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "resolution_notes",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "resolved_by",
+        "type": "uuid",
+        "required": false,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "opened_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "resolved_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "fee_unit_balances": {
+    "description": "أرصدة وحدات الرسوم لكل مستخدم (1 وحدة = 1 دينار)",
+    "columns": [
+      {
+        "name": "user_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Primary Key.<pk/>\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "balance",
+        "type": "bigint",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "reserved_balance",
+        "type": "bigint",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "total_deposited",
+        "type": "bigint",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "total_withdrawn",
+        "type": "bigint",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "total_bonus_received",
+        "type": "bigint",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "last_transaction_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "fee_unit_requests": {
+    "description": "طلبات شحن وحدات الرسوم من المستخدمين",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "user_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "amount_requested",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "payment_method",
+        "type": "public.payment_method",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "transaction_reference",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "proof_image_url",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "notes",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "status",
+        "type": "public.fee_unit_request_status",
+        "required": true,
+        "default": "pending",
+        "description": ""
+      },
+      {
+        "name": "reviewed_by",
+        "type": "uuid",
+        "required": false,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "reviewed_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "admin_notes",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "rejection_reason",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "amount_approved",
+        "type": "bigint",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "submitted_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "fee_unit_transactions": {
+    "description": "سجل كامل لكل حركات وحدات الرسوم",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "user_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "transaction_type",
+        "type": "public.transaction_type",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "amount",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "balance_after",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "source_type",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "source_id",
+        "type": "uuid",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "description",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "executed_by",
+        "type": "uuid",
+        "required": false,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "holdings": {
+    "description": "ملكيات المستخدمين في كل مشروع",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "user_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "project_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `projects.id`.<fk table='projects' column='id'/>"
+      },
+      {
+        "name": "shares",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "frozen_shares",
+        "type": "bigint",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "average_buy_price",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "total_invested",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "acquired_from_offering",
+        "type": "bigint",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "acquired_from_ambassador",
+        "type": "bigint",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "acquired_from_secondary",
+        "type": "bigint",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "first_acquired_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "last_acquired_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "kyc_submissions": {
+    "description": "طلبات التحقق من الهوية",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "user_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "full_name",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "date_of_birth",
+        "type": "date",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "address",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "city",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "phone",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "document_type",
+        "type": "public.id_document_type",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "document_number",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "document_front_url",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "document_back_url",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "selfie_url",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "status",
+        "type": "public.kyc_status",
+        "required": true,
+        "default": "pending",
+        "description": ""
+      },
+      {
+        "name": "review_notes",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "reviewed_by",
+        "type": "uuid",
+        "required": false,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "reviewed_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "submitted_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "listings": {
+    "description": "إعلانات بيع الحصص في السوق الثانوي",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "seller_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "project_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `projects.id`.<fk table='projects' column='id'/>"
+      },
+      {
+        "name": "shares_offered",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "shares_sold",
+        "type": "bigint",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "price_per_share",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "notes",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "is_quick_sell",
+        "type": "boolean",
+        "required": true,
+        "default": false,
+        "description": ""
+      },
+      {
+        "name": "status",
+        "type": "public.listing_status",
+        "required": true,
+        "default": "active",
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "expires_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "sold_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "buyer_id",
+        "type": "uuid",
+        "required": false,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      }
+    ]
+  },
+  "news": {
+    "description": "الأخبار والتحديثات من إدارة المنصة",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "slug",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "summary",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "content",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "cover_image_url",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "gallery_images",
+        "type": "text[]",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "news_type",
+        "type": "public.news_type",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "tags",
+        "type": "text[]",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "related_project_id",
+        "type": "uuid",
+        "required": false,
+        "description": "Note:\nThis is a Foreign Key to `projects.id`.<fk table='projects' column='id'/>"
+      },
+      {
+        "name": "is_published",
+        "type": "boolean",
+        "required": true,
+        "default": false,
+        "description": ""
+      },
+      {
+        "name": "is_pinned",
+        "type": "boolean",
+        "required": true,
+        "default": false,
+        "description": ""
+      },
+      {
+        "name": "published_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "views_count",
+        "type": "integer",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "reactions_count",
+        "type": "integer",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "author_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "news_reactions": {
+    "description": "تفاعلات المستخدمين مع الأخبار",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "news_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `news.id`.<fk table='news' column='id'/>"
+      },
+      {
+        "name": "user_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "reaction_type",
+        "type": "public.reaction_type",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "notifications": {
+    "description": "إشعارات المستخدمين داخل التطبيق",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "user_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "notification_type",
+        "type": "public.notification_type",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "message",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "priority",
+        "type": "public.notification_priority",
+        "required": true,
+        "default": "normal",
+        "description": ""
+      },
+      {
+        "name": "link_url",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "metadata",
+        "type": "jsonb",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "icon_name",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "is_read",
+        "type": "boolean",
+        "required": true,
+        "default": false,
+        "description": ""
+      },
+      {
+        "name": "read_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "sent_via_email",
+        "type": "boolean",
+        "required": true,
+        "default": false,
+        "description": ""
+      },
+      {
+        "name": "sent_via_push",
+        "type": "boolean",
+        "required": true,
+        "default": false,
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "expires_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      }
+    ]
+  },
+  "payment_proofs": {
+    "description": "إثباتات الدفع المرفوعة من المشتري",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "deal_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `deals.id`.<fk table='deals' column='id'/>"
+      },
+      {
+        "name": "payment_method",
+        "type": "public.payment_method",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "amount_paid",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "transaction_reference",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "proof_image_url",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "notes",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "submitted_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "profiles": {
+    "description": "ملفات المستخدمين الشخصية - امتداد لـ auth.users",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "full_name",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "username",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "phone",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "avatar_url",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "role",
+        "type": "public.user_role",
+        "required": true,
+        "default": "user",
+        "description": ""
+      },
+      {
+        "name": "kyc_status",
+        "type": "public.kyc_status",
+        "required": true,
+        "default": "not_submitted",
+        "description": ""
+      },
+      {
+        "name": "is_active",
+        "type": "boolean",
+        "required": true,
+        "default": true,
+        "description": ""
+      },
+      {
+        "name": "is_banned",
+        "type": "boolean",
+        "required": true,
+        "default": false,
+        "description": ""
+      },
+      {
+        "name": "ban_reason",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "rating_average",
+        "type": "numeric",
+        "required": false,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "rating_count",
+        "type": "integer",
+        "required": false,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "trades_completed",
+        "type": "integer",
+        "required": false,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "total_invested",
+        "type": "bigint",
+        "required": false,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "is_ambassador",
+        "type": "boolean",
+        "required": false,
+        "default": false,
+        "description": ""
+      },
+      {
+        "name": "referred_by",
+        "type": "uuid",
+        "required": false,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "last_seen_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      }
+    ]
+  },
+  "project_updates": {
+    "description": "تحديثات دورية عن المشاريع",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "project_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `projects.id`.<fk table='projects' column='id'/>"
+      },
+      {
+        "name": "title",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "content",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "images",
+        "type": "text[]",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "progress_percentage",
+        "type": "integer",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "created_by",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "project_wallets": {
+    "description": "المحافظ الثلاث لكل مشروع: طرح، سفير، احتياطي",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "project_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `projects.id`.<fk table='projects' column='id'/>"
+      },
+      {
+        "name": "wallet_type",
+        "type": "public.wallet_type",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "total_shares",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "available_shares",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "reserved_shares",
+        "type": "bigint",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "sold_shares",
+        "type": "bigint",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "projects": {
+    "description": "المشاريع الاستثمارية",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "name",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "slug",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "description",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "short_description",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "project_type",
+        "type": "public.project_type",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "cover_image_url",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "gallery_images",
+        "type": "text[]",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "location_address",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "location_city",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "location_coords",
+        "type": "point",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "total_shares",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "share_price",
+        "type": "bigint",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "total_value",
+        "type": "bigint",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "offering_percentage",
+        "type": "numeric",
+        "required": true,
+        "default": 90,
+        "description": "نسبة محفظة الطرح (للبيع الأولي)"
+      },
+      {
+        "name": "ambassador_percentage",
+        "type": "numeric",
+        "required": true,
+        "default": 2,
+        "description": "نسبة محفظة السفير (مكافآت)"
+      },
+      {
+        "name": "reserve_percentage",
+        "type": "numeric",
+        "required": true,
+        "default": 8,
+        "description": "نسبة محفظة الاحتياطي"
+      },
+      {
+        "name": "current_market_price",
+        "type": "bigint",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "status",
+        "type": "public.project_status",
+        "required": true,
+        "default": "draft",
+        "description": ""
+      },
+      {
+        "name": "offering_start_date",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "offering_end_date",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "expected_completion_date",
+        "type": "date",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "created_by",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "published_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      }
+    ]
+  },
+  "quick_sell_subscriptions": {
+    "description": "اشتراكات البيع السريع (25,000 د.ع/شهر)",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "user_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "amount_paid",
+        "type": "bigint",
+        "required": true,
+        "default": 25000,
+        "description": ""
+      },
+      {
+        "name": "status",
+        "type": "public.subscription_status",
+        "required": true,
+        "default": "active",
+        "description": ""
+      },
+      {
+        "name": "started_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "expires_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "(now() + '30 days'::interval)",
+        "description": ""
+      },
+      {
+        "name": "cancelled_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "auto_renew",
+        "type": "boolean",
+        "required": true,
+        "default": false,
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "ratings": {
+    "description": "تقييمات الصفقات بين الأطراف",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "deal_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `deals.id`.<fk table='deals' column='id'/>"
+      },
+      {
+        "name": "rater_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "rated_user_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "stars",
+        "type": "integer",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "comment",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "quick_tags",
+        "type": "text[]",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "referral_links": {
+    "description": "روابط الإحالة الخاصة بالسفراء",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "ambassador_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `ambassadors.id`.<fk table='ambassadors' column='id'/>"
+      },
+      {
+        "name": "code",
+        "type": "text",
+        "required": true,
+        "description": ""
+      },
+      {
+        "name": "description",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "campaign_name",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "status",
+        "type": "public.referral_link_status",
+        "required": true,
+        "default": "active",
+        "description": ""
+      },
+      {
+        "name": "clicks_count",
+        "type": "integer",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "signups_count",
+        "type": "integer",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "conversions_count",
+        "type": "integer",
+        "required": true,
+        "default": 0,
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "expires_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "(now() + '30 days'::interval)",
+        "description": ""
+      },
+      {
+        "name": "renewed_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "revoked_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      }
+    ]
+  },
+  "referrals": {
+    "description": "عمليات الإحالة بين السفراء والمستخدمين الجدد",
+    "columns": [
+      {
+        "name": "id",
+        "type": "uuid",
+        "required": true,
+        "default": "extensions.uuid_generate_v4()",
+        "description": "Note:\nThis is a Primary Key.<pk/>"
+      },
+      {
+        "name": "ambassador_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `ambassadors.id`.<fk table='ambassadors' column='id'/>"
+      },
+      {
+        "name": "referral_link_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `referral_links.id`.<fk table='referral_links' column='id'/>"
+      },
+      {
+        "name": "referred_user_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "has_invested",
+        "type": "boolean",
+        "required": true,
+        "default": false,
+        "description": ""
+      },
+      {
+        "name": "first_investment_deal_id",
+        "type": "uuid",
+        "required": false,
+        "description": "Note:\nThis is a Foreign Key to `deals.id`.<fk table='deals' column='id'/>"
+      },
+      {
+        "name": "first_investment_at",
+        "type": "timestamp with time zone",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "first_investment_amount",
+        "type": "bigint",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "signup_ip",
+        "type": "inet",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "signup_user_agent",
+        "type": "text",
+        "required": false,
+        "description": ""
+      },
+      {
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  },
+  "user_preferences": {
+    "description": "إعدادات المستخدم",
+    "columns": [
+      {
+        "name": "user_id",
+        "type": "uuid",
+        "required": true,
+        "description": "Note:\nThis is a Primary Key.<pk/>\nThis is a Foreign Key to `profiles.id`.<fk table='profiles' column='id'/>"
+      },
+      {
+        "name": "language",
+        "type": "text",
+        "required": true,
+        "default": "ar",
+        "description": ""
+      },
+      {
+        "name": "email_notifications",
+        "type": "boolean",
+        "required": false,
+        "default": true,
+        "description": ""
+      },
+      {
+        "name": "push_notifications",
+        "type": "boolean",
+        "required": false,
+        "default": true,
+        "description": ""
+      },
+      {
+        "name": "sms_notifications",
+        "type": "boolean",
+        "required": false,
+        "default": false,
+        "description": ""
+      },
+      {
+        "name": "notify_new_deal",
+        "type": "boolean",
+        "required": false,
+        "default": true,
+        "description": ""
+      },
+      {
+        "name": "notify_deal_update",
+        "type": "boolean",
+        "required": false,
+        "default": true,
+        "description": ""
+      },
+      {
+        "name": "notify_market_alerts",
+        "type": "boolean",
+        "required": false,
+        "default": true,
+        "description": ""
+      },
+      {
+        "name": "notify_ambassador_rewards",
+        "type": "boolean",
+        "required": false,
+        "default": true,
+        "description": ""
+      },
+      {
+        "name": "notify_news",
+        "type": "boolean",
+        "required": false,
+        "default": true,
+        "description": ""
+      },
+      {
+        "name": "show_stats_publicly",
+        "type": "boolean",
+        "required": false,
+        "default": true,
+        "description": ""
+      },
+      {
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "required": true,
+        "default": "now()",
+        "description": ""
+      }
+    ]
+  }
+}

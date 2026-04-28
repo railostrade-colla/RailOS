@@ -1,0 +1,214 @@
+"use client"
+
+import { useState, useMemo } from "react"
+import { useRouter } from "next/navigation"
+import { Calendar, ChevronLeft, Clock } from "lucide-react"
+import { AppLayout } from "@/components/layout/AppLayout"
+import { GridBackground } from "@/components/layout/GridBackground"
+import { PageHeader } from "@/components/layout/PageHeader"
+import { Card, StatCard, Tabs, Badge, EmptyState } from "@/components/ui"
+import {
+  COUNCIL_PROPOSALS,
+  getCouncilStats,
+  type ProposalStatus,
+  type ProposalType,
+} from "@/lib/mock-data"
+import { cn } from "@/lib/utils/cn"
+
+type TabId = "voting" | "approved" | "rejected" | "all"
+
+const TYPE_META: Record<ProposalType, { label: string; icon: string }> = {
+  new_project:    { label: "مشروع",    icon: "🏗️" },
+  shares_release: { label: "حصص",     icon: "📈" },
+  investigation:  { label: "تحقيق",    icon: "🔍" },
+  policy:         { label: "سياسة",    icon: "📜" },
+}
+
+const STATUS_META: Record<ProposalStatus, { label: string; color: "yellow" | "blue" | "green" | "red" | "neutral" }> = {
+  pending:   { label: "قيد الانتظار", color: "yellow" },
+  voting:    { label: "تصويت نشط",   color: "blue" },
+  approved:  { label: "موافق عليه",   color: "green" },
+  rejected:  { label: "مرفوض",       color: "red" },
+  executed:  { label: "تم التنفيذ",  color: "neutral" },
+}
+
+export default function ProposalsPage() {
+  const router = useRouter()
+  const [tab, setTab] = useState<TabId>("voting")
+  const [typeFilter, setTypeFilter] = useState<ProposalType | "all">("all")
+
+  const stats = useMemo(() => getCouncilStats(), [])
+
+  const filtered = useMemo(() => {
+    let rows = [...COUNCIL_PROPOSALS]
+    if (tab === "voting") rows = rows.filter((p) => p.status === "voting" || p.status === "pending")
+    else if (tab === "approved") rows = rows.filter((p) => p.status === "approved")
+    else if (tab === "rejected") rows = rows.filter((p) => p.status === "rejected")
+    if (typeFilter !== "all") rows = rows.filter((p) => p.type === typeFilter)
+    return rows.sort((a, b) => (a.submitted_at < b.submitted_at ? 1 : -1))
+  }, [tab, typeFilter])
+
+  return (
+    <AppLayout>
+      <div className="relative">
+        <GridBackground showCircles={false} />
+
+        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-4xl mx-auto pb-20">
+
+          <PageHeader
+            title="📋 القرارات"
+            subtitle="تابع القرارات والتصويت"
+            backHref="/council"
+          />
+
+          {/* ═══ Stats ═══ */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6">
+            <StatCard label="الإجمالي" value={stats.proposals} />
+            <StatCard label="نشط" value={stats.active} color="blue" />
+            <StatCard label="موافق" value={stats.approved} color="green" />
+            <StatCard label="مرفوض" value={stats.rejected} color="red" />
+          </div>
+
+          {/* ═══ Tabs ═══ */}
+          <div className="mb-4">
+            <Tabs
+              tabs={[
+                { id: "voting",   icon: "⏳", label: "نشط",      count: stats.active },
+                { id: "approved", icon: "✅", label: "موافق",     count: stats.approved },
+                { id: "rejected", icon: "❌", label: "مرفوض",     count: stats.rejected },
+                { id: "all",      icon: "📜", label: "الكل",      count: stats.proposals },
+              ]}
+              activeTab={tab}
+              onChange={(id) => setTab(id as TabId)}
+              size="sm"
+            />
+          </div>
+
+          {/* ═══ Type filter chips ═══ */}
+          <div className="flex gap-2 overflow-x-auto pb-2 mb-5 -mx-1 px-1">
+            {([
+              { id: "all", label: "كل الأنواع" },
+              { id: "new_project", label: "🏗️ مشاريع" },
+              { id: "shares_release", label: "📈 حصص" },
+              { id: "investigation", label: "🔍 تحقيقات" },
+              { id: "policy", label: "📜 سياسات" },
+            ] as Array<{ id: ProposalType | "all"; label: string }>).map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setTypeFilter(f.id)}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-[11px] flex-shrink-0 transition-colors border whitespace-nowrap",
+                  typeFilter === f.id
+                    ? "bg-white text-black border-transparent font-bold"
+                    : "bg-white/[0.04] border-white/[0.08] text-neutral-400 hover:text-white",
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* ═══ Proposals list ═══ */}
+          {filtered.length === 0 ? (
+            <EmptyState
+              icon="📭"
+              title="لا توجد قرارات في هذه الفئة"
+              description="جرّب تبويباً آخر أو غيّر النوع"
+              size="md"
+            />
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((p) => {
+                const status = STATUS_META[p.status]
+                const type = TYPE_META[p.type]
+                const total = p.votes_approve + p.votes_object + p.votes_abstain
+                const eligible = p.total_eligible_voters
+                return (
+                  <Card key={p.id} onClick={() => router.push("/council/proposals/" + p.id)}>
+                    {/* Badges */}
+                    <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                      <Badge color="neutral" variant="soft" size="xs" icon={type.icon}>{type.label}</Badge>
+                      <Badge color={status.color} variant="soft" size="xs">{status.label}</Badge>
+                      {p.council_recommendation && (
+                        <Badge
+                          color={p.council_recommendation === "approve" ? "green" : p.council_recommendation === "object" ? "red" : "neutral"}
+                          variant="soft"
+                          size="xs"
+                        >
+                          توصية: {p.council_recommendation === "approve" ? "موافقة" : p.council_recommendation === "object" ? "اعتراض" : "محايد"}
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Title */}
+                    <h3 className="text-sm font-bold text-white mb-2 leading-snug">{p.title}</h3>
+
+                    {/* Description */}
+                    <p className="text-[11px] text-neutral-400 leading-relaxed line-clamp-3 mb-3">{p.description}</p>
+
+                    {/* Submitter */}
+                    <div className="flex items-center gap-2 text-[10px] text-neutral-500 mb-3">
+                      <span>قُدّم من: <span className="text-white font-bold">{p.submitted_by_name ?? "—"}</span></span>
+                      <span>·</span>
+                      <span dir="ltr">{p.submitted_at}</span>
+                    </div>
+
+                    {/* Voting bars */}
+                    {(p.status === "voting" || p.status === "approved" || p.status === "rejected") && (
+                      <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3 mb-3">
+                        <div className="space-y-1.5">
+                          {[
+                            { label: "موافقة", count: p.votes_approve, color: "bg-green-400", text: "text-green-400" },
+                            { label: "اعتراض",  count: p.votes_object,  color: "bg-red-400",   text: "text-red-400" },
+                            { label: "امتناع",  count: p.votes_abstain, color: "bg-neutral-500", text: "text-neutral-400" },
+                          ].map((row) => (
+                            <div key={row.label} className="flex items-center gap-2">
+                              <span className="text-[10px] text-neutral-500 w-12 flex-shrink-0">{row.label}</span>
+                              <div className="flex-1 h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
+                                <div
+                                  className={cn("h-full transition-all", row.color)}
+                                  style={{ width: eligible > 0 ? (row.count / eligible) * 100 + "%" : "0%" }}
+                                />
+                              </div>
+                              <span className={cn("text-[11px] font-bold font-mono w-8 text-left", row.text)}>{row.count}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="text-[9px] text-neutral-600 mt-2 flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5" />
+                          {total} من {eligible} عضو صوّتوا
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Final decision */}
+                    {p.final_decision && (
+                      <div className={cn(
+                        "rounded-lg px-3 py-2 mb-3 text-[11px] flex items-center gap-2",
+                        p.final_decision === "approved"
+                          ? "bg-green-400/[0.06] border border-green-400/25 text-green-300"
+                          : "bg-red-400/[0.06] border border-red-400/25 text-red-300",
+                      )}>
+                        <Calendar className="w-3 h-3" />
+                        القرار النهائي من <span className="font-bold">{p.final_decision_by}</span> · {p.final_decision_at}
+                      </div>
+                    )}
+
+                    {/* CTA */}
+                    <div className="flex items-center justify-end">
+                      <span className="text-[11px] text-blue-400 font-bold flex items-center gap-1">
+                        التفاصيل والتصويت
+                        <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
+                      </span>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+
+        </div>
+      </div>
+    </AppLayout>
+  )
+}

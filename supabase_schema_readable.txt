@@ -1,0 +1,426 @@
+═══ ads (15 cols)
+   DESC: الإعلانات الخارجية (بانرات) في التطبيق
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * title :: text
+     description :: text
+   * image_url :: text
+   * link_url :: text
+   * placement :: public.ad_placement
+   * display_order :: integer = 0
+   * is_active :: boolean = true
+   * impressions_count :: integer = 0
+   * clicks_count :: integer = 0
+   * starts_at :: timestamp with time zone = "now()"
+     ends_at :: timestamp with time zone
+   * created_by :: uuid
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+
+═══ ambassador_rewards (13 cols)
+   DESC: مكافآت السفراء على الاستثمارات الأولى للمحالين
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * ambassador_id :: uuid
+   * referral_id :: uuid
+   * deal_id :: uuid
+   * project_id :: uuid
+   * investment_amount :: bigint
+   * reward_percentage :: numeric
+   * reward_shares :: bigint
+   * status :: public.reward_status = "pending"
+     notes :: text
+     granted_at :: timestamp with time zone
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+
+═══ ambassadors (20 cols)
+   DESC: السفراء المعتمدون للمنصة
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * user_id :: uuid
+   * application_status :: public.ambassador_application_status = "pending"
+   * is_active :: boolean = false
+   * reward_percentage :: numeric = 1
+     application_reason :: text
+     application_experience :: text
+     social_media_links :: jsonb
+     approved_by :: uuid
+     approved_at :: timestamp with time zone
+     revoked_by :: uuid
+     revoked_at :: timestamp with time zone
+     revoke_reason :: text
+     admin_notes :: text
+   * total_referrals :: integer = 0
+   * successful_referrals :: integer = 0
+   * total_rewards_earned :: bigint = 0
+   * applied_at :: timestamp with time zone = "now()"
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+
+═══ audit_log (9 cols)
+   DESC: سجل جميع الإجراءات المهمة في النظام
+   * id :: uuid = "extensions.uuid_generate_v4()"
+     user_id :: uuid
+   * action :: text
+     entity_type :: text
+     entity_id :: uuid
+     metadata :: jsonb
+     ip_address :: inet
+     user_agent :: text
+   * created_at :: timestamp with time zone = "now()"
+
+═══ deal_messages (9 cols)
+   DESC: رسائل غرفة الصفقة (دردشة البائع والمشتري)
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * deal_id :: uuid
+   * sender_id :: uuid
+   * message_type :: public.message_type = "text"
+     content :: text
+     attachment_url :: text
+   * is_read :: boolean = false
+     read_at :: timestamp with time zone
+   * created_at :: timestamp with time zone = "now()"
+
+═══ deals (21 cols)
+   DESC: الصفقات بين المشترين والبائعين
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * buyer_id :: uuid
+   * seller_id :: uuid
+   * project_id :: uuid
+     listing_id :: uuid
+   * deal_type :: public.deal_type
+   * shares :: bigint
+   * price_per_share :: bigint
+     total_amount :: bigint
+     fee_percentage :: numeric = 1
+     fee_amount :: bigint
+   * status :: public.deal_status = "pending_seller_approval"
+     buyer_notes :: text
+     seller_notes :: text
+     cancellation_reason :: text
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+     accepted_at :: timestamp with time zone
+     payment_submitted_at :: timestamp with time zone
+     completed_at :: timestamp with time zone
+   * expires_at :: timestamp with time zone = "(now() + '48:00:00'::interval)"
+
+═══ disputes (13 cols)
+   DESC: النزاعات بين البائع والمشتري
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * deal_id :: uuid
+   * opened_by :: uuid
+   * reason :: text
+     evidence_urls :: text[]
+   * status :: public.dispute_status = "open"
+     admin_notes :: text
+     resolution_notes :: text
+     resolved_by :: uuid
+   * opened_at :: timestamp with time zone = "now()"
+     resolved_at :: timestamp with time zone
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+
+═══ fee_unit_balances (9 cols)
+   DESC: أرصدة وحدات الرسوم لكل مستخدم (1 وحدة = 1 دينار)
+   * user_id :: uuid
+   * balance :: bigint = 0
+   * reserved_balance :: bigint = 0
+   * total_deposited :: bigint = 0
+   * total_withdrawn :: bigint = 0
+   * total_bonus_received :: bigint = 0
+     last_transaction_at :: timestamp with time zone
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+
+═══ fee_unit_requests (16 cols)
+   DESC: طلبات شحن وحدات الرسوم من المستخدمين
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * user_id :: uuid
+   * amount_requested :: bigint
+   * payment_method :: public.payment_method
+     transaction_reference :: text
+   * proof_image_url :: text
+     notes :: text
+   * status :: public.fee_unit_request_status = "pending"
+     reviewed_by :: uuid
+     reviewed_at :: timestamp with time zone
+     admin_notes :: text
+     rejection_reason :: text
+     amount_approved :: bigint
+   * submitted_at :: timestamp with time zone = "now()"
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+
+═══ fee_unit_transactions (10 cols)
+   DESC: سجل كامل لكل حركات وحدات الرسوم
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * user_id :: uuid
+   * transaction_type :: public.transaction_type
+   * amount :: bigint
+   * balance_after :: bigint
+     source_type :: text
+     source_id :: uuid
+     description :: text
+     executed_by :: uuid
+   * created_at :: timestamp with time zone = "now()"
+
+═══ holdings (14 cols)
+   DESC: ملكيات المستخدمين في كل مشروع
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * user_id :: uuid
+   * project_id :: uuid
+   * shares :: bigint
+   * frozen_shares :: bigint = 0
+   * average_buy_price :: bigint
+   * total_invested :: bigint
+   * acquired_from_offering :: bigint = 0
+   * acquired_from_ambassador :: bigint = 0
+   * acquired_from_secondary :: bigint = 0
+   * first_acquired_at :: timestamp with time zone = "now()"
+   * last_acquired_at :: timestamp with time zone = "now()"
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+
+═══ kyc_submissions (19 cols)
+   DESC: طلبات التحقق من الهوية
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * user_id :: uuid
+   * full_name :: text
+   * date_of_birth :: date
+   * address :: text
+   * city :: text
+   * phone :: text
+   * document_type :: public.id_document_type
+   * document_number :: text
+   * document_front_url :: text
+     document_back_url :: text
+   * selfie_url :: text
+   * status :: public.kyc_status = "pending"
+     review_notes :: text
+     reviewed_by :: uuid
+     reviewed_at :: timestamp with time zone
+   * submitted_at :: timestamp with time zone = "now()"
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+
+═══ listings (14 cols)
+   DESC: إعلانات بيع الحصص في السوق الثانوي
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * seller_id :: uuid
+   * project_id :: uuid
+   * shares_offered :: bigint
+   * shares_sold :: bigint = 0
+   * price_per_share :: bigint
+     notes :: text
+   * is_quick_sell :: boolean = false
+   * status :: public.listing_status = "active"
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+     expires_at :: timestamp with time zone
+     sold_at :: timestamp with time zone
+     buyer_id :: uuid
+
+═══ news (18 cols)
+   DESC: الأخبار والتحديثات من إدارة المنصة
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * title :: text
+   * slug :: text
+     summary :: text
+   * content :: text
+     cover_image_url :: text
+     gallery_images :: text[]
+   * news_type :: public.news_type
+     tags :: text[]
+     related_project_id :: uuid
+   * is_published :: boolean = false
+   * is_pinned :: boolean = false
+     published_at :: timestamp with time zone
+   * views_count :: integer = 0
+   * reactions_count :: integer = 0
+   * author_id :: uuid
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+
+═══ news_reactions (5 cols)
+   DESC: تفاعلات المستخدمين مع الأخبار
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * news_id :: uuid
+   * user_id :: uuid
+   * reaction_type :: public.reaction_type
+   * created_at :: timestamp with time zone = "now()"
+
+═══ notifications (15 cols)
+   DESC: إشعارات المستخدمين داخل التطبيق
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * user_id :: uuid
+   * notification_type :: public.notification_type
+   * title :: text
+   * message :: text
+   * priority :: public.notification_priority = "normal"
+     link_url :: text
+     metadata :: jsonb
+     icon_name :: text
+   * is_read :: boolean = false
+     read_at :: timestamp with time zone
+   * sent_via_email :: boolean = false
+   * sent_via_push :: boolean = false
+   * created_at :: timestamp with time zone = "now()"
+     expires_at :: timestamp with time zone
+
+═══ payment_proofs (9 cols)
+   DESC: إثباتات الدفع المرفوعة من المشتري
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * deal_id :: uuid
+   * payment_method :: public.payment_method
+   * amount_paid :: bigint
+     transaction_reference :: text
+   * proof_image_url :: text
+     notes :: text
+   * submitted_at :: timestamp with time zone = "now()"
+   * created_at :: timestamp with time zone = "now()"
+
+═══ profiles (19 cols)
+   DESC: ملفات المستخدمين الشخصية - امتداد لـ auth.users
+   * id :: uuid
+     full_name :: text
+     username :: text
+     phone :: text
+     avatar_url :: text
+   * role :: public.user_role = "user"
+   * kyc_status :: public.kyc_status = "not_submitted"
+   * is_active :: boolean = true
+   * is_banned :: boolean = false
+     ban_reason :: text
+     rating_average :: numeric = 0
+     rating_count :: integer = 0
+     trades_completed :: integer = 0
+     total_invested :: bigint = 0
+     is_ambassador :: boolean = false
+     referred_by :: uuid
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+     last_seen_at :: timestamp with time zone
+
+═══ project_updates (9 cols)
+   DESC: تحديثات دورية عن المشاريع
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * project_id :: uuid
+   * title :: text
+   * content :: text
+     images :: text[]
+     progress_percentage :: integer
+   * created_by :: uuid
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+
+═══ project_wallets (9 cols)
+   DESC: المحافظ الثلاث لكل مشروع: طرح، سفير، احتياطي
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * project_id :: uuid
+   * wallet_type :: public.wallet_type
+   * total_shares :: bigint
+   * available_shares :: bigint
+   * reserved_shares :: bigint = 0
+   * sold_shares :: bigint = 0
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+
+═══ projects (26 cols)
+   DESC: المشاريع الاستثمارية
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * name :: text
+   * slug :: text
+   * description :: text
+     short_description :: text
+   * project_type :: public.project_type
+     cover_image_url :: text
+     gallery_images :: text[]
+     location_address :: text
+     location_city :: text
+     location_coords :: point
+   * total_shares :: bigint
+   * share_price :: bigint
+     total_value :: bigint
+   * offering_percentage :: numeric = 90
+   * ambassador_percentage :: numeric = 2
+   * reserve_percentage :: numeric = 8
+     current_market_price :: bigint
+   * status :: public.project_status = "draft"
+     offering_start_date :: timestamp with time zone
+     offering_end_date :: timestamp with time zone
+     expected_completion_date :: date
+   * created_by :: uuid
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+     published_at :: timestamp with time zone
+
+═══ quick_sell_subscriptions (10 cols)
+   DESC: اشتراكات البيع السريع (25,000 د.ع/شهر)
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * user_id :: uuid
+   * amount_paid :: bigint = 25000
+   * status :: public.subscription_status = "active"
+   * started_at :: timestamp with time zone = "now()"
+   * expires_at :: timestamp with time zone = "(now() + '30 days'::interval)"
+     cancelled_at :: timestamp with time zone
+   * auto_renew :: boolean = false
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+
+═══ ratings (8 cols)
+   DESC: تقييمات الصفقات بين الأطراف
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * deal_id :: uuid
+   * rater_id :: uuid
+   * rated_user_id :: uuid
+   * stars :: integer
+     comment :: text
+     quick_tags :: text[]
+   * created_at :: timestamp with time zone = "now()"
+
+═══ referral_links (14 cols)
+   DESC: روابط الإحالة الخاصة بالسفراء
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * ambassador_id :: uuid
+   * code :: text
+     description :: text
+     campaign_name :: text
+   * status :: public.referral_link_status = "active"
+   * clicks_count :: integer = 0
+   * signups_count :: integer = 0
+   * conversions_count :: integer = 0
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+   * expires_at :: timestamp with time zone = "(now() + '30 days'::interval)"
+     renewed_at :: timestamp with time zone
+     revoked_at :: timestamp with time zone
+
+═══ referrals (12 cols)
+   DESC: عمليات الإحالة بين السفراء والمستخدمين الجدد
+   * id :: uuid = "extensions.uuid_generate_v4()"
+   * ambassador_id :: uuid
+   * referral_link_id :: uuid
+   * referred_user_id :: uuid
+   * has_invested :: boolean = false
+     first_investment_deal_id :: uuid
+     first_investment_at :: timestamp with time zone
+     first_investment_amount :: bigint
+     signup_ip :: inet
+     signup_user_agent :: text
+   * created_at :: timestamp with time zone = "now()"
+   * updated_at :: timestamp with time zone = "now()"
+
+═══ user_preferences (12 cols)
+   DESC: إعدادات المستخدم
+   * user_id :: uuid
+   * language :: text = "ar"
+     email_notifications :: boolean = true
+     push_notifications :: boolean = true
+     sms_notifications :: boolean = false
+     notify_new_deal :: boolean = true
+     notify_deal_update :: boolean = true
+     notify_market_alerts :: boolean = true
+     notify_ambassador_rewards :: boolean = true
+     notify_news :: boolean = true
+     show_stats_publicly :: boolean = true
+   * updated_at :: timestamp with time zone = "now()"
+

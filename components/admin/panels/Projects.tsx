@@ -1,0 +1,295 @@
+"use client"
+
+import { useState } from "react"
+import { Plus, Edit2, Trash2, AlertTriangle, X, Eye } from "lucide-react"
+import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, AdminEmpty, KPI, InnerTabBar } from "@/components/admin/ui"
+import { mockProjectsAdmin } from "@/lib/admin/mock-data"
+import { EntityFormPanel, type EntityFormData } from "./EntityFormPanel"
+import { EntityDetailsView } from "./EntityDetailsView"
+import { showSuccess, showError } from "@/lib/utils/toast"
+import { cn } from "@/lib/utils/cn"
+
+type MainTab = "list" | "create_project" | "create_company" | "view" | "edit"
+type EntityRow = typeof mockProjectsAdmin[0]
+
+/** Pre-populate the edit form from an existing entity row. */
+function rowToInitialData(row: EntityRow): EntityFormData {
+  return {
+    id:            row.id,
+    name:          row.name,
+    sector:        "real_estate",  // mock data uses Arabic strings; default for prefill
+    short_desc:    row.name + " — " + row.sector,
+    long_desc:     "",
+    city:          "",
+    share_price:   String(row.share_price || ""),
+    total_shares:  String(row.total_shares || ""),
+    offering_pct:  "90",
+    ambassador_pct:"2",
+    reserve_pct:   "8",
+    risk_level:    row.quality === "high" ? "low" : row.quality === "medium" ? "medium" : "high",
+  }
+}
+
+const fmtNum = (n: number) => n.toLocaleString("en-US")
+
+const sectorIcon = (s: string) => {
+  if (s?.includes("زراع")) return "🌾"
+  if (s?.includes("تجار")) return "🏪"
+  if (s?.includes("عقار")) return "🏢"
+  if (s?.includes("صناع")) return "🏭"
+  if (s?.includes("تقن")) return "💻"
+  return "🏢"
+}
+
+export function ProjectsPanel() {
+  const [mainTab, setMainTab] = useState<MainTab>("list")
+  const [filter, setFilter] = useState<string>("all")
+  const [deleteTarget, setDeleteTarget] = useState<EntityRow | null>(null)
+  const [confirmText, setConfirmText] = useState("")
+  const [selectedEntity, setSelectedEntity] = useState<EntityRow | null>(null)
+
+  const backToList = () => {
+    setMainTab("list")
+    setSelectedEntity(null)
+  }
+
+  const filtered = mockProjectsAdmin.filter((p) => {
+    if (filter === "all") return true
+    if (filter === "company") return p.entity_type === "company"
+    if (filter === "project") return p.entity_type === "project"
+    if (filter === "pending") return p.status === "pending"
+    return true
+  })
+
+  const tabs = [
+    { key: "all", label: "الكل", count: mockProjectsAdmin.length },
+    { key: "project", label: "مشاريع", count: mockProjectsAdmin.filter((p) => p.entity_type === "project").length },
+    { key: "company", label: "شركات", count: mockProjectsAdmin.filter((p) => p.entity_type === "company").length },
+    { key: "pending", label: "قيد المراجعة", count: mockProjectsAdmin.filter((p) => p.status === "pending").length },
+  ]
+
+  const handleDelete = () => {
+    if (!deleteTarget) return
+    if (confirmText !== deleteTarget.name) {
+      showError("الاسم غير مطابق")
+      return
+    }
+    showSuccess("تم الحذف بنجاح")
+    setDeleteTarget(null)
+    setConfirmText("")
+  }
+
+  // ─── Sub-views: create / view / edit (mode-based) ───
+  if (mainTab === "create_project") {
+    return (
+      <div>
+        <div className="px-6 pt-4">
+          <button onClick={backToList} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
+            ← العودة لقائمة المشاريع
+          </button>
+        </div>
+        <EntityFormPanel mode="create" entityType="project" onDone={backToList} />
+      </div>
+    )
+  }
+  if (mainTab === "create_company") {
+    return (
+      <div>
+        <div className="px-6 pt-4">
+          <button onClick={backToList} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
+            ← العودة لقائمة المشاريع
+          </button>
+        </div>
+        <EntityFormPanel mode="create" entityType="company" onDone={backToList} />
+      </div>
+    )
+  }
+  if (mainTab === "view" && selectedEntity) {
+    return (
+      <EntityDetailsView
+        entity={selectedEntity}
+        onEdit={() => setMainTab("edit")}
+        onBack={backToList}
+      />
+    )
+  }
+  if (mainTab === "edit" && selectedEntity) {
+    return (
+      <div>
+        <div className="px-6 pt-4">
+          <button
+            onClick={() => setMainTab("view")}
+            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+          >
+            ← العودة لتفاصيل {selectedEntity.entity_type === "project" ? "المشروع" : "الشركة"}
+          </button>
+        </div>
+        <EntityFormPanel
+          mode="edit"
+          entityType={selectedEntity.entity_type as "project" | "company"}
+          initialData={rowToInitialData(selectedEntity)}
+          onDone={() => setMainTab("view")}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-6 max-w-screen-2xl">
+
+      <div className="flex justify-between items-start mb-4 gap-3">
+        <div>
+          <div className="text-lg font-bold text-white">▣ المشاريع والشركات</div>
+          <div className="text-xs text-neutral-500 mt-0.5">
+            {mockProjectsAdmin.length} عنصر إجمالاً ({mockProjectsAdmin.filter((p) => p.entity_type === "project").length} مشروع · {mockProjectsAdmin.filter((p) => p.entity_type === "company").length} شركة)
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setMainTab("create_company")}
+            className="bg-purple-400/[0.1] border border-purple-400/[0.25] text-purple-400 hover:bg-purple-400/[0.15] px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            شركة جديدة
+          </button>
+          <button
+            onClick={() => setMainTab("create_project")}
+            className="bg-neutral-100 text-black px-3 py-2 rounded-lg text-xs font-bold hover:bg-neutral-200 flex items-center gap-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            مشروع جديد
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <KPI label="مشاريع نشطة" val={mockProjectsAdmin.filter((p) => p.entity_type === "project" && p.status === "active").length} color="#60A5FA" />
+        <KPI label="معلقة - مراجعة" val={mockProjectsAdmin.filter((p) => p.status === "pending").length} color="#FBBF24" accent="rgba(251,191,36,0.05)" />
+        <KPI label="إجمالي القيمة" val={fmtNum(mockProjectsAdmin.reduce((s, p) => s + p.project_value, 0)) + " د.ع"} color="#FBBF24" />
+        <KPI label="حصص متاحة" val={fmtNum(mockProjectsAdmin.reduce((s, p) => s + p.available_shares, 0))} color="#4ADE80" />
+      </div>
+
+      <InnerTabBar tabs={tabs} active={filter} onSelect={setFilter} />
+
+      {filtered.length === 0 ? (
+        <AdminEmpty title="لا توجد نتائج" body="جرب تغيير الفلترة" />
+      ) : (
+        <Table>
+          <THead>
+            <TH>الاسم</TH>
+            <TH>النوع</TH>
+            <TH>القطاع</TH>
+            <TH>قيمة الحصة</TH>
+            <TH>الحصص</TH>
+            <TH>قيمة المشروع</TH>
+            <TH>الحالة</TH>
+            <TH>الجودة</TH>
+            <TH>إجراءات</TH>
+          </THead>
+          <TBody>
+            {filtered.map((p) => {
+              const handleView = () => { setSelectedEntity(p); setMainTab("view") }
+              const handleEdit = () => { setSelectedEntity(p); setMainTab("edit") }
+              return (
+              <TR key={p.id} onClick={handleView}>
+                <TD>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{sectorIcon(p.sector)}</span>
+                    <span className="font-bold">{p.name}</span>
+                  </div>
+                </TD>
+                <TD>
+                  <Badge label={p.entity_type === "project" ? "مشروع" : "شركة"} color={p.entity_type === "project" ? "blue" : "purple"} />
+                </TD>
+                <TD><span className="text-neutral-400">{p.sector}</span></TD>
+                <TD><span className="font-mono">{p.share_price ? fmtNum(p.share_price) : "—"}</span></TD>
+                <TD><span className="text-green-400 font-mono">{fmtNum(p.available_shares)}/{fmtNum(p.total_shares)}</span></TD>
+                <TD><span className="font-mono text-yellow-400">{fmtNum(p.project_value)}</span></TD>
+                <TD>
+                  <Badge
+                    label={p.status === "active" ? "نشط" : p.status === "pending" ? "مراجعة" : "متوقف"}
+                    color={p.status === "active" ? "green" : p.status === "pending" ? "yellow" : "gray"}
+                  />
+                </TD>
+                <TD>
+                  <Badge
+                    label={p.quality === "high" ? "★ عالية" : p.quality === "medium" ? "متوسطة" : "منخفضة"}
+                    color={p.quality === "high" ? "purple" : p.quality === "medium" ? "blue" : "gray"}
+                  />
+                </TD>
+                <TD>
+                  <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    <ActionBtn label="👁 تفاصيل" color="gray" sm onClick={handleView} />
+                    {p.status === "pending" && (
+                      <>
+                        <ActionBtn label="قبول" color="green" sm onClick={() => showSuccess("تم القبول")} />
+                        <ActionBtn label="رفض" color="red" sm onClick={() => showSuccess("تم الرفض")} />
+                      </>
+                    )}
+                    {p.status === "active" && (
+                      <ActionBtn label="✏ تعديل" color="blue" sm onClick={handleEdit} />
+                    )}
+                    <ActionBtn label="حذف" color="red" sm onClick={(e?: React.MouseEvent) => { e?.stopPropagation?.(); setDeleteTarget(p) }} />
+                  </div>
+                </TD>
+              </TR>
+              )
+            })}
+          </TBody>
+        </Table>
+      )}
+
+      {/* Delete confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border border-red-500/[0.3] rounded-2xl p-5 w-full max-w-md">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-red-500/[0.1] border border-red-500/[0.3] flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <div className="flex-1">
+                <div className="text-base font-bold text-red-400 mb-1">حذف نهائي</div>
+                <div className="text-xs text-neutral-400 leading-relaxed">
+                  هذا الإجراء لا يمكن التراجع عنه. سيتم حذف "{deleteTarget.name}" وجميع البيانات المرتبطة به.
+                </div>
+              </div>
+              <button onClick={() => { setDeleteTarget(null); setConfirmText("") }} className="text-neutral-500 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <label className="text-xs text-neutral-400 mb-2 block">
+              للتأكيد، اكتب اسم المشروع: <span className="text-red-400 font-bold">{deleteTarget.name}</span>
+            </label>
+            <input
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-red-500/30 mb-4"
+            />
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setDeleteTarget(null); setConfirmText("") }}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={confirmText !== deleteTarget.name}
+                className={cn(
+                  "flex-1 py-3 rounded-xl text-sm font-bold transition-colors",
+                  confirmText === deleteTarget.name
+                    ? "bg-red-500 text-white hover:bg-red-600"
+                    : "bg-white/[0.05] text-neutral-600 cursor-not-allowed"
+                )}
+              >
+                حذف نهائي
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
