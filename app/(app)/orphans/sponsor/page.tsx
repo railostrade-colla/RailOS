@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { Suspense, useState, useMemo } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Heart } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
-export default function SponsorPage() {
+function SponsorContent() {
   const sp = useSearchParams()
   const router = useRouter()
   const initialChild = sp?.get("child") || ""
@@ -256,5 +256,13 @@ export default function SponsorPage() {
         )}
       </Modal>
     </AppLayout>
+  )
+}
+
+export default function SponsorPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black" />}>
+      <SponsorContent />
+    </Suspense>
   )
 }

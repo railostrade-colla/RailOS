@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { Suspense, useState, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChevronDown, Search, Plus, X, Filter, AlertTriangle, ShoppingCart, Lock, Star, Clock, Wallet } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -246,7 +246,7 @@ function PaymentMethodFilter({
 }
 
 // ─── Main Page ───
-export default function ExchangePage() {
+function ExchangeContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const projectFilter = searchParams?.get("project")
@@ -690,5 +690,13 @@ export default function ExchangePage() {
         </div>
       )}
     </AppLayout>
+  )
+}
+
+export default function ExchangePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black" />}>
+      <ExchangeContent />
+    </Suspense>
   )
 }

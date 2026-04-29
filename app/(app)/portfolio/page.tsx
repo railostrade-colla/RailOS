@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Send, Download, Zap, CreditCard, TrendingUp, X, Coins, ArrowDownToLine, ArrowUpFromLine, Briefcase, BarChart3, History, Trophy, Sparkles, Users } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -58,7 +58,7 @@ const opLabel = (op: string) => {
 
 const VALID_TABS: ReadonlyArray<PortfolioTab> = ["holdings", "stats", "history", "fee_units"]
 
-export default function PortfolioPage() {
+function PortfolioContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialTab = (() => {
@@ -582,5 +582,13 @@ export default function PortfolioPage() {
         </div>
       )}
     </AppLayout>
+  )
+}
+
+export default function PortfolioPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black" />}>
+      <PortfolioContent />
+    </Suspense>
   )
 }
