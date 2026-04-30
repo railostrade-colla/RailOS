@@ -11,11 +11,20 @@
  */
 
 import { useState } from "react"
-import { Save, Send, Image as ImageIcon, Sprout, Building2, Factory, Briefcase, Stethoscope } from "lucide-react"
+import { Image as ImageIcon, Sprout, Building2, Factory, Briefcase, Stethoscope, FileText, X, Plus } from "lucide-react"
 import { ActionBtn } from "@/components/admin/ui"
 import { ALL_COMPANIES } from "@/lib/mock-data/companies"
 import { createProjectWallet } from "@/lib/mock-data/projectWallets"
 import { showError, showSuccess } from "@/lib/utils/toast"
+import { calculateTotalShares, calculateOfferedShares } from "@/lib/utils/finance"
+import type {
+  ProjectEntityType,
+  ProjectBuildStatus,
+  ProjectQuality,
+  ProjectInvestmentType,
+  ProjectDistributionType,
+  ProjectDocument,
+} from "@/lib/mock-data/types"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -47,6 +56,30 @@ export interface EntityFormData {
   return_max?: string
   duration_months?: string
   risk_level?: RiskLevel
+
+  // Extended fields (admin form expansion)
+  symbol?: string
+  entity_type?: ProjectEntityType
+  build_status?: ProjectBuildStatus
+  quality?: ProjectQuality
+  revenue?: string
+  project_value?: string
+  listing_percent?: string
+  capital_needed?: string
+  capital_raised?: string
+  owner_percent?: string
+  offer_percent?: string
+  investment_type?: ProjectInvestmentType
+  distribution_type?: ProjectDistributionType
+  profit_source?: string
+  owner_name?: string
+  owner_phone?: string
+  owner_email?: string
+  detailed_address?: string
+  logo?: string
+  project_images?: string[]
+  company_images?: string[]
+  documents?: ProjectDocument[]
 }
 
 const SECTOR_OPTIONS = [
@@ -102,10 +135,65 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
   const [durationMonths, setDurationMonths] = useState(initialData?.duration_months ?? "36")
   const [riskLevel, setRiskLevel] = useState<RiskLevel>(initialData?.risk_level ?? "medium")
 
+  // ─── §8 Extended classification ───
+  const [symbol, setSymbol] = useState(initialData?.symbol ?? "")
+  const [entityTypeField, setEntityTypeField] = useState<ProjectEntityType>(
+    initialData?.entity_type ?? (isProject ? "project" : "company")
+  )
+  const [buildStatus, setBuildStatus] = useState<ProjectBuildStatus>(initialData?.build_status ?? "planning")
+  const [quality, setQuality] = useState<ProjectQuality>(initialData?.quality ?? "medium")
+  const [revenue, setRevenue] = useState(initialData?.revenue ?? "")
+
+  // ─── §9 Extended financial ───
+  const [projectValue, setProjectValue] = useState(initialData?.project_value ?? "")
+  const [listingPercent, setListingPercent] = useState(initialData?.listing_percent ?? "40")
+  const [investmentType, setInvestmentType] = useState<ProjectInvestmentType>(initialData?.investment_type ?? "direct")
+  const [capitalNeeded, setCapitalNeeded] = useState(initialData?.capital_needed ?? "")
+  const [capitalRaised, setCapitalRaised] = useState(initialData?.capital_raised ?? "0")
+  const [ownerPercent, setOwnerPercent] = useState(initialData?.owner_percent ?? "60")
+  const [offerPercent, setOfferPercent] = useState(initialData?.offer_percent ?? "40")
+
+  // ─── §10 Distribution ───
+  const [distributionType, setDistributionType] = useState<ProjectDistributionType>(initialData?.distribution_type ?? "quarterly")
+  const [profitSource, setProfitSource] = useState(initialData?.profit_source ?? "")
+
+  // ─── §11 Owner contact ───
+  const [ownerName, setOwnerName] = useState(initialData?.owner_name ?? "")
+  const [ownerPhone, setOwnerPhone] = useState(initialData?.owner_phone ?? "")
+  const [ownerEmail, setOwnerEmail] = useState(initialData?.owner_email ?? "")
+  const [detailedAddress, setDetailedAddress] = useState(initialData?.detailed_address ?? "")
+
+  // ─── §12 Documents ───
+  const [documents, setDocuments] = useState<ProjectDocument[]>(initialData?.documents ?? [])
+  const [newDocName, setNewDocName] = useState("")
+  const [newDocUrl, setNewDocUrl] = useState("")
+
   const sharePriceNum = Number(sharePrice) || 0
   const totalSharesNum = Number(totalShares) || 0
   const totalValue = sharePriceNum * totalSharesNum
   const totalPct = (Number(offeringPct) || 0) + (Number(ambassadorPct) || 0) + (Number(reservePct) || 0)
+
+  // ─── Auto-calculations for preview cards ───
+  const projectValueNum = Number(projectValue) || 0
+  const listingPercentNum = Number(listingPercent) || 0
+  const autoTotalShares = calculateTotalShares(projectValueNum, sharePriceNum)
+  const autoOfferedShares = calculateOfferedShares(autoTotalShares, listingPercentNum)
+  const capitalProgress = Number(capitalNeeded) > 0
+    ? Math.min(100, (Number(capitalRaised) / Number(capitalNeeded)) * 100)
+    : 0
+
+  const addDocument = () => {
+    if (!newDocName.trim() || !newDocUrl.trim()) {
+      showError("اكتب اسم الوثيقة ورابطها")
+      return
+    }
+    setDocuments([...documents, { name: newDocName.trim(), url: newDocUrl.trim() }])
+    setNewDocName("")
+    setNewDocUrl("")
+  }
+  const removeDocument = (index: number) => {
+    setDocuments(documents.filter((_, i) => i !== index))
+  }
 
   const isValid =
     name.trim().length >= 3 &&
@@ -355,6 +443,194 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
           </div>
         </div>
 
+        {/* §8 Classification + Symbol (extended) */}
+        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 lg:col-span-2">
+          <div className="text-sm font-bold text-white mb-4">8️⃣ التصنيف الموسَّع</div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">الرمز (Symbol)</label>
+              <input
+                type="text" value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                placeholder="مثلاً: RMD"
+                maxLength={6}
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+                dir="ltr"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">نوع الكيان</label>
+              <select
+                value={entityTypeField}
+                onChange={(e) => setEntityTypeField(e.target.value as ProjectEntityType)}
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
+              >
+                <option value="company">🏢 شركة</option>
+                <option value="project">🏗️ مشروع</option>
+                <option value="individual">👤 فرد</option>
+                <option value="partnership">🤝 شراكة</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">حالة الإنشاء</label>
+              <select
+                value={buildStatus}
+                onChange={(e) => setBuildStatus(e.target.value as ProjectBuildStatus)}
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
+              >
+                <option value="planning">قيد الإنشاء</option>
+                <option value="active">نشط / مُنشأ</option>
+                <option value="completed">منجز</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">مؤشّر الجودة</label>
+              <select
+                value={quality}
+                onChange={(e) => setQuality(e.target.value as ProjectQuality)}
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
+              >
+                <option value="low">🔴 منخفض</option>
+                <option value="medium">🟡 متوسط</option>
+                <option value="high">🟢 عالي</option>
+              </select>
+            </div>
+          </div>
+
+          {buildStatus === "completed" && (
+            <div className="mt-3">
+              <label className="text-xs text-neutral-400 mb-1.5 block">الإيرادات (للمنجز فقط)</label>
+              <input
+                type="number" value={revenue} onChange={(e) => setRevenue(e.target.value)}
+                placeholder="مثلاً: 25000000"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* §9 Extended financial — capital + percentages + auto-calculated previews */}
+        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 lg:col-span-2">
+          <div className="text-sm font-bold text-white mb-4">9️⃣ المعلومات المالية الموسَّعة</div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">قيمة المشروع الكلّية (د.ع)</label>
+              <input
+                type="number" value={projectValue} onChange={(e) => setProjectValue(e.target.value)}
+                placeholder="500000000"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">سعر الحصّة الابتدائي (د.ع)</label>
+              <input
+                type="number" value={sharePrice} onChange={(e) => setSharePrice(e.target.value)}
+                placeholder="50000"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+              />
+            </div>
+          </div>
+
+          {/* Auto-calc preview: total shares */}
+          {autoTotalShares > 0 && (
+            <div className="bg-green-400/[0.05] border border-green-400/[0.2] rounded-xl p-3 mb-3 flex justify-between items-center">
+              <span className="text-[11px] text-green-400">⚡ الحصص الإجمالية المحسوبة تلقائياً</span>
+              <span className="text-base font-bold text-green-400 font-mono">{fmtNum(autoTotalShares)} حصة</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">نسبة الطرح (%)</label>
+              <input
+                type="number" value={listingPercent} onChange={(e) => setListingPercent(e.target.value)}
+                placeholder="40"
+                min="1" max="100"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">نوع الاستثمار</label>
+              <select
+                value={investmentType}
+                onChange={(e) => setInvestmentType(e.target.value as ProjectInvestmentType)}
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
+              >
+                <option value="direct">مباشر</option>
+                <option value="auction">مزاد</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Auto-calc preview: offered shares */}
+          {autoOfferedShares > 0 && (
+            <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-xl p-3 mb-3 flex justify-between items-center">
+              <span className="text-[11px] text-blue-400">📊 الحصص المطروحة للمستثمرين</span>
+              <span className="text-base font-bold text-blue-400 font-mono">{fmtNum(autoOfferedShares)} حصة</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">رأس المال المطلوب (د.ع)</label>
+              <input
+                type="number" value={capitalNeeded} onChange={(e) => setCapitalNeeded(e.target.value)}
+                placeholder="200000000"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">رأس المال المُحقَّق (د.ع)</label>
+              <input
+                type="number" value={capitalRaised} onChange={(e) => setCapitalRaised(e.target.value)}
+                placeholder="0"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+              />
+            </div>
+          </div>
+
+          {/* Capital progress preview */}
+          {Number(capitalNeeded) > 0 && (
+            <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3 mb-3">
+              <div className="flex justify-between text-[11px] mb-2">
+                <span className="text-neutral-400">تقدّم رأس المال</span>
+                <span className="text-yellow-400 font-mono font-bold">{capitalProgress.toFixed(1)}%</span>
+              </div>
+              <div className="h-2 bg-white/[0.05] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-yellow-400 transition-all"
+                  style={{ width: `${capitalProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">نسبة المالك (%)</label>
+              <input
+                type="number" value={ownerPercent} onChange={(e) => setOwnerPercent(e.target.value)}
+                placeholder="60"
+                min="0" max="100"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">نسبة المطروح (%)</label>
+              <input
+                type="number" value={offerPercent} onChange={(e) => setOfferPercent(e.target.value)}
+                placeholder="40"
+                min="0" max="100"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* §7 Returns + risk */}
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5">
           <div className="text-sm font-bold text-white mb-4">7️⃣ العائد والمخاطر</div>
@@ -386,6 +662,133 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
                 {r.label}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* §🔟 Distribution mechanism + Profit source */}
+        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5">
+          <div className="text-sm font-bold text-white mb-4">🔟 آلية التوزيع</div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">آلية التوزيع</label>
+              <select
+                value={distributionType}
+                onChange={(e) => setDistributionType(e.target.value as ProjectDistributionType)}
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
+              >
+                <option value="monthly">🗓 شهري</option>
+                <option value="quarterly">📅 ربعي</option>
+                <option value="semi_annual">📆 نصف سنوي</option>
+                <option value="annual">🗃 سنوي</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">مصدر الأرباح</label>
+              <input
+                type="text" value={profitSource} onChange={(e) => setProfitSource(e.target.value)}
+                placeholder="مثلاً: أرباح التشغيل، الإيجارات"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* §1️⃣1️⃣ Owner contact */}
+        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 lg:col-span-2">
+          <div className="text-sm font-bold text-white mb-4">1️⃣1️⃣ بيانات المالك</div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">اسم المالك (الكامل)</label>
+              <input
+                type="text" value={ownerName} onChange={(e) => setOwnerName(e.target.value)}
+                placeholder="أحمد محمد"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">رقم الهاتف</label>
+              <input
+                type="tel" value={ownerPhone} onChange={(e) => setOwnerPhone(e.target.value)}
+                placeholder="07XXXXXXXXX"
+                dir="ltr"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="mb-3">
+            <label className="text-xs text-neutral-400 mb-1.5 block">البريد الإلكتروني</label>
+            <input
+              type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)}
+              placeholder="owner@example.com"
+              dir="ltr"
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-neutral-400 mb-1.5 block">العنوان التفصيلي</label>
+            <textarea
+              value={detailedAddress} onChange={(e) => setDetailedAddress(e.target.value)}
+              rows={2}
+              placeholder="المحافظة / المنطقة / الشارع / رقم البناية"
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 resize-none"
+            />
+          </div>
+        </div>
+
+        {/* §1️⃣2️⃣ Documents (Media gallery already in §2) */}
+        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 lg:col-span-2">
+          <div className="text-sm font-bold text-white mb-4">1️⃣2️⃣ الأوراق الرسمية والمستندات</div>
+
+          {/* Existing documents list */}
+          {documents.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {documents.map((doc, i) => (
+                <div key={i} className="bg-white/[0.04] border border-white/[0.08] rounded-lg p-2.5 flex items-center gap-3">
+                  <FileText className="w-4 h-4 text-blue-400 flex-shrink-0" strokeWidth={1.5} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-white font-bold truncate">{doc.name}</div>
+                    <div className="text-[10px] text-neutral-500 truncate" dir="ltr">{doc.url}</div>
+                  </div>
+                  <button
+                    onClick={() => removeDocument(i)}
+                    className="text-red-400 hover:text-red-300 flex-shrink-0"
+                    aria-label="حذف"
+                  >
+                    <X className="w-4 h-4" strokeWidth={2} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add new document */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr,2fr,auto] gap-2">
+            <input
+              type="text" value={newDocName} onChange={(e) => setNewDocName(e.target.value)}
+              placeholder="اسم الوثيقة (مثلاً: عقد التأسيس)"
+              className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
+            />
+            <input
+              type="text" value={newDocUrl} onChange={(e) => setNewDocUrl(e.target.value)}
+              placeholder="https://example.com/document.pdf"
+              dir="ltr"
+              className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 font-mono"
+            />
+            <button
+              onClick={addDocument}
+              className="bg-blue-500/[0.15] border border-blue-500/30 hover:bg-blue-500/[0.2] text-blue-400 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
+              إضافة
+            </button>
+          </div>
+
+          <div className="text-[10px] text-neutral-500 mt-2 leading-relaxed">
+            مثال: عقد التأسيس، الترخيص التجاري، شهادة الملكية، الميزانية الأخيرة...
           </div>
         </div>
 

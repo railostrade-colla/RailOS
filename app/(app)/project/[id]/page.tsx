@@ -412,6 +412,162 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
 
+              {/* ═══ Extended classification (admin form data) ═══ */}
+              {(project.symbol || project.entity_type || project.build_status || project.quality) && (
+                <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-3">
+                  <div className="text-sm font-bold text-white mb-3">التصنيف</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {project.symbol && (
+                      <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5">
+                        <div className="text-[10px] text-neutral-500 mb-0.5">الرمز</div>
+                        <div className="text-sm font-bold text-blue-400 font-mono" dir="ltr">{project.symbol}</div>
+                      </div>
+                    )}
+                    {project.entity_type && (
+                      <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5">
+                        <div className="text-[10px] text-neutral-500 mb-0.5">نوع الكيان</div>
+                        <div className="text-sm font-bold text-white">
+                          {project.entity_type === "company" ? "🏢 شركة"
+                            : project.entity_type === "project" ? "🏗️ مشروع"
+                            : project.entity_type === "individual" ? "👤 فرد"
+                            : "🤝 شراكة"}
+                        </div>
+                      </div>
+                    )}
+                    {project.build_status && (
+                      <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5">
+                        <div className="text-[10px] text-neutral-500 mb-0.5">حالة الإنشاء</div>
+                        <div className="text-sm font-bold text-white">
+                          {project.build_status === "planning" ? "قيد الإنشاء"
+                            : project.build_status === "active" ? "نشط" : "منجز"}
+                        </div>
+                      </div>
+                    )}
+                    {project.quality && (
+                      <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5">
+                        <div className="text-[10px] text-neutral-500 mb-0.5">الجودة</div>
+                        <div className="text-sm font-bold">
+                          <span className={
+                            project.quality === "high" ? "text-green-400"
+                            : project.quality === "medium" ? "text-yellow-400" : "text-red-400"
+                          }>
+                            {project.quality === "high" ? "🟢 عالي"
+                              : project.quality === "medium" ? "🟡 متوسط" : "🔴 منخفض"}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ═══ Capital progress (admin form data) ═══ */}
+              {project.capital_needed && project.capital_needed > 0 && (
+                <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-3">
+                  <div className="text-sm font-bold text-white mb-3">رأس المال</div>
+                  <div className="space-y-2.5">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-neutral-500">رأس المال المطلوب</span>
+                      <span className="text-white font-bold font-mono">{fmtIQD(project.capital_needed)} د.ع</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-neutral-500">المُحقَّق حتى الآن</span>
+                      <span className="text-yellow-400 font-bold font-mono">{fmtIQD(project.capital_raised ?? 0)} د.ع</span>
+                    </div>
+                    <div className="h-2 bg-white/[0.05] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-yellow-400 transition-all"
+                        style={{
+                          width: `${Math.min(100, ((project.capital_raised ?? 0) / project.capital_needed) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px]">
+                      <span className="text-neutral-500">نسبة التحقيق</span>
+                      <span className="text-yellow-400 font-mono">
+                        {(((project.capital_raised ?? 0) / project.capital_needed) * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    {(project.owner_percent || project.offer_percent) && (
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/[0.04]">
+                        {project.owner_percent !== undefined && (
+                          <div>
+                            <div className="text-[10px] text-neutral-500">نسبة المالك</div>
+                            <div className="text-sm font-bold text-white font-mono">{project.owner_percent}%</div>
+                          </div>
+                        )}
+                        {project.offer_percent !== undefined && (
+                          <div>
+                            <div className="text-[10px] text-neutral-500">نسبة المطروح</div>
+                            <div className="text-sm font-bold text-white font-mono">{project.offer_percent}%</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ═══ Owner contact (admin form data) ═══ */}
+              {(project.owner_name || project.address) && (
+                <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-3">
+                  <div className="text-sm font-bold text-white mb-3">المالك</div>
+                  <div className="space-y-2">
+                    {project.owner_name && (
+                      <div className="flex justify-between py-1.5">
+                        <span className="text-xs text-neutral-500">اسم المالك</span>
+                        <span className="text-xs font-bold text-white">{project.owner_name}</span>
+                      </div>
+                    )}
+                    {project.owner_phone && myShares > 0 && (
+                      <div className="flex justify-between py-1.5">
+                        <span className="text-xs text-neutral-500">الهاتف</span>
+                        <span className="text-xs font-bold text-white font-mono" dir="ltr">{project.owner_phone}</span>
+                      </div>
+                    )}
+                    {project.owner_email && myShares > 0 && (
+                      <div className="flex justify-between py-1.5">
+                        <span className="text-xs text-neutral-500">البريد</span>
+                        <span className="text-xs font-bold text-white font-mono" dir="ltr">{project.owner_email}</span>
+                      </div>
+                    )}
+                    {project.address && (
+                      <div className="py-1.5">
+                        <div className="text-xs text-neutral-500 mb-1">العنوان</div>
+                        <div className="text-xs text-white leading-relaxed">{project.address}</div>
+                      </div>
+                    )}
+                    {!myShares && (project.owner_phone || project.owner_email) && (
+                      <div className="bg-blue-400/[0.05] border border-blue-400/20 rounded-lg p-2.5 text-[10px] text-blue-400 leading-relaxed">
+                        🔒 بيانات التواصل (هاتف/بريد) متاحة للمستثمرين فقط
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ═══ Documents (admin form data) ═══ */}
+              {project.documents && project.documents.length > 0 && (
+                <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-3">
+                  <div className="text-sm font-bold text-white mb-3">📁 الأوراق الرسمية</div>
+                  <div className="space-y-2">
+                    {project.documents.map((doc, i) => (
+                      <a
+                        key={i}
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2.5 bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.06] rounded-lg p-2.5 transition-colors"
+                      >
+                        <span className="text-blue-400">📄</span>
+                        <span className="text-xs text-white flex-1 truncate">{doc.name}</span>
+                        <span className="text-[10px] text-blue-400">تنزيل ←</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {myShares > 0 && (
                 <div className="bg-green-400/[0.06] border border-green-400/20 rounded-2xl p-4 mb-3">
                   <div className="text-sm font-bold text-green-400 mb-3">استثماري الشخصي</div>

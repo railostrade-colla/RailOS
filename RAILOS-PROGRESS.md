@@ -4,7 +4,8 @@
 - **الاسم:** Railos
 - **النوع:** منصة تداول استثماري عراقية (PWA)
 - **اللغة:** عربي RTL
-- **المسار:** C:\Users\pc\OneDrive\Desktop\RailOS
+- **المسار الرئيسي:** C:\Users\pc\OneDrive\المستندات\GitHub\RailOS  (يستخدمه GitHub Desktop)
+- **النسخة الاحتياطية:** C:\Users\pc\OneDrive\Desktop\RailOS  (للقراءة فقط — لا تُعدِّل فيها)
 
 ## 🛠️ Tech Stack
 - Next.js 16.2.4 + React 19 + TypeScript

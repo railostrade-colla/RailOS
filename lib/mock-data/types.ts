@@ -36,6 +36,20 @@ export const RISK_AR_TO_EN: Record<RiskLevelAr, RiskLevelEn> = {
 // ──────────────────────────────────────────────────────────────────────────
 // Project — superset of everything dashboard / market / investment / exchange use
 // ──────────────────────────────────────────────────────────────────────────
+// Extended classification for projects/companies (admin form + display)
+// ──────────────────────────────────────────────────────────────────────────
+export type ProjectEntityType = "company" | "project" | "individual" | "partnership"
+export type ProjectBuildStatus = "planning" | "active" | "completed"
+export type ProjectQuality = "low" | "medium" | "high"
+export type ProjectAdminStatus = "pending" | "active" | "paused" | "rejected" | "closed"
+export type ProjectInvestmentType = "direct" | "auction"
+export type ProjectDistributionType = "monthly" | "quarterly" | "semi_annual" | "annual"
+
+export interface ProjectDocument {
+  name: string
+  url: string
+}
+
 export interface Project {
   // Core (required everywhere)
   id: string
@@ -47,18 +61,49 @@ export interface Project {
   /** English form — used by dashboard / investment / project / company helpers */
   risk_level: RiskLevelEn
 
-  // Optional / page-specific
-  project_value?: number              // dashboard
-  description?: string                // investment, project/[id]
-  created_at?: string                 // investment, project/[id]
-  return_min?: number                 // project/[id]
-  return_max?: number                 // project/[id]
-  distribution_type?: "annual" | "semi_annual" | "quarterly" | "monthly"
-  profit_source?: string              // project/[id]
-  seller_id?: string                  // project/[id]
-  seller_name?: string                // project/[id]
+  // ─── Admin form: classification ───
+  symbol?: string                     // الرمز (مثل: RMD)
+  entity_type?: ProjectEntityType     // company / project / individual / partnership
+  build_status?: ProjectBuildStatus   // planning / active / completed
+  quality?: ProjectQuality            // low / medium / high
+  admin_status?: ProjectAdminStatus   // pending / active / paused / rejected / closed
 
-  // Card-display extras (market / cards)
+  // ─── Admin form: financial ───
+  project_value?: number              // قيمة المشروع الكلية
+  shares_offered?: number             // الحصص المطروحة
+  reserved_shares?: number            // الحصص المحجوزة
+  listing_percent?: number            // نسبة الطرح
+  capital_needed?: number             // رأس المال المطلوب
+  capital_raised?: number             // رأس المال المحقق
+  owner_percent?: number              // نسبة المالك
+  offer_percent?: number              // نسبة المطروح للأرشفة
+  revenue?: number                    // الإيرادات (للمنجز فقط)
+  investment_type?: ProjectInvestmentType  // direct / auction
+
+  // ─── Admin form: returns ───
+  description?: string
+  created_at?: string
+  return_min?: number
+  return_max?: number
+  distribution_type?: ProjectDistributionType
+  profit_source?: string
+
+  // ─── Admin form: owner ───
+  owner_name?: string
+  owner_phone?: string
+  owner_email?: string
+  address?: string                    // العنوان التفصيلي
+  seller_id?: string
+  seller_name?: string
+
+  // ─── Admin form: media + documents ───
+  logo?: string
+  cover_image?: string
+  project_images?: string[]
+  company_images?: string[]
+  documents?: ProjectDocument[]
+
+  // ─── Card-display extras (market / cards) ───
   company_id?: string
   company_name?: string
   expected_return_min?: number

@@ -146,6 +146,25 @@ export function calculatePortfolioExpectedReturn(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Shares calculations (admin form preview cards)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * إجمالي الحصص = قيمة المشروع ÷ سعر الحصة (تقريب لأقرب عدد صحيح للأسفل).
+ * مستخدم في CreateProjectPanel للعرض التلقائي.
+ */
+export function calculateTotalShares(projectValue: number, sharePrice: number): number {
+  if (!sharePrice || sharePrice <= 0) return 0
+  return Math.floor(projectValue / sharePrice)
+}
+
+/** الحصص المطروحة للاستثمار = إجمالي الحصص × نسبة الطرح ÷ 100. */
+export function calculateOfferedShares(totalShares: number, listingPercent: number): number {
+  if (totalShares <= 0 || listingPercent <= 0) return 0
+  return Math.floor((totalShares * listingPercent) / 100)
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Convenience: pretty-printers
 // ──────────────────────────────────────────────────────────────────────────
 

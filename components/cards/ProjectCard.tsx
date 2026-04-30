@@ -48,6 +48,14 @@ export interface ProjectCardData {
   status: "open" | "closing_soon" | "closed"
   is_trending?: boolean
   is_new?: boolean
+
+  // Extended (optional — from admin form)
+  symbol?: string
+  entity_type?: "company" | "project" | "individual" | "partnership"
+  quality?: "low" | "medium" | "high"
+  distribution_type?: "monthly" | "quarterly" | "semi_annual" | "annual"
+  capital_needed?: number
+  capital_raised?: number
 }
 
 interface ProjectCardProps {
@@ -161,6 +169,38 @@ export function ProjectCard({ project, variant = "full" }: ProjectCardProps) {
           </div>
         )}
       </div>
+
+      {/* Extended badges (symbol + quality + distribution) */}
+      {(project.symbol || project.quality || project.distribution_type) && (
+        <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+          {project.symbol && (
+            <span className="bg-blue-400/[0.08] border border-blue-400/20 text-blue-400 px-2 py-0.5 rounded-md text-[10px] font-bold font-mono" dir="ltr">
+              {project.symbol}
+            </span>
+          )}
+          {project.quality && (
+            <span
+              className={cn(
+                "px-2 py-0.5 rounded-md text-[10px] font-bold border",
+                project.quality === "high" ? "bg-green-400/[0.08] border-green-400/20 text-green-400"
+                  : project.quality === "medium" ? "bg-yellow-400/[0.08] border-yellow-400/20 text-yellow-400"
+                  : "bg-red-400/[0.08] border-red-400/20 text-red-400"
+              )}
+            >
+              {project.quality === "high" ? "🟢 جودة عالية"
+                : project.quality === "medium" ? "🟡 جودة متوسطة" : "🔴 جودة منخفضة"}
+            </span>
+          )}
+          {project.distribution_type && (
+            <span className="bg-white/[0.04] border border-white/[0.08] text-neutral-300 px-2 py-0.5 rounded-md text-[10px]">
+              توزيع{" "}
+              {project.distribution_type === "monthly" ? "شهري"
+                : project.distribution_type === "quarterly" ? "ربعي"
+                : project.distribution_type === "semi_annual" ? "نصف سنوي" : "سنوي"}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Price + Returns */}
       <div className="flex items-end justify-between mb-3 pb-3 border-b border-white/[0.05]">
