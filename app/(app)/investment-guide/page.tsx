@@ -6,7 +6,6 @@ import { TrendingUp, AlertTriangle, Lightbulb, Search, ShoppingCart, Wallet, Che
 import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
-import { Footer } from "@/components/layout/Footer"
 import { cn } from "@/lib/utils/cn"
 
 // خطوات الاستثمار - من الصفر للنجاح
@@ -760,7 +759,6 @@ export default function InvestmentGuidePage() {
             </div>
           </div>
 
-          <Footer compact />
         </div>
       </div>
     </AppLayout>

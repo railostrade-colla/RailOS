@@ -5,7 +5,6 @@ import { ChevronDown, Lock, Shield } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
-import { Footer } from "@/components/layout/Footer"
 import { cn } from "@/lib/utils/cn"
 
 const SECTIONS = [
@@ -134,7 +133,6 @@ export default function PrivacyPage() {
             </div>
           </div>
 
-          <Footer compact />
         </div>
       </div>
     </AppLayout>

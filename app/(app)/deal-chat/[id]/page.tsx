@@ -127,7 +127,7 @@ export default function DealChatPage() {
   }
 
   return (
-    <AppLayout hideBottomNav>
+    <AppLayout hideBottomNav hideFooter>
       <div className="relative min-h-screen flex flex-col">
         <GridBackground showCircles={false} />
 

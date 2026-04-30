@@ -17,7 +17,6 @@ import {
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
-import { Footer } from "@/components/layout/Footer"
 import { AdsSlider } from "@/components/common/AdsSlider"
 import { ProjectCard } from "@/components/cards"
 import { SectionHeader, Tabs, SkeletonCard } from "@/components/ui"
@@ -653,8 +652,6 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-
-          <Footer />
 
         </div>
       </div>

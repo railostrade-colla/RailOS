@@ -6,7 +6,6 @@ import { Target, Sparkles, Lock, Globe, Handshake, Rocket, Mail, Phone, Headphon
 import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
-import { Footer } from "@/components/layout/Footer"
 import { APP_NAME, APP_NAME_EN } from "@/lib/utils/version"
 
 const VALUES = [
@@ -163,7 +162,6 @@ export default function AboutPage() {
             </div>
           </div>
 
-          <Footer compact />
 
         </div>
       </div>

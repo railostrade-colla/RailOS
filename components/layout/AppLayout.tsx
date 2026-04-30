@@ -2,11 +2,15 @@ import { ReactNode } from "react"
 import { DesktopHeader } from "./DesktopHeader"
 import { MobileHeader } from "./MobileHeader"
 import { BottomNav } from "./BottomNav"
+import { Footer } from "./Footer"
 import { cn } from "@/lib/utils/cn"
 
 interface AppLayoutProps {
   children: ReactNode
+  /** يخفي شريط التنقّل السفلي (للموبايل) — مفيد لشاشات الدردشة الكاملة. */
   hideBottomNav?: boolean
+  /** يخفي الـ Footer (مفيد لشاشات الدردشة أو الشاشات الفائقة الصغر). */
+  hideFooter?: boolean
 }
 
 /**
@@ -17,12 +21,13 @@ interface AppLayoutProps {
  *   - main: flex-1 + flex-col → يملأ المساحة المتبقية بعد الـ header
  *   - الـ scroll طبيعي عند تجاوز المحتوى للارتفاع
  *
- * Desktop (≥1024px): Header علوي + content بعرض كامل
- * Mobile/Tablet (<1024px): Header علوي بسيط + content + BottomNav سفلي
+ * Desktop (≥1024px): Header علوي + content بعرض كامل + Footer
+ * Mobile/Tablet (<1024px): Header علوي + content + Footer + BottomNav سفلي
  *
- * hideBottomNav: لإخفاء الـ BottomNav (مفيد لشاشات chat كاملة الارتفاع)
+ * Footer: نسخة كاملة موحَّدة (مأخوذة من تصميم Dashboard) — تظهر في كل الصفحات
+ *         ما لم يُمَرَّر hideFooter={true}.
  */
-export function AppLayout({ children, hideBottomNav = false }: AppLayoutProps) {
+export function AppLayout({ children, hideBottomNav = false, hideFooter = false }: AppLayoutProps) {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Desktop Header (sticky top) */}
@@ -39,6 +44,13 @@ export function AppLayout({ children, hideBottomNav = false }: AppLayoutProps) {
         )}
       >
         {children}
+
+        {/* Unified Footer (Dashboard-style full version) */}
+        {!hideFooter && (
+          <div className="px-4 lg:px-8 max-w-screen-2xl mx-auto w-full">
+            <Footer />
+          </div>
+        )}
       </main>
 
       {/* Mobile Bottom Nav (fixed) */}
