@@ -314,15 +314,13 @@ export default function CreateAdPage() {
   const hasEnoughFeeBalance = MOCK_FEE_BALANCE >= listingFee
 
   // ─── Validation Errors (per field) ───
+  // ✦ القاعدة: لا توجد عمولة بالحصص — الإعلانات لا تخصم من الحصص نفسها.
+  //   رسوم الإعلان (إن وُجدت) مدفوعة من رصيد وحدات الرسوم.
   const sharesError = useMemo(() => {
     if (sharesInput === "") return null
     if (sharesNum < 1) return "يجب أن يكون عدد الحصص 1 على الأقل"
-    if (adType === "sell") {
-      const COMMISSION = Math.ceil(sharesNum * 0.02)
-      const totalNeeded = sharesNum + COMMISSION
-      if (totalNeeded > availableShares) {
-        return "لا يمكن — تحتاج " + totalNeeded + " حصة (" + sharesNum + " + " + COMMISSION + " عمولة) ولديك " + availableShares + " فقط"
-      }
+    if (adType === "sell" && sharesNum > availableShares) {
+      return "تجاوزت رصيدك المتاح — لديك " + availableShares + " حصة فقط"
     }
     return null
   }, [sharesInput, sharesNum, adType, availableShares])
@@ -351,13 +349,9 @@ export default function CreateAdPage() {
       return
     }
     const num = parseInt(v) || 0
-    if (adType === "sell" && availableShares > 0) {
-      const COMMISSION_FACTOR = 1.02
-      const maxAllowed = Math.floor(availableShares / COMMISSION_FACTOR)
-      if (num > maxAllowed) {
-        setSharesInput(String(maxAllowed))
-        return
-      }
+    if (adType === "sell" && availableShares > 0 && num > availableShares) {
+      setSharesInput(String(availableShares))
+      return
     }
     setSharesInput(v)
   }
@@ -519,11 +513,7 @@ export default function CreateAdPage() {
                   <span>عدد الحصص</span>
                   {adType === "sell" && selectedHolding && (
                     <button
-                      onClick={() => {
-                        const COMMISSION_FACTOR = 1.02
-                        const maxAllowed = Math.floor(availableShares / COMMISSION_FACTOR)
-                        setSharesInput(String(maxAllowed))
-                      }}
+                      onClick={() => setSharesInput(String(availableShares))}
                       className="text-[10px] text-blue-400 hover:text-blue-300 font-normal"
                     >
                       الحد الأقصى
@@ -536,7 +526,7 @@ export default function CreateAdPage() {
                   onChange={(e) => handleSharesChange(e.target.value)}
                   placeholder="0"
                   min="1"
-                  max={adType === "sell" && availableShares > 0 ? Math.floor(availableShares / 1.02) : undefined}
+                  max={adType === "sell" && availableShares > 0 ? availableShares : undefined}
                   className={cn(
                     "w-full bg-white/[0.05] border rounded-xl px-4 py-3 text-base font-bold text-white outline-none text-center font-mono transition-colors",
                     sharesError
@@ -552,8 +542,8 @@ export default function CreateAdPage() {
                   </div>
                 ) : adType === "sell" && availableShares > 0 ? (
                   <div className="text-[10px] text-neutral-500 mt-1.5">
-                    الحد الأقصى: <span className="text-yellow-400 font-mono font-bold">{Math.floor(availableShares / 1.02)}</span> حصة
-                    <span className="text-neutral-600"> (يشمل عمولة 2%)</span>
+                    المتاح: <span className="text-yellow-400 font-mono font-bold">{availableShares}</span> حصة
+                    <span className="text-neutral-600"> (لا توجد عمولة بالحصص)</span>
                   </div>
                 ) : null}
               </div>

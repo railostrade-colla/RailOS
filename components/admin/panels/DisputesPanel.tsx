@@ -67,19 +67,19 @@ export function DisputesPanel() {
       return
     }
     const labels: Record<Exclude<ActionMode, null>, string> = {
-      buyer_favor: "✅ تم الحسم لصالح المشتري — استرداد كامل",
-      seller_favor: "✅ تم الحسم لصالح البائع — تأكيد البيع",
-      split: "⚖️ تم الحل المُقسَّم 50/50",
-      request_evidence: "📎 تم طلب أدلّة إضافية من الطرفين",
+      buyer_favor: "✅ تم تحرير الحصص للمشتري + غرامة 2% على البائع",
+      seller_favor: "✅ تم إعادة الحصص للبائع + غرامة 2% على المشتري",
+      split: "⚖️ تم تقسيم الحصص 50/50 بين الطرفين",
+      request_evidence: "📎 تم طلب أدلّة إضافية من الطرفين — تجميد 7 أيام",
     }
     showSuccess(labels[actionMode])
     closeAll()
   }
 
   const resolutionLabels: Record<DisputeResolution, string> = {
-    buyer_favor: "لصالح المشتري",
-    seller_favor: "لصالح البائع",
-    split: "مُقسَّم 50/50",
+    buyer_favor: "تحرير الحصص للمشتري",
+    seller_favor: "إعادة الحصص للبائع",
+    split: "تقسيم الحصص 50/50",
     escalated: "صُعِّد للأعلى",
   }
 
@@ -193,9 +193,14 @@ export function DisputesPanel() {
               </button>
             </div>
 
-            {/* Section 1: Deal info */}
+            {/* Section 1: Deal info + Escrow status */}
             <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-4 mb-4">
-              <div className="text-[11px] font-bold text-neutral-400 mb-3">📋 معلومات الصفقة</div>
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <div className="text-[11px] font-bold text-neutral-400">📋 معلومات الصفقة + Escrow</div>
+                <span className="bg-yellow-400/[0.12] border border-yellow-400/30 text-yellow-400 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1">
+                  🔒 الحصص مُعلَّقة
+                </span>
+              </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                 <div>
                   <div className="text-[10px] text-neutral-500 mb-1">رقم الصفقة</div>
@@ -206,12 +211,12 @@ export function DisputesPanel() {
                   <div className="text-white">{selected.project_name}</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-neutral-500 mb-1">عدد الحصص</div>
-                  <div className="font-mono text-white">{fmtNum(selected.shares)}</div>
+                  <div className="text-[10px] text-neutral-500 mb-1">🔒 الحصص المُعلَّقة</div>
+                  <div className="font-mono text-yellow-400 font-bold">{fmtNum(selected.shares)} حصة</div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-neutral-500 mb-1">المبلغ</div>
-                  <div className="font-mono text-yellow-400 font-bold">{fmtNum(selected.amount)} د.ع</div>
+                  <div className="text-[10px] text-neutral-500 mb-1">المبلغ المُتفق عليه</div>
+                  <div className="font-mono text-white font-bold">{fmtNum(selected.amount)} د.ع</div>
                 </div>
                 <div className="col-span-2">
                   <div className="text-[10px] text-neutral-500 mb-1">المشتري</div>
@@ -303,10 +308,10 @@ export function DisputesPanel() {
             {/* Footer actions */}
             {(selected.status === "open" || selected.status === "in_review") ? (
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                <ActionBtn label="✅ المشتري" color="green" onClick={() => setActionMode("buyer_favor")} />
-                <ActionBtn label="✅ البائع" color="blue" onClick={() => setActionMode("seller_favor")} />
-                <ActionBtn label="⚖️ مقسّم" color="yellow" onClick={() => setActionMode("split")} />
-                <ActionBtn label="📎 أدلّة" color="gray" onClick={() => setActionMode("request_evidence")} />
+                <ActionBtn label="✅ تحرير للمشتري" color="green" onClick={() => setActionMode("buyer_favor")} />
+                <ActionBtn label="↩️ إعادة للبائع" color="blue" onClick={() => setActionMode("seller_favor")} />
+                <ActionBtn label="⚖️ تقسيم 50/50" color="yellow" onClick={() => setActionMode("split")} />
+                <ActionBtn label="🧊 تجميد 7 أيام" color="gray" onClick={() => setActionMode("request_evidence")} />
               </div>
             ) : (
               <button
@@ -326,10 +331,10 @@ export function DisputesPanel() {
           <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-w-md">
             <div className="flex justify-between items-start mb-4">
               <div className="text-base font-bold text-white">
-                {actionMode === "buyer_favor" && "✅ حسم لصالح المشتري"}
-                {actionMode === "seller_favor" && "✅ حسم لصالح البائع"}
-                {actionMode === "split" && "⚖️ حلّ مُقسَّم 50/50"}
-                {actionMode === "request_evidence" && "📎 طلب أدلّة إضافية"}
+                {actionMode === "buyer_favor" && "✅ تحرير الحصص للمشتري"}
+                {actionMode === "seller_favor" && "↩️ إعادة الحصص للبائع"}
+                {actionMode === "split" && "⚖️ تقسيم الحصص 50/50"}
+                {actionMode === "request_evidence" && "🧊 تجميد الصفقة للتحقيق"}
               </div>
               <button onClick={() => { setActionMode(null); setAdminNotes("") }} className="text-neutral-500 hover:text-white">
                 <X className="w-5 h-5" />
@@ -343,10 +348,10 @@ export function DisputesPanel() {
               actionMode === "split" && "bg-yellow-400/[0.05] border-yellow-400/[0.2] text-yellow-400",
               actionMode === "request_evidence" && "bg-gray-400/[0.05] border-gray-400/[0.2] text-gray-400",
             )}>
-              {actionMode === "buyer_favor" && `سيتم استرداد ${fmtNum(selected.amount)} د.ع كاملاً للمشتري ${selected.buyer_name}.`}
-              {actionMode === "seller_favor" && `سيتم تأكيد البيع وتحويل المبلغ للبائع ${selected.seller_name}.`}
-              {actionMode === "split" && `سيحصل كل طرف على نصف المبلغ — ${fmtNum(Math.floor(selected.amount / 2))} د.ع للمشتري والبائع.`}
-              {actionMode === "request_evidence" && "سيُرسَل طلب للطرفين لرفع أدلّة إضافية. تحويل النزاع لـ in_review."}
+              {actionMode === "buyer_favor" && `سيتم تحرير ${fmtNum(selected.shares)} حصة من الـ Escrow ونقلها لمحفظة المشتري ${selected.buyer_name}. تُطبَّق غرامة 2% على البائع (في وحدات الرسوم).`}
+              {actionMode === "seller_favor" && `سيتم فك تعليق ${fmtNum(selected.shares)} حصة وإعادتها للبائع ${selected.seller_name}. تُطبَّق غرامة 2% على المشتري (في وحدات الرسوم).`}
+              {actionMode === "split" && `سيحصل كل طرف على ${fmtNum(Math.floor(selected.shares / 2))} حصة. الباقي يُعاد للبائع.`}
+              {actionMode === "request_evidence" && `سيُجمَّد النزاع لـ 7 أيام. الحصص (${fmtNum(selected.shares)}) تبقى مُعلَّقة لحين رفع أدلّة من الطرفين.`}
             </div>
 
             <label className="text-xs text-neutral-400 mb-2 block font-bold">

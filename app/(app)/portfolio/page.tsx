@@ -74,10 +74,22 @@ function PortfolioContent() {
   // إحصائيات المحفظة
   const totalShares = mockHoldings.reduce((s, h) => s + h.shares_owned, 0)
   const totalValue = mockHoldings.reduce((s, h) => s + (h.project?.share_price || 0) * h.shares_owned, 0)
-  const totalInvested = totalValue * 0.92 // يفترض أن سعر الشراء كان 92% من الحالي
+  // إذا توفّر buy_price لكل holding نستخدمه؛ وإلا نُقدِّر بـ ‎92%‎ من القيمة الحالية.
+  const totalInvested = mockHoldings.reduce((s, h) => {
+    const cost = (h.buy_price ?? (h.project?.share_price ?? 0) * 0.92) * h.shares_owned
+    return s + cost
+  }, 0)
   const netProfit = totalValue - totalInvested
   const profitPct = totalInvested > 0 ? ((netProfit / totalInvested) * 100).toFixed(2) : "0"
   const isUp = netProfit >= 0
+
+  // أفضل مشروع أداءً — يُحسب من الفرق الفعلي بين القيمة الحالية وسعر الشراء.
+  const bestPerformerPct = mockHoldings.reduce((bestPct, h) => {
+    const cost = (h.buy_price ?? (h.project?.share_price ?? 0) * 0.92) * h.shares_owned
+    const current = (h.project?.share_price ?? 0) * h.shares_owned
+    const pct = cost > 0 ? ((current - cost) / cost) * 100 : 0
+    return pct > bestPct ? pct : bestPct
+  }, -Infinity)
 
   // وحدات الرسوم
   const feeBalance = 85000
@@ -378,7 +390,9 @@ function PortfolioContent() {
                     </div>
                     <div>
                       <div className="text-sm font-bold text-white">{mockHoldings[0]?.project?.name}</div>
-                      <div className="text-[11px] text-green-400">↑ +12%</div>
+                      <div className="text-[11px] text-green-400">
+                        ↑ {bestPerformerPct >= 0 ? "+" : ""}{bestPerformerPct.toFixed(1)}%
+                      </div>
                     </div>
                   </div>
                 </div>

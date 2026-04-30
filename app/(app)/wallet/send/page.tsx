@@ -49,13 +49,12 @@ export default function SendSharesPage() {
   const [sending, setSending] = useState(false)
 
   // Calculations
-  const COMMISSION_RATE = 0.02
+  // ✦ القاعدة: المنصّة لا تخصم رسوماً بالحصص — كل العمولات بوحدات الرسوم فقط.
   const qtyNum = parseInt(qty) || 0
-  const commission = Math.ceil(qtyNum * COMMISSION_RATE)
-  const netQty = qtyNum - commission
   const sharePrice = selectedHolding?.project?.share_price || 0
   const totalValue = qtyNum * sharePrice
   const TRANSFER_FEE_PERCENT = 2.5
+  // العمولة الوحيدة — مدفوعة من رصيد وحدات الرسوم (وليس من الحصص نفسها).
   const transferFee = Math.ceil((totalValue * TRANSFER_FEE_PERCENT) / 100)
 
   // Validations
@@ -73,9 +72,8 @@ export default function SendSharesPage() {
     if (selectedHolding && qtyNum > selectedHolding.shares_owned) {
       return "تجاوزت رصيدك المتاح (" + selectedHolding.shares_owned + " حصة)"
     }
-    if (netQty < 1) return "العمولة (" + commission + ") تتجاوز الكمية"
     return null
-  }, [qty, qtyNum, selectedHolding, netQty, commission])
+  }, [qty, qtyNum, selectedHolding])
 
   // Handlers
   const handleVerifyRecipient = async (id?: string) => {
@@ -164,7 +162,7 @@ export default function SendSharesPage() {
   const handleSubmit = async () => {
     setSending(true)
     await new Promise((r) => setTimeout(r, 1200))
-    showSuccess("تم إرسال " + netQty + " حصة بنجاح! 🎉")
+    showSuccess("تم إرسال " + qtyNum + " حصة بنجاح! 🎉")
     setShowConfirm(false)
     setSending(false)
     setTimeout(() => router.replace("/portfolio"), 800)
@@ -437,8 +435,8 @@ export default function SendSharesPage() {
                 </div>
               ) : qtyNum > 0 ? (
                 <div className="text-[10px] text-neutral-500 mt-1.5 flex items-center justify-between">
-                  <span>الصافي للمستلم: <span className="text-green-400 font-mono font-bold">{netQty}</span> حصة</span>
-                  <span>العمولة: <span className="text-red-400 font-mono">{commission}</span> حصة</span>
+                  <span>سيستلم المستلم كاملاً: <span className="text-green-400 font-mono font-bold">{qtyNum}</span> حصة</span>
+                  <span>رسوم التحويل: <span className="text-yellow-400 font-mono">{transferFee.toLocaleString("en-US")}</span> وحدة</span>
                 </div>
               ) : null}
             </div>
@@ -478,11 +476,11 @@ export default function SendSharesPage() {
                 {[
                   { label: "المستلم", value: recipientUser?.name || "—", color: "white" },
                   { label: "المشروع", value: selectedHolding.project.name, color: "white" },
-                  { label: "الحصص المرسلة", value: qtyNum + " حصة", color: "white" },
-                  { label: "عمولة المنصة (2%)", value: commission + " حصة", color: "red" },
-                  { label: "الصافي للمستلم", value: netQty + " حصة", color: "green" },
-                  { label: "رصيدك بعد الإرسال", value: (selectedHolding.shares_owned - qtyNum) + " حصة", color: "yellow" },
-                  { label: "رسوم التحويل", value: transferFee + " وحدة رسوم", color: "yellow" },
+                  { label: "الحصص المُرسَلة", value: qtyNum + " حصة", color: "white" },
+                  { label: "يستلم المستلم", value: qtyNum + " حصة (كاملاً)", color: "green" },
+                  { label: "رصيدك بعد الإرسال", value: (selectedHolding.shares_owned - qtyNum) + " حصة", color: "white" },
+                  { label: "رسوم التحويل", value: transferFee.toLocaleString("en-US") + " وحدة", color: "yellow" },
+                  { label: "رصيد وحدات الرسوم بعد الخصم", value: (CURRENT_FEE_BALANCE - transferFee).toLocaleString("en-US") + " وحدة", color: "yellow" },
                 ].map((row, i) => (
                   <div key={i} className="flex justify-between items-center py-1.5 border-b border-white/[0.04] last:border-0">
                     <span className="text-[11px] text-neutral-500">{row.label}</span>
@@ -617,10 +615,10 @@ export default function SendSharesPage() {
                 ["المستلم", recipientUser.name],
                 ["ID المستلم", formatID(recipientUser.id)],
                 ["المشروع", selectedHolding.project.name],
-                ["الحصص المرسلة", qtyNum + " حصة"],
-                ["العمولة (2%)", commission + " حصة"],
-                ["الصافي للمستلم", netQty + " حصة"],
-                ["رسوم التحويل", transferFee + " وحدة"],
+                ["الحصص المُرسَلة", qtyNum + " حصة"],
+                ["يستلم المستلم", qtyNum + " حصة (كاملاً)"],
+                ["رسوم التحويل (وحدات)", transferFee.toLocaleString("en-US") + " وحدة"],
+                ["خصم من رصيد الرسوم", transferFee.toLocaleString("en-US") + " وحدة"],
                 ...(note ? [["الملاحظة", note] as [string, string]] : []),
               ].map(([l, v], i) => (
                 <div key={i} className="flex justify-between gap-2">

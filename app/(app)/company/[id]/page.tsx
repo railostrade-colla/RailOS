@@ -27,6 +27,7 @@ import {
   companiesById as mockCompanies,
   relatedProjectsByCompany as mockRelatedProjects,
 } from "@/lib/mock-data"
+import { getProjectReturnRange } from "@/lib/utils/finance"
 
 function genChart(base: number, days: number, seed = 1) {
   const d: number[] = []
@@ -340,12 +341,23 @@ export default function CompanyDetailPage() {
               <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4">
                 <div className="text-xs font-bold text-white mb-3">ملخص الأداء</div>
                 <div className="divide-y divide-white/[0.04]">
-                  {[
-                    { label: "العائد المتوقع السنوي", value: "12-18%", color: "text-green-400" },
-                    { label: "متوسط حجم التداول", value: fmtIQD(Math.round(marketCap * 0.05)) + " IQD" },
-                    { label: "عدد المستثمرين النشطين", value: Math.floor(soldShares / 50) + "" },
-                    { label: "متوسط النمو الشهري", value: "+5.2%", color: "text-green-400" },
-                  ].map((item, i) => (
+                  {(() => {
+                    // العائد السنوي مُجمَّع من مشاريع الشركة (وليس ثابتاً).
+                    const ranges = projects.map((p) => getProjectReturnRange(p))
+                    const avgMin = ranges.length ? ranges.reduce((s, r) => s + r.min, 0) / ranges.length : 0
+                    const avgMax = ranges.length ? ranges.reduce((s, r) => s + r.max, 0) / ranges.length : 0
+                    const returnLabel = ranges.length === 0
+                      ? "—"
+                      : avgMin === avgMax
+                      ? `${avgMin.toFixed(0)}%`
+                      : `${avgMin.toFixed(0)}-${avgMax.toFixed(0)}%`
+                    return [
+                      { label: "العائد المتوقع السنوي", value: returnLabel, color: "text-green-400" },
+                      { label: "متوسط حجم التداول", value: fmtIQD(Math.round(marketCap * 0.05)) + " IQD" },
+                      { label: "عدد المستثمرين النشطين", value: Math.floor(soldShares / 50) + "" },
+                      { label: "متوسط النمو الشهري", value: "+5.2%", color: "text-green-400" },
+                    ]
+                  })().map((item, i) => (
                     <div key={i} className="flex justify-between py-2.5">
                       <span className="text-xs text-neutral-500">{item.label}</span>
                       <span className={cn("text-xs font-bold", item.color || "text-white")}>{item.value}</span>

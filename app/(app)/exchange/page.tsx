@@ -2,17 +2,29 @@
 
 import { Suspense, useState, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ChevronDown, Search, Plus, X, Filter, AlertTriangle, ShoppingCart, Lock, Star, Clock, Wallet } from "lucide-react"
+import { ChevronDown, Search, Plus, X, AlertTriangle, ShoppingCart, Lock, Clock, Wallet, ChevronLeft } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
-import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
+import { showSuccess, showError } from "@/lib/utils/toast"
 import {
   MOCK_PROJECTS,
   MOCK_LISTINGS,
   PAYMENT_METHODS_PUBLIC as PAYMENT_METHODS,
 } from "@/lib/mock-data"
+import { canCreateDeal, createDeal } from "@/lib/escrow"
 import { cn } from "@/lib/utils/cn"
+
+const CURRENT_USER_ID = "me"
+const CURRENT_USER_NAME = "أنا"
+
+function formatTimeLeftShort(ms: number): string {
+  if (ms <= 0) return "انتهى"
+  const hrs = Math.floor(ms / 3_600_000)
+  const mins = Math.floor((ms % 3_600_000) / 60_000)
+  if (hrs > 0) return `${hrs}س ${mins}د`
+  return `${mins}د`
+}
 
 const fmtIQD = (n: number) => n.toLocaleString("en-US")
 
@@ -255,8 +267,15 @@ function ExchangeContent() {
   const [sort, setSort] = useState<"price" | "trust" | "speed">("price")
   const [selectedProject, setSelectedProject] = useState<typeof MOCK_PROJECTS[0] | null>(null)
   const [paymentFilter, setPaymentFilter] = useState<string[]>([])
+
+  // Escrow modal state
   const [confirmListing, setConfirmListing] = useState<typeof MOCK_LISTINGS[0] | null>(null)
-  const [agreed, setAgreed] = useState(false)
+  const [conflictDeal, setConflictDeal] = useState<{ id: string; expires_at: string } | null>(null)
+  const [amount, setAmount] = useState<number>(1)
+  const [duration, setDuration] = useState<24 | 48 | 72>(24)
+  const [notes, setNotes] = useState("")
+  const [agreed1, setAgreed1] = useState(false)  // shares lock
+  const [agreed2, setAgreed2] = useState(false)  // commitment
   const [opening, setOpening] = useState(false)
 
   // Apply project filter from URL
@@ -284,20 +303,70 @@ function ExchangeContent() {
       })
   }, [mode, sort, selectedProject, paymentFilter])
 
-  const handleOpenDeal = () => {
-    if (!agreed) {
-      showError("يجب الموافقة على القوانين أولاً")
+  /** Triggered when user clicks "شراء/بيع" on a listing card. */
+  const onClickListing = (listing: typeof MOCK_LISTINGS[0]) => {
+    // 1. Check for active deal على هذا الإعلان
+    const can = canCreateDeal(CURRENT_USER_ID, listing.id)
+    if (!can.allowed && can.activeDeal) {
+      setConflictDeal({ id: can.activeDeal.id, expires_at: can.activeDeal.expires_at })
       return
     }
+    // 2. Open the new-deal modal
+    setConfirmListing(listing)
+    setAmount(Math.min(1, listing.shares))
+    setDuration(24)
+    setNotes("")
+    setAgreed1(false)
+    setAgreed2(false)
+  }
+
+  const closeNewDealModal = () => {
+    setConfirmListing(null)
+    setAmount(1)
+    setNotes("")
+    setAgreed1(false)
+    setAgreed2(false)
+  }
+
+  const handleCreateDeal = () => {
+    if (!confirmListing) return
+    if (amount < 1 || amount > confirmListing.shares) {
+      return showError(`الكمية يجب أن تكون بين 1 و ${confirmListing.shares}`)
+    }
+    if (!agreed1 || !agreed2) {
+      return showError("يجب الموافقة على شروط الـ Escrow")
+    }
+
     setOpening(true)
-    setTimeout(() => {
-      const dealId = "deal_" + Date.now()
-      showSuccess("تم فتح الدردشة! 💬")
-      setOpening(false)
-      setConfirmListing(null)
-      setAgreed(false)
-      router.push("/deal-chat/" + dealId)
-    }, 800)
+    // Determine buyer/seller based on listing type + mode
+    const isBuyingFromSellListing = confirmListing.type === "sell"
+    const buyerId = isBuyingFromSellListing ? CURRENT_USER_ID : confirmListing.user_id
+    const buyerName = isBuyingFromSellListing ? CURRENT_USER_NAME : confirmListing.user_name
+    const sellerId = isBuyingFromSellListing ? confirmListing.user_id : CURRENT_USER_ID
+    const sellerName = isBuyingFromSellListing ? confirmListing.user_name : CURRENT_USER_NAME
+
+    const result = createDeal({
+      buyerId,
+      buyerName,
+      sellerId,
+      sellerName,
+      listingId: confirmListing.id,
+      projectId: confirmListing.project_id,
+      projectName: confirmListing.project_name,
+      amount,
+      pricePerShare: confirmListing.price,
+      durationHours: duration,
+      notes: notes.trim() || undefined,
+    })
+
+    setOpening(false)
+
+    if (!result.success || !result.data) {
+      return showError(result.reason ?? "تعذّر فتح الصفقة")
+    }
+    showSuccess(`🔒 تم تعليق ${amount} حصة وفتح الصفقة`)
+    closeNewDealModal()
+    router.push("/deals/" + result.data.id)
   }
 
   return (
@@ -545,7 +614,7 @@ function ExchangeContent() {
 
                     {/* Action button */}
                     <button
-                      onClick={() => setConfirmListing(l)}
+                      onClick={() => onClickListing(l)}
                       className={cn(
                         "w-full py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2",
                         mode === "buy"
@@ -565,71 +634,184 @@ function ExchangeContent() {
         </div>
       </div>
 
-      {/* Confirmation Modal */}
+      {/* ═══ Conflict Modal — صفقة نشطة موجودة ═══ */}
+      {conflictDeal && (
+        <div
+          className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-end sm:items-center justify-center sm:p-4"
+          onClick={() => setConflictDeal(null)}
+        >
+          <div
+            className="bg-[#0a0a0a] border-t border-white/[0.1] sm:border sm:rounded-2xl rounded-t-3xl p-5 w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-yellow-400/15 border border-yellow-400/30 flex items-center justify-center text-xl">
+                  ⏳
+                </div>
+                <div>
+                  <div className="text-base font-bold text-white">صفقة نشطة موجودة</div>
+                  <div className="text-[11px] text-neutral-500 mt-0.5">على هذا الإعلان</div>
+                </div>
+              </div>
+              <button onClick={() => setConflictDeal(null)} className="text-neutral-500 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-yellow-400/[0.05] border border-yellow-400/20 rounded-xl p-4 mb-4 text-center">
+              <div className="text-[10px] text-neutral-500 mb-1">الوقت المتبقّي</div>
+              <div className="text-2xl font-bold text-yellow-400 font-mono mb-1" dir="ltr">
+                {formatTimeLeftShort(new Date(conflictDeal.expires_at).getTime() - Date.now())}
+              </div>
+              <div className="text-[10px] text-neutral-400">يجب إكمال أو إلغاء الصفقة الحالية أولاً</div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConflictDeal(null)}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={() => router.push("/deals/" + conflictDeal.id)}
+                className="flex-[2] py-3 rounded-xl bg-neutral-100 text-black text-sm font-bold hover:bg-neutral-200 flex items-center justify-center gap-2"
+              >
+                عرض الصفقة
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ New Deal Modal — Escrow ═══ */}
       {confirmListing && (
         <div
           className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-end sm:items-center justify-center sm:p-4"
-          onClick={() => {
-            setConfirmListing(null)
-            setAgreed(false)
-          }}
+          onClick={closeNewDealModal}
         >
           <div
             className="bg-[#0a0a0a] border-t border-white/[0.1] sm:border sm:rounded-2xl rounded-t-3xl p-5 w-full max-w-md max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-start mb-4">
-              <div>
-                <div className="text-base font-bold text-white">تأكيد الصفقة</div>
-                <div className="text-[11px] text-neutral-500 mt-0.5">
-                  {mode === "buy" ? "شراء من" : "بيع إلى"} {confirmListing.user_name}
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-blue-400/15 border border-blue-400/30 flex items-center justify-center">
+                  <Lock className="w-5 h-5 text-blue-400" strokeWidth={2} />
+                </div>
+                <div>
+                  <div className="text-base font-bold text-white">فتح صفقة جديدة</div>
+                  <div className="text-[11px] text-neutral-500 mt-0.5">
+                    {mode === "buy" ? "شراء من" : "بيع إلى"} {confirmListing.user_name}
+                  </div>
                 </div>
               </div>
-              <button
-                onClick={() => {
-                  setConfirmListing(null)
-                  setAgreed(false)
-                }}
-                className="text-neutral-500 hover:text-white"
-              >
+              <button onClick={closeNewDealModal} className="text-neutral-500 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Deal summary */}
-            <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-4 mb-4 space-y-2.5">
-              {[
-                ["المشروع", confirmListing.project_name],
-                ["البائع", confirmListing.user_name + " (" + confirmListing.success_rate + "%)"],
-                ["الكمية", confirmListing.shares + " حصة"],
-                ["سعر الحصة", confirmListing.price.toLocaleString("en-US") + " د.ع"],
-              ].map(([l, v], i) => (
-                <div key={i} className="flex justify-between gap-2">
-                  <span className="text-[11px] text-neutral-500">{l}</span>
-                  <span className="text-xs font-bold text-white">{v}</span>
-                </div>
-              ))}
-              <div className="h-px bg-white/[0.05]" />
-              <div className="flex justify-between gap-2">
-                <span className="text-xs font-bold text-yellow-400">الإجمالي</span>
-                <span className="text-base font-bold text-yellow-400 font-mono">
-                  {fmtIQD(confirmListing.price * confirmListing.shares)} د.ع
+            {/* 1. Amount input */}
+            <div className="mb-4">
+              <label className="text-[11px] font-bold text-neutral-300 mb-2 block">
+                الكمية {mode === "buy" ? "المُراد شراؤها" : "المُراد بيعها"}
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min={1}
+                  max={confirmListing.shares}
+                  value={amount}
+                  onChange={(e) => {
+                    const v = Math.max(1, Math.min(confirmListing.shares, Number(e.target.value) || 1))
+                    setAmount(v)
+                  }}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-base text-white font-mono outline-none focus:border-white/20"
+                />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-neutral-500 font-bold">
+                  / {confirmListing.shares} متاح
                 </span>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5 mt-2">
+                {[1, Math.ceil(confirmListing.shares / 4), Math.ceil(confirmListing.shares / 2), confirmListing.shares].map((n, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setAmount(n)}
+                    className={cn(
+                      "py-1.5 rounded-lg text-[10px] font-bold border transition-colors",
+                      amount === n
+                        ? "bg-blue-400/15 border-blue-400/40 text-blue-400"
+                        : "bg-white/[0.04] border-white/[0.08] text-neutral-400 hover:text-white"
+                    )}
+                  >
+                    {n} حصة
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Laws box */}
+            {/* 2. Duration selector */}
+            <div className="mb-4">
+              <label className="text-[11px] font-bold text-neutral-300 mb-2 block">
+                مدّة إكمال الصفقة
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {([24, 48, 72] as const).map((h) => (
+                  <button
+                    key={h}
+                    onClick={() => setDuration(h)}
+                    className={cn(
+                      "py-2.5 rounded-lg text-xs font-bold border transition-colors",
+                      duration === h
+                        ? "bg-blue-400/15 border-blue-400/40 text-blue-400"
+                        : "bg-white/[0.04] border-white/[0.08] text-neutral-400 hover:text-white"
+                    )}
+                  >
+                    {h} ساعة
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 3. Notes */}
+            <div className="mb-4">
+              <label className="text-[11px] font-bold text-neutral-300 mb-2 block">
+                ملاحظات (اختياري)
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                placeholder="مثال: أفضّل الدفع عبر زين كاش..."
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-sm text-white placeholder:text-neutral-600 outline-none resize-none"
+              />
+            </div>
+
+            {/* Total summary */}
+            <div className="bg-yellow-400/[0.05] border border-yellow-400/20 rounded-xl p-3 mb-4 flex justify-between items-center">
+              <div>
+                <div className="text-[10px] text-neutral-500">الإجمالي</div>
+                <div className="text-[10px] text-neutral-400">{amount} × {fmtIQD(confirmListing.price)}</div>
+              </div>
+              <div className="text-lg font-bold text-yellow-400 font-mono">
+                {fmtIQD(amount * confirmListing.price)} د.ع
+              </div>
+            </div>
+
+            {/* Escrow rules */}
             <div className="bg-blue-400/[0.04] border border-blue-400/15 rounded-xl p-3.5 mb-4">
               <div className="text-[11px] font-bold text-blue-400 mb-2 flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" strokeWidth={1.5} />
-                قانون الصفقات
+                <Lock className="w-3.5 h-3.5" strokeWidth={2} />
+                نظام التعليق (Escrow)
               </div>
               <ul className="space-y-1.5">
                 {[
-                  "مدة الصفقة 15 دقيقة بعد فتح الدردشة",
-                  "البائع يلتزم بإتمام البيع فور موافقة المشتري",
-                  "الإلغاء يؤثر على تقييمك",
-                  "المشتري يرفع إثبات الدفع قبل إطلاق الحصص",
+                  "ستُعلَّق الحصص فور إنشاء الصفقة (لا يستطيع البائع بيعها لأحد آخر).",
+                  "بعد الدفع، تضغط زر «تأكيد الدفع».",
+                  "البائع يضغط «تحرير الحصص» بعد استلام المبلغ.",
+                  "إذا انتهى الوقت بدون تأكيد، الحصص ترجع للبائع تلقائياً.",
                 ].map((rule, i) => (
                   <li key={i} className="text-[11px] text-neutral-300 flex gap-1.5 leading-relaxed">
                     <span className="text-blue-400 flex-shrink-0">•</span>
@@ -639,51 +821,68 @@ function ExchangeContent() {
               </ul>
             </div>
 
-            {/* Agreement */}
-            <button
-              onClick={() => setAgreed(!agreed)}
-              className={cn(
-                "w-full flex items-start gap-3 p-3 rounded-xl border mb-4 transition-all text-right",
-                agreed
-                  ? "bg-green-400/[0.06] border-green-400/30"
-                  : "bg-white/[0.04] border-white/[0.08]"
-              )}
-            >
-              <div
+            {/* Two checkboxes */}
+            <div className="space-y-2 mb-4">
+              <button
+                onClick={() => setAgreed1(!agreed1)}
                 className={cn(
-                  "w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all",
-                  agreed ? "bg-green-400 border-green-400" : "border-neutral-500"
+                  "w-full flex items-start gap-3 p-2.5 rounded-xl border transition-all text-right",
+                  agreed1 ? "bg-green-400/[0.06] border-green-400/30" : "bg-white/[0.04] border-white/[0.08]"
                 )}
               >
-                {agreed && <span className="text-black text-xs font-bold">✓</span>}
-              </div>
-              <span className={cn("text-[11px] leading-relaxed", agreed ? "text-green-400" : "text-neutral-400")}>
-                أوافق على قوانين الصفقة وشروط الاستخدام
-              </span>
-            </button>
+                <div
+                  className={cn(
+                    "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
+                    agreed1 ? "bg-green-400 border-green-400" : "border-neutral-500"
+                  )}
+                >
+                  {agreed1 && <span className="text-black text-[9px] font-bold">✓</span>}
+                </div>
+                <span className={cn("text-[11px] leading-relaxed", agreed1 ? "text-green-400" : "text-neutral-400")}>
+                  أوافق على تعليق الحصص فور إنشاء الصفقة
+                </span>
+              </button>
+              <button
+                onClick={() => setAgreed2(!agreed2)}
+                className={cn(
+                  "w-full flex items-start gap-3 p-2.5 rounded-xl border transition-all text-right",
+                  agreed2 ? "bg-green-400/[0.06] border-green-400/30" : "bg-white/[0.04] border-white/[0.08]"
+                )}
+              >
+                <div
+                  className={cn(
+                    "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
+                    agreed2 ? "bg-green-400 border-green-400" : "border-neutral-500"
+                  )}
+                >
+                  {agreed2 && <span className="text-black text-[9px] font-bold">✓</span>}
+                </div>
+                <span className={cn("text-[11px] leading-relaxed", agreed2 ? "text-green-400" : "text-neutral-400")}>
+                  أتعهّد بإكمال الدفع/التسليم خلال {duration} ساعة
+                </span>
+              </button>
+            </div>
 
             <div className="flex gap-2">
               <button
-                onClick={() => {
-                  setConfirmListing(null)
-                  setAgreed(false)
-                }}
+                onClick={closeNewDealModal}
                 disabled={opening}
                 className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
               >
                 إلغاء
               </button>
               <button
-                onClick={handleOpenDeal}
-                disabled={!agreed || opening}
+                onClick={handleCreateDeal}
+                disabled={!agreed1 || !agreed2 || opening}
                 className={cn(
                   "flex-[2] py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2",
-                  agreed && !opening
+                  agreed1 && agreed2 && !opening
                     ? "bg-neutral-100 text-black hover:bg-neutral-200"
                     : "bg-white/[0.05] text-neutral-600 cursor-not-allowed"
                 )}
               >
-                {opening ? "جاري الفتح..." : "فتح الدردشة 💬"}
+                <Lock className="w-4 h-4" strokeWidth={2} />
+                {opening ? "جاري التعليق..." : "فتح الصفقة + تعليق"}
               </button>
             </div>
           </div>

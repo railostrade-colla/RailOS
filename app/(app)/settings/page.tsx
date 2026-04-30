@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   Bell,
@@ -10,14 +10,22 @@ import {
   Palette,
   AlertTriangle,
   ChevronLeft,
+  Fingerprint,
 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Tabs, Modal } from "@/components/ui"
-import { showSuccess, showInfo } from "@/lib/utils/toast"
+import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
 import { CURRENT_USER } from "@/lib/mock-data"
 import { LEVEL_LIMITS, fmtLimit } from "@/lib/utils/contractLimits"
+import {
+  isBiometricSupported,
+  isBiometricEnabledForUser,
+  registerBiometric,
+  disableBiometric,
+  resetBiometricPrompt,
+} from "@/lib/auth/biometric"
 import { cn } from "@/lib/utils/cn"
 
 type SettingsTab = "notifications" | "general" | "security" | "finance" | "appearance"
@@ -162,6 +170,35 @@ function SettingsContent() {
   const [density, setDensity] = useState("comfortable")
   const [animations, setAnimations] = useState(true)
 
+  // Security — biometric
+  const [bioSupported, setBioSupported] = useState(false)
+  const [bioEnabled, setBioEnabled] = useState(false)
+  const [bioBusy, setBioBusy] = useState(false)
+
+  useEffect(() => {
+    setBioSupported(isBiometricSupported())
+    setBioEnabled(isBiometricEnabledForUser(CURRENT_USER.id))
+  }, [])
+
+  const handleToggleBiometric = async (next: boolean) => {
+    setBioBusy(true)
+    if (next) {
+      const result = await registerBiometric(CURRENT_USER.id, CURRENT_USER.email ?? CURRENT_USER.name)
+      if (result.success) {
+        setBioEnabled(true)
+        showSuccess("تم تفعيل البصمة 👆")
+      } else {
+        showError(result.error ?? "تعذّر التفعيل")
+      }
+    } else {
+      disableBiometric(CURRENT_USER.id)
+      resetBiometricPrompt()
+      setBioEnabled(false)
+      showSuccess("تم إلغاء تفعيل البصمة")
+    }
+    setBioBusy(false)
+  }
+
   return (
     <AppLayout>
       <div className="relative">
@@ -284,6 +321,31 @@ function SettingsContent() {
           {/* ═══ Security ═══ */}
           {tab === "security" && (
             <div className="space-y-4">
+              {/* Biometric login */}
+              <Card>
+                <div className="text-xs font-bold text-white mb-3 flex items-center gap-2">
+                  <Fingerprint className="w-4 h-4 text-blue-400" strokeWidth={2} />
+                  تسجيل الدخول السريع
+                </div>
+
+                {!bioSupported ? (
+                  <div className="text-[11px] text-neutral-500 leading-relaxed bg-white/[0.03] border border-white/[0.06] rounded-lg p-3">
+                    متصفحك أو جهازك لا يدعم البصمة / Face ID. جرّب من جهاز محمول أو متصفّح حديث.
+                  </div>
+                ) : (
+                  <Toggle
+                    checked={bioEnabled}
+                    onChange={handleToggleBiometric}
+                    label={bioBusy ? "جاري التحديث..." : "تسجيل الدخول بالبصمة / Face ID"}
+                    description={
+                      bioEnabled
+                        ? "مفعَّل — يمكنك الدخول بسرعة بدون كلمة مرور"
+                        : "ادخل التطبيق بسرعة بدون كتابة كلمة المرور"
+                    }
+                  />
+                )}
+              </Card>
+
               <Card>
                 <div className="text-xs font-bold text-white mb-3 flex items-center gap-2">
                   <Lock className="w-4 h-4 text-purple-400" strokeWidth={2} />

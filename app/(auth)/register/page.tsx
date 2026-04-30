@@ -72,7 +72,8 @@ export default function RegisterPage() {
 
     if (data.user) {
       showSuccess("تم إنشاء حسابك بنجاح، مرحباً في Railos! 🎉")
-      router.push("/profile-setup")
+      router.push("/dashboard")
+      router.refresh()
     }
   }
 
