@@ -19,17 +19,24 @@ const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 const PLAN_FEATURES: Record<InsurancePlan, { features: string[]; covers: string[] }> = {
   basic: {
-    features: ["تغطية 30% من تكاليف العلاج", "حدّ سنوي 5 مليون د.ع", "أمراض الطوارئ"],
-    covers: ["كسور وحوادث", "أمراض موسمية"],
+    features: ["قسط شهري بسيط — 3,000 د.ع فقط", "حدّ سنوي 1 مليون د.ع", "أمراض الطوارئ والحالات البسيطة"],
+    covers: ["كسور وحوادث", "أمراض موسمية", "فحوصات أساسية"],
   },
   advanced: {
-    features: ["تغطية 60% من تكاليف العلاج", "حدّ سنوي 15 مليون د.ع", "أمراض مزمنة + جراحات صغيرة"],
-    covers: ["السكّري", "ارتفاع الضغط", "جراحات اليوم الواحد"],
+    features: ["قسط شهري متوازن — 6,000 د.ع", "حدّ سنوي 3 مليون د.ع", "أمراض مزمنة + جراحات صغيرة"],
+    covers: ["السكّري", "ارتفاع الضغط", "جراحات اليوم الواحد", "الأشعة"],
   },
   comprehensive: {
-    features: ["تغطية 90% من تكاليف العلاج", "حدّ سنوي 50 مليون د.ع", "كل الأمراض + الجراحات الكبرى"],
+    features: ["قسط شهري للحماية الكاملة — 12,000 د.ع", "حدّ سنوي 9 مليون د.ع", "كل الأمراض + الجراحات الكبرى"],
     covers: ["جراحات القلب", "علاج السرطان", "زراعة الأعضاء", "علاج خارج العراق"],
   },
+}
+
+/** عرض الحدّ السنوي بصيغة مختصرة (مثلاً: "1 مليون د.ع"). */
+function fmtAnnualLimit(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)} مليون د.ع`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)} ألف د.ع`
+  return `${fmtNum(n)} د.ع`
 }
 
 export default function InsurancePage() {
@@ -67,15 +74,19 @@ export default function InsurancePage() {
                 <div>
                   <div className="text-sm font-bold text-white">أنت مشترك حالياً</div>
                   <div className="text-[11px] text-neutral-400">
-                    خطّة {MOCK_INSURANCE_PLANS.find((p) => p.plan === myInsurance.plan)?.name} · {myInsurance.coverage_pct}% تغطية
+                    خطّة {MOCK_INSURANCE_PLANS.find((p) => p.plan === myInsurance.plan)?.name} · حدّ سنوي {fmtAnnualLimit(myInsurance.annual_limit)}
                   </div>
                 </div>
                 <Badge color="green">نشط</Badge>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="grid grid-cols-3 gap-3 text-xs">
                 <div>
                   <div className="text-[10px] text-neutral-500 mb-0.5">القسط الشهري</div>
                   <div className="text-white font-mono font-bold">{fmtNum(myInsurance.monthly_fee)} د.ع</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-neutral-500 mb-0.5">الحدّ السنوي</div>
+                  <div className="text-yellow-400 font-mono font-bold">{fmtAnnualLimit(myInsurance.annual_limit)}</div>
                 </div>
                 <div>
                   <div className="text-[10px] text-neutral-500 mb-0.5">الفاتورة التالية</div>
@@ -94,7 +105,7 @@ export default function InsurancePage() {
               <li>اختر خطّة تناسبك من 3 خطط متاحة</li>
               <li>يُخصم القسط الشهري تلقائياً من رصيد وحدات الرسوم</li>
               <li>عند الحاجة للعلاج، قدّم طلباً مع الفواتير</li>
-              <li>نُغطّي النسبة المُحدَّدة (30/60/90%) خلال 48 ساعة</li>
+              <li>نُغطّي تكاليف العلاج حتى الحدّ السنوي للخطّة (1M / 3M / 9M د.ع) خلال 48 ساعة</li>
             </ol>
           </Card>
 
@@ -133,7 +144,7 @@ export default function InsurancePage() {
                     plan.color === "purple" && "text-purple-400",
                     plan.color === "green"  && "text-green-400",
                   )}>
-                    تغطية {plan.coverage_pct}%
+                    حدّ سنوي {fmtAnnualLimit(plan.annual_limit)}
                   </div>
 
                   <div className="space-y-2 mb-4">
@@ -200,6 +211,8 @@ export default function InsurancePage() {
             <>
               <div className="text-xs text-neutral-300 leading-relaxed mb-3">
                 ستشترك في خطّة <span className="text-white font-bold">{plan.name}</span> بقسط شهري <span className="text-white font-bold font-mono">{fmtNum(plan.monthly_fee)}</span> د.ع.
+                <br />
+                الحدّ السنوي للتغطية: <span className="text-yellow-400 font-bold">{fmtAnnualLimit(plan.annual_limit)}</span>.
               </div>
               <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-xl p-3 text-[11px] text-blue-400">
                 ⚠️ سيتم خصم القسط الأول الآن من رصيد وحدات الرسوم. يمكن إلغاء الاشتراك في أي وقت.

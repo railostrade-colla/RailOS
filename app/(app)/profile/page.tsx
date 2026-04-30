@@ -124,7 +124,7 @@ export default function ProfilePage() {
 
         <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
 
-          <PageHeader title="ملفي الشخصي" subtitle="إدارة حسابك" backHref="/dashboard" />
+          <PageHeader title="ملفي الشخصي" subtitle="إدارة حسابك" showBack={false} />
 
           {/* ═══ § 1 Profile Card (Hero) ═══ */}
           <Card variant="gradient" color="purple" className="mb-6">

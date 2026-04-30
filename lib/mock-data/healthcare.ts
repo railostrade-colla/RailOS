@@ -54,7 +54,10 @@ export interface InsuranceSubscription {
   user_name?: string
   plan: InsurancePlan
   monthly_fee: number
-  coverage_pct: number
+  /** السقف السنوي بالدينار العراقي (الحد الأقصى للتغطية في السنة). */
+  annual_limit: number
+  /** Deprecated — احتُفظ به للتوافق الخلفي. الجديد: annual_limit. */
+  coverage_pct?: number
   started_at: string
   next_billing: string
   status: InsuranceStatus
@@ -344,17 +347,17 @@ export const MOCK_HEALTHCARE_APPLICATIONS: HealthcareApplication[] = [
 // Insurance subscriptions (5)
 // ──────────────────────────────────────────────────────────────────────────
 export const MOCK_INSURANCE_PLANS = [
-  { plan: "basic" as const,         name: "أساسي",   monthly_fee: 25_000,  coverage_pct: 30, color: "blue" as const },
-  { plan: "advanced" as const,      name: "متقدّم",  monthly_fee: 60_000,  coverage_pct: 60, color: "purple" as const },
-  { plan: "comprehensive" as const, name: "شامل",    monthly_fee: 120_000, coverage_pct: 90, color: "green" as const },
+  { plan: "basic" as const,         name: "أساسي",   monthly_fee:  3_000, annual_limit: 1_000_000, color: "blue" as const },
+  { plan: "advanced" as const,      name: "متقدّم",  monthly_fee:  6_000, annual_limit: 3_000_000, color: "purple" as const },
+  { plan: "comprehensive" as const, name: "محترف",   monthly_fee: 12_000, annual_limit: 9_000_000, color: "green" as const },
 ]
 
 export const MOCK_INSURANCE_SUBSCRIPTIONS: InsuranceSubscription[] = [
-  { id: "is-1", user_id: "abc123def456", user_name: "أحمد محمد",  plan: "advanced",      monthly_fee: 60_000,  coverage_pct: 60, started_at: "2026-01-15", next_billing: "2026-05-15", status: "active" },
-  { id: "is-2", user_id: "u2",            user_name: "علي حسن",     plan: "comprehensive", monthly_fee: 120_000, coverage_pct: 90, started_at: "2025-11-01", next_billing: "2026-05-01", status: "active" },
-  { id: "is-3", user_id: "u3",            user_name: "محمد أحمد",  plan: "basic",         monthly_fee: 25_000,  coverage_pct: 30, started_at: "2026-02-20", next_billing: "2026-05-20", status: "active" },
-  { id: "is-4", user_id: "u5",            user_name: "نور الدين",  plan: "advanced",      monthly_fee: 60_000,  coverage_pct: 60, started_at: "2026-03-10", next_billing: "2026-05-10", status: "paused" },
-  { id: "is-5", user_id: "u9",            user_name: "هدى صبري",   plan: "basic",         monthly_fee: 25_000,  coverage_pct: 30, started_at: "2025-08-05", next_billing: "—",          status: "cancelled" },
+  { id: "is-1", user_id: "abc123def456", user_name: "أحمد محمد",  plan: "advanced",      monthly_fee:  6_000, annual_limit: 3_000_000, started_at: "2026-01-15", next_billing: "2026-05-15", status: "active" },
+  { id: "is-2", user_id: "u2",            user_name: "علي حسن",     plan: "comprehensive", monthly_fee: 12_000, annual_limit: 9_000_000, started_at: "2025-11-01", next_billing: "2026-05-01", status: "active" },
+  { id: "is-3", user_id: "u3",            user_name: "محمد أحمد",  plan: "basic",         monthly_fee:  3_000, annual_limit: 1_000_000, started_at: "2026-02-20", next_billing: "2026-05-20", status: "active" },
+  { id: "is-4", user_id: "u5",            user_name: "نور الدين",  plan: "advanced",      monthly_fee:  6_000, annual_limit: 3_000_000, started_at: "2026-03-10", next_billing: "2026-05-10", status: "paused" },
+  { id: "is-5", user_id: "u9",            user_name: "هدى صبري",   plan: "basic",         monthly_fee:  3_000, annual_limit: 1_000_000, started_at: "2025-08-05", next_billing: "—",          status: "cancelled" },
 ]
 
 // ──────────────────────────────────────────────────────────────────────────

@@ -295,7 +295,7 @@ export function HealthcareAdminPanel() {
                 <TH>المستخدم</TH>
                 <TH>الخطّة</TH>
                 <TH>القسط الشهري</TH>
-                <TH>التغطية</TH>
+                <TH>الحدّ السنوي</TH>
                 <TH>الفاتورة التالية</TH>
                 <TH>الحالة</TH>
               </THead>
@@ -303,9 +303,9 @@ export function HealthcareAdminPanel() {
                 {MOCK_INSURANCE_SUBSCRIPTIONS.map((s) => (
                   <TR key={s.id}>
                     <TD>{s.user_name || s.user_id}</TD>
-                    <TD>{s.plan === "basic" ? "أساسي" : s.plan === "advanced" ? "متقدّم" : "شامل"}</TD>
+                    <TD>{s.plan === "basic" ? "أساسي" : s.plan === "advanced" ? "متقدّم" : "محترف"}</TD>
                     <TD><span className="font-mono">{fmtNum(s.monthly_fee)}</span></TD>
-                    <TD>{s.coverage_pct}%</TD>
+                    <TD><span className="font-mono text-yellow-400">{fmtNum(s.annual_limit)}</span></TD>
                     <TD><span className="text-[11px] text-neutral-500">{s.next_billing}</span></TD>
                     <TD>
                       <Badge

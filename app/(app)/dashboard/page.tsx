@@ -393,28 +393,38 @@ export default function DashboardPage() {
             })}
           </div>
 
-          {/* ═════════════ § 3: Alerts strip (conditional) ═════════════ */}
+          {/* ═════════════ § 3: Alerts strip (interactive pills) ═════════════ */}
           {alerts.length > 0 && (
-            <div className="bg-yellow-400/[0.04] border border-yellow-400/20 rounded-xl px-3 py-2.5 mb-7 flex items-center gap-2 overflow-x-auto">
-              {alerts.map((a, i) => (
-                <span key={a.id} className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => router.push(a.href)}
-                    className="text-[11px] text-neutral-300 hover:text-white whitespace-nowrap flex items-center gap-1.5 transition-colors"
-                  >
-                    <span>{a.icon}</span>
-                    <span>{a.title}</span>
-                  </button>
-                  {i < alerts.length - 1 && <span className="text-neutral-700">·</span>}
+            <div className="mb-7">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] text-yellow-400 font-bold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                  تنبيهات تحتاج انتباهك
                 </span>
-              ))}
-              <button
-                onClick={() => router.push("/notifications")}
-                className="mr-auto text-[10px] text-yellow-400 hover:text-yellow-300 flex items-center gap-1 flex-shrink-0 transition-colors"
-              >
-                الكل
-                <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
-              </button>
+                <button
+                  onClick={() => router.push("/notifications")}
+                  className="text-[10px] text-yellow-400 hover:text-yellow-300 flex items-center gap-1 transition-colors"
+                >
+                  عرض الكل
+                  <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+                {alerts.map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => router.push(a.href)}
+                    className={cn(
+                      "flex items-center gap-1.5 flex-shrink-0 px-3 py-2 rounded-full border transition-colors text-[11px] font-bold whitespace-nowrap",
+                      "bg-yellow-400/[0.08] border-yellow-400/30 text-yellow-400",
+                      "hover:bg-yellow-400/[0.15] hover:border-yellow-400/50 active:bg-yellow-400/[0.2]"
+                    )}
+                  >
+                    <span>{a.title}</span>
+                    <ChevronLeft className="w-3 h-3 opacity-70" strokeWidth={2.5} />
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

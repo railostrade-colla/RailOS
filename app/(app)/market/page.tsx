@@ -49,7 +49,7 @@ function MarketContent() {
   const tabFromUrl = searchParams?.get("tab") as MarketTab | null
   const companyFilter = searchParams?.get("company")
 
-  const [tab, setTab] = useState<MarketTab>(tabFromUrl || "projects")
+  const [tab, setTab] = useState<MarketTab>(tabFromUrl || "news")
   const [search, setSearch] = useState("")
   const [sectorFilter, setSectorFilter] = useState("الكل")
   const [riskFilter, setRiskFilter] = useState("الكل")
@@ -160,13 +160,13 @@ function MarketContent() {
             </div>
           )}
 
-          {/* Tabs (uses Tabs primitive) — 4 tabs: News | Projects | Companies | Offers */}
+          {/* Tabs (uses Tabs primitive) — 4 tabs: News (default) | Projects | Companies | Offers */}
           <div className="mb-4">
             <Tabs
               tabs={[
-                { id: "news", icon: "📰", label: "الأخبار", count: news.length },
-                { id: "projects", icon: "🏗️", label: "المشاريع", count: filteredProjects.length },
-                { id: "companies", icon: "🏢", label: "الشركات", count: filteredCompanies.length },
+                { id: "news", label: "الأخبار", count: news.length },
+                { id: "projects", label: "المشاريع", count: filteredProjects.length },
+                { id: "companies", label: "الشركات", count: filteredCompanies.length },
                 { id: "offers", icon: "✨", label: "العروض", count: mockAds.length + userOffers.length },
               ]}
               activeTab={tab}

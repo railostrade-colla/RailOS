@@ -1,11 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import {
   Coins, Zap, Star, Shield, Settings, Newspaper,
   HelpCircle, BookOpen, TrendingUp, FileText, Lock, Info, Heart, Building2,
-  HeartPulse, Users, Gift, ChevronRight,
+  HeartPulse, Users, Gift,
 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
@@ -187,7 +186,6 @@ const menuItems: MenuItem[] = [
 ]
 
 export default function MenuPage() {
-  const router = useRouter()
   return (
     <AppLayout>
       <div className="relative">
@@ -195,22 +193,11 @@ export default function MenuPage() {
 
         <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-screen-2xl mx-auto">
 
-          {/* Back button — same style as menu items */}
-          <button
-            onClick={() => router.back()}
-            className="group flex items-center gap-2 mb-5 px-3 py-2 rounded-xl bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] transition-colors"
-          >
-            <div className="w-8 h-8 rounded-lg bg-neutral-300/5 border border-neutral-300/20 flex items-center justify-center group-hover:scale-105 transition-transform">
-              <ChevronRight className="w-4 h-4 text-neutral-300" strokeWidth={1.5} />
-            </div>
-            <span className="text-sm text-neutral-200 font-medium">رجوع</span>
-          </button>
-
           <PageHeader
             badge="MAIN MENU · 17 SHORTCUTS"
             title="القائمة الرئيسية"
             description="كل اختصارات Railos في مكان واحد"
-            showBack={false}
+            showBack={true}
           />
 
           {/* Grid - 4 cols always (mobile flat, desktop carded) */}
