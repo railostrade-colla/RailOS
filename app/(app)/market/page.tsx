@@ -160,14 +160,14 @@ function MarketContent() {
             </div>
           )}
 
-          {/* Tabs (uses Tabs primitive) — 4 tabs: News (default) | Projects | Companies | Offers */}
+          {/* Tabs (uses Tabs primitive) — 4 tabs (clean labels only): News (default) | Projects | Companies | Offers */}
           <div className="mb-4">
             <Tabs
               tabs={[
-                { id: "news", label: "الأخبار", count: news.length },
-                { id: "projects", label: "المشاريع", count: filteredProjects.length },
-                { id: "companies", label: "الشركات", count: filteredCompanies.length },
-                { id: "offers", icon: "✨", label: "العروض", count: mockAds.length + userOffers.length },
+                { id: "news", label: "الأخبار" },
+                { id: "projects", label: "المشاريع" },
+                { id: "companies", label: "الشركات" },
+                { id: "offers", label: "العروض" },
               ]}
               activeTab={tab}
               onChange={(id) => handleTabChange(id as MarketTab)}
