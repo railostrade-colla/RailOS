@@ -120,7 +120,6 @@ function PortfolioContent() {
           <PageHeader
             title="المحفظة"
             subtitle="حصصك والمعاملات والوحدات في مكان واحد"
-            showBack={false}
           />
 
           {/* بطاقة الحدود الشهرية */}
