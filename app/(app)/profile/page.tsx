@@ -195,11 +195,11 @@ export default function ProfilePage() {
               </div>
 
               <button
-                onClick={() => router.push("/quick-sell")}
+                onClick={() => router.push("/quick-sale")}
                 className="w-full bg-gradient-to-r from-yellow-400 to-orange-400 text-black py-3 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
               >
                 <Crown className="w-4 h-4" strokeWidth={2.5} />
-                اشترك الآن — 50,000 د.ع/شهر
+                اشترك الآن — 10,000 وحدة رسوم
               </button>
               <p className="text-[10px] text-neutral-500 text-center mt-2">إلغاء في أي وقت</p>
             </div>

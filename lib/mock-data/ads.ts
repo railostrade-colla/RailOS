@@ -34,7 +34,7 @@ export const mockAds: Ad[] = [
     icon: "⚡",
     action_label: "اشترك",
     link_type: "internal",
-    link_url: "/quick-sell",
+    link_url: "/quick-sale",
     type: "promo",
   },
 ]

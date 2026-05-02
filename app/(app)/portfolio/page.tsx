@@ -246,7 +246,7 @@ function PortfolioContent() {
               {[
                 { label: "إرسال", icon: Send, onClick: () => router.push("/wallet/send") },
                 { label: "استلام", icon: Download, onClick: () => router.push("/wallet/receive") },
-                { label: "بيع سريع", icon: Zap, onClick: () => router.push("/quick-sell"), disabled: totalShares === 0 },
+                { label: "بيع سريع", icon: Zap, onClick: () => router.push("/quick-sale"), disabled: totalShares === 0 },
                 { label: "طلب وحدات", icon: CreditCard, onClick: () => setShowFeeModal(true) },
               ].map((btn) => {
                 const Icon = btn.icon
