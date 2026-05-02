@@ -39,6 +39,9 @@ export type AdminTab =
   | "admin_users"
   // Phase Health
   | "market_health"
+  // Phase Levels
+  | "level_settings"
+  | "user_stats"
 
 export interface AdminNavItem {
   key: AdminTab
@@ -69,7 +72,9 @@ export const ADMIN_NAV: AdminNavItem[] = [
 
   { key: "shares",       label: "الحصص والتداول",  icon: "◎",  section: "الحصص" },
   { key: "fees",         label: "الرسوم",          icon: "💰", section: "الرسوم" },
-  { key: "users",        label: "المستخدمون",      icon: "⊙",  section: "المستخدمون" },
+  { key: "users",            label: "المستخدمون",       icon: "⊙",  section: "المستخدمون" },
+  { key: "user_stats",       label: "سجلّ مستخدم",     icon: "📋", section: "المستخدمون" },
+  { key: "level_settings",   label: "إعدادات المستويات", icon: "⚙️", section: "المستخدمون" },
 
   // الحوكمة (governance) — Phase Admin-A + Phase Admin-B
   { key: "council_admin",      label: "المجلس",         icon: "🏛️", section: "الحوكمة" },

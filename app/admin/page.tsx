@@ -43,6 +43,9 @@ import { LegalPagesEditorPanel } from "@/components/admin/panels/LegalPagesEdito
 import { AdminUsersPanel } from "@/components/admin/panels/AdminUsersPanel"
 // Phase Health
 import { MarketHealthPanel } from "@/components/admin/panels/MarketHealthPanel"
+// Phase Levels
+import { LevelSettingsPanel } from "@/components/admin/panels/LevelSettingsPanel"
+import { UserStatsPanel } from "@/components/admin/panels/UserStatsPanel"
 
 export default function AdminPage() {
   const searchParams = useSearchParams()
@@ -90,6 +93,9 @@ export default function AdminPage() {
     admin_users: <AdminUsersPanel />,
     // Phase Health
     market_health: <MarketHealthPanel />,
+    // Phase Levels
+    level_settings: <LevelSettingsPanel />,
+    user_stats: <UserStatsPanel />,
   }
 
   if (panels[tab]) return <>{panels[tab]}</>
