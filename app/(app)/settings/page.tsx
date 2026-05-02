@@ -217,6 +217,21 @@ function SettingsContent() {
           {/* ═══ Notifications ═══ */}
           {tab === "notifications" && (
             <div className="space-y-4">
+              {/* Link to the new advanced notification settings page */}
+              <button
+                onClick={() => router.push("/settings/notifications")}
+                className="w-full bg-gradient-to-l from-blue-400/[0.08] to-transparent border border-blue-400/20 rounded-xl p-3.5 flex items-center gap-3 hover:from-blue-400/[0.12] transition-colors text-right"
+              >
+                <div className="w-9 h-9 rounded-xl bg-blue-400/[0.12] border border-blue-400/30 flex items-center justify-center flex-shrink-0">
+                  <Bell className="w-4 h-4 text-blue-400" strokeWidth={2} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-white">إعدادات الإشعارات المتقدّمة</div>
+                  <div className="text-[11px] text-neutral-400 mt-0.5">دفعات Web، ساعات هدوء، 9 فئات قابلة للتخصيص</div>
+                </div>
+                <ChevronLeft className="w-4 h-4 text-neutral-500 flex-shrink-0" strokeWidth={2} />
+              </button>
+
               <Card>
                 <div className="text-xs font-bold text-white mb-3 flex items-center gap-2">
                   <Bell className="w-4 h-4 text-blue-400" strokeWidth={2} />

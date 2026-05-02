@@ -7,6 +7,7 @@ import { MobileHeader } from "./MobileHeader"
 import { BottomNav } from "./BottomNav"
 import { Footer } from "./Footer"
 import { OfflineBanner } from "./OfflineBanner"
+import { PushPermissionPrompt } from "@/components/notifications/PushPermissionPrompt"
 import { cn } from "@/lib/utils/cn"
 
 interface AppLayoutProps {
@@ -89,6 +90,9 @@ export function AppLayout({ children, hideBottomNav = false, hideFooter = false 
 
       {/* Mobile Bottom Nav (fixed) */}
       {!hideBottomNav && <BottomNav />}
+
+      {/* Push permission prompt (shows once after 3s for new users) */}
+      <PushPermissionPrompt />
     </div>
   )
 }
