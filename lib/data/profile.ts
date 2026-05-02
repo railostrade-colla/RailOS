@@ -80,24 +80,42 @@ export interface CurrentUserProfile {
   joined_year_month: string
 }
 
-/** Shape we expect from `profiles` (raw — every column nullable to be safe). */
+/**
+ * Shape we expect from `profiles` (raw).
+ *
+ * Base columns (always present from `01_users.sql`):
+ *   full_name, username, phone, avatar_url, role, kyc_status,
+ *   is_active, is_banned, rating_average, rating_count,
+ *   trades_completed, total_invested, is_ambassador, created_at
+ *
+ * Optional columns (present only when migration `10-levels-system.sql`
+ * has been applied):
+ *   total_trades, successful_trades, total_trade_volume, level, ...
+ *
+ * We mark the optional ones as `... | undefined` so destructuring stays
+ * safe on databases that haven't been migrated yet.
+ */
 interface ProfileRow {
-  full_name: string | null
-  username: string | null
-  phone: string | null
-  avatar_url: string | null
-  role: string
-  kyc_status: KycStatus
-  is_active: boolean
-  is_banned: boolean
-  rating_average: number | null
-  rating_count: number | null
-  total_trades: number | null
-  successful_trades: number | null
-  total_trade_volume: number | null
-  level: string | null
-  is_ambassador: boolean | null
-  created_at: string
+  // Base
+  full_name?: string | null
+  username?: string | null
+  phone?: string | null
+  avatar_url?: string | null
+  role?: string
+  kyc_status?: KycStatus
+  is_active?: boolean
+  is_banned?: boolean
+  rating_average?: number | null
+  rating_count?: number | null
+  trades_completed?: number | null
+  is_ambassador?: boolean | null
+  created_at?: string
+
+  // From migration 10 (may be undefined on un-migrated DBs)
+  total_trades?: number | null
+  successful_trades?: number | null
+  total_trade_volume?: number | null
+  level?: string | null
 }
 
 /** Subset of `user_stats_view` we read here. */
@@ -172,13 +190,16 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
   }
 
   // ── Step 2: profiles row (REQUIRED) ───────────────────────
+  // Use `select("*")` so the query never fails on databases where
+  // migration 10 hasn't been applied yet (those DBs lack columns
+  // like total_trades / successful_trades / level). We treat every
+  // migration-10 column as optional in `ProfileRow` and fall back
+  // gracefully below.
   let profile: ProfileRow
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select(
-        "full_name, username, phone, avatar_url, role, kyc_status, is_active, is_banned, rating_average, rating_count, total_trades, successful_trades, total_trade_volume, level, is_ambassador, created_at",
-      )
+      .select("*")
       .eq("id", userId)
       .maybeSingle()
 
@@ -223,11 +244,16 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
     console.warn("[profile] user_stats_view fetch threw, using fallbacks:", err)
   }
 
-  // ── Step 4: merge ─────────────────────────────────────────
+  // ── Step 4: merge with fallbacks for missing migration-10 columns ─
   const level = stats?.level ?? profile.level ?? "basic"
   const ratingAvg = Number(profile.rating_average ?? 0)
-  const totalTrades = Number(profile.total_trades ?? 0)
+  // Prefer migration-10's total_trades; fall back to the base
+  // trades_completed column when that migration hasn't run.
+  const totalTrades = Number(
+    profile.total_trades ?? profile.trades_completed ?? 0,
+  )
   const successfulTrades = Number(profile.successful_trades ?? 0)
+  const createdAt = profile.created_at ?? ""
 
   const successRate =
     stats?.success_rate != null
@@ -239,15 +265,15 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
   return {
     id: userId,
     email: userEmail,
-    full_name: profile.full_name,
-    username: profile.username,
-    phone: profile.phone,
-    avatar_url: profile.avatar_url,
-    role: profile.role,
-    kyc_status: profile.kyc_status,
+    full_name: profile.full_name ?? null,
+    username: profile.username ?? null,
+    phone: profile.phone ?? null,
+    avatar_url: profile.avatar_url ?? null,
+    role: profile.role ?? "user",
+    kyc_status: (profile.kyc_status as KycStatus | undefined) ?? "not_submitted",
     is_verified: profile.kyc_status === "approved",
-    is_active: profile.is_active,
-    is_banned: profile.is_banned,
+    is_active: profile.is_active ?? true,
+    is_banned: profile.is_banned ?? false,
     total_trades: totalTrades,
     successful_trades: successfulTrades,
     success_rate: successRate,
@@ -264,7 +290,7 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
     level_color:
       stats?.level_color ?? FALLBACK_LEVEL_COLORS[level] ?? "#60A5FA",
     is_ambassador: profile.is_ambassador ?? false,
-    created_at: profile.created_at,
-    joined_year_month: formatYearMonth(profile.created_at),
+    created_at: createdAt,
+    joined_year_month: formatYearMonth(createdAt),
   }
 }
