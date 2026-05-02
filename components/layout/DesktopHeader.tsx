@@ -80,8 +80,8 @@ export function DesktopHeader() {
             <HelpCircle className="w-4 h-4 text-neutral-300" strokeWidth={1.5} />
           </Link>
 
-          {/* Notifications — bell button + dropdown (badge replaces the legacy dot) */}
-          <NotificationBell badgePosition="right" dropdownAlign="right" />
+          {/* Notifications — bell links straight to /notifications page */}
+          <NotificationBell badgePosition="right" />
 
           {/* Menu (يفتح صفحة /menu) */}
           <Link

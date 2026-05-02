@@ -44,8 +44,8 @@ export function MobileHeader() {
             <HelpCircle className="w-4 h-4 text-neutral-300" strokeWidth={1.5} />
           </Link>
 
-          {/* Notifications — bell button + dropdown (badge replaces the legacy dot) */}
-          <NotificationBell badgePosition="left" dropdownAlign="left" withActiveState />
+          {/* Notifications — bell links straight to /notifications page */}
+          <NotificationBell badgePosition="left" withActiveState />
 
 
           {/* Menu (يفتح صفحة /menu) */}
