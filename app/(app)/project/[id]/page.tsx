@@ -136,7 +136,7 @@ export default function ProjectDetailPage() {
       <AppLayout>
         <div className="relative">
           <GridBackground showCircles={false} />
-          <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20 space-y-3">
+          <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20 space-y-3">
             <SkeletonCard />
             <SkeletonCard />
             <SkeletonCard />
@@ -160,7 +160,7 @@ export default function ProjectDetailPage() {
       <div className="relative">
         <GridBackground showCircles={false} />
 
-        <div className="relative z-10 px-4 lg:px-8 py-6 max-w-3xl mx-auto">
+        <div className="relative z-10 px-3 lg:px-8 py-6 max-w-3xl mx-auto">
 
           <PageHeader
             title="تفاصيل المشروع"

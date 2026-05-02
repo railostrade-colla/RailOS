@@ -6,10 +6,6 @@ import {
   ChevronDown,
   ChevronLeft,
   HelpCircle,
-  MessageCircle,
-  Mail,
-  Phone,
-  Send,
   Clock,
   ThumbsUp,
   ThumbsDown,
@@ -83,7 +79,7 @@ export default function SupportPage() {
   return (
     <AppLayout>
       <div className="relative">
-<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-4xl mx-auto pb-20">
+<div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-4xl mx-auto pb-20">
 
           <PageHeader
             title="🆘 مركز المساعدة"
@@ -125,31 +121,26 @@ export default function SupportPage() {
             </div>
           </Card>
 
-          {/* ═══ § 2 Quick actions ═══ */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-7">
-            <Card onClick={() => showInfo("ميزة الدردشة المباشرة قادمة قريباً")} className="text-center">
-              <div className="w-10 h-10 rounded-xl bg-green-400/[0.1] border border-green-400/30 flex items-center justify-center mx-auto mb-2">
-                <MessageCircle className="w-5 h-5 text-green-400" strokeWidth={2} />
-              </div>
-              <div className="text-sm font-bold text-white mb-0.5">💬 محادثة مباشرة</div>
-              <div className="text-[10px] text-neutral-500">متاحة 9 ص - 6 م</div>
-            </Card>
-
-            <Card onClick={() => setShowNewTicket(true)} className="text-center">
-              <div className="w-10 h-10 rounded-xl bg-blue-400/[0.1] border border-blue-400/30 flex items-center justify-center mx-auto mb-2">
-                <Send className="w-5 h-5 text-blue-400" strokeWidth={2} />
-              </div>
-              <div className="text-sm font-bold text-white mb-0.5">📧 إرسال طلب دعم</div>
-              <div className="text-[10px] text-neutral-500">رد خلال 24 ساعة</div>
-            </Card>
-
-            <Card onClick={() => showInfo("للاتصال: 07721726518")} className="text-center">
-              <div className="w-10 h-10 rounded-xl bg-purple-400/[0.1] border border-purple-400/30 flex items-center justify-center mx-auto mb-2">
-                <Phone className="w-5 h-5 text-purple-400" strokeWidth={2} />
-              </div>
-              <div className="text-sm font-bold text-white mb-0.5">📞 اتصل بنا</div>
-              <div className="text-[10px] text-neutral-500" dir="ltr">+964 772 172 6518</div>
-            </Card>
+          {/* ═══ § 2 Quick actions — horizontal compact row ═══ */}
+          <div className="grid grid-cols-3 gap-2 mb-7">
+            <button
+              onClick={() => showInfo("ميزة الدردشة المباشرة قادمة قريباً")}
+              className="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] rounded-xl py-2.5 px-2 text-center transition-colors"
+            >
+              <div className="text-[11px] font-bold text-white">محادثة مباشرة</div>
+            </button>
+            <button
+              onClick={() => setShowNewTicket(true)}
+              className="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] rounded-xl py-2.5 px-2 text-center transition-colors"
+            >
+              <div className="text-[11px] font-bold text-white">إرسال طلب دعم</div>
+            </button>
+            <button
+              onClick={() => showInfo("للاتصال: 07721726518")}
+              className="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] rounded-xl py-2.5 px-2 text-center transition-colors"
+            >
+              <div className="text-[11px] font-bold text-white">اتصل بنا</div>
+            </button>
           </div>
 
           {/* ═══ § 3 FAQ Tabs + List ═══ */}
@@ -264,33 +255,6 @@ export default function SupportPage() {
               </div>
             </div>
           )}
-
-          {/* ═══ § 5 Contact Methods ═══ */}
-          <SectionHeader title="📞 طرق التواصل" subtitle="نحن هنا لمساعدتك" />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Card padding="md" className="text-center">
-              <Mail className="w-5 h-5 text-blue-400 mx-auto mb-2" strokeWidth={2} />
-              <div className="text-[10px] text-neutral-500 mb-1">البريد</div>
-              <a href="mailto:railostrade@gmail.com" className="text-[10px] text-white font-bold break-all" dir="ltr">
-                railostrade@gmail.com
-              </a>
-            </Card>
-            <Card padding="md" className="text-center">
-              <MessageCircle className="w-5 h-5 text-green-400 mx-auto mb-2" strokeWidth={2} />
-              <div className="text-[10px] text-neutral-500 mb-1">WhatsApp</div>
-              <div className="text-xs text-white font-bold font-mono" dir="ltr">+964 772 172 6518</div>
-            </Card>
-            <Card padding="md" className="text-center">
-              <Phone className="w-5 h-5 text-purple-400 mx-auto mb-2" strokeWidth={2} />
-              <div className="text-[10px] text-neutral-500 mb-1">الهاتف</div>
-              <div className="text-xs text-white font-bold font-mono" dir="ltr">07721726518</div>
-            </Card>
-            <Card padding="md" className="text-center">
-              <Clock className="w-5 h-5 text-yellow-400 mx-auto mb-2" strokeWidth={2} />
-              <div className="text-[10px] text-neutral-500 mb-1">ساعات العمل</div>
-              <div className="text-xs text-white font-bold">9 ص - 6 م</div>
-            </Card>
-          </div>
 
         </div>
       </div>

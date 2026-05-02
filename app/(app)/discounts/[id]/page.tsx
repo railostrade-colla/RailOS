@@ -51,7 +51,7 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
       <AppLayout>
         <div className="relative">
           <GridBackground showCircles={false} />
-          <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto">
+          <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
             <PageHeader title="غير موجود" />
             <EmptyState icon="🔍" title="هذا الخصم غير متاح" action={{ label: "العودة للخصومات", onClick: () => router.push("/discounts") }} />
           </div>
@@ -87,7 +87,7 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
       <div className="relative">
         <GridBackground showCircles={false} />
 
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
+        <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader title={discount.brand_name} subtitle={cat.label} />
 

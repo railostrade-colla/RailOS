@@ -27,7 +27,7 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
       <AppLayout>
         <div className="relative">
           <GridBackground showCircles={false} />
-          <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto">
+          <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
             <PageHeader title="غير موجود" />
             <EmptyState icon="🔍" title="لم نعثر على هذا الطفل" action={{ label: "العودة للأطفال", onClick: () => router.push("/orphans/children") }} />
           </div>
@@ -49,7 +49,7 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
       <div className="relative">
         <GridBackground showCircles={false} />
 
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
+        <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader title={child.first_name} subtitle={`${child.age} سنوات · ${child.city}`} />
 

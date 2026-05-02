@@ -35,7 +35,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
       <AppLayout>
         <div className="relative">
           <GridBackground showCircles={false} />
-          <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto">
+          <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
             <PageHeader title="حالة غير موجودة" />
             <EmptyState icon="🔍" title="هذه الحالة غير متاحة" description="ربما حُذفت أو الرابط غير صحيح" action={{ label: "العودة للحالات", onClick: () => router.push("/healthcare/cases") }} />
           </div>
@@ -70,7 +70,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
       <div className="relative">
         <GridBackground showCircles={false} />
 
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
+        <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader title={c.patient_display_name} subtitle={`${c.patient_age} سنة · ${c.city}`} />
 

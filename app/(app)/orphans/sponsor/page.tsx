@@ -65,7 +65,7 @@ function SponsorContent() {
   return (
     <AppLayout>
       <div className="relative">
-<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-2xl mx-auto pb-20">
+<div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-2xl mx-auto pb-20">
 
           <PageHeader title="❤️ كفالة طفل" subtitle="اختر طفلاً وابدأ رحلة العطاء" />
 

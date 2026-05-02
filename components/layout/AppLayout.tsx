@@ -29,7 +29,8 @@ interface AppLayoutProps {
  * ملاحظة: "/profile" يطابق "/profile" + "/profile/level" + "/profile-setup".
  */
 const FOOTER_VISIBLE_PATHS = [
-  "/",          // الصفحة الرئيسية
+  "/",          // الصفحة الرئيسية (landing)
+  "/dashboard", // اللوحة الرئيسية (home بعد تسجيل الدخول)
   "/market",    // السوق
   "/portfolio", // الاستثمار / محفظتي
   "/council",   // المجتمع / مجلس السوق

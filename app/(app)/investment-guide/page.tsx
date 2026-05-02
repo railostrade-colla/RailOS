@@ -329,7 +329,7 @@ export default function InvestmentGuidePage() {
   return (
     <AppLayout>
       <div className="relative">
-<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-4xl mx-auto">
+<div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-4xl mx-auto">
 
           <PageHeader
             title="دليل الاستثمار"

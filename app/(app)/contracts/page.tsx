@@ -31,7 +31,7 @@ export default function ContractsPage() {
   return (
     <AppLayout>
       <div className="relative">
-<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto">
+<div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
 
           <PageHeader
             title="العقود"

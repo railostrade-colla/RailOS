@@ -188,7 +188,7 @@ export default function MenuPage() {
   return (
     <AppLayout>
       <div className="relative">
-<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-screen-2xl mx-auto">
+<div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-screen-2xl mx-auto">
 
           <PageHeader
             badge="MAIN MENU · 17 SHORTCUTS"

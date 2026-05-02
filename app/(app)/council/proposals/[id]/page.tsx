@@ -85,7 +85,7 @@ export default function ProposalDetailsPage() {
       <AppLayout>
         <div className="relative">
           <GridBackground showCircles={false} />
-          <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
+          <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
             <PageHeader title="تفاصيل القرار" backHref="/council/proposals" />
             <EmptyState
               icon="🔍"
@@ -142,7 +142,7 @@ export default function ProposalDetailsPage() {
       <div className="relative">
         <GridBackground showCircles={false} />
 
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
+        <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader
             title="تفاصيل القرار"
