@@ -41,6 +41,8 @@ import { CreateCompanyPanel } from "@/components/admin/panels/CreateCompanyPanel
 import { ProjectWalletsPanel } from "@/components/admin/panels/ProjectWalletsPanel"
 import { LegalPagesEditorPanel } from "@/components/admin/panels/LegalPagesEditorPanel"
 import { AdminUsersPanel } from "@/components/admin/panels/AdminUsersPanel"
+// Phase Health
+import { MarketHealthPanel } from "@/components/admin/panels/MarketHealthPanel"
 
 export default function AdminPage() {
   const searchParams = useSearchParams()
@@ -86,6 +88,8 @@ export default function AdminPage() {
     project_wallets: <ProjectWalletsPanel />,
     legal_editor: <LegalPagesEditorPanel />,
     admin_users: <AdminUsersPanel />,
+    // Phase Health
+    market_health: <MarketHealthPanel />,
   }
 
   if (panels[tab]) return <>{panels[tab]}</>

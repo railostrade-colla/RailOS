@@ -3,6 +3,7 @@ import { DesktopHeader } from "./DesktopHeader"
 import { MobileHeader } from "./MobileHeader"
 import { BottomNav } from "./BottomNav"
 import { Footer } from "./Footer"
+import { OfflineBanner } from "./OfflineBanner"
 import { cn } from "@/lib/utils/cn"
 
 interface AppLayoutProps {
@@ -30,6 +31,9 @@ interface AppLayoutProps {
 export function AppLayout({ children, hideBottomNav = false, hideFooter = false }: AppLayoutProps) {
   return (
     <div className="min-h-screen flex flex-col">
+      {/* Offline banner (sticky top, above all) — shows only when offline */}
+      <OfflineBanner />
+
       {/* Desktop Header (sticky top) */}
       <DesktopHeader />
 

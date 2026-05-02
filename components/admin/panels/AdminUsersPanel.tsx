@@ -1,10 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { Search, X, Plus } from "lucide-react"
+import { Search, X, Plus, Lock } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
-  SectionHeader, KPI, InnerTabBar, AdminEmpty,
+  KPI, InnerTabBar, AdminEmpty,
 } from "@/components/admin/ui"
 import {
   MOCK_ADMIN_USERS,
@@ -12,6 +12,9 @@ import {
   ADMIN_PERMISSION_LABELS,
   ADMIN_STATUS_LABELS,
   getAdminUsersStats,
+  isSuperAdmin,
+  countActiveSuperAdmins,
+  MOCK_CURRENT_ADMIN,
   type AdminUserRecord,
   type AdminPermission,
   type AdminRoleId,
@@ -25,6 +28,27 @@ const fmtNum = (n: number) => n.toLocaleString("en-US")
 type RowAction = null | "view" | "edit_perms" | "suspend" | "reactivate" | "delete"
 
 export function AdminUsersPanel() {
+  // ─── 🔒 Access guard: super_admin (founder) only ───
+  if (!isSuperAdmin(MOCK_CURRENT_ADMIN)) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <div className="bg-red-400/[0.05] border border-red-400/[0.25] rounded-2xl p-8 text-center">
+          <div className="w-16 h-16 rounded-full bg-red-400/[0.1] border border-red-400/[0.3] flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-8 h-8 text-red-400" strokeWidth={1.5} />
+          </div>
+          <div className="text-lg font-bold text-white mb-2">🚫 غير مصرَّح</div>
+          <div className="text-xs text-neutral-400 leading-relaxed max-w-sm mx-auto">
+            فقط <span className="text-purple-400 font-bold">المسؤول الأعلى (Super Admin)</span> يستطيع
+            إدارة الأدمنز الآخرين، إنشاءهم، تعديل صلاحياتهم، أو حذفهم.
+          </div>
+          <div className="mt-4 inline-block bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-1.5 text-[11px] text-neutral-500">
+            دورك الحالي: <span className="text-white font-bold">{ADMIN_ROLE_LABELS[MOCK_CURRENT_ADMIN.role].label}</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const [filter, setFilter] = useState<AdminUserStatus>("active")
   const [search, setSearch] = useState("")
   const [selected, setSelected] = useState<AdminUserRecord | null>(null)
@@ -59,16 +83,28 @@ export function AdminUsersPanel() {
 
   const handleAction = () => {
     if (!selected || !action) return
+
+    // 🛡️ منع المسؤول من حذف/إيقاف نفسه
+    if ((action === "suspend" || action === "delete") && selected.id === MOCK_CURRENT_ADMIN.id) {
+      return showError("لا يمكنك إيقاف أو حذف نفسك")
+    }
+
+    // 🛡️ منع حذف آخر super_admin (founder)
+    if ((action === "suspend" || action === "delete") && selected.role === "founder") {
+      const remainingSuperAdmins = countActiveSuperAdmins()
+      if (remainingSuperAdmins <= 1) {
+        return showError("يجب وجود مسؤول أعلى (Super Admin) واحد على الأقل في النظام")
+      }
+    }
+
     if (action === "edit_perms") {
       showSuccess(`✅ تم تحديث صلاحيات ${selected.full_name}`)
     }
     if (action === "suspend") {
-      if (selected.role === "founder") return showError("لا يمكن إيقاف المؤسّس")
       showSuccess(`⏸ تم إيقاف ${selected.full_name}`)
     }
     if (action === "reactivate") showSuccess(`▶️ تم إعادة تفعيل ${selected.full_name}`)
     if (action === "delete") {
-      if (selected.role === "founder") return showError("لا يمكن حذف المؤسّس")
       showSuccess(`🗑️ تم حذف ${selected.full_name}`)
     }
     setAction(null)

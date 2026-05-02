@@ -168,6 +168,25 @@ export function getAdminUsersStats() {
   }
 }
 
+/**
+ * المسؤول الأعلى الحالي (Current Logged-in Admin) — للـ Mock mode فقط.
+ * في Production: يأتي من Supabase auth + جدول admins بـ role = 'super_admin'.
+ *
+ * بحسب القاعدة الذهبية: "founder" = "super_admin"
+ * فقط هذا المستوى يستطيع إدارة بقية الأدمنز.
+ */
+export const MOCK_CURRENT_ADMIN: AdminUserRecord = MOCK_ADMIN_USERS[0] // founder
+
+/** هل المسؤول الحالي super_admin؟ */
+export function isSuperAdmin(admin: AdminUserRecord = MOCK_CURRENT_ADMIN): boolean {
+  return admin.role === "founder"
+}
+
+/** عدد الـ super admins النشطين (للحماية من حذف الأخير). */
+export function countActiveSuperAdmins(): number {
+  return MOCK_ADMIN_USERS.filter((a) => a.role === "founder" && a.status === "active").length
+}
+
 export function createAdminUser(_data: Partial<AdminUserRecord>) {
   return { success: true, id: `a-${Date.now()}` }
 }

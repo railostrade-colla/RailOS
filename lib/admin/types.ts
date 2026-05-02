@@ -37,6 +37,8 @@ export type AdminTab =
   | "project_wallets"
   | "legal_editor"
   | "admin_users"
+  // Phase Health
+  | "market_health"
 
 export interface AdminNavItem {
   key: AdminTab
@@ -48,6 +50,7 @@ export interface AdminNavItem {
 export const ADMIN_NAV: AdminNavItem[] = [
   { key: "dashboard",    label: "لوحة التحكم",   icon: "◈",  section: "رئيسي" },
   { key: "monitor",      label: "مراقبة السوق",   icon: "📡", section: "رئيسي" },
+  { key: "market_health",label: "صحّة السوق",    icon: "📊", section: "رئيسي" },
   { key: "alerts",       label: "التنبيهات",      icon: "🚨", section: "رئيسي" },
   { key: "log",          label: "سجل القرارات",   icon: "📋", section: "رئيسي" },
 
