@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Search, X, Calendar, Star, ChevronLeft, Clock } from "lucide-react"
+import { Search, X, Calendar, ChevronLeft, Clock } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { CompanyCard, ProjectCard } from "@/components/cards"
@@ -14,7 +14,6 @@ import {
   RISK_LEVELS_AR as RISK_LEVELS,
   getRecentNews,
   mockAds,
-  MOCK_LISTINGS,
   type PlatformNews,
   type NewsType,
 } from "@/lib/mock-data"
@@ -27,15 +26,6 @@ const NEWS_TYPE_META: Record<NewsType, { label: string; color: "blue" | "purple"
   feature:      { label: "ميزة جديدة", color: "purple" },
   tip:          { label: "نصيحة",      color: "green" },
   update:       { label: "تحديث",      color: "yellow" },
-}
-
-// ─── Sector icon for user offers ──────────────────────────
-const sectorIcon = (s: string) => {
-  if (s.includes("زراع")) return "🌾"
-  if (s.includes("تجار")) return "🏪"
-  if (s.includes("صناع")) return "🏭"
-  if (s.includes("عقار")) return "🏢"
-  return "🏢"
 }
 
 type MarketTab = "news" | "projects" | "companies" | "offers"
@@ -79,15 +69,6 @@ function MarketContent() {
 
   // ─── Tab content data ──────────────────────────────────────
   const news = useMemo(() => getRecentNews(12), [])
-  // Top user offers — high-reputation sell listings
-  const userOffers = useMemo(
-    () =>
-      MOCK_LISTINGS
-        .filter((l) => l.type === "sell" && l.reputation_score >= 85)
-        .sort((a, b) => b.reputation_score - a.reputation_score)
-        .slice(0, 6),
-    [],
-  )
 
   useEffect(() => {
     if (tabFromUrl) setTab(tabFromUrl)
@@ -281,9 +262,9 @@ function MarketContent() {
             </div>
           )}
 
-          {/* ═══ TAB CONTENT: ✨ Offers (System + User) ═══ */}
+          {/* ═══ TAB CONTENT: ✨ Offers (System only — user offers moved to /exchange + /quick-sale) ═══ */}
           {tab === "offers" && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="space-y-4">
               {/* System offers */}
               <Card variant="gradient" color="purple">
                 <SectionHeader
@@ -321,51 +302,40 @@ function MarketContent() {
                 </div>
               </Card>
 
-              {/* User offers */}
-              <Card variant="gradient" color="blue">
-                <SectionHeader
-                  title="👥 عروض المستخدمين"
-                  subtitle="أفضل المتداولين في السوق الثانوية"
-                  action={{ label: "كل العروض", href: "/exchange" }}
-                />
-
-                {userOffers.length === 0 ? (
-                  <EmptyState
-                    icon="📭"
-                    title="لا توجد عروض حالياً"
-                    description="تحقّق من السوق الثانوية"
-                    size="sm"
-                  />
-                ) : (
-                  <div className="space-y-2">
-                    {userOffers.map((l) => {
-                      const project = ALL_PROJECTS.find((p) => p.id === l.project_id)
-                      return (
-                        <button
-                          key={l.id}
-                          onClick={() => router.push("/exchange?project=" + l.project_id)}
-                          className="w-full bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl p-3 transition-colors text-right flex items-center gap-3"
-                        >
-                          <div className="w-10 h-10 rounded-xl bg-blue-400/[0.12] border border-blue-400/30 flex items-center justify-center text-xl flex-shrink-0">
-                            {sectorIcon(project?.sector ?? "")}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                              <span className="text-xs font-bold text-white truncate">{l.user_name}</span>
-                              <Badge color="green" variant="soft" size="xs" icon={<Star className="w-2 h-2 fill-green-400" />}>
-                                {l.reputation_score}
-                              </Badge>
-                            </div>
-                            <div className="text-[10px] text-neutral-400 truncate">
-                              {l.project_name} · <span className="font-mono text-white">{l.shares}</span> حصة بسعر <span className="font-mono text-yellow-400">{l.price.toLocaleString("en-US")}</span>
-                            </div>
-                          </div>
-                          <ChevronLeft className="w-4 h-4 text-neutral-500 flex-shrink-0" strokeWidth={2} />
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
+              {/* Redirect note — user listings now live in dedicated routes */}
+              <Card>
+                <div className="text-xs font-bold text-white mb-3">عروض المستخدمين متاحة في:</div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                  <button
+                    onClick={() => router.push("/exchange")}
+                    className="bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl p-3 text-right flex items-center gap-3 transition-colors"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-blue-400/[0.12] border border-blue-400/30 flex items-center justify-center text-base flex-shrink-0">
+                      🔄
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-bold text-white">سوق التبادل</div>
+                      <div className="text-[10px] text-neutral-400">تداول مباشر بين المستخدمين</div>
+                    </div>
+                    <ChevronLeft className="w-4 h-4 text-neutral-500 flex-shrink-0" strokeWidth={2} />
+                  </button>
+                  <button
+                    onClick={() => router.push("/quick-sale")}
+                    className="bg-white/[0.05] hover:bg-white/[0.08] border border-orange-400/20 rounded-xl p-3 text-right flex items-center gap-3 transition-colors"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-orange-400/[0.12] border border-orange-400/30 flex items-center justify-center text-base flex-shrink-0">
+                      ⚡
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-white">البيع السريع</span>
+                        <Badge color="yellow" variant="soft" size="xs">اشتراك</Badge>
+                      </div>
+                      <div className="text-[10px] text-neutral-400">أسعار حصرية للمشتركين</div>
+                    </div>
+                    <ChevronLeft className="w-4 h-4 text-neutral-500 flex-shrink-0" strokeWidth={2} />
+                  </button>
+                </div>
               </Card>
             </div>
           )}

@@ -33,7 +33,7 @@ const menuItems: MenuItem[] = [
   {
     label: "البيع السريع",
     description: "اشترك واربح فرصاً حصرية",
-    href: "/quick-sell",
+    href: "/quick-sale",
     icon: Zap,
     iconColor: "text-orange-400",
     iconBg: "bg-orange-400/10",
