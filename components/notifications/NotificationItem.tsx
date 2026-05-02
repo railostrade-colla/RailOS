@@ -13,6 +13,7 @@ import {
   MessageSquare,
   ShoppingCart,
   TrendingUp,
+  Trash2,
   XCircle,
   type LucideIcon,
 } from "lucide-react"
@@ -59,9 +60,15 @@ interface Props {
    * itself). The page-level list passes a no-op.
    */
   onAction: () => void
+  /**
+   * If provided, renders a delete button on hover that calls this with
+   * the notification id. Used by the full /notifications page; omitted
+   * by the (now-removed) dropdown.
+   */
+  onDelete?: (id: string) => void
 }
 
-export function NotificationItem({ notification, onAction }: Props) {
+export function NotificationItem({ notification, onAction, onDelete }: Props) {
   const Icon = TYPE_ICONS[notification.notification_type] ?? Bell
   const colorClass = PRIORITY_COLOR[notification.priority] ?? PRIORITY_COLOR.normal
   const unread = !notification.is_read
@@ -72,6 +79,12 @@ export function NotificationItem({ notification, onAction }: Props) {
       void markAsRead(notification.id)
     }
     onAction()
+  }
+
+  function handleDeleteClick(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (onDelete) onDelete(notification.id)
   }
 
   const inner = (
@@ -124,18 +137,28 @@ export function NotificationItem({ notification, onAction }: Props) {
     </div>
   )
 
-  if (notification.link_url) {
-    return (
-      <Link href={notification.link_url} onClick={handleClick}>
-        {inner}
-      </Link>
-    )
-  }
-
   return (
-    <button type="button" onClick={handleClick} className="w-full text-right">
-      {inner}
-    </button>
+    <div className="relative group">
+      {notification.link_url ? (
+        <Link href={notification.link_url} onClick={handleClick} className="block">
+          {inner}
+        </Link>
+      ) : (
+        <button type="button" onClick={handleClick} className="w-full text-right">
+          {inner}
+        </button>
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          onClick={handleDeleteClick}
+          className="absolute top-3 left-3 w-7 h-7 rounded-md bg-white/[0.04] border border-white/[0.06] text-neutral-500 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20 transition-colors opacity-0 group-hover:opacity-100 flex items-center justify-center"
+          aria-label="حذف الإشعار"
+        >
+          <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+        </button>
+      )}
+    </div>
   )
 }
 

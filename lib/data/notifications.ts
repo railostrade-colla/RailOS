@@ -61,6 +61,23 @@ export async function markAsRead(notificationId: string): Promise<boolean> {
   }
 }
 
+/**
+ * Permanently deletes a notification. RLS restricts this to the row's owner.
+ * Returns true on success, false on auth/db failure.
+ */
+export async function deleteNotification(notificationId: string): Promise<boolean> {
+  try {
+    const supabase = createClient()
+    const { error } = await supabase
+      .from("notifications")
+      .delete()
+      .eq("id", notificationId)
+    return !error
+  } catch {
+    return false
+  }
+}
+
 // ════════════════════════════════════════════════════════════════════
 // Bell-icon helpers (added 2026-05-02 for in-app dropdown system).
 // These do NOT replace the legacy helpers above — they wrap them with
