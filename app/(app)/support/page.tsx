@@ -6,6 +6,9 @@ import {
   ChevronDown,
   ChevronLeft,
   HelpCircle,
+  MessageCircle,
+  Send,
+  Phone,
   Clock,
   ThumbsUp,
   ThumbsDown,
@@ -121,24 +124,33 @@ export default function SupportPage() {
             </div>
           </Card>
 
-          {/* ═══ § 2 Quick actions — horizontal compact row ═══ */}
+          {/* ═══ § 2 Quick actions — horizontal row with colored icons ═══ */}
           <div className="grid grid-cols-3 gap-2 mb-7">
             <button
               onClick={() => showInfo("ميزة الدردشة المباشرة قادمة قريباً")}
-              className="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] rounded-xl py-2.5 px-2 text-center transition-colors"
+              className="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] rounded-xl py-3 px-2 flex flex-col items-center gap-2 transition-colors"
             >
+              <div className="w-10 h-10 rounded-xl bg-green-400/[0.1] border border-green-400/30 flex items-center justify-center">
+                <MessageCircle className="w-5 h-5 text-green-400" strokeWidth={2} />
+              </div>
               <div className="text-[11px] font-bold text-white">محادثة مباشرة</div>
             </button>
             <button
               onClick={() => setShowNewTicket(true)}
-              className="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] rounded-xl py-2.5 px-2 text-center transition-colors"
+              className="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] rounded-xl py-3 px-2 flex flex-col items-center gap-2 transition-colors"
             >
+              <div className="w-10 h-10 rounded-xl bg-blue-400/[0.1] border border-blue-400/30 flex items-center justify-center">
+                <Send className="w-5 h-5 text-blue-400" strokeWidth={2} />
+              </div>
               <div className="text-[11px] font-bold text-white">إرسال طلب دعم</div>
             </button>
             <button
               onClick={() => showInfo("للاتصال: 07721726518")}
-              className="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] rounded-xl py-2.5 px-2 text-center transition-colors"
+              className="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] rounded-xl py-3 px-2 flex flex-col items-center gap-2 transition-colors"
             >
+              <div className="w-10 h-10 rounded-xl bg-purple-400/[0.1] border border-purple-400/30 flex items-center justify-center">
+                <Phone className="w-5 h-5 text-purple-400" strokeWidth={2} />
+              </div>
               <div className="text-[11px] font-bold text-white">اتصل بنا</div>
             </button>
           </div>
