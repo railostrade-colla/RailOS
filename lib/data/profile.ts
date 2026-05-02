@@ -3,11 +3,16 @@
 /**
  * Real profile data layer for /profile page.
  *
- * Composes three sources into one shape:
- *   • auth.users          → email
- *   • profiles            → full_name, kyc_status, rating, trades, ...
- *   • user_stats_view     → level_name_ar, level_icon, level_color,
- *                           computed success_rate
+ * Resilient composition (Phase 4.1 hot-fix):
+ *   • Step 1 (REQUIRED) auth.users      → email
+ *   • Step 2 (REQUIRED) profiles        → all primary fields
+ *   • Step 3 (OPTIONAL) user_stats_view → level_name_ar, level_icon,
+ *                                         level_color, success_rate
+ *
+ * Each step has its own try/catch so a missing/broken view (e.g. when
+ * migration `10-levels-system.sql` hasn't been applied) cannot wipe
+ * out the whole profile load. When `user_stats_view` is unavailable,
+ * we fall back to the same constants the seed migration uses.
  *
  * Derived (computed here, not stored in DB):
  *   • is_verified         = kyc_status === 'approved'
@@ -15,7 +20,7 @@
  *                           (Phase 4.X: enrich with disputes/reports/age)
  *   • joined_year_month   = 'YYYY-MM' from created_at
  *
- * Phase 4.1 — Profile only. Portfolio numbers (totalValue, profit, etc.)
+ * Phase 4.1 — Profile only. Portfolio numbers (totalValue, profit, ...)
  * still come from `lib/mock-data` until Phase 4.2.
  */
 
@@ -129,6 +134,7 @@ const FALLBACK_LEVEL_COLORS: Record<string, string> = {
 }
 
 function formatYearMonth(iso: string): string {
+  if (!iso) return ""
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ""
   const yyyy = d.getFullYear()
@@ -137,93 +143,128 @@ function formatYearMonth(iso: string): string {
 }
 
 /**
- * Load the signed-in user's full profile, joined with stats view.
- * Returns `null` when:
+ * Load the signed-in user's full profile, with optional stats view.
+ *
+ * Returns `null` only when:
  *   - no authenticated user
  *   - the profile row is missing (orphaned auth.user)
- *   - any unexpected error (also logged via console.error)
+ *   - the profiles query itself errors
  *
- * Always fails closed — never throws to the caller.
+ * Failures inside the OPTIONAL `user_stats_view` step never cause null —
+ * they just trigger fallback values for level_label/icon/color and an
+ * inline computation for success_rate.
  */
 export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null> {
+  const supabase = createClient()
+
+  // ── Step 1: auth user (REQUIRED) ──────────────────────────
+  let userId: string
+  let userEmail: string
   try {
-    const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return null
+    const { data } = await supabase.auth.getUser()
+    if (!data.user) return null
+    userId = data.user.id
+    userEmail = data.user.email ?? ""
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[profile] auth.getUser failed:", err)
+    return null
+  }
 
-    // Parallel: profile + stats view (one round-trip pair).
-    const [profileRes, statsRes] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select(
-          "full_name, username, phone, avatar_url, role, kyc_status, is_active, is_banned, rating_average, rating_count, total_trades, successful_trades, total_trade_volume, level, is_ambassador, created_at",
-        )
-        .eq("id", user.id)
-        .maybeSingle(),
-      supabase
-        .from("user_stats_view")
-        .select("level, level_name_ar, level_icon, level_color, success_rate")
-        .eq("id", user.id)
-        .maybeSingle(),
-    ])
+  // ── Step 2: profiles row (REQUIRED) ───────────────────────
+  let profile: ProfileRow
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        "full_name, username, phone, avatar_url, role, kyc_status, is_active, is_banned, rating_average, rating_count, total_trades, successful_trades, total_trade_volume, level, is_ambassador, created_at",
+      )
+      .eq("id", userId)
+      .maybeSingle()
 
-    const profile = profileRes.data as ProfileRow | null
-    const stats = statsRes.data as StatsRow | null
-
-    if (!profile) {
+    if (error) {
       // eslint-disable-next-line no-console
-      console.error("[profile] no row in profiles for user", user.id)
+      console.error("[profile] profiles query error:", error.message)
       return null
     }
+    if (!data) {
+      // eslint-disable-next-line no-console
+      console.error("[profile] no profile row for user", userId)
+      return null
+    }
+    profile = data as ProfileRow
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[profile] profiles query threw:", err)
+    return null
+  }
 
-    const level = stats?.level ?? profile.level ?? "basic"
-    const ratingAvg = Number(profile.rating_average ?? 0)
-    const totalTrades = profile.total_trades ?? 0
-    const successfulTrades = profile.successful_trades ?? 0
+  // ── Step 3: user_stats_view (OPTIONAL) ────────────────────
+  // Isolated from the main flow — failure here just triggers fallbacks.
+  let stats: StatsRow | null = null
+  try {
+    const { data, error } = await supabase
+      .from("user_stats_view")
+      .select("level, level_name_ar, level_icon, level_color, success_rate")
+      .eq("id", userId)
+      .maybeSingle()
 
-    const successRate =
-      stats?.success_rate != null
-        ? Math.round(Number(stats.success_rate))
-        : totalTrades > 0
-          ? Math.round((successfulTrades / totalTrades) * 100)
-          : 0
-
-    return {
-      id: user.id,
-      email: user.email ?? "",
-      full_name: profile.full_name,
-      username: profile.username,
-      phone: profile.phone,
-      avatar_url: profile.avatar_url,
-      role: profile.role,
-      kyc_status: profile.kyc_status,
-      is_verified: profile.kyc_status === "approved",
-      is_active: profile.is_active,
-      is_banned: profile.is_banned,
-      total_trades: totalTrades,
-      successful_trades: successfulTrades,
-      success_rate: successRate,
-      rating_average: ratingAvg,
-      rating_count: profile.rating_count ?? 0,
-      total_trade_volume: Number(profile.total_trade_volume ?? 0),
-      // TODO Phase 4.X — replace this naive 5★→100 mapping with a
-      // richer trust formula (factoring disputes, reports, account age).
-      trust_score: Math.round(ratingAvg * 20),
-      level,
-      level_label:
-        stats?.level_name_ar ?? FALLBACK_LEVEL_LABELS[level] ?? level,
-      level_icon: stats?.level_icon ?? FALLBACK_LEVEL_ICONS[level] ?? "⭐",
-      level_color:
-        stats?.level_color ?? FALLBACK_LEVEL_COLORS[level] ?? "#60A5FA",
-      is_ambassador: profile.is_ambassador ?? false,
-      created_at: profile.created_at,
-      joined_year_month: formatYearMonth(profile.created_at),
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[profile] user_stats_view unavailable, using fallbacks:",
+        error.message,
+      )
+    } else if (data) {
+      stats = data as StatsRow
     }
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error("getCurrentUserProfile failed:", err)
-    return null
+    console.warn("[profile] user_stats_view fetch threw, using fallbacks:", err)
+  }
+
+  // ── Step 4: merge ─────────────────────────────────────────
+  const level = stats?.level ?? profile.level ?? "basic"
+  const ratingAvg = Number(profile.rating_average ?? 0)
+  const totalTrades = Number(profile.total_trades ?? 0)
+  const successfulTrades = Number(profile.successful_trades ?? 0)
+
+  const successRate =
+    stats?.success_rate != null
+      ? Math.round(Number(stats.success_rate))
+      : totalTrades > 0
+        ? Math.round((successfulTrades / totalTrades) * 100)
+        : 0
+
+  return {
+    id: userId,
+    email: userEmail,
+    full_name: profile.full_name,
+    username: profile.username,
+    phone: profile.phone,
+    avatar_url: profile.avatar_url,
+    role: profile.role,
+    kyc_status: profile.kyc_status,
+    is_verified: profile.kyc_status === "approved",
+    is_active: profile.is_active,
+    is_banned: profile.is_banned,
+    total_trades: totalTrades,
+    successful_trades: successfulTrades,
+    success_rate: successRate,
+    rating_average: ratingAvg,
+    rating_count: Number(profile.rating_count ?? 0),
+    total_trade_volume: Number(profile.total_trade_volume ?? 0),
+    // TODO Phase 4.X — replace this naive 5★→100 mapping with a
+    // richer trust formula (factoring disputes, reports, account age).
+    trust_score: Math.round(ratingAvg * 20),
+    level,
+    level_label:
+      stats?.level_name_ar ?? FALLBACK_LEVEL_LABELS[level] ?? level,
+    level_icon: stats?.level_icon ?? FALLBACK_LEVEL_ICONS[level] ?? "⭐",
+    level_color:
+      stats?.level_color ?? FALLBACK_LEVEL_COLORS[level] ?? "#60A5FA",
+    is_ambassador: profile.is_ambassador ?? false,
+    created_at: profile.created_at,
+    joined_year_month: formatYearMonth(profile.created_at),
   }
 }
