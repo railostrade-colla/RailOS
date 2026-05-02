@@ -146,16 +146,17 @@ const PLATFORM_FEATURES = [
   },
 ]
 
-// مستويات المستثمرين
+// مستويات المستثمرين — مُحدَّث مع نظام الترقية الشامل (Volume + Trades + Disputes + Reports + Rating)
+// المصدر: lib/mock-data/levels.ts (LEVEL_SETTINGS_STORE) — قابل للتعديل من الأدمن
 const INVESTOR_LEVELS = [
   {
     level: "أساسي",
-    color: "green",
-    icon: "🟢",
+    color: "blue",
+    icon: "🌱",
     badge: "للمبتدئين",
     limit: "10 مليون",
     limitUnit: "د.ع / شهر",
-    desc: "نقطة البداية لكل مستثمر جديد - اكتشف وتعلم بأمان",
+    desc: "نقطة البداية لكل مستثمر جديد — اكتشف وتعلم بأمان",
     requirements: [
       "تسجيل حساب جديد",
       "توثيق KYC أساسي (هوية)",
@@ -171,18 +172,21 @@ const INVESTOR_LEVELS = [
     ],
   },
   {
-    level: "متقدم",
-    color: "blue",
-    icon: "🔵",
+    level: "متقدّم",
+    color: "green",
+    icon: "⚡",
     badge: "للنشطين",
     limit: "50 مليون",
     limitUnit: "د.ع / شهر",
     desc: "للمستثمر الذي أثبت نشاطه واستقراره على المنصة",
     requirements: [
       "توثيق KYC متقدم (هوية + إثبات سكن)",
-      "100 صفقة ناجحة على الأقل",
-      "90 يوم نشاط متواصل",
-      "نسبة نجاح أعلى من 95%",
+      "حجم تداول 100 مليون د.ع",
+      "50 صفقة ناجحة على الأقل",
+      "30 يوم نشاط متواصل",
+      "نسبة نجاح ≥ 90%",
+      "تقييم 4.0+ نجوم",
+      "أقل من 2 نزاع خاسر",
     ],
     perks: [
       "كل صلاحيات المستوى الأساسي",
@@ -190,25 +194,29 @@ const INVESTOR_LEVELS = [
       "أولوية في فرص استثمارية",
       "وصول مبكر للمشاريع الجديدة",
       "أدوات تحليل أوسع",
+      "شارة \"متقدّم\" على ملفك",
       "دعم فني خلال 12 ساعة",
     ],
   },
   {
     level: "محترف",
     color: "purple",
-    icon: "🟣",
+    icon: "💎",
     badge: "للنخبة",
     limit: "250 مليون",
     limitUnit: "د.ع / شهر",
-    desc: "نخبة المستثمرين - وصول حصري لأفضل الفرص",
+    desc: "مستثمر متمرّس — وصول حصري لأفضل الفرص",
     requirements: [
-      "توثيق KYC احترافي (إثبات دخل + سجل تجاري للشركات)",
-      "500 صفقة ناجحة على الأقل",
-      "180 يوم نشاط متواصل",
-      "نسبة نجاح أعلى من 98%",
+      "توثيق KYC احترافي (إثبات دخل + سجل تجاري)",
+      "حجم تداول 250 مليون د.ع",
+      "200 صفقة ناجحة على الأقل",
+      "90 يوم نشاط متواصل",
+      "نسبة نجاح ≥ 95%",
+      "تقييم 4.5+ نجوم",
+      "أقل من 1 نزاع خاسر",
     ],
     perks: [
-      "كل صلاحيات المستوى المتقدم",
+      "كل صلاحيات المستوى المتقدّم",
       "وصول حصري لمزادات VIP",
       "وصول مبكر للفرص (48 ساعة قبل العامة)",
       "مدير حساب شخصي",
@@ -216,30 +224,57 @@ const INVESTOR_LEVELS = [
       "دعوات لزيارات ميدانية للمشاريع",
     ],
   },
+  {
+    level: "النخبة",
+    color: "yellow",
+    icon: "👑",
+    badge: "VIP",
+    limit: "1 مليار",
+    limitUnit: "د.ع / شهر",
+    desc: "أعلى مستوى — مستثمرون موثّقون من النخبة",
+    requirements: [
+      "توثيق KYC احترافي + توثيق إضافي",
+      "حجم تداول 500 مليون د.ع",
+      "500 صفقة ناجحة على الأقل",
+      "180 يوم نشاط متواصل",
+      "نسبة نجاح ≥ 98%",
+      "تقييم 4.8+ نجوم",
+      "صفر نزاعات خاسرة + صفر بلاغات",
+    ],
+    perks: [
+      "كل صلاحيات المستوى المحترف",
+      "حد تداول حتى 1 مليار د.ع شهرياً",
+      "شارة \"النخبة\" الذهبية الحصرية",
+      "مدير حساب VIP مخصّص",
+      "دعوات حصرية للفعاليات",
+      "وصول مبكر لكل المنتجات الجديدة",
+      "أولوية مطلقة في الدعم",
+    ],
+  },
 ]
 
 const CONTRACT_LIMIT_EXAMPLES = [
   {
     title: "4 مستثمرين أساسيين",
-    icon: "🟢",
-    color: "green",
+    icon: "🌱",
+    color: "blue",
     members: "4 × أساسي",
     calculation: "(4 × 10M) + 25%",
     result: "50M / شهر",
     note: "بدلاً من 10M فردياً",
   },
   {
-    title: "3 مستثمرين متقدمين",
-    icon: "🔵",
-    color: "blue",
-    members: "3 × متقدم",
+    title: "3 مستثمرين متقدّمين",
+    icon: "⚡",
+    color: "green",
+    members: "3 × متقدّم",
     calculation: "(3 × 50M) + 25%",
     result: "187.5M / شهر",
     note: "بدلاً من 50M فردياً",
   },
   {
     title: "2 مستثمرين محترفين",
-    icon: "🟣",
+    icon: "💎",
     color: "purple",
     members: "2 × محترف",
     calculation: "(2 × 250M) + 25%",
@@ -247,13 +282,13 @@ const CONTRACT_LIMIT_EXAMPLES = [
     note: "بدلاً من 250M فردياً",
   },
   {
-    title: "عقد مختلط (3 أعضاء)",
-    icon: "💎",
+    title: "2 من النخبة",
+    icon: "👑",
     color: "yellow",
-    members: "1 محترف + 2 متقدم",
-    calculation: "(250M + 50M + 50M) + 25%",
-    result: "437.5M / شهر",
-    note: "تنويع المستويات",
+    members: "2 × النخبة",
+    calculation: "(2 × 1B) + 25%",
+    result: "2.5B / شهر",
+    note: "أعلى حد ممكن — للعقود الكبرى",
   },
 ]
 
@@ -430,7 +465,7 @@ export default function InvestmentGuidePage() {
               ابدأ بالأساسي وارتقِ تلقائياً مع نشاطك على المنصة
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               {INVESTOR_LEVELS.map((lvl) => {
                 const c = colorMap[lvl.color]
                 return (
@@ -525,23 +560,26 @@ export default function InvestmentGuidePage() {
               </div>
             </div>
 
-            {/* بطاقتي الترقية */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-4">
+            {/* بطاقات الترقية — مسار 4 مستويات */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
 
               {/* Basic → Advanced */}
-              <div className="bg-blue-400/[0.04] border border-blue-400/20 rounded-2xl p-4">
+              <div className="bg-green-400/[0.04] border border-green-400/20 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-2xl">🟢</span>
+                  <span className="text-2xl">🌱</span>
                   <ChevronLeft className="w-4 h-4 text-neutral-500" strokeWidth={1.5} />
-                  <span className="text-2xl">🔵</span>
-                  <span className="text-sm font-bold text-white mr-2">الترقية لـ متقدم</span>
+                  <span className="text-2xl">⚡</span>
+                  <span className="text-sm font-bold text-white mr-2">الترقية لـ متقدّم</span>
                 </div>
                 <ul className="space-y-2">
                   {[
-                    { icon: "📋", text: "إكمال توثيق KYC المتقدم (هوية + إثبات سكن)" },
-                    { icon: "🎯", text: "إتمام 100 صفقة ناجحة على الأقل" },
-                    { icon: "📅", text: "90 يوم نشاط متواصل على المنصة" },
-                    { icon: "✨", text: "نسبة نجاح أعلى من 95% في الصفقات" },
+                    { icon: "📋", text: "إكمال توثيق KYC المتقدم" },
+                    { icon: "💰", text: "حجم تداول 100 مليون د.ع" },
+                    { icon: "🎯", text: "50 صفقة ناجحة" },
+                    { icon: "📅", text: "30 يوم نشاط" },
+                    { icon: "✨", text: "نسبة نجاح ≥ 90%" },
+                    { icon: "⭐", text: "تقييم 4.0+ نجوم" },
+                    { icon: "⚖️", text: "أقل من 2 نزاع خاسر" },
                   ].map((item, i) => (
                     <li key={i} className="flex items-start gap-2 text-[11px] text-neutral-300 leading-relaxed">
                       <span className="flex-shrink-0">{item.icon}</span>
@@ -554,17 +592,20 @@ export default function InvestmentGuidePage() {
               {/* Advanced → Pro */}
               <div className="bg-purple-400/[0.04] border border-purple-400/20 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-2xl">🔵</span>
+                  <span className="text-2xl">⚡</span>
                   <ChevronLeft className="w-4 h-4 text-neutral-500" strokeWidth={1.5} />
-                  <span className="text-2xl">🟣</span>
+                  <span className="text-2xl">💎</span>
                   <span className="text-sm font-bold text-white mr-2">الترقية لـ محترف</span>
                 </div>
                 <ul className="space-y-2">
                   {[
-                    { icon: "📋", text: "إكمال توثيق KYC الاحترافي (إثبات دخل + سجل تجاري)" },
-                    { icon: "🎯", text: "إتمام 500 صفقة ناجحة على الأقل" },
-                    { icon: "📅", text: "180 يوم نشاط متواصل على المنصة" },
-                    { icon: "✨", text: "نسبة نجاح أعلى من 98% في الصفقات" },
+                    { icon: "📋", text: "KYC احترافي (إثبات دخل + سجل تجاري)" },
+                    { icon: "💰", text: "حجم تداول 250 مليون د.ع" },
+                    { icon: "🎯", text: "200 صفقة ناجحة" },
+                    { icon: "📅", text: "90 يوم نشاط" },
+                    { icon: "✨", text: "نسبة نجاح ≥ 95%" },
+                    { icon: "⭐", text: "تقييم 4.5+ نجوم" },
+                    { icon: "⚖️", text: "أقل من 1 نزاع خاسر" },
                   ].map((item, i) => (
                     <li key={i} className="flex items-start gap-2 text-[11px] text-neutral-300 leading-relaxed">
                       <span className="flex-shrink-0">{item.icon}</span>
@@ -574,6 +615,58 @@ export default function InvestmentGuidePage() {
                 </ul>
               </div>
 
+              {/* Pro → Elite */}
+              <div className="bg-yellow-400/[0.04] border border-yellow-400/30 rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-2xl">💎</span>
+                  <ChevronLeft className="w-4 h-4 text-neutral-500" strokeWidth={1.5} />
+                  <span className="text-2xl">👑</span>
+                  <span className="text-sm font-bold text-yellow-400 mr-2">الترقية لـ النخبة</span>
+                </div>
+                <ul className="space-y-2">
+                  {[
+                    { icon: "📋", text: "KYC احترافي + توثيق إضافي" },
+                    { icon: "💰", text: "حجم تداول 500 مليون د.ع" },
+                    { icon: "🎯", text: "500 صفقة ناجحة" },
+                    { icon: "📅", text: "180 يوم نشاط" },
+                    { icon: "✨", text: "نسبة نجاح ≥ 98%" },
+                    { icon: "⭐", text: "تقييم 4.8+ نجوم" },
+                    { icon: "⚖️", text: "صفر نزاعات + صفر بلاغات" },
+                  ].map((item, i) => (
+                    <li key={i} className="flex items-start gap-2 text-[11px] text-neutral-300 leading-relaxed">
+                      <span className="flex-shrink-0">{item.icon}</span>
+                      <span>{item.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+            </div>
+
+            {/* المعايير الجديدة في النظام */}
+            <div className="bg-blue-400/[0.04] border border-blue-400/20 rounded-2xl p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-400/[0.15] border border-blue-400/30 flex items-center justify-center flex-shrink-0">
+                  <span className="text-base">📊</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-blue-400 mb-1.5">معايير الترقية الشاملة</div>
+                  <div className="text-xs text-neutral-300 leading-relaxed mb-2">
+                    نظام الترقية الجديد يعتمد على <span className="text-white font-bold">9 معايير</span> بدلاً من 4:
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] text-neutral-300">
+                    <div>• <span className="text-white">حجم التداول الإجمالي</span> (Volume)</div>
+                    <div>• <span className="text-white">عدد الصفقات الناجحة</span></div>
+                    <div>• <span className="text-white">نسبة النجاح</span> (Success Rate)</div>
+                    <div>• <span className="text-white">أيام النشاط</span> المتراكمة</div>
+                    <div>• <span className="text-white">عدد النزاعات الخاسرة</span></div>
+                    <div>• <span className="text-white">عدد البلاغات</span> المُستلمة</div>
+                    <div>• <span className="text-white">نسبة النزاعات</span> من الصفقات</div>
+                    <div>• <span className="text-white">متوسط التقييم</span> من المستخدمين</div>
+                    <div>• <span className="text-white">مستوى KYC</span> المطلوب</div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* النزول التلقائي */}
@@ -589,10 +682,12 @@ export default function InvestmentGuidePage() {
                   </div>
                   <ul className="space-y-1.5">
                     {[
-                      "إذا لم يقم مستثمر محترف بأي صفقة لمدة 3 أشهر متواصلة → ينزل تلقائياً للمستوى المتقدم",
-                      "إذا لم يقم مستثمر متقدم بأي صفقة لمدة 6 أشهر متواصلة → ينزل للمستوى الأساسي",
-                      "ستتلقى إشعاراً تحذيرياً قبل النزول بـ 30 يوماً",
-                      "يمكن استرجاع المستوى السابق فور استئناف النشاط واستيفاء الشروط",
+                      "النزول يحدث عند انخفاض معايير الترقية (نزاعات خاسرة، بلاغات، تقييم منخفض، نسبة نجاح منخفضة)",
+                      "إذا تجاوز عدد النزاعات الخاسرة الحد المسموح للمستوى الحالي → نزول تلقائي",
+                      "إذا انخفض التقييم تحت الحد الأدنى (4.0/4.5/4.8 حسب المستوى) → نزول تلقائي",
+                      "ستتلقى إشعاراً تحذيرياً عند الاقتراب من حدود النزول",
+                      "استرجاع المستوى السابق ممكن فور استيفاء جميع الشروط مرة أخرى",
+                      "في حالات استثنائية، الأدمن يستطيع تطبيق تجاوز يدوي (Manual Override) وقفل المستوى",
                     ].map((item, i) => (
                       <li key={i} className="flex items-start gap-2 text-[11px] text-neutral-300 leading-relaxed">
                         <span className="text-orange-400 flex-shrink-0">•</span>
