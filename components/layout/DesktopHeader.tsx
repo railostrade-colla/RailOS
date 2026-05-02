@@ -5,9 +5,10 @@ import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 import {
-  Bell, ChevronDown, User, Settings, LogOut, HelpCircle, Grid3x3, FileText
+  ChevronDown, User, Settings, LogOut, HelpCircle, Grid3x3, FileText
 } from "lucide-react"
 import { cn } from "@/lib/utils/cn"
+import { NotificationBell } from "@/components/notifications/NotificationBell"
 
 const navItems = [
   { id: "home", label: "الرئيسية", href: "/dashboard" },
@@ -79,15 +80,8 @@ export function DesktopHeader() {
             <HelpCircle className="w-4 h-4 text-neutral-300" strokeWidth={1.5} />
           </Link>
 
-          {/* Notifications */}
-          <Link
-            href="/notifications"
-            className="relative w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] transition-colors"
-            aria-label="الإشعارات"
-          >
-            <Bell className="w-4 h-4 text-neutral-300" strokeWidth={1.5} />
-            <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-400 rounded-full shadow-[0_0_4px_rgba(248,113,113,0.6)]" />
-          </Link>
+          {/* Notifications — bell button + dropdown (badge replaces the legacy dot) */}
+          <NotificationBell badgePosition="right" dropdownAlign="right" />
 
           {/* Menu (يفتح صفحة /menu) */}
           <Link
