@@ -130,15 +130,6 @@ const VOLUME_HISTORY = [
 // ─── Quick action items (4 only — no send/receive) ──────────────
 const QUICK_ACTIONS = [
   {
-    label: "تبادل",
-    path: "/exchange",
-    icon: ArrowLeftRight,
-    badge: 0,
-    iconColor: "text-blue-400",
-    iconBg: "bg-blue-400/10",
-    iconBorder: "border-blue-400/30",
-  },
-  {
     label: "محفظة",
     path: "/portfolio",
     icon: Wallet,
@@ -146,6 +137,15 @@ const QUICK_ACTIONS = [
     iconColor: "text-green-400",
     iconBg: "bg-green-400/10",
     iconBorder: "border-green-400/30",
+  },
+  {
+    label: "تبادل",
+    path: "/exchange",
+    icon: ArrowLeftRight,
+    badge: 0,
+    iconColor: "text-blue-400",
+    iconBg: "bg-blue-400/10",
+    iconBorder: "border-blue-400/30",
   },
   {
     label: "مزاد",
