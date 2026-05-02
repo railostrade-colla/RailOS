@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Send, Download, Zap, CreditCard, TrendingUp, X, Coins, ArrowDownToLine, ArrowUpFromLine, Briefcase, BarChart3, History, Trophy, Sparkles, Users } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -15,15 +15,24 @@ import {
   computeContractLimit,
   type InvestorLevel,
 } from "@/lib/utils/contractLimits"
+// Phase 4.2: portfolio + fee data is real (from Supabase). Active
+// group-investment contracts (USER_ACTIVE_CONTRACTS) and the monthly
+// limits usage stay mock for now — different feature scope.
+import { USER_ACTIVE_CONTRACTS } from "@/lib/mock-data"
 import {
-  CURRENT_USER_LEVEL,
-  CURRENT_USER_USED_THIS_MONTH,
-  USER_ACTIVE_CONTRACTS,
-  mockHoldings,
-  mockWalletLog,
-  mockFeeRequests,
-  mockFeeLedger,
-} from "@/lib/mock-data"
+  getPortfolioData,
+  submitFeeRequest as apiSubmitFeeRequest,
+  type PortfolioData,
+} from "@/lib/data/portfolio"
+
+// TODO Phase 4.X — derive from this month's deals.total_amount sum.
+const CURRENT_USER_USED_THIS_MONTH = 0
+
+/** Map raw DB level → InvestorLevel supported by contractLimits. */
+function safeInvestorLevel(raw: string | undefined | null): InvestorLevel {
+  if (raw === "advanced" || raw === "pro") return raw
+  return "basic"
+}
 
 type PortfolioTab = "holdings" | "stats" | "history" | "fee_units"
 
@@ -38,6 +47,14 @@ const sectorIcon = (s: string) => {
 
 const fmtIQD = (n: number) => n.toLocaleString("en-US")
 
+/** ISO timestamp → 'YYYY-MM-DD' (en-US locale, RTL-safe). */
+const fmtDate = (iso: string | null | undefined): string => {
+  if (!iso) return ""
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ""
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" })
+}
+
 const reasonLabel = (reason: string) => {
   if (reason === "admin_topup") return "👨‍💼 من الإدارة"
   if (reason === "listing_fee") return "📝 رسوم إدراج"
@@ -48,10 +65,18 @@ const reasonLabel = (reason: string) => {
 }
 
 const opLabel = (op: string) => {
+  // Legacy share-movement types (will be wired in Phase 4.4 /deals).
   if (op === "deal_buy") return { icon: "📈", label: "شراء حصص (صفقة)", color: "text-green-400", bg: "bg-green-400/10" }
   if (op === "deal_sell") return { icon: "📉", label: "بيع حصص (صفقة)", color: "text-red-400", bg: "bg-red-400/10" }
   if (op === "shares_sent") return { icon: "📤", label: "إرسال حصص", color: "text-orange-400", bg: "bg-orange-400/10" }
   if (op === "shares_received") return { icon: "📥", label: "استلام حصص", color: "text-blue-400", bg: "bg-blue-400/10" }
+  // Phase 4.2 — fee_unit_transactions.type values.
+  if (op === "deposit") return { icon: "💰", label: "إيداع وحدات", color: "text-green-400", bg: "bg-green-400/10" }
+  if (op === "withdrawal") return { icon: "💸", label: "خصم وحدات", color: "text-red-400", bg: "bg-red-400/10" }
+  if (op === "subscription") return { icon: "⚡", label: "اشتراك", color: "text-purple-400", bg: "bg-purple-400/10" }
+  if (op === "bonus") return { icon: "🎁", label: "مكافأة", color: "text-yellow-400", bg: "bg-yellow-400/10" }
+  if (op === "refund") return { icon: "↩️", label: "استرجاع", color: "text-blue-400", bg: "bg-blue-400/10" }
+  if (op === "adjustment") return { icon: "🔧", label: "تعديل", color: "text-neutral-400", bg: "bg-white/[0.08]" }
   return { icon: "💼", label: op, color: "text-white", bg: "bg-white/[0.08]" }
 }
 
@@ -70,31 +95,54 @@ function PortfolioContent() {
   const [feeNote, setFeeNote] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<"zaincash" | "mastercard" | "bank">("zaincash")
 
-  // إحصائيات المحفظة
-  const totalShares = mockHoldings.reduce((s, h) => s + h.shares_owned, 0)
-  const totalValue = mockHoldings.reduce((s, h) => s + (h.project?.share_price || 0) * h.shares_owned, 0)
-  // إذا توفّر buy_price لكل holding نستخدمه؛ وإلا نُقدِّر بـ ‎92%‎ من القيمة الحالية.
-  const totalInvested = mockHoldings.reduce((s, h) => {
-    const cost = (h.buy_price ?? (h.project?.share_price ?? 0) * 0.92) * h.shares_owned
-    return s + cost
-  }, 0)
-  const netProfit = totalValue - totalInvested
-  const profitPct = totalInvested > 0 ? ((netProfit / totalInvested) * 100).toFixed(2) : "0"
+  // Phase 4.2 — Real DB-backed portfolio data.
+  const [data, setData] = useState<PortfolioData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [submittingFee, setSubmittingFee] = useState(false)
+
+  const refresh = async () => {
+    const fresh = await getPortfolioData()
+    setData(fresh)
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    getPortfolioData().then((d) => {
+      if (cancelled) return
+      setData(d)
+      setLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Derived state from real data (with safe zero defaults during loading).
+  const holdings = data?.holdings ?? []
+  const summary = data?.summary
+  const feeRequests = data?.feeRequests ?? []
+  const feeTransactions = data?.feeTransactions ?? []
+
+  const totalShares = summary?.totalShares ?? 0
+  const totalValue = summary?.totalValue ?? 0
+  const totalInvested = summary?.totalInvested ?? 0
+  const netProfit = summary?.totalProfit ?? 0
+  const profitPct = totalInvested > 0
+    ? ((netProfit / totalInvested) * 100).toFixed(2)
+    : "0"
   const isUp = netProfit >= 0
+  const bestPerformerPct = summary?.bestPerformerPct ?? 0
+  const bestHolding = summary?.bestPerformerHolding ?? null
 
-  // أفضل مشروع أداءً — يُحسب من الفرق الفعلي بين القيمة الحالية وسعر الشراء.
-  const bestPerformerPct = mockHoldings.reduce((bestPct, h) => {
-    const cost = (h.buy_price ?? (h.project?.share_price ?? 0) * 0.92) * h.shares_owned
-    const current = (h.project?.share_price ?? 0) * h.shares_owned
-    const pct = cost > 0 ? ((current - cost) / cost) * 100 : 0
-    return pct > bestPct ? pct : bestPct
-  }, -Infinity)
+  // Fee units
+  const feeBalance = data?.feeBalance.balance ?? 0
+  const pendingCount = feeRequests.filter((r) => r.status === "pending").length
 
-  // وحدات الرسوم
-  const feeBalance = 85000
-  const pendingCount = mockFeeRequests.filter((r) => r.status === "pending").length
+  // Level (DB → InvestorLevel; supports basic/advanced/pro, downgrades elite → basic)
+  const userLevel: InvestorLevel = safeInvestorLevel(data?.level)
 
-  const submitFeeRequest = () => {
+  const submitFeeRequest = async () => {
     if (!feeAmount || feeAmount < 1) {
       showError("أدخل عدداً صحيحاً موجباً")
       return
@@ -103,10 +151,24 @@ function PortfolioContent() {
       showError("اختر طريقة الدفع")
       return
     }
-    showSuccess("✅ تم إرسال الطلب — بانتظار موافقة الإدارة")
-    setShowFeeModal(false)
-    setFeeAmount(0)
-    setFeeNote("")
+    setSubmittingFee(true)
+    const id = await apiSubmitFeeRequest({
+      amount_requested: feeAmount,
+      payment_method: paymentMethod,
+      notes: feeNote || undefined,
+    })
+    setSubmittingFee(false)
+
+    if (id) {
+      showSuccess("✅ تم إرسال الطلب — بانتظار موافقة الإدارة")
+      setShowFeeModal(false)
+      setFeeAmount(0)
+      setFeeNote("")
+      // Refresh to show the new pending request immediately.
+      void refresh()
+    } else {
+      showError("تعذّر إرسال الطلب — حاول مرة أخرى")
+    }
   }
 
   return (
@@ -127,12 +189,12 @@ function PortfolioContent() {
               <div>
                 <div className="text-xs text-neutral-400 mb-1">حدّك الشهري الفردي</div>
                 <div className="text-2xl font-bold text-white font-mono">
-                  {fmtLimit(LEVEL_LIMITS[CURRENT_USER_LEVEL])} د.ع
+                  {fmtLimit(LEVEL_LIMITS[userLevel])} د.ع
                 </div>
               </div>
               <div className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2">
-                <span className="text-base">{LEVEL_ICONS[CURRENT_USER_LEVEL]}</span>
-                <span className="text-xs font-bold text-white">{LEVEL_LABELS[CURRENT_USER_LEVEL]}</span>
+                <span className="text-base">{LEVEL_ICONS[userLevel]}</span>
+                <span className="text-xs font-bold text-white">{LEVEL_LABELS[userLevel]}</span>
               </div>
             </div>
 
@@ -141,14 +203,14 @@ function PortfolioContent() {
               <div className="flex justify-between text-[10px] text-neutral-500 mb-1.5">
                 <span>المستخدم هذا الشهر</span>
                 <span className="font-mono">
-                  {fmtLimit(CURRENT_USER_USED_THIS_MONTH)} / {fmtLimit(LEVEL_LIMITS[CURRENT_USER_LEVEL])}
+                  {fmtLimit(CURRENT_USER_USED_THIS_MONTH)} / {fmtLimit(LEVEL_LIMITS[userLevel])}
                 </span>
               </div>
               <div className="h-2 bg-white/[0.05] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-blue-400 to-blue-500 transition-all"
                   style={{
-                    width: `${Math.min(100, (CURRENT_USER_USED_THIS_MONTH / LEVEL_LIMITS[CURRENT_USER_LEVEL]) * 100)}%`,
+                    width: `${Math.min(100, (CURRENT_USER_USED_THIS_MONTH / LEVEL_LIMITS[userLevel]) * 100)}%`,
                   }}
                 />
               </div>
@@ -295,7 +357,28 @@ function PortfolioContent() {
 
           {/* Holdings Tab */}
           {tab === "holdings" && (
-            mockHoldings.length === 0 ? (
+            loading ? (
+              <div className="space-y-2">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 animate-pulse">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-xl bg-white/[0.06]" />
+                        <div className="space-y-1.5">
+                          <div className="h-3 w-24 bg-white/[0.06] rounded" />
+                          <div className="h-2.5 w-32 bg-white/[0.05] rounded" />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5 text-left">
+                        <div className="h-3 w-16 bg-white/[0.06] rounded ml-auto" />
+                        <div className="h-2.5 w-10 bg-white/[0.05] rounded ml-auto" />
+                      </div>
+                    </div>
+                    <div className="h-1 bg-white/[0.06] rounded-full" />
+                  </div>
+                ))}
+              </div>
+            ) : holdings.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-5xl mb-4">📭</div>
                 <div className="text-sm text-neutral-400 mb-4">لا توجد حصص في محفظتك</div>
@@ -308,7 +391,7 @@ function PortfolioContent() {
               </div>
             ) : (
               <div className="space-y-2">
-                {mockHoldings.map((h) => {
+                {holdings.map((h) => {
                   const value = (h.project?.share_price || 0) * h.shares_owned
                   const pct = h.project?.total_shares
                     ? Math.round(((h.project.total_shares - (h.project.available_shares ?? 0)) / h.project.total_shares) * 100)
@@ -363,7 +446,7 @@ function PortfolioContent() {
                 {[
                   { label: "إجمالي الاستثمار", value: fmtIQD(totalInvested), unit: "IQD" },
                   { label: "إجمالي الأرباح", value: (isUp ? "+" : "") + fmtIQD(netProfit), unit: "IQD", color: isUp ? "text-green-400" : "text-red-400" },
-                  { label: "عدد الاستثمارات", value: String(mockHoldings.length), unit: "مشروع" },
+                  { label: "عدد الاستثمارات", value: String(holdings.length), unit: "مشروع" },
                   { label: "متوسط العائد", value: profitPct + "%", unit: "", color: isUp ? "text-green-400" : "text-red-400" },
                 ].map((s, i) => (
                   <div key={i} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4">
@@ -374,7 +457,7 @@ function PortfolioContent() {
                 ))}
               </div>
 
-              {mockHoldings.length > 0 && (
+              {holdings.length > 0 && (
                 <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4">
                   <div className="text-[11px] text-neutral-500 mb-3 flex items-center gap-1.5">
                     <Trophy className="w-3 h-3 text-yellow-400" />
@@ -382,10 +465,10 @@ function PortfolioContent() {
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-lg">
-                      {sectorIcon(mockHoldings[0]?.project?.sector || "")}
+                      {sectorIcon(bestHolding?.project?.sector || "")}
                     </div>
                     <div>
-                      <div className="text-sm font-bold text-white">{mockHoldings[0]?.project?.name}</div>
+                      <div className="text-sm font-bold text-white">{bestHolding?.project?.name}</div>
                       <div className="text-[11px] text-green-400">
                         ↑ {bestPerformerPct >= 0 ? "+" : ""}{bestPerformerPct.toFixed(1)}%
                       </div>
@@ -398,14 +481,14 @@ function PortfolioContent() {
 
           {/* History Tab */}
           {tab === "history" && (
-            mockWalletLog.length === 0 ? (
+            feeTransactions.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-5xl mb-4">📋</div>
                 <div className="text-sm text-neutral-400">لا توجد عمليات مسجّلة بعد</div>
               </div>
             ) : (
               <div className="space-y-2">
-                {mockWalletLog.map((entry) => {
+                {feeTransactions.map((entry) => {
                   const op = opLabel(entry.op_type)
                   return (
                     <div key={entry.id} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3 flex items-center gap-3">
@@ -414,7 +497,7 @@ function PortfolioContent() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm text-white">{op.label}</div>
-                        <div className="text-[10px] text-neutral-500 mt-0.5">{entry.project_name} • {entry.created_at}</div>
+                        <div className="text-[10px] text-neutral-500 mt-0.5">{entry.project_name || ""} {entry.project_name ? "•" : ""} {fmtDate(entry.created_at)}</div>
                       </div>
                       <div className={cn("text-sm font-bold font-mono", op.color)}>
                         {entry.op_type.includes("buy") || entry.op_type.includes("received") ? "+" : "-"}
@@ -440,9 +523,9 @@ function PortfolioContent() {
               {/* 3 stats */}
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { label: "⏳ معلقة", value: mockFeeRequests.filter((r) => r.status === "pending").length, color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/20" },
-                  { label: "✅ موافق", value: mockFeeRequests.filter((r) => r.status === "approved").length, color: "text-green-400", bg: "bg-green-400/10", border: "border-green-400/20" },
-                  { label: "❌ مرفوض", value: mockFeeRequests.filter((r) => r.status === "rejected").length, color: "text-red-400", bg: "bg-red-400/10", border: "border-red-400/20" },
+                  { label: "⏳ معلقة", value: feeRequests.filter((r) => r.status === "pending").length, color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/20" },
+                  { label: "✅ موافق", value: feeRequests.filter((r) => r.status === "approved").length, color: "text-green-400", bg: "bg-green-400/10", border: "border-green-400/20" },
+                  { label: "❌ مرفوض", value: feeRequests.filter((r) => r.status === "rejected").length, color: "text-red-400", bg: "bg-red-400/10", border: "border-red-400/20" },
                 ].map((s, i) => (
                   <div key={i} className={cn("rounded-xl p-3 text-center border", s.bg, s.border)}>
                     <div className={cn("text-[10px] mb-1", s.color)}>{s.label}</div>
@@ -460,15 +543,15 @@ function PortfolioContent() {
               </button>
 
               {/* Requests list */}
-              {mockFeeRequests.length > 0 && (
+              {feeRequests.length > 0 && (
                 <div>
                   <div className="text-xs text-neutral-400 font-bold mb-2">الطلبات</div>
                   <div className="space-y-2">
-                    {mockFeeRequests.map((r) => (
+                    {feeRequests.map((r) => (
                       <div key={r.id} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3 flex justify-between items-center">
                         <div>
                           <div className="text-sm font-bold text-white">{r.amount_requested.toLocaleString("en-US")} وحدة</div>
-                          <div className="text-[10px] text-neutral-500 mt-0.5">{r.created_at}</div>
+                          <div className="text-[10px] text-neutral-500 mt-0.5">{fmtDate(r.created_at)}</div>
                         </div>
                         <span className={cn(
                           "px-2.5 py-1 rounded-full text-[10px] font-bold border",
@@ -485,15 +568,15 @@ function PortfolioContent() {
               )}
 
               {/* Ledger */}
-              {mockFeeLedger.length > 0 && (
+              {feeTransactions.length > 0 && (
                 <div>
                   <div className="text-xs text-neutral-400 font-bold mb-2">سجل الحركات</div>
                   <div className="space-y-2">
-                    {mockFeeLedger.map((item) => (
+                    {feeTransactions.map((item) => (
                       <div key={item.id} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3 flex justify-between items-center">
                         <div>
                           <div className="text-xs text-neutral-300">{reasonLabel(item.reason)}</div>
-                          <div className="text-[10px] text-neutral-500 mt-0.5">{item.created_at}</div>
+                          <div className="text-[10px] text-neutral-500 mt-0.5">{fmtDate(item.created_at)}</div>
                         </div>
                         <div className={cn("text-base font-bold", item.type === "addition" ? "text-green-400" : "text-red-400")}>
                           {item.type === "addition" ? "+" : "-"}{item.amount.toLocaleString("en-US")}
@@ -583,9 +666,10 @@ function PortfolioContent() {
               </button>
               <button
                 onClick={submitFeeRequest}
-                className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold"
+                disabled={submittingFee}
+                className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                إرسال الطلب
+                {submittingFee ? "جاري الإرسال..." : "إرسال الطلب"}
               </button>
             </div>
           </div>
