@@ -2,10 +2,11 @@
 
 import { Suspense, useState, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ChevronDown, Search, Plus, X, AlertTriangle, ShoppingCart, Lock, Clock, Wallet, ChevronLeft } from "lucide-react"
+import { ChevronDown, Search, Plus, X, AlertTriangle, ShoppingCart, Clock, Wallet, ChevronLeft, Lock } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
+import { QuantityModal, type QuantityModalListing } from "@/components/exchange/QuantityModal"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import {
   MOCK_PROJECTS,
@@ -13,6 +14,8 @@ import {
   PAYMENT_METHODS_PUBLIC as PAYMENT_METHODS,
 } from "@/lib/mock-data"
 import { canCreateDeal, createDeal } from "@/lib/escrow"
+import { CURRENT_FEE_BALANCE } from "@/lib/mock-data"
+import { HOLDINGS } from "@/lib/mock-data/holdings"
 import { cn } from "@/lib/utils/cn"
 
 const CURRENT_USER_ID = "me"
@@ -268,15 +271,9 @@ function ExchangeContent() {
   const [selectedProject, setSelectedProject] = useState<typeof MOCK_PROJECTS[0] | null>(null)
   const [paymentFilter, setPaymentFilter] = useState<string[]>([])
 
-  // Escrow modal state
-  const [confirmListing, setConfirmListing] = useState<typeof MOCK_LISTINGS[0] | null>(null)
+  // QuantityModal state (نافذة تحديد الكمية الموحَّدة)
+  const [selectedListing, setSelectedListing] = useState<typeof MOCK_LISTINGS[0] | null>(null)
   const [conflictDeal, setConflictDeal] = useState<{ id: string; expires_at: string } | null>(null)
-  const [amount, setAmount] = useState<number>(1)
-  const [duration, setDuration] = useState<24 | 48 | 72>(24)
-  const [notes, setNotes] = useState("")
-  const [agreed1, setAgreed1] = useState(false)  // shares lock
-  const [agreed2, setAgreed2] = useState(false)  // commitment
-  const [opening, setOpening] = useState(false)
 
   // Apply project filter from URL
   useEffect(() => {
@@ -305,67 +302,72 @@ function ExchangeContent() {
 
   /** Triggered when user clicks "شراء/بيع" on a listing card. */
   const onClickListing = (listing: typeof MOCK_LISTINGS[0]) => {
+    // 0. منع المستخدم من فتح صفقة على إعلانه
+    if (listing.user_id === CURRENT_USER_ID) {
+      return showError("لا يمكنك فتح صفقة على إعلانك")
+    }
     // 1. Check for active deal على هذا الإعلان
     const can = canCreateDeal(CURRENT_USER_ID, listing.id)
     if (!can.allowed && can.activeDeal) {
       setConflictDeal({ id: can.activeDeal.id, expires_at: can.activeDeal.expires_at })
       return
     }
-    // 2. Open the new-deal modal
-    setConfirmListing(listing)
-    setAmount(Math.min(1, listing.shares))
-    setDuration(24)
-    setNotes("")
-    setAgreed1(false)
-    setAgreed2(false)
+    // 2. Open QuantityModal
+    setSelectedListing(listing)
   }
 
-  const closeNewDealModal = () => {
-    setConfirmListing(null)
-    setAmount(1)
-    setNotes("")
-    setAgreed1(false)
-    setAgreed2(false)
-  }
-
-  const handleCreateDeal = () => {
-    if (!confirmListing) return
-    if (amount < 1 || amount > confirmListing.shares) {
-      return showError(`الكمية يجب أن تكون بين 1 و ${confirmListing.shares}`)
+  /** Convert MOCK_LISTINGS shape → QuantityModal shape. */
+  const modalListing: QuantityModalListing | null = useMemo(() => {
+    if (!selectedListing) return null
+    return {
+      id: selectedListing.id,
+      type: selectedListing.type,
+      user_id: selectedListing.user_id,
+      user_name: selectedListing.user_name,
+      project_id: selectedListing.project_id,
+      project_name: selectedListing.project_name,
+      price_per_share: selectedListing.price,
+      available_shares: selectedListing.shares,
+      min_shares: selectedListing.min_amount > 0 ? Math.ceil(selectedListing.min_amount / selectedListing.price) : 1,
     }
-    if (!agreed1 || !agreed2) {
-      return showError("يجب الموافقة على شروط الـ Escrow")
-    }
+  }, [selectedListing])
 
-    setOpening(true)
-    // Determine buyer/seller based on listing type + mode
-    const isBuyingFromSellListing = confirmListing.type === "sell"
-    const buyerId = isBuyingFromSellListing ? CURRENT_USER_ID : confirmListing.user_id
-    const buyerName = isBuyingFromSellListing ? CURRENT_USER_NAME : confirmListing.user_name
-    const sellerId = isBuyingFromSellListing ? confirmListing.user_id : CURRENT_USER_ID
-    const sellerName = isBuyingFromSellListing ? confirmListing.user_name : CURRENT_USER_NAME
+  /** حصص المستخدم في المشروع المحدّد (للبيع). */
+  const userSharesInProject = useMemo(() => {
+    if (!selectedListing) return 0
+    return HOLDINGS
+      .filter((h) => (h.user_id ?? "me") === CURRENT_USER_ID && h.project_id === selectedListing.project_id)
+      .reduce((s, h) => s + h.shares_owned, 0)
+  }, [selectedListing])
+
+  /** يُنفَّذ من QuantityModal بعد التأكيد. */
+  const handleConfirmDeal = async (quantity: number, durationHours: 24 | 48 | 72) => {
+    if (!selectedListing) return
+
+    const isBuyingFromSellListing = selectedListing.type === "sell"
+    const buyerId = isBuyingFromSellListing ? CURRENT_USER_ID : selectedListing.user_id
+    const buyerName = isBuyingFromSellListing ? CURRENT_USER_NAME : selectedListing.user_name
+    const sellerId = isBuyingFromSellListing ? selectedListing.user_id : CURRENT_USER_ID
+    const sellerName = isBuyingFromSellListing ? selectedListing.user_name : CURRENT_USER_NAME
 
     const result = createDeal({
       buyerId,
       buyerName,
       sellerId,
       sellerName,
-      listingId: confirmListing.id,
-      projectId: confirmListing.project_id,
-      projectName: confirmListing.project_name,
-      amount,
-      pricePerShare: confirmListing.price,
-      durationHours: duration,
-      notes: notes.trim() || undefined,
+      listingId: selectedListing.id,
+      projectId: selectedListing.project_id,
+      projectName: selectedListing.project_name,
+      amount: quantity,
+      pricePerShare: selectedListing.price,
+      durationHours,
     })
 
-    setOpening(false)
-
     if (!result.success || !result.data) {
-      return showError(result.reason ?? "تعذّر فتح الصفقة")
+      throw new Error(result.reason ?? "تعذّر فتح الصفقة")
     }
-    showSuccess(`🔒 تم تعليق ${amount} حصة وفتح الصفقة`)
-    closeNewDealModal()
+    showSuccess(`🔒 تم تعليق ${quantity} حصة وفتح الصفقة`)
+    setSelectedListing(null)
     router.push("/deals/" + result.data.id)
   }
 
@@ -612,7 +614,7 @@ function ExchangeContent() {
                       </span>
                     </div>
 
-                    {/* Action button */}
+                    {/* Action button — يفتح QuantityModal لتحديد الكمية */}
                     <button
                       onClick={() => onClickListing(l)}
                       className={cn(
@@ -623,7 +625,8 @@ function ExchangeContent() {
                       )}
                     >
                       <ShoppingCart className="w-4 h-4" strokeWidth={2} />
-                      {mode === "buy" ? "شراء" : "بيع"}
+                      {mode === "buy" ? "شراء — تحديد الكمية" : "بيع — تحديد الكمية"}
+                      <ChevronLeft className="w-3.5 h-3.5 opacity-70" strokeWidth={2.5} />
                     </button>
                   </div>
                 )
@@ -686,209 +689,15 @@ function ExchangeContent() {
         </div>
       )}
 
-      {/* ═══ New Deal Modal — Escrow ═══ */}
-      {confirmListing && (
-        <div
-          className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-end sm:items-center justify-center sm:p-4"
-          onClick={closeNewDealModal}
-        >
-          <div
-            className="bg-[#0a0a0a] border-t border-white/[0.1] sm:border sm:rounded-2xl rounded-t-3xl p-5 w-full max-w-md max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-blue-400/15 border border-blue-400/30 flex items-center justify-center">
-                  <Lock className="w-5 h-5 text-blue-400" strokeWidth={2} />
-                </div>
-                <div>
-                  <div className="text-base font-bold text-white">فتح صفقة جديدة</div>
-                  <div className="text-[11px] text-neutral-500 mt-0.5">
-                    {mode === "buy" ? "شراء من" : "بيع إلى"} {confirmListing.user_name}
-                  </div>
-                </div>
-              </div>
-              <button onClick={closeNewDealModal} className="text-neutral-500 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* 1. Amount input */}
-            <div className="mb-4">
-              <label className="text-[11px] font-bold text-neutral-300 mb-2 block">
-                الكمية {mode === "buy" ? "المُراد شراؤها" : "المُراد بيعها"}
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min={1}
-                  max={confirmListing.shares}
-                  value={amount}
-                  onChange={(e) => {
-                    const v = Math.max(1, Math.min(confirmListing.shares, Number(e.target.value) || 1))
-                    setAmount(v)
-                  }}
-                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-base text-white font-mono outline-none focus:border-white/20"
-                />
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-neutral-500 font-bold">
-                  / {confirmListing.shares} متاح
-                </span>
-              </div>
-              <div className="grid grid-cols-4 gap-1.5 mt-2">
-                {[1, Math.ceil(confirmListing.shares / 4), Math.ceil(confirmListing.shares / 2), confirmListing.shares].map((n, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setAmount(n)}
-                    className={cn(
-                      "py-1.5 rounded-lg text-[10px] font-bold border transition-colors",
-                      amount === n
-                        ? "bg-blue-400/15 border-blue-400/40 text-blue-400"
-                        : "bg-white/[0.04] border-white/[0.08] text-neutral-400 hover:text-white"
-                    )}
-                  >
-                    {n} حصة
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 2. Duration selector */}
-            <div className="mb-4">
-              <label className="text-[11px] font-bold text-neutral-300 mb-2 block">
-                مدّة إكمال الصفقة
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {([24, 48, 72] as const).map((h) => (
-                  <button
-                    key={h}
-                    onClick={() => setDuration(h)}
-                    className={cn(
-                      "py-2.5 rounded-lg text-xs font-bold border transition-colors",
-                      duration === h
-                        ? "bg-blue-400/15 border-blue-400/40 text-blue-400"
-                        : "bg-white/[0.04] border-white/[0.08] text-neutral-400 hover:text-white"
-                    )}
-                  >
-                    {h} ساعة
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 3. Notes */}
-            <div className="mb-4">
-              <label className="text-[11px] font-bold text-neutral-300 mb-2 block">
-                ملاحظات (اختياري)
-              </label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={2}
-                placeholder="مثال: أفضّل الدفع عبر زين كاش..."
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-sm text-white placeholder:text-neutral-600 outline-none resize-none"
-              />
-            </div>
-
-            {/* Total summary */}
-            <div className="bg-yellow-400/[0.05] border border-yellow-400/20 rounded-xl p-3 mb-4 flex justify-between items-center">
-              <div>
-                <div className="text-[10px] text-neutral-500">الإجمالي</div>
-                <div className="text-[10px] text-neutral-400">{amount} × {fmtIQD(confirmListing.price)}</div>
-              </div>
-              <div className="text-lg font-bold text-yellow-400 font-mono">
-                {fmtIQD(amount * confirmListing.price)} د.ع
-              </div>
-            </div>
-
-            {/* Escrow rules */}
-            <div className="bg-blue-400/[0.04] border border-blue-400/15 rounded-xl p-3.5 mb-4">
-              <div className="text-[11px] font-bold text-blue-400 mb-2 flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5" strokeWidth={2} />
-                نظام التعليق (Escrow)
-              </div>
-              <ul className="space-y-1.5">
-                {[
-                  "ستُعلَّق الحصص فور إنشاء الصفقة (لا يستطيع البائع بيعها لأحد آخر).",
-                  "بعد الدفع، تضغط زر «تأكيد الدفع».",
-                  "البائع يضغط «تحرير الحصص» بعد استلام المبلغ.",
-                  "إذا انتهى الوقت بدون تأكيد، الحصص ترجع للبائع تلقائياً.",
-                ].map((rule, i) => (
-                  <li key={i} className="text-[11px] text-neutral-300 flex gap-1.5 leading-relaxed">
-                    <span className="text-blue-400 flex-shrink-0">•</span>
-                    <span>{rule}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Two checkboxes */}
-            <div className="space-y-2 mb-4">
-              <button
-                onClick={() => setAgreed1(!agreed1)}
-                className={cn(
-                  "w-full flex items-start gap-3 p-2.5 rounded-xl border transition-all text-right",
-                  agreed1 ? "bg-green-400/[0.06] border-green-400/30" : "bg-white/[0.04] border-white/[0.08]"
-                )}
-              >
-                <div
-                  className={cn(
-                    "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
-                    agreed1 ? "bg-green-400 border-green-400" : "border-neutral-500"
-                  )}
-                >
-                  {agreed1 && <span className="text-black text-[9px] font-bold">✓</span>}
-                </div>
-                <span className={cn("text-[11px] leading-relaxed", agreed1 ? "text-green-400" : "text-neutral-400")}>
-                  أوافق على تعليق الحصص فور إنشاء الصفقة
-                </span>
-              </button>
-              <button
-                onClick={() => setAgreed2(!agreed2)}
-                className={cn(
-                  "w-full flex items-start gap-3 p-2.5 rounded-xl border transition-all text-right",
-                  agreed2 ? "bg-green-400/[0.06] border-green-400/30" : "bg-white/[0.04] border-white/[0.08]"
-                )}
-              >
-                <div
-                  className={cn(
-                    "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5",
-                    agreed2 ? "bg-green-400 border-green-400" : "border-neutral-500"
-                  )}
-                >
-                  {agreed2 && <span className="text-black text-[9px] font-bold">✓</span>}
-                </div>
-                <span className={cn("text-[11px] leading-relaxed", agreed2 ? "text-green-400" : "text-neutral-400")}>
-                  أتعهّد بإكمال الدفع/التسليم خلال {duration} ساعة
-                </span>
-              </button>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={closeNewDealModal}
-                disabled={opening}
-                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
-              >
-                إلغاء
-              </button>
-              <button
-                onClick={handleCreateDeal}
-                disabled={!agreed1 || !agreed2 || opening}
-                className={cn(
-                  "flex-[2] py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2",
-                  agreed1 && agreed2 && !opening
-                    ? "bg-neutral-100 text-black hover:bg-neutral-200"
-                    : "bg-white/[0.05] text-neutral-600 cursor-not-allowed"
-                )}
-              >
-                <Lock className="w-4 h-4" strokeWidth={2} />
-                {opening ? "جاري التعليق..." : "فتح الصفقة + تعليق"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </AppLayout>
+          {/* Quantity Modal -- تحديد الكمية + Escrow */}
+      <QuantityModal
+        listing={modalListing}
+        userBalance={CURRENT_FEE_BALANCE}
+        userShares={userSharesInProject}
+        onClose={() => setSelectedListing(null)}
+        onConfirm={handleConfirmDeal}
+      />
+      </AppLayout>
   )
 }
 
