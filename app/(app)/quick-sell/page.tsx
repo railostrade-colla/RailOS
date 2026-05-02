@@ -8,6 +8,7 @@ import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { mockHoldingsQuickSell as mockHoldings } from "@/lib/mock-data"
+import { createInvoice } from "@/lib/data/invoices"
 import { cn } from "@/lib/utils/cn"
 
 const fmtIQD = (n: number) => n.toLocaleString("en-US")
@@ -60,10 +61,22 @@ export default function QuickSellPage() {
 
     setSubmitting(true)
     setTimeout(() => {
-      showSuccess("تم نشر الإعلان! ⚡")
+      // ─── 📄 إنشاء الفاتورة الرسمية للبيع السريع ───
+      const invoice = createInvoice({
+        type: "quick_sell_sell",
+        from: { id: "abc123def456", name: "أنا" },
+        to: { id: "system_market", name: "السوق المباشر" },
+        project_id: selectedHolding.project_id,
+        project_name: selectedHolding.project.name,
+        shares_amount: sharesNum,
+        price_per_share: sellPrice,
+        platform_fee_units: feeUnitsNeeded,
+      })
+
+      showSuccess(`⚡ تم نشر إعلان البيع السريع + إصدار الفاتورة ${invoice.id}`)
       setSubmitting(false)
       setShowConfirm(false)
-      router.push("/portfolio")
+      router.push(`/invoices/${invoice.id}`)
     }, 1000)
   }
 

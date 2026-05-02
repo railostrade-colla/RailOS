@@ -16,6 +16,7 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Badge, Modal } from "@/components/ui"
+import { InvoiceCard } from "@/components/invoices/InvoiceCard"
 import {
   getDealById,
   buyerConfirmPayment,
@@ -27,6 +28,7 @@ import {
   STATUS_META,
 } from "@/lib/escrow"
 import type { EscrowDeal } from "@/lib/escrow"
+import { createInvoice, getInvoicesBySourceId, type Invoice } from "@/lib/data/invoices"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -133,7 +135,22 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
     const r = sellerReleaseShares(deal.id, CURRENT_USER_ID)
     setSubmitting(false)
     if (!r.success) return showError(r.reason ?? "فشل الإجراء")
-    showSuccess(`🎉 تم تحويل ${fmtNum(deal.shares_amount)} حصة إلى المشتري`)
+
+    // ─── 📄 إنشاء الفاتورة الرسمية تلقائياً ───
+    createInvoice({
+      type: "exchange_buy",  // من منظور المشتري (يستلم الحصص)
+      from: { id: deal.seller_id, name: deal.seller_name },
+      to:   { id: deal.buyer_id,  name: deal.buyer_name },
+      project_id: deal.project_id,
+      project_name: deal.project_name,
+      shares_amount: deal.shares_amount,
+      price_per_share: deal.price_per_share,
+      platform_fee_units: Math.ceil(deal.total_amount * 0.025),
+      source_id: deal.id,
+      notes: deal.notes,
+    })
+
+    showSuccess(`🎉 تم تحويل ${fmtNum(deal.shares_amount)} حصة + إصدار الفاتورة الرسمية`)
     refresh()
     closeModal()
   }
@@ -435,19 +452,24 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
           )}
 
           {deal.status === "completed" && (
-            <Card variant="gradient" color="green">
-              <div className="flex items-center gap-2 text-green-400">
-                <CheckCircle2 className="w-5 h-5" strokeWidth={2} />
-                <span className="text-sm font-bold">✅ الصفقة مكتملة بنجاح</span>
-              </div>
-              <div className="text-[11px] text-neutral-300 mt-2">
-                {role === "buyer"
-                  ? `تم نقل ${fmtNum(deal.shares_amount)} حصة إلى محفظتك.`
-                  : role === "seller"
-                  ? `تم نقل ${fmtNum(deal.shares_amount)} حصة من محفظتك إلى المشتري.`
-                  : "تمت الصفقة."}
-              </div>
-            </Card>
+            <>
+              <Card variant="gradient" color="green" className="mb-4">
+                <div className="flex items-center gap-2 text-green-400">
+                  <CheckCircle2 className="w-5 h-5" strokeWidth={2} />
+                  <span className="text-sm font-bold">✅ الصفقة مكتملة بنجاح</span>
+                </div>
+                <div className="text-[11px] text-neutral-300 mt-2">
+                  {role === "buyer"
+                    ? `تم نقل ${fmtNum(deal.shares_amount)} حصة إلى محفظتك.`
+                    : role === "seller"
+                    ? `تم نقل ${fmtNum(deal.shares_amount)} حصة من محفظتك إلى المشتري.`
+                    : "تمت الصفقة."}
+                </div>
+              </Card>
+
+              {/* ─── 📄 الفاتورة الرسمية ─── */}
+              <DealInvoice dealId={deal.id} />
+            </>
           )}
 
           {(deal.status === "cancelled_mutual" || deal.status === "cancelled_expired") && (
@@ -643,6 +665,17 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
       </Modal>
     </AppLayout>
   )
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Sub-component: Deal Invoice (auto-renders the invoice for a completed deal)
+// ──────────────────────────────────────────────────────────────────────────
+
+function DealInvoice({ dealId }: { dealId: string }) {
+  const invoices = getInvoicesBySourceId(dealId)
+  const invoice: Invoice | undefined = invoices[0]
+  if (!invoice) return null
+  return <InvoiceCard invoice={invoice} variant="banner" />
 }
 
 // ──────────────────────────────────────────────────────────────────────────

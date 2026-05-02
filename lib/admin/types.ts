@@ -42,6 +42,8 @@ export type AdminTab =
   // Phase Levels
   | "level_settings"
   | "user_stats"
+  // Phase Invoices
+  | "invoices_admin"
 
 export interface AdminNavItem {
   key: AdminTab
@@ -84,6 +86,9 @@ export const ADMIN_NAV: AdminNavItem[] = [
   // التواصل (communications) — Phase Admin-B
   { key: "broadcaster",     label: "إذاعة الإشعارات", icon: "📢", section: "التواصل" },
   { key: "support_inbox",   label: "صندوق الدعم",     icon: "💬", section: "التواصل" },
+
+  // الفواتير — Phase Invoices
+  { key: "invoices_admin",  label: "الفواتير الرسمية", icon: "📄", section: "الفواتير" },
 
   // البرامج الاجتماعية (social_programs) — Phase Social
   { key: "healthcare_admin", label: "الرعاية الصحية",  icon: "🏥", section: "البرامج الاجتماعية" },

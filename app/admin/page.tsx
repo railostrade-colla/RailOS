@@ -46,6 +46,8 @@ import { MarketHealthPanel } from "@/components/admin/panels/MarketHealthPanel"
 // Phase Levels
 import { LevelSettingsPanel } from "@/components/admin/panels/LevelSettingsPanel"
 import { UserStatsPanel } from "@/components/admin/panels/UserStatsPanel"
+// Phase Invoices
+import { InvoicesAdminPanel } from "@/components/admin/panels/InvoicesAdminPanel"
 
 export default function AdminPage() {
   const searchParams = useSearchParams()
@@ -96,6 +98,8 @@ export default function AdminPage() {
     // Phase Levels
     level_settings: <LevelSettingsPanel />,
     user_stats: <UserStatsPanel />,
+    // Phase Invoices
+    invoices_admin: <InvoicesAdminPanel />,
   }
 
   if (panels[tab]) return <>{panels[tab]}</>

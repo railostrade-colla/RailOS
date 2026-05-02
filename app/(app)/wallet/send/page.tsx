@@ -7,6 +7,7 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
+import { createInvoice } from "@/lib/data/invoices"
 import { LEVEL_LIMITS, fmtLimit } from "@/lib/utils/contractLimits"
 import {
   CURRENT_USER_ID_WALLET as CURRENT_USER_ID,
@@ -160,12 +161,27 @@ export default function SendSharesPage() {
   }
 
   const handleSubmit = async () => {
+    if (!recipientUser || !selectedHolding) return
     setSending(true)
     await new Promise((r) => setTimeout(r, 1200))
-    showSuccess("تم إرسال " + qtyNum + " حصة بنجاح! 🎉")
+
+    // ─── 📄 إنشاء الفاتورة الرسمية للتحويل ───
+    const invoice = createInvoice({
+      type: "transfer_send",
+      from: { id: CURRENT_USER_ID, name: "أنا" },
+      to: { id: recipientUser.id, name: recipientUser.name },
+      project_id: selectedHolding.project_id,
+      project_name: selectedHolding.project.name,
+      shares_amount: qtyNum,
+      price_per_share: selectedHolding.project.share_price,
+      platform_fee_units: transferFee,
+      notes: note.trim() || undefined,
+    })
+
+    showSuccess(`✅ تم إرسال ${qtyNum} حصة + إصدار الفاتورة ${invoice.id}`)
     setShowConfirm(false)
     setSending(false)
-    setTimeout(() => router.replace("/portfolio"), 800)
+    setTimeout(() => router.replace(`/invoices/${invoice.id}`), 800)
   }
 
   return (
