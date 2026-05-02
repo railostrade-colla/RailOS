@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   Edit2,
@@ -23,13 +23,11 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, StatCard, Badge, Modal } from "@/components/ui"
 import { signOut } from "@/lib/supabase/auth-helpers"
 import { showSuccess, showInfo } from "@/lib/utils/toast"
-import {
-  mockProfile,
-  mockRecentTrades,
-  getPortfolioSummary,
-  HOLDINGS,
-} from "@/lib/mock-data"
-import { LEVEL_LABELS, LEVEL_ICONS, fmtLimit } from "@/lib/utils/contractLimits"
+// Phase 4.1: profile data is now real (from Supabase). Portfolio
+// numbers and holdings are still mock — they move to DB in Phase 4.2.
+import { getPortfolioSummary, HOLDINGS } from "@/lib/mock-data"
+import { fmtLimit } from "@/lib/utils/contractLimits"
+import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/data/profile"
 import { cn } from "@/lib/utils/cn"
 
 // ─── Settings menu category ───────────────────────────────────
@@ -46,13 +44,37 @@ interface MenuCategory {
   items: MenuItem[]
 }
 
+// Skeleton bar — same dark tone as inactive surfaces, with a subtle pulse.
+function Skel({ className }: { className: string }) {
+  return <span className={cn("inline-block bg-white/[0.08] rounded animate-pulse", className)} />
+}
+
 export default function ProfilePage() {
   const router = useRouter()
   const [showLogoutModal, setShowLogoutModal] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
 
+  // Real profile from Supabase (Phase 4.1)
+  const [profile, setProfile] = useState<CurrentUserProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    getCurrentUserProfile().then((p) => {
+      if (cancelled) return
+      setProfile(p)
+      setLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Portfolio numbers — still mock; will be replaced in Phase 4.2.
   const portfolio = getPortfolioSummary("me")
-  const sectorsCount = new Set(HOLDINGS.filter((h) => (h.user_id ?? "me") === "me").map((h) => h.project.sector)).size
+  const sectorsCount = new Set(
+    HOLDINGS.filter((h) => (h.user_id ?? "me") === "me").map((h) => h.project.sector),
+  ).size
 
   const handleLogout = async () => {
     setLoggingOut(true)
@@ -116,6 +138,8 @@ export default function ProfilePage() {
     },
   ]
 
+  const avatarChar = profile?.full_name?.charAt(0) ?? "?"
+
   return (
     <AppLayout>
       <div className="relative">
@@ -127,21 +151,36 @@ export default function ProfilePage() {
           <Card variant="gradient" color="purple" className="mb-6">
             <div className="flex items-start gap-4 mb-5 flex-wrap">
               <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-400/[0.3] to-blue-400/[0.2] border border-purple-400/30 flex items-center justify-center text-3xl font-bold text-white flex-shrink-0">
-                {mockProfile.name.charAt(0)}
+                {loading ? <Skel className="w-8 h-8 rounded-md" /> : avatarChar}
               </div>
               <div className="flex-1 min-w-[200px]">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <h2 className="text-lg font-bold text-white">{mockProfile.name}</h2>
-                  <Badge color="purple" variant="soft" icon={LEVEL_ICONS[mockProfile.level]}>
-                    {LEVEL_LABELS[mockProfile.level]}
-                  </Badge>
-                  {mockProfile.is_verified && (
-                    <Badge color="green" variant="soft" size="xs">✓ موثق</Badge>
+                  {loading ? (
+                    <>
+                      <Skel className="h-5 w-32" />
+                      <Skel className="h-4 w-16 rounded-full" />
+                    </>
+                  ) : (
+                    <>
+                      <h2 className="text-lg font-bold text-white">
+                        {profile?.full_name ?? "—"}
+                      </h2>
+                      <Badge color="purple" variant="soft" icon={profile?.level_icon ?? "⭐"}>
+                        {profile?.level_label ?? "—"}
+                      </Badge>
+                      {profile?.is_verified && (
+                        <Badge color="green" variant="soft" size="xs">✓ موثق</Badge>
+                      )}
+                    </>
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] text-neutral-400 mb-3">
                   <Mail className="w-3 h-3" />
-                  <span dir="ltr">user@railos.app</span>
+                  {loading ? (
+                    <Skel className="h-3 w-40" />
+                  ) : (
+                    <span dir="ltr">{profile?.email ?? "—"}</span>
+                  )}
                 </div>
                 <button
                   onClick={() => router.push("/profile-setup")}
@@ -155,13 +194,30 @@ export default function ProfilePage() {
 
             {/* Quick stats inside hero */}
             <div className="grid grid-cols-3 gap-2">
-              <StatCard size="sm" label="تاريخ الانضمام" value="2026-01" icon={<Calendar className="w-3 h-3" />} />
-              <StatCard size="sm" label="الصفقات" value={mockProfile.total_trades} color="blue" />
-              <StatCard size="sm" label="نسبة النجاح" value={`${mockProfile.success_rate}%`} color="green" />
+              <StatCard
+                size="sm"
+                label="تاريخ الانضمام"
+                value={loading ? "..." : (profile?.joined_year_month || "—")}
+                icon={<Calendar className="w-3 h-3" />}
+              />
+              <StatCard
+                size="sm"
+                label="الصفقات"
+                value={loading ? "..." : (profile?.total_trades ?? 0)}
+                color="blue"
+              />
+              <StatCard
+                size="sm"
+                label="نسبة النجاح"
+                value={loading ? "..." : `${profile?.success_rate ?? 0}%`}
+                color="green"
+              />
             </div>
           </Card>
 
           {/* ═══ § 2 Banner Premium ═══ */}
+          {/* TODO Phase 4.X: Hide if user already has an active row in
+              quick_sale_subscriptions (currently always visible). */}
           <Card variant="highlighted" color="yellow" className="mb-6 relative overflow-hidden">
             <div className="absolute -top-8 -right-8 w-32 h-32 bg-yellow-400/10 rounded-full blur-3xl pointer-events-none" />
             <div className="relative">
@@ -228,7 +284,7 @@ export default function ProfilePage() {
               />
               <StatCard
                 label="مستواي"
-                value={LEVEL_LABELS[mockProfile.level]}
+                value={loading ? "..." : (profile?.level_label ?? "—")}
                 color="purple"
                 icon={<Trophy className="w-3 h-3" />}
               />
