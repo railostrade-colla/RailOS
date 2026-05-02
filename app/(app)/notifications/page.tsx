@@ -4,7 +4,6 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Bell, BarChart3, Hammer, TrendingUp, Headphones, Users, BellRing, CheckCheck, Trash2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess } from "@/lib/utils/toast"
 import { mockNotifications, generateMarketNotifications } from "@/lib/mock-data"
@@ -102,9 +101,7 @@ export default function NotificationsPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto">
+<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto">
 
           <PageHeader
             badge={`NOTIFICATIONS · ${unreadCount > 0 ? `${unreadCount} جديد` : "كل شي مقروء"}`}

@@ -7,7 +7,6 @@ import {
   HeartPulse, Users, Gift,
 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 
 interface MenuItem {
@@ -189,9 +188,7 @@ export default function MenuPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-screen-2xl mx-auto">
+<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-screen-2xl mx-auto">
 
           <PageHeader
             badge="MAIN MENU · 17 SHORTCUTS"

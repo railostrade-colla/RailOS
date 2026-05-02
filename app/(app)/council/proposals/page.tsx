@@ -4,7 +4,6 @@ import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Calendar, ChevronLeft, Clock } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, StatCard, Tabs, Badge, EmptyState } from "@/components/ui"
 import {
@@ -51,9 +50,7 @@ export default function ProposalsPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-4xl mx-auto pb-20">
+<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-4xl mx-auto pb-20">
 
           <PageHeader
             title="📋 القرارات"

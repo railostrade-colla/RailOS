@@ -4,7 +4,6 @@ import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Target, Sparkles, Lock, Globe, Handshake, Rocket, Mail, Phone, Headphones, ChevronRight } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { APP_NAME, APP_NAME_EN } from "@/lib/utils/version"
 
@@ -34,9 +33,7 @@ export default function AboutPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-4xl mx-auto">
+<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-4xl mx-auto">
 
           {/* Back button */}
           <button
@@ -161,7 +158,6 @@ export default function AboutPage() {
               </button>
             </div>
           </div>
-
 
         </div>
       </div>

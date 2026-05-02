@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Lock, Mail, Shield } from "lucide-react"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { showSuccess, showError } from "@/lib/utils/toast"
 
 export default function AdminLoginPage() {
@@ -27,9 +26,7 @@ export default function AdminLoginPage() {
 
   return (
     <div className="relative min-h-screen bg-black flex items-center justify-center p-4" dir="rtl">
-      <GridBackground showCircles={false} />
-
-      <div className="relative z-10 w-full max-w-sm">
+<div className="relative z-10 w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-purple-900 border border-purple-500/30 flex items-center justify-center mx-auto mb-4">

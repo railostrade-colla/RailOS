@@ -26,6 +26,15 @@ interface GridBackgroundProps {
  * <GridBackground showCornerMarkers={false} />    // بدون corner markers
  * ```
  */
+/**
+ * GridBackground — الخلفية المزخرفة (Grid + Circles + Corner markers).
+ *
+ * تُستخدم فقط في:
+ *   - صفحات Splash (SplashSlider)
+ *   - صفحات Auth (login / register / forgot-password) عبر AuthLayout
+ *
+ * كل الصفحات الأخرى تستخدم خلفية سوداء صلبة (#000000) بدون مزخرفات.
+ */
 export function GridBackground({
   showCircles = true,
   showCornerMarkers = true,

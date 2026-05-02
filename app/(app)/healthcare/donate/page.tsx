@@ -4,7 +4,6 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Heart } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card } from "@/components/ui"
 import { getActiveCases, makeDonation, DISEASE_LABELS } from "@/lib/mock-data/healthcare"
@@ -48,9 +47,7 @@ export default function HealthcareDonatePage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-2xl mx-auto pb-20">
+<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-2xl mx-auto pb-20">
 
           <PageHeader title="❤️ تبرّع للرعاية الصحية" subtitle="ساهم في إنقاذ حياة" />
 

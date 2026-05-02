@@ -14,7 +14,6 @@ import {
   Sparkles,
 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
@@ -124,9 +123,7 @@ export default function ResetPasswordPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-md mx-auto pb-20">
+<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-md mx-auto pb-20">
 
           <PageHeader
             title="تغيير كلمة المرور"

@@ -3,7 +3,6 @@
 import { useState, useMemo, useEffect } from "react"
 import { Search, Calendar } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Badge, Tabs, EmptyState, Modal, SkeletonCard } from "@/components/ui"
 import {
@@ -111,9 +110,7 @@ export default function NewsPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-5xl mx-auto pb-20">
+<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-5xl mx-auto pb-20">
 
           <PageHeader
             title="📰 آخر الأخبار"

@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation"
 import { Info, Coins, FileCheck, Stethoscope, Eye, Users } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader } from "@/components/ui"
 import { DISEASE_LABELS } from "@/lib/mock-data/healthcare"
@@ -53,9 +52,7 @@ export default function HealthcareAboutPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
+<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader
             title="عن البرنامج"

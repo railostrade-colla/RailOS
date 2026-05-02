@@ -1,4 +1,7 @@
+"use client"
+
 import { ReactNode } from "react"
+import { usePathname } from "next/navigation"
 import { DesktopHeader } from "./DesktopHeader"
 import { MobileHeader } from "./MobileHeader"
 import { BottomNav } from "./BottomNav"
@@ -10,27 +13,53 @@ interface AppLayoutProps {
   children: ReactNode
   /** يخفي شريط التنقّل السفلي (للموبايل) — مفيد لشاشات الدردشة الكاملة. */
   hideBottomNav?: boolean
-  /** يخفي الـ Footer (مفيد لشاشات الدردشة أو الشاشات الفائقة الصغر). */
+  /** يخفي الـ Footer يدوياً (تجاوز للقائمة الافتراضية). */
   hideFooter?: boolean
+}
+
+/**
+ * المسارات التي يظهر فيها الـ Footer.
+ * أي صفحة خارج هذه القائمة لا تعرض Footer (حتى لو hideFooter=false).
+ *
+ * يطابق:
+ *   - "/"         (الرئيسية)
+ *   - المسار بالضبط (مثل "/market")
+ *   - أو الصفحات الفرعية ("/market/new", "/portfolio?tab=...")
+ *
+ * ملاحظة: "/profile" يطابق "/profile" + "/profile/level" + "/profile-setup".
+ */
+const FOOTER_VISIBLE_PATHS = [
+  "/",          // الصفحة الرئيسية
+  "/market",    // السوق
+  "/portfolio", // الاستثمار / محفظتي
+  "/council",   // المجتمع / مجلس السوق
+  "/profile",   // حسابي
+  "/account",   // حسابي (alias)
+  "/support",   // الدعم
+]
+
+function shouldShowFooter(pathname: string | null): boolean {
+  if (!pathname) return false
+  return FOOTER_VISIBLE_PATHS.some((path) => {
+    if (path === "/") return pathname === "/"
+    return pathname === path || pathname.startsWith(path + "/")
+  })
 }
 
 /**
  * AppLayout - التخطيط الموحد للتطبيق
  *
- * البنية الموحّدة:
- *   - root: min-h-screen + flex-col → يضمن ارتفاع 100vh كحدّ أدنى
- *   - main: flex-1 + flex-col → يملأ المساحة المتبقية بعد الـ header
- *   - الـ scroll طبيعي عند تجاوز المحتوى للارتفاع
- *
- * Desktop (≥1024px): Header علوي + content بعرض كامل + Footer
- * Mobile/Tablet (<1024px): Header علوي + content + Footer + BottomNav سفلي
- *
- * Footer: نسخة كاملة موحَّدة (مأخوذة من تصميم Dashboard) — تظهر في كل الصفحات
- *         ما لم يُمَرَّر hideFooter={true}.
+ * Footer policy:
+ *   - يظهر تلقائياً في 6 صفحات فقط (FOOTER_VISIBLE_PATHS)
+ *   - hideFooter={true} يخفيه يدوياً (تجاوز إجباري لشاشات chat/splash)
+ *   - باقي الصفحات: لا footer
  */
 export function AppLayout({ children, hideBottomNav = false, hideFooter = false }: AppLayoutProps) {
+  const pathname = usePathname()
+  const showFooter = !hideFooter && shouldShowFooter(pathname)
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-black">
       {/* Offline banner (sticky top, above all) — shows only when offline */}
       <OfflineBanner />
 
@@ -49,8 +78,8 @@ export function AppLayout({ children, hideBottomNav = false, hideFooter = false 
       >
         {children}
 
-        {/* Unified Footer (Dashboard-style full version) */}
-        {!hideFooter && (
+        {/* Footer (path-aware — 6 pages only) */}
+        {showFooter && (
           <div className="px-4 lg:px-8 max-w-screen-2xl mx-auto w-full">
             <Footer />
           </div>

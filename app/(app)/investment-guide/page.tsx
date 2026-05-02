@@ -4,7 +4,6 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { TrendingUp, AlertTriangle, Lightbulb, Search, ShoppingCart, Wallet, ChevronDown, ChevronLeft, FileText, Users, BarChart3, ArrowLeftRight, Gavel, Heart, Bell, Info, Sparkles } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { cn } from "@/lib/utils/cn"
 
@@ -330,9 +329,7 @@ export default function InvestmentGuidePage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-4xl mx-auto">
+<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-4xl mx-auto">
 
           <PageHeader
             title="دليل الاستثمار"

@@ -16,7 +16,6 @@ import {
 } from "lucide-react"
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { AdsSlider } from "@/components/common/AdsSlider"
 import { ProjectCard } from "@/components/cards"
 import { SectionHeader, Tabs, SkeletonCard } from "@/components/ui"
@@ -236,9 +235,7 @@ export default function DashboardPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        {/* Sticky Project Selector (kept — global context) */}
+{/* Sticky Project Selector (kept — global context) */}
         <div className="sticky top-[60px] lg:top-[68px] z-30 bg-black/85 backdrop-blur-xl border-b border-white/[0.1] px-4 lg:px-8 py-3">
           <div className="relative max-w-2xl">
             <button
@@ -505,7 +502,6 @@ export default function DashboardPage() {
               action={{ label: "تفاصيل أكثر", href: "/market" }}
             />
 
-
             {/* Mini stats */}
             <div className="grid grid-cols-3 gap-2 mb-4">
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
@@ -624,7 +620,6 @@ export default function DashboardPage() {
                 subtitle="آخر مستجدات المنصة"
                 action={{ label: "الكل", href: "/notifications" }}
               />
-
 
               <div className="space-y-1">
                 {news.map((n, i) => (

@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ChevronDown, Search, X, AlertTriangle, Check, Wallet, ShoppingCart, Tag, Clock, FileText, Info, Lock, Coins } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
@@ -422,9 +421,7 @@ export default function CreateAdPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
+<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader
             title="إنشاء إعلان"

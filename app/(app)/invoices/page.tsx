@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Search, FileText } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, EmptyState, Tabs } from "@/components/ui"
 import { InvoiceCard } from "@/components/invoices/InvoiceCard"
@@ -68,9 +67,7 @@ export default function InvoicesPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
+<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
           <PageHeader
             title="📄 فواتيري"
             subtitle={`${invoices.length} فاتورة رسمية — كل واحدة عقد لامتلاك الحصص`}

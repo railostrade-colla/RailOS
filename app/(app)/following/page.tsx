@@ -3,7 +3,6 @@
 import { useState, useMemo } from "react"
 import { Heart, ChevronLeft, Trash2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { CompanyCard, ProjectCard } from "@/components/cards"
 import { SectionHeader, StatCard, Tabs, EmptyState } from "@/components/ui"
@@ -50,9 +49,7 @@ export default function FollowingPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-5xl mx-auto pb-20">
+<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-5xl mx-auto pb-20">
 
           <PageHeader
             title="❤️ متابعتي"

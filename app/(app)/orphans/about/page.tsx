@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation"
 import { Info, ListChecks, Home, BookOpen, Heart, FileText } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader } from "@/components/ui"
 import { SPONSORSHIP_PLANS } from "@/lib/mock-data/orphans"
@@ -49,9 +48,7 @@ export default function OrphansAboutPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
-        <div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
+<div className="relative z-10 px-4 lg:px-8 py-8 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader title="عن البرنامج" subtitle="كيف يعمل برنامج رعاية الأيتام" />
 
