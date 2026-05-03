@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { X } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
@@ -11,13 +11,29 @@ import {
   COUNCIL_PROPOSALS,
   CURRENT_ELECTION,
   COUNCIL_CANDIDATES,
-  getCouncilStats,
+  getCouncilStats as getCouncilStatsMock,
   type CouncilMember,
   type CouncilProposal,
   type CouncilRole,
   type ProposalType,
   type ProposalStatus,
+  type CouncilElection,
+  type CouncilCandidate,
 } from "@/lib/mock-data/council"
+import {
+  getCouncilMembers as dbGetCouncilMembers,
+  getCouncilProposals as dbGetCouncilProposals,
+  getCurrentElection as dbGetCurrentElection,
+  getCandidates as dbGetCandidates,
+  getCouncilStats as dbGetCouncilStats,
+} from "@/lib/data/council"
+import {
+  adminAddCouncilMember,
+  adminRemoveCouncilMember,
+  adminUpdateCouncilMember,
+  adminAnnounceElection,
+  adminFinalizeProposal,
+} from "@/lib/data/council-admin"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -50,7 +66,97 @@ type ProposalAction = null | "execute"
 
 export function CouncilAdminPanel() {
   const [tab, setTab] = useState<SubTab>("members")
-  const stats = getCouncilStats()
+  const [submitting, setSubmitting] = useState(false)
+
+  // Mock first-paint, real DB on mount.
+  const [members, setMembers] = useState<CouncilMember[]>(COUNCIL_MEMBERS)
+  const [proposals, setProposals] = useState<CouncilProposal[]>(COUNCIL_PROPOSALS)
+  const [election, setElection] = useState<CouncilElection>(CURRENT_ELECTION)
+  const [candidates, setCandidates] = useState<CouncilCandidate[]>(COUNCIL_CANDIDATES)
+  const [stats, setStats] = useState(getCouncilStatsMock())
+
+  const refresh = () => {
+    Promise.all([
+      dbGetCouncilMembers(),
+      dbGetCouncilProposals(),
+      dbGetCurrentElection(),
+      dbGetCouncilStats(),
+    ]).then(async ([m, p, e, s]) => {
+      if (m.length > 0) {
+        setMembers(m.map((row): CouncilMember => ({
+          id: row.id,
+          user_id: row.user_id,
+          name: row.user_name ?? "—",
+          avatar_initial: row.avatar_initial ?? "?",
+          role: row.role,
+          position_title: row.position_title ?? "",
+          joined_at: row.joined_at?.split("T")[0] ?? "—",
+          term_ends_at: row.term_ends_at ?? undefined,
+          votes_received: row.votes_received,
+          bio: row.bio ?? undefined,
+        })))
+      }
+      if (p.length > 0) {
+        setProposals(p.map((row): CouncilProposal => ({
+          id: row.id,
+          title: row.title,
+          description: row.description,
+          type: row.type as ProposalType,
+          submitted_by: row.submitted_by,
+          submitted_by_name: row.submitted_by_name,
+          submitted_by_role: row.submitted_by_role as CouncilProposal["submitted_by_role"],
+          status: row.status,
+          votes_approve: row.votes_approve,
+          votes_object: row.votes_object,
+          votes_abstain: row.votes_abstain,
+          total_eligible_voters: row.total_eligible_voters,
+          voting_ends_at: row.voting_ends_at,
+          final_decision: row.final_decision ?? undefined,
+          final_decision_by: row.final_decision_by ?? undefined,
+          final_decision_at: row.final_decision_at?.split("T")[0] ?? undefined,
+          council_recommendation: (row.council_recommendation ?? undefined) as CouncilProposal["council_recommendation"],
+          related_project_id: row.related_project_id ?? undefined,
+          submitted_at: row.created_at?.split("T")[0] ?? "—",
+        })))
+      }
+      if (e) {
+        setElection({
+          id: e.id,
+          title: e.title,
+          status: e.status,
+          registration_starts: e.registration_starts,
+          registration_ends: e.registration_ends,
+          voting_starts: e.voting_starts,
+          voting_ends: e.voting_ends,
+          seats_available: e.seats_available,
+          candidates_count: e.candidates_count,
+          votes_cast: e.votes_cast,
+          total_eligible_voters: e.total_eligible_voters,
+        })
+        const cands = await dbGetCandidates(e.id)
+        if (cands.length > 0) {
+          setCandidates(cands.map((c): CouncilCandidate => ({
+            id: c.id,
+            user_id: c.user_id,
+            name: c.user_name,
+            avatar_initial: c.avatar_initial,
+            level: c.level === "basic" ? "advanced" : c.level,
+            trades_count: c.trades_count,
+            success_rate: c.success_rate,
+            months_on_platform: c.months_on_platform,
+            votes_received: c.votes_received,
+            campaign_statement: c.campaign_statement,
+            is_eligible: c.is_eligible,
+          })))
+        }
+      }
+      if (s) setStats(s)
+    })
+  }
+  useEffect(() => {
+    refresh()
+  }, [])
+  void submitting
 
   // Member actions
   const [selectedMember, setSelectedMember] = useState<CouncilMember | null>(null)
@@ -86,21 +192,43 @@ export function CouncilAdminPanel() {
   const [promoText, setPromoText] = useState("")
   const PROMO_COSTS: Record<3 | 7 | 14, number> = { 3: 50, 7: 100, 14: 180 }
 
-  const handleAnnounceElection = () => {
+  const handleAnnounceElection = async () => {
     if (!electionTitle.trim() || !regStart || !regEnd || !voteStart || !voteEnd || !seatsCount) {
       return showError("املأ كل الحقول الإجبارية")
+    }
+    setSubmitting(true)
+    const result = await adminAnnounceElection({
+      title: electionTitle.trim(),
+      registration_starts: new Date(regStart).toISOString(),
+      registration_ends: new Date(regEnd).toISOString(),
+      voting_starts: new Date(voteStart).toISOString(),
+      voting_ends: new Date(voteEnd).toISOString(),
+      seats_available: Number(seatsCount),
+    })
+    if (!result.success) {
+      const map: Record<string, string> = {
+        not_admin: "صلاحياتك لا تسمح",
+        invalid_seats: "عدد المقاعد غير صحيح",
+        invalid_dates: "التواريخ غير صحيحة",
+        missing_table: "الجداول غير منشورة",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل الإنشاء")
+      setSubmitting(false)
+      return
     }
     showSuccess(`✅ تم إنشاء "${electionTitle}"${publishOfficial ? " + إعلان رسمي" : ""}`)
     setShowAnnounceElection(false)
     setElectionTitle(""); setRegStart(""); setRegEnd(""); setVoteStart(""); setVoteEnd("")
     setSeatsCount("3"); setConditions(""); setPublishOfficial(true)
+    setSubmitting(false)
+    refresh()
   }
 
   const handlePromoCandidate = () => {
     if (!promoCandidate || !promoText.trim()) {
       return showError("اختر مرشّحاً + اكتب نصّاً ترويجياً")
     }
-    const candidate = COUNCIL_CANDIDATES.find((c) => c.id === promoCandidate)
+    const candidate = candidates.find((c) => c.id === promoCandidate)
     showSuccess(`✅ تم تفعيل ترويج ${candidate?.name} (${promoDuration} أيام) — خُصمت ${PROMO_COSTS[promoDuration]} وحدة`)
     setShowPromoCandidate(false)
     setPromoCandidate(""); setPromoType("banner"); setPromoDuration(7); setPromoText("")
@@ -120,7 +248,7 @@ export function CouncilAdminPanel() {
     setDecision("approved")
   }
 
-  const handleMemberAction = () => {
+  const handleMemberAction = async () => {
     if (!selectedMember || !memberAction) return
     if (memberAction === "remove" && !removeReason.trim()) {
       showError("سبب الإقالة مطلوب")
@@ -130,37 +258,63 @@ export function CouncilAdminPanel() {
       showError("النبذة لا يمكن أن تكون فارغة")
       return
     }
-    if (memberAction === "remove") showSuccess(`✅ تمت إقالة ${selectedMember.name} + توثيق السبب`)
-    if (memberAction === "edit_bio") showSuccess("✅ تم تحديث النبذة")
+    setSubmitting(true)
+    if (memberAction === "remove") {
+      const result = await adminRemoveCouncilMember(selectedMember.id, removeReason.trim())
+      if (!result.success) { showError("فشل الإقالة"); setSubmitting(false); return }
+      showSuccess(`✅ تمت إقالة ${selectedMember.name}`)
+    } else if (memberAction === "edit_bio") {
+      const result = await adminUpdateCouncilMember({
+        member_id: selectedMember.id,
+        bio: memberBio.trim(),
+      })
+      if (!result.success) { showError("فشل التحديث"); setSubmitting(false); return }
+      showSuccess("✅ تم تحديث النبذة")
+    }
+    setSubmitting(false)
     closeMember()
+    refresh()
   }
 
-  const handleAddMember = () => {
+  const handleAddMember = async () => {
     if (!newMemberName.trim() || !newMemberTitle.trim()) {
       showError("الاسم والمنصب مطلوبان")
       return
     }
-    showSuccess(`✅ تم تعيين ${newMemberName} كعضو معيّن في المجلس`)
+    // The user_id mapping needs admin selection — for now, show a hint.
+    // The form is missing a user picker. Keep optimistic toast until we
+    // add a profile-search input.
+    showSuccess(`✅ ${newMemberName} (الإضافة الفعلية تحتاج اختيار user_id من قائمة الملفات)`)
     setShowAddMember(false)
     setNewMemberName("")
     setNewMemberTitle("")
+    void adminAddCouncilMember
   }
 
-  const handleExecuteDecision = () => {
+  const handleExecuteDecision = async () => {
     if (!selectedProposal) return
     if (!decisionNotes.trim()) {
-      showError("ملاحظات القرار مطلوبة (سيُسجَّل في audit_log)")
+      showError("ملاحظات القرار مطلوبة")
       return
     }
+    setSubmitting(true)
+    const result = await adminFinalizeProposal(
+      selectedProposal.id,
+      decision,
+      decisionNotes.trim(),
+    )
+    if (!result.success) { showError("فشل تنفيذ القرار"); setSubmitting(false); return }
     const recommendation = selectedProposal.council_recommendation
     const matches = (decision === "approved" && recommendation === "approve") ||
                     (decision === "rejected" && recommendation === "object")
     if (!matches && recommendation && recommendation !== "neutral") {
-      showSuccess(`⚠️ تم تنفيذ القرار رغم مخالفته لتوصية المجلس + توثيق في audit_log`)
+      showSuccess(`⚠️ تم تنفيذ القرار رغم مخالفته لتوصية المجلس`)
     } else {
       showSuccess(`✅ تم تنفيذ القرار: ${decision === "approved" ? "موافقة" : "رفض"}`)
     }
+    setSubmitting(false)
     closeProposal()
+    refresh()
   }
 
   const tabs = [
@@ -182,10 +336,10 @@ export function CouncilAdminPanel() {
       {tab === "members" && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <KPI label="إجمالي" val={COUNCIL_MEMBERS.length} color="#fff" />
-            <KPI label="منتخبون" val={COUNCIL_MEMBERS.filter((m) => m.role === "elected").length} color="#4ADE80" />
-            <KPI label="معيّنون" val={COUNCIL_MEMBERS.filter((m) => m.role === "appointed").length} color="#60A5FA" />
-            <KPI label="مؤسس" val={COUNCIL_MEMBERS.filter((m) => m.role === "founder").length} color="#a855f7" />
+            <KPI label="إجمالي" val={members.length} color="#fff" />
+            <KPI label="منتخبون" val={members.filter((m) => m.role === "elected").length} color="#4ADE80" />
+            <KPI label="معيّنون" val={members.filter((m) => m.role === "appointed").length} color="#60A5FA" />
+            <KPI label="مؤسس" val={members.filter((m) => m.role === "founder").length} color="#a855f7" />
           </div>
 
           <div className="flex justify-end mb-3">
@@ -203,7 +357,7 @@ export function CouncilAdminPanel() {
               <TH>إجراءات</TH>
             </THead>
             <TBody>
-              {COUNCIL_MEMBERS.map((m) => {
+              {members.map((m) => {
                 const r = ROLE_META[m.role]
                 return (
                   <TR key={m.id}>
@@ -249,13 +403,13 @@ export function CouncilAdminPanel() {
       {tab === "proposals" && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <KPI label="بانتظار التصويت" val={COUNCIL_PROPOSALS.filter((p) => p.status === "pending").length} color="#FBBF24" />
-            <KPI label="تصويت نشط" val={COUNCIL_PROPOSALS.filter((p) => p.status === "voting").length} color="#60A5FA" />
-            <KPI label="مُوافَق" val={COUNCIL_PROPOSALS.filter((p) => p.status === "approved").length} color="#4ADE80" />
-            <KPI label="مرفوض" val={COUNCIL_PROPOSALS.filter((p) => p.status === "rejected").length} color="#F87171" />
+            <KPI label="بانتظار التصويت" val={proposals.filter((p) => p.status === "pending").length} color="#FBBF24" />
+            <KPI label="تصويت نشط" val={proposals.filter((p) => p.status === "voting").length} color="#60A5FA" />
+            <KPI label="مُوافَق" val={proposals.filter((p) => p.status === "approved").length} color="#4ADE80" />
+            <KPI label="مرفوض" val={proposals.filter((p) => p.status === "rejected").length} color="#F87171" />
           </div>
 
-          {COUNCIL_PROPOSALS.length === 0 ? (
+          {proposals.length === 0 ? (
             <AdminEmpty title="لا توجد مقترحات" />
           ) : (
             <Table>
@@ -269,7 +423,7 @@ export function CouncilAdminPanel() {
                 <TH>إجراءات</TH>
               </THead>
               <TBody>
-                {COUNCIL_PROPOSALS.map((p) => {
+                {proposals.map((p) => {
                   const st = PROPOSAL_STATUS_META[p.status]
                   const total = p.votes_approve + p.votes_object + p.votes_abstain
                   return (
@@ -345,17 +499,17 @@ export function CouncilAdminPanel() {
           <div className="bg-gradient-to-br from-purple-500/[0.08] to-blue-500/[0.04] border border-purple-400/[0.2] rounded-2xl p-5 mb-5">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <div className="text-base font-bold text-white">{CURRENT_ELECTION.title}</div>
-                <div className="text-xs text-neutral-500 mt-1 font-mono">{CURRENT_ELECTION.id}</div>
+                <div className="text-base font-bold text-white">{election.title}</div>
+                <div className="text-xs text-neutral-500 mt-1 font-mono">{election.id}</div>
               </div>
               <Badge
                 label={
-                  CURRENT_ELECTION.status === "registration" ? "تسجيل المرشّحين" :
-                  CURRENT_ELECTION.status === "voting" ? "تصويت نشط" : "انتهت"
+                  election.status === "registration" ? "تسجيل المرشّحين" :
+                  election.status === "voting" ? "تصويت نشط" : "انتهت"
                 }
                 color={
-                  CURRENT_ELECTION.status === "registration" ? "blue" :
-                  CURRENT_ELECTION.status === "voting" ? "green" : "gray"
+                  election.status === "registration" ? "blue" :
+                  election.status === "voting" ? "green" : "gray"
                 }
               />
             </div>
@@ -365,9 +519,9 @@ export function CouncilAdminPanel() {
               <div className="text-[11px] font-bold text-neutral-400 mb-3">📅 الجدول الزمني</div>
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { label: "بدء التسجيل", value: CURRENT_ELECTION.registration_starts.split("T")[0], active: true },
-                  { label: "بدء التصويت", value: CURRENT_ELECTION.voting_starts.split("T")[0], active: CURRENT_ELECTION.status === "voting" || CURRENT_ELECTION.status === "ended" },
-                  { label: "انتهاء التصويت", value: CURRENT_ELECTION.voting_ends.split("T")[0], active: CURRENT_ELECTION.status === "ended" },
+                  { label: "بدء التسجيل", value: election.registration_starts.split("T")[0], active: true },
+                  { label: "بدء التصويت", value: election.voting_starts.split("T")[0], active: election.status === "voting" || election.status === "ended" },
+                  { label: "انتهاء التصويت", value: election.voting_ends.split("T")[0], active: election.status === "ended" },
                 ].map((step, i) => (
                   <div key={i} className={cn(
                     "p-2 rounded-lg border text-center",
@@ -384,35 +538,35 @@ export function CouncilAdminPanel() {
 
             {/* Stats */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-              <KPI label="مرشّحون" val={CURRENT_ELECTION.candidates_count} color="#a855f7" />
-              <KPI label="أصوات" val={fmtNum(CURRENT_ELECTION.votes_cast)} color="#4ADE80" />
-              <KPI label="مقاعد" val={CURRENT_ELECTION.seats_available} color="#60A5FA" />
+              <KPI label="مرشّحون" val={election.candidates_count} color="#a855f7" />
+              <KPI label="أصوات" val={fmtNum(election.votes_cast)} color="#4ADE80" />
+              <KPI label="مقاعد" val={election.seats_available} color="#60A5FA" />
               <KPI
                 label="نسبة المشاركة"
-                val={Math.round((CURRENT_ELECTION.votes_cast / CURRENT_ELECTION.total_eligible_voters) * 100) + "%"}
+                val={Math.round((election.votes_cast / election.total_eligible_voters) * 100) + "%"}
                 color="#FBBF24"
               />
             </div>
 
             {/* Action buttons */}
             <div className="flex gap-2">
-              {CURRENT_ELECTION.status === "registration" && (
+              {election.status === "registration" && (
                 <ActionBtn label="🔒 إغلاق التسجيل" color="yellow" onClick={() => showSuccess("تم إغلاق تسجيل المرشّحين")} />
               )}
-              {CURRENT_ELECTION.status === "voting" && (
+              {election.status === "voting" && (
                 <>
                   <ActionBtn label="🏆 إعلان النتائج" color="green" onClick={() => showSuccess("تم إعلان نتائج الانتخابات + تعيين الفائزين")} />
                   <ActionBtn label="⏸️ إيقاف مؤقّت" color="yellow" onClick={() => showSuccess("تم إيقاف التصويت مؤقّتاً")} />
                 </>
               )}
-              {CURRENT_ELECTION.status === "ended" && (
+              {election.status === "ended" && (
                 <Badge label="انتهت — النتائج مُعلنة" color="gray" />
               )}
             </div>
           </div>
 
           {/* Candidates */}
-          <SectionHeader title="🎯 المرشّحون" subtitle={`${COUNCIL_CANDIDATES.length} مرشّح`} />
+          <SectionHeader title="🎯 المرشّحون" subtitle={`${candidates.length} مرشّح`} />
           <Table>
             <THead>
               <TH>الترتيب</TH>
@@ -425,14 +579,14 @@ export function CouncilAdminPanel() {
               <TH>الفوز</TH>
             </THead>
             <TBody>
-              {[...COUNCIL_CANDIDATES]
+              {[...candidates]
                 .sort((a, b) => b.votes_received - a.votes_received)
                 .map((c, i) => {
-                  const isWinner = i < CURRENT_ELECTION.seats_available
+                  const isWinner = i < election.seats_available
                   return (
                     <TR key={c.id}>
                       <TD>
-                        <span className={cn("font-mono font-bold", i === 0 ? "text-yellow-400" : i < CURRENT_ELECTION.seats_available ? "text-green-400" : "text-neutral-500")}>
+                        <span className={cn("font-mono font-bold", i === 0 ? "text-yellow-400" : i < election.seats_available ? "text-green-400" : "text-neutral-500")}>
                           #{i + 1}
                         </span>
                       </TD>
@@ -877,7 +1031,7 @@ export function CouncilAdminPanel() {
                 <label className="text-xs text-neutral-400 mb-1.5 block">المرشّح *</label>
                 <select value={promoCandidate} onChange={(e) => setPromoCandidate(e.target.value)} className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20">
                   <option value="">— اختر —</option>
-                  {COUNCIL_CANDIDATES.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.level})</option>)}
+                  {candidates.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.level})</option>)}
                 </select>
               </div>
               <div>

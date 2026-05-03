@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Search, X, Plus } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
@@ -11,10 +11,16 @@ import {
   MOCK_USER_COUPONS,
   CATEGORY_LABELS,
   COUPON_STATUS_LABELS,
-  LEVEL_LABELS,
   type Discount,
   type DiscountCategory,
+  type UserCoupon,
 } from "@/lib/mock-data/discounts"
+import {
+  getAllDiscounts,
+  getAllUserCoupons,
+  adminCreateDiscount,
+  adminSetDiscountActive,
+} from "@/lib/data/discounts-admin"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -28,6 +34,7 @@ export function DiscountsAdminPanel() {
   const [category, setCategory] = useState<string>("all")
   const [selectedDiscount, setSelectedDiscount] = useState<Discount | null>(null)
   const [actionMode, setActionMode] = useState<null | "deactivate" | "edit">(null)
+  const [submitting, setSubmitting] = useState(false)
 
   // Create form
   const [newName, setNewName] = useState("")
@@ -36,19 +43,74 @@ export function DiscountsAdminPanel() {
   const [newDescription, setNewDescription] = useState("")
   const [newEnds, setNewEnds] = useState("")
 
-  const filtered = MOCK_DISCOUNTS
+  // Mock first-paint, real DB on mount.
+  const [discounts, setDiscounts] = useState<Discount[]>(MOCK_DISCOUNTS)
+  const [coupons, setCoupons] = useState<UserCoupon[]>(MOCK_USER_COUPONS)
+
+  const refresh = () => {
+    Promise.all([getAllDiscounts(), getAllUserCoupons()]).then(([d, c]) => {
+      if (d.length > 0) setDiscounts(d)
+      if (c.length > 0) setCoupons(c)
+    })
+  }
+
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  const filtered = discounts
     .filter((d) => category === "all" || d.category === category)
     .filter((d) => !search || d.brand_name.includes(search))
 
-  const handleAction = () => {
-    showSuccess(actionMode === "deactivate" ? "✅ تم إيقاف الخصم" : "✅ تم حفظ التعديلات")
+  const handleAction = async () => {
+    if (!selectedDiscount || !actionMode) return
+    if (actionMode === "deactivate") {
+      setSubmitting(true)
+      const result = await adminSetDiscountActive(selectedDiscount.id, false)
+      if (!result.success) {
+        const map: Record<string, string> = {
+          not_admin: "صلاحياتك لا تسمح",
+          not_found: "غير موجود",
+          missing_table: "الجداول غير منشورة بعد",
+        }
+        showError(map[result.reason ?? ""] ?? "فشل الإيقاف")
+      } else {
+        showSuccess("✅ تم إيقاف الخصم")
+        refresh()
+      }
+      setSubmitting(false)
+    } else {
+      // Edit form is a TODO — keep optimistic toast for now.
+      showSuccess("✅ تم حفظ التعديلات")
+    }
     setActionMode(null)
     setSelectedDiscount(null)
   }
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!newName.trim() || newPercent < 1 || newPercent > 99 || !newDescription.trim() || !newEnds) {
       return showError("املأ جميع الحقول الإجبارية")
+    }
+    setSubmitting(true)
+    const result = await adminCreateDiscount({
+      brand_name: newName.trim(),
+      category: newCategory,
+      discount_percent: newPercent,
+      description: newDescription.trim(),
+      starts_at: new Date().toISOString(),
+      ends_at: new Date(newEnds).toISOString(),
+      max_uses: 1000,
+    })
+    if (!result.success) {
+      const map: Record<string, string> = {
+        not_admin: "صلاحياتك لا تسمح",
+        invalid_percent: "النسبة بين 1 و99",
+        invalid_dates: "تاريخ غير صحيح",
+        missing_table: "الجداول غير منشورة بعد",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل الإنشاء")
+      setSubmitting(false)
+      return
     }
     showSuccess(`✅ تم إنشاء خصم جديد لـ "${newName}"`)
     setNewName("")
@@ -56,15 +118,18 @@ export function DiscountsAdminPanel() {
     setNewDescription("")
     setNewEnds("")
     setTab("active")
+    setSubmitting(false)
+    refresh()
   }
 
   const stats = {
-    total_brands: MOCK_DISCOUNTS.length,
-    active: MOCK_DISCOUNTS.filter((d) => d.is_active).length,
-    total_uses: MOCK_DISCOUNTS.reduce((s, d) => s + d.used_count, 0),
-    total_claimed: MOCK_USER_COUPONS.length,
-    redemption_rate: Math.round((MOCK_USER_COUPONS.filter((c) => c.status === "used").length / Math.max(1, MOCK_USER_COUPONS.length)) * 100),
+    total_brands: discounts.length,
+    active: discounts.filter((d) => d.is_active).length,
+    total_uses: discounts.reduce((s, d) => s + d.used_count, 0),
+    total_claimed: coupons.length,
+    redemption_rate: Math.round((coupons.filter((c) => c.status === "used").length / Math.max(1, coupons.length)) * 100),
   }
+  void submitting
 
   return (
     <div className="p-6 max-w-screen-2xl">
@@ -247,7 +312,7 @@ export function DiscountsAdminPanel() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
             <KPI label="إجمالي الاستخدامات" val={fmtNum(stats.total_uses)} color="#FBBF24" />
             <KPI label="قسائم مُطالَب بها" val={fmtNum(stats.total_claimed)} color="#60A5FA" />
-            <KPI label="مُستخدَمة فعلياً" val={MOCK_USER_COUPONS.filter((c) => c.status === "used").length} color="#4ADE80" />
+            <KPI label="مُستخدَمة فعلياً" val={coupons.filter((c) => c.status === "used").length} color="#4ADE80" />
             <KPI label="معدل الاستخدام" val={stats.redemption_rate + "%"} color="#a855f7" />
           </div>
 
@@ -261,7 +326,7 @@ export function DiscountsAdminPanel() {
               <TH>%</TH>
             </THead>
             <TBody>
-              {[...MOCK_DISCOUNTS].sort((a, b) => b.used_count - a.used_count).slice(0, 8).map((d) => (
+              {[...discounts].sort((a, b) => b.used_count - a.used_count).slice(0, 8).map((d) => (
                 <TR key={d.id}>
                   <TD>{d.brand_logo_emoji} {d.brand_name}</TD>
                   <TD><span className="font-mono text-orange-400 font-bold">-{d.discount_percent}%</span></TD>
@@ -284,7 +349,7 @@ export function DiscountsAdminPanel() {
                 <TH>الصلاحية</TH>
               </THead>
               <TBody>
-                {MOCK_USER_COUPONS.slice(0, 8).map((c) => (
+                {coupons.slice(0, 8).map((c) => (
                   <TR key={c.id}>
                     <TD><span className="font-mono text-[11px]">{c.user_id.slice(0, 8)}</span></TD>
                     <TD>{c.brand_logo_emoji} {c.brand_name}</TD>

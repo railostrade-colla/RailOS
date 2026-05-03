@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Search, X } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
@@ -17,6 +17,14 @@ import {
   type HealthcareApplication,
   type HealthcareCase,
 } from "@/lib/mock-data/healthcare"
+import {
+  getAllApplications,
+  getAllCases,
+  adminReviewApplication,
+  adminUpdateCaseProgress,
+  adminMarkCaseCompleted,
+  adminCreateHealthcareCase,
+} from "@/lib/data/healthcare-admin"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -28,6 +36,7 @@ type CaseAction = null | "update_progress" | "mark_completed"
 
 export function HealthcareAdminPanel() {
   const [tab, setTab] = useState<SubTab>("applications")
+  const [submitting, setSubmitting] = useState(false)
 
   // Applications
   const [appFilter, setAppFilter] = useState<string>("pending")
@@ -56,44 +65,112 @@ export function HealthcareAdminPanel() {
   const [newAnonymous, setNewAnonymous] = useState(false)
   const [newUrgent, setNewUrgent] = useState(false)
 
-  const handleCreateCase = (asDraft: boolean) => {
-    if (!asDraft) {
-      if (!newPatient.trim() || !newAge || !newCity.trim() || !newDiagnosis.trim() || !newHospital.trim() || !newCost) {
-        return showError("املأ كل الحقول الإجبارية")
-      }
+  // Mock first-paint, real DB on mount.
+  const [applications, setApplications] = useState<HealthcareApplication[]>(MOCK_HEALTHCARE_APPLICATIONS)
+  const [allCases, setAllCases] = useState<HealthcareCase[]>(MOCK_HEALTHCARE_CASES)
+
+  const refresh = () => {
+    Promise.all([getAllApplications(), getAllCases()]).then(([a, c]) => {
+      if (a.length > 0) setApplications(a)
+      if (c.length > 0) setAllCases(c)
+    })
+  }
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  const handleCreateCase = async (asDraft: boolean) => {
+    if (asDraft) {
+      // Drafts: keep optimistic toast (no draft column on cases table)
+      showSuccess("💾 تم حفظ الحالة كمسودّة (غير مفعّل في قاعدة البيانات)")
+      return
     }
-    showSuccess(asDraft
-      ? "💾 تم حفظ الحالة كمسودّة"
-      : `✅ تم نشر حالة "${newPatient}" — ${newUrgent ? "عاجلة" : "نشطة"}${newAnonymous ? " · مجهولة الهوية" : ""}`
-    )
+    if (!newPatient.trim() || !newAge || !newCity.trim() || !newDiagnosis.trim() || !newHospital.trim() || !newCost) {
+      return showError("املأ كل الحقول الإجبارية")
+    }
+    void newDoctor; void newRequested
+    setSubmitting(true)
+    const result = await adminCreateHealthcareCase({
+      patient_display_name: newPatient.trim(),
+      patient_age: Number(newAge),
+      city: newCity.trim(),
+      disease_type: (newDisease || "other") as Parameters<typeof adminCreateHealthcareCase>[0]["disease_type"],
+      diagnosis: newDiagnosis.trim(),
+      hospital: newHospital.trim(),
+      total_required: Number(newCost),
+      is_urgent: newUrgent,
+      is_anonymous: newAnonymous,
+    })
+    if (!result.success) {
+      const map: Record<string, string> = {
+        not_admin: "صلاحياتك لا تسمح",
+        missing_table: "الجداول غير منشورة بعد",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل النشر")
+      setSubmitting(false)
+      return
+    }
+    showSuccess(`✅ تم نشر حالة "${newPatient}"`)
     setShowCreateCase(false)
     setNewPatient(""); setNewAge(""); setNewCity(""); setNewDisease("")
     setNewDiagnosis(""); setNewHospital(""); setNewDoctor("")
     setNewCost(""); setNewRequested(""); setNewAnonymous(false); setNewUrgent(false)
+    setSubmitting(false)
+    refresh()
   }
 
-  const apps = MOCK_HEALTHCARE_APPLICATIONS
+  const apps = applications
     .filter((a) => appFilter === "all" || a.status === appFilter)
     .filter((a) => !appSearch || a.user_name.includes(appSearch) || a.diagnosis.includes(appSearch))
 
-  const cases = MOCK_HEALTHCARE_CASES.filter((c) => caseFilter === "all" || c.status === caseFilter)
+  const cases = allCases.filter((c) => caseFilter === "all" || c.status === caseFilter)
 
-  const handleAppAction = () => {
+  const handleAppAction = async () => {
     if (!selectedApp || !appAction) return
     if (appAction === "reject" && !appReason.trim()) return showError("سبب الرفض مطلوب")
+    setSubmitting(true)
+    const result = await adminReviewApplication(
+      selectedApp.id,
+      appAction === "approve",
+      appReason.trim() || undefined,
+    )
+    if (!result.success) {
+      const map: Record<string, string> = {
+        not_admin: "صلاحياتك لا تسمح",
+        not_found: "الطلب غير موجود",
+        already_reviewed: "تمت المراجعة مسبقاً",
+      }
+      showError(map[result.reason ?? ""] ?? "فشلت العملية")
+      setSubmitting(false)
+      return
+    }
     showSuccess(appAction === "approve" ? "✅ تمت الموافقة على الطلب" : "❌ تم رفض الطلب")
     setSelectedApp(null)
     setAppAction(null)
     setAppReason("")
+    setSubmitting(false)
+    refresh()
   }
+  void submitting
 
-  const handleCaseAction = () => {
+  const handleCaseAction = async () => {
     if (!selectedCase) return
     if (caseAction === "update_progress" && progressAmount <= 0) return showError("أدخل مبلغاً صحيحاً")
+    setSubmitting(true)
+    const result = caseAction === "update_progress"
+      ? await adminUpdateCaseProgress(selectedCase.id, progressAmount)
+      : await adminMarkCaseCompleted(selectedCase.id)
+    if (!result.success) {
+      showError("فشلت العملية")
+      setSubmitting(false)
+      return
+    }
     showSuccess(caseAction === "update_progress" ? `✅ تم تحديث المبلغ المُجمَّع` : "✅ تم وضع الحالة كمُكتملة")
     setSelectedCase(null)
     setCaseAction(null)
     setProgressAmount(0)
+    setSubmitting(false)
+    refresh()
   }
 
   return (
@@ -112,8 +189,8 @@ export function HealthcareAdminPanel() {
 
       <InnerTabBar
         tabs={[
-          { key: "applications", label: "📋 الطلبات",         count: MOCK_HEALTHCARE_APPLICATIONS.filter((a) => a.status === "pending").length },
-          { key: "cases",        label: "🏥 الحالات النشطة", count: MOCK_HEALTHCARE_CASES.filter((c) => c.status !== "completed").length },
+          { key: "applications", label: "📋 الطلبات",         count: applications.filter((a) => a.status === "pending").length },
+          { key: "cases",        label: "🏥 الحالات النشطة", count: allCases.filter((c) => c.status !== "completed").length },
           { key: "finance",      label: "💰 الماليات" },
         ]}
         active={tab}
@@ -124,10 +201,10 @@ export function HealthcareAdminPanel() {
       {tab === "applications" && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <KPI label="بانتظار" val={MOCK_HEALTHCARE_APPLICATIONS.filter((a) => a.status === "pending").length} color="#FBBF24" accent="rgba(251,191,36,0.05)" />
-            <KPI label="مُوافَق" val={MOCK_HEALTHCARE_APPLICATIONS.filter((a) => a.status === "approved").length} color="#4ADE80" />
-            <KPI label="مرفوض" val={MOCK_HEALTHCARE_APPLICATIONS.filter((a) => a.status === "rejected").length} color="#F87171" />
-            <KPI label="إجمالي" val={MOCK_HEALTHCARE_APPLICATIONS.length} color="#fff" />
+            <KPI label="بانتظار" val={applications.filter((a) => a.status === "pending").length} color="#FBBF24" accent="rgba(251,191,36,0.05)" />
+            <KPI label="مُوافَق" val={applications.filter((a) => a.status === "approved").length} color="#4ADE80" />
+            <KPI label="مرفوض" val={applications.filter((a) => a.status === "rejected").length} color="#F87171" />
+            <KPI label="إجمالي" val={applications.length} color="#fff" />
           </div>
 
           <div className="relative mb-3">
@@ -143,10 +220,10 @@ export function HealthcareAdminPanel() {
 
           <InnerTabBar
             tabs={[
-              { key: "all",      label: "الكل",   count: MOCK_HEALTHCARE_APPLICATIONS.length },
-              { key: "pending",  label: "بانتظار", count: MOCK_HEALTHCARE_APPLICATIONS.filter((a) => a.status === "pending").length },
-              { key: "approved", label: "مُوافَق", count: MOCK_HEALTHCARE_APPLICATIONS.filter((a) => a.status === "approved").length },
-              { key: "rejected", label: "مرفوض",  count: MOCK_HEALTHCARE_APPLICATIONS.filter((a) => a.status === "rejected").length },
+              { key: "all",      label: "الكل",   count: applications.length },
+              { key: "pending",  label: "بانتظار", count: applications.filter((a) => a.status === "pending").length },
+              { key: "approved", label: "مُوافَق", count: applications.filter((a) => a.status === "approved").length },
+              { key: "rejected", label: "مرفوض",  count: applications.filter((a) => a.status === "rejected").length },
             ]}
             active={appFilter}
             onSelect={setAppFilter}
@@ -193,17 +270,17 @@ export function HealthcareAdminPanel() {
       {tab === "cases" && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-            <KPI label="عاجلة" val={MOCK_HEALTHCARE_CASES.filter((c) => c.status === "urgent").length} color="#F87171" accent="rgba(248,113,113,0.05)" />
-            <KPI label="نشطة" val={MOCK_HEALTHCARE_CASES.filter((c) => c.status === "active").length} color="#FBBF24" />
-            <KPI label="مُكتملة" val={MOCK_HEALTHCARE_CASES.filter((c) => c.status === "completed").length} color="#4ADE80" />
-            <KPI label="إجمالي المبالغ" val={fmtNum(MOCK_HEALTHCARE_CASES.reduce((s, c) => s + c.amount_collected, 0))} color="#60A5FA" />
+            <KPI label="عاجلة" val={allCases.filter((c) => c.status === "urgent").length} color="#F87171" accent="rgba(248,113,113,0.05)" />
+            <KPI label="نشطة" val={allCases.filter((c) => c.status === "active").length} color="#FBBF24" />
+            <KPI label="مُكتملة" val={allCases.filter((c) => c.status === "completed").length} color="#4ADE80" />
+            <KPI label="إجمالي المبالغ" val={fmtNum(allCases.reduce((s, c) => s + c.amount_collected, 0))} color="#60A5FA" />
           </div>
 
           <InnerTabBar
             tabs={[
-              { key: "urgent",    label: "عاجلة",   count: MOCK_HEALTHCARE_CASES.filter((c) => c.status === "urgent").length },
-              { key: "active",    label: "نشطة",    count: MOCK_HEALTHCARE_CASES.filter((c) => c.status === "active").length },
-              { key: "completed", label: "مُكتملة", count: MOCK_HEALTHCARE_CASES.filter((c) => c.status === "completed").length },
+              { key: "urgent",    label: "عاجلة",   count: allCases.filter((c) => c.status === "urgent").length },
+              { key: "active",    label: "نشطة",    count: allCases.filter((c) => c.status === "active").length },
+              { key: "completed", label: "مُكتملة", count: allCases.filter((c) => c.status === "completed").length },
             ]}
             active={caseFilter}
             onSelect={setCaseFilter}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Search, X, Send, Paperclip } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
@@ -12,17 +12,64 @@ import {
   ADMIN_TICKET_STATUS_LABELS,
   ADMIN_TICKET_PRIORITY_LABELS,
   REPLY_TEMPLATES,
-  ADMIN_LIST,
+  ADMIN_LIST as MOCK_ADMIN_LIST,
   getAdminTicketsStats,
   type AdminSupportTicket,
   type AdminTicketStatus,
 } from "@/lib/mock-data/support"
+import {
+  getAllTickets,
+  getTicketReplies,
+  getAdminList,
+  computeTicketsStats,
+  assignTicket,
+  setTicketStatus,
+  adminReplyToTicket,
+  adminCloseTicket,
+  type AdminTicketRow,
+  type TicketReply,
+} from "@/lib/data/support-admin"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 const CURRENT_ADMIN = { id: "a1", name: "Admin@Main", role: "founder" }
+
+// Map a DB row → the page's AdminSupportTicket shape (so existing JSX
+// renders unchanged).
+function rowToTicket(r: AdminTicketRow, replies: TicketReply[] = []): AdminSupportTicket {
+  return {
+    id: r.id,
+    user_id: r.user_id,
+    user_name: r.user_name,
+    user_email: r.user_email,
+    user_level: r.user_level === "elite" ? "pro" : r.user_level,
+    user_kyc_status:
+      r.user_kyc_status === "approved" ? "verified" :
+      r.user_kyc_status === "rejected" ? "rejected" :
+      r.user_kyc_status === "pending" ? "pending" : "not_submitted",
+    subject: r.subject,
+    body: r.body,
+    category: "other", // DB has 6 categories; admin types map well — keep override below
+    priority: r.priority,
+    status: r.status,
+    assigned_to: r.assigned_to ?? undefined,
+    assigned_to_name: r.assigned_to_name ?? undefined,
+    replies: replies.map((rep) => ({
+      id: rep.id,
+      sender_type: rep.sender_type,
+      sender_name: rep.sender_name,
+      sender_role: rep.sender_role,
+      body: rep.body,
+      created_at: rep.created_at,
+    })),
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    closed_at: r.closed_at ?? undefined,
+    closed_reason: r.closed_reason ?? undefined,
+  }
+}
 
 export function SupportInboxPanel() {
   const [filter, setFilter] = useState<string>("new")
@@ -35,11 +82,45 @@ export function SupportInboxPanel() {
   const [showCloseModal, setShowCloseModal] = useState(false)
   const [closeReason, setCloseReason] = useState("")
   const [showTemplates, setShowTemplates] = useState(false)
-  // Local mutable copies for status/assignee changes (mock — in real life would call API)
   const [localStatus, setLocalStatus] = useState<AdminTicketStatus | null>(null)
   const [localAssignee, setLocalAssignee] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
-  const stats = getAdminTicketsStats()
+  // Mock first-paint, real DB on mount.
+  const [tickets, setTickets] = useState<AdminSupportTicket[]>(ADMIN_SUPPORT_TICKETS)
+  const [adminList, setAdminList] = useState(MOCK_ADMIN_LIST as ReadonlyArray<{ id: string; name: string }>)
+  const [dbRows, setDbRows] = useState<AdminTicketRow[]>([])
+
+  const refresh = () => {
+    Promise.all([getAllTickets(), getAdminList()]).then(([rows, admins]) => {
+      if (rows.length > 0) {
+        setDbRows(rows)
+        setTickets(rows.map((r) => rowToTicket(r)))
+      }
+      if (admins.length > 0) setAdminList(admins)
+    })
+  }
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  // When a ticket is selected, fetch its full thread
+  useEffect(() => {
+    if (!selected) return
+    const isFromDb = dbRows.some((r) => r.id === selected.id)
+    if (!isFromDb) return
+    getTicketReplies(selected.id).then((replies) => {
+      const dbRow = dbRows.find((r) => r.id === selected.id)
+      if (dbRow && replies.length >= 0) {
+        setSelected(rowToTicket(dbRow, replies))
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id])
+
+  const stats = dbRows.length > 0
+    ? computeTicketsStats(dbRows)
+    : getAdminTicketsStats()
 
   const tabs = [
     { key: "all", label: "الكل", count: stats.total },
@@ -49,7 +130,7 @@ export function SupportInboxPanel() {
     { key: "closed", label: "مُغلقة", count: stats.closed },
   ]
 
-  const filtered = ADMIN_SUPPORT_TICKETS
+  const filtered = tickets
     .filter((t) => filter === "all" || t.status === filter)
     .filter((t) => categoryFilter === "all" || t.category === categoryFilter)
     .filter((t) => priorityFilter === "all" || t.priority === priorityFilter)
@@ -77,14 +158,24 @@ export function SupportInboxPanel() {
     setShowTemplates(false)
   }
 
-  const handleSendReply = () => {
+  const handleSendReply = async () => {
+    if (!selected) return
     if (!replyText.trim()) {
       showError("نص الرد مطلوب")
       return
     }
-    showSuccess("📤 تم إرسال الرد + تحديث حالة التذكرة + إشعار المستخدم")
+    setSubmitting(true)
+    const result = await adminReplyToTicket(selected.id, replyText.trim())
+    if (!result.success) {
+      showError("فشل إرسال الرد")
+      setSubmitting(false)
+      return
+    }
+    showSuccess("📤 تم إرسال الرد")
     setReplyText("")
     setLocalStatus("replied")
+    setSubmitting(false)
+    refresh()
   }
 
   const handleSaveDraft = () => {
@@ -92,37 +183,70 @@ export function SupportInboxPanel() {
       showError("النص فارغ")
       return
     }
-    showSuccess("💾 تم حفظ الرد كمسودّة")
+    showSuccess("💾 تم حفظ الرد كمسودّة (محلياً)")
   }
 
-  const handleCloseTicket = () => {
+  const handleCloseTicket = async () => {
+    if (!selected) return
     if (!closeReason.trim()) {
       showError("سبب الإغلاق مطلوب")
+      return
+    }
+    setSubmitting(true)
+    const result = await adminCloseTicket(selected.id, closeReason.trim())
+    if (!result.success) {
+      showError("فشل الإغلاق")
+      setSubmitting(false)
       return
     }
     showSuccess("✅ تم إغلاق التذكرة")
     setShowCloseModal(false)
     setCloseReason("")
     closeTicketModal()
+    setSubmitting(false)
+    refresh()
   }
 
-  const handleAssignToMe = () => {
+  const handleAssignToMe = async () => {
+    if (!selected) return
+    const result = await assignTicket(selected.id, CURRENT_ADMIN.id)
+    if (!result.success) {
+      // Even if RPC fails (no real admin id mapping), keep optimistic UI
+      setLocalAssignee(CURRENT_ADMIN.id)
+      showSuccess(`📌 أُسنِدت محلياً (DB: ${result.reason ?? "—"})`)
+      return
+    }
     setLocalAssignee(CURRENT_ADMIN.id)
     showSuccess(`📌 أُسنِدت التذكرة إلى ${CURRENT_ADMIN.name}`)
+    refresh()
   }
 
-  const handleAssigneeChange = (newAssignee: string) => {
+  const handleAssigneeChange = async (newAssignee: string) => {
+    if (!selected) return
     setLocalAssignee(newAssignee || null)
-    if (newAssignee) {
-      const adminName = ADMIN_LIST.find((a) => a.id === newAssignee)?.name
+    if (!newAssignee) return
+    const adminName = adminList.find((a) => a.id === newAssignee)?.name
+    const result = await assignTicket(selected.id, newAssignee)
+    if (result.success) {
       showSuccess(`📌 أُسنِدت إلى ${adminName}`)
+      refresh()
+    } else {
+      showSuccess(`📌 أُسنِدت محلياً`)
     }
   }
 
-  const handleStatusChange = (newStatus: AdminTicketStatus) => {
+  const handleStatusChange = async (newStatus: AdminTicketStatus) => {
+    if (!selected) return
     setLocalStatus(newStatus)
-    showSuccess(`✏️ تم تحديث الحالة إلى: ${ADMIN_TICKET_STATUS_LABELS[newStatus].label}`)
+    const result = await setTicketStatus(selected.id, newStatus)
+    if (result.success) {
+      showSuccess(`✏️ تم تحديث الحالة إلى: ${ADMIN_TICKET_STATUS_LABELS[newStatus].label}`)
+      refresh()
+    } else {
+      showSuccess(`✏️ تحديث محلي فقط`)
+    }
   }
+  void submitting
 
   const insertTemplate = (template: string) => {
     setReplyText(template)
@@ -162,7 +286,7 @@ export function SupportInboxPanel() {
           className="bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-white/20"
         >
           <option value="all">كل المُسنَدين</option>
-          {ADMIN_LIST.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          {adminList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
       </div>
 
@@ -338,7 +462,7 @@ export function SupportInboxPanel() {
                           className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-white/20"
                         >
                           <option value="">— غير مُسنَد —</option>
-                          {ADMIN_LIST.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                          {adminList.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                         </select>
                         <button
                           onClick={handleAssignToMe}

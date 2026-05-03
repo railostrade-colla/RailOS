@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Search, X } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
@@ -13,6 +13,14 @@ import {
   calculateContractDistribution,
 } from "@/lib/mock-data/contracts"
 import type { ContractListItem, ContractStatus } from "@/lib/mock-data/types"
+import {
+  getAllContracts,
+  getContractMembers,
+  adminForceEndContract,
+  adminCancelContract,
+  adminResolveContractInternally,
+  type AdminContractMember,
+} from "@/lib/data/contracts-admin"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -37,15 +45,40 @@ export function ContractsAdminPanel() {
   // For internal resolution — edit percentages
   const [editPercents, setEditPercents] = useState<Record<string, number>>({})
 
+  // Mock first-paint, real DB on mount.
+  const [contracts, setContracts] = useState<ContractListItem[]>(mockContracts)
+  const [members, setMembers] = useState<AdminContractMember[]>([])
+  const [submitting, setSubmitting] = useState(false)
+
+  const refresh = () => {
+    getAllContracts().then((c) => {
+      if (c.length > 0) setContracts(c)
+    })
+  }
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  // When user opens a contract detail, fetch its real members
+  useEffect(() => {
+    if (selected) {
+      getContractMembers(selected.id).then((m) => {
+        setMembers(m)
+      })
+    } else {
+      setMembers([])
+    }
+  }, [selected])
+
   const tabs = [
-    { key: "all", label: "الكل", count: mockContracts.length },
-    { key: "pending", label: "بانتظار", count: mockContracts.filter((c) => c.status === "pending").length },
-    { key: "active", label: "نشطة", count: mockContracts.filter((c) => c.status === "active").length },
-    { key: "ended", label: "منتهية", count: mockContracts.filter((c) => c.status === "ended").length },
-    { key: "cancelled", label: "ملغاة", count: mockContracts.filter((c) => c.status === "cancelled").length },
+    { key: "all", label: "الكل", count: contracts.length },
+    { key: "pending", label: "بانتظار", count: contracts.filter((c) => c.status === "pending").length },
+    { key: "active", label: "نشطة", count: contracts.filter((c) => c.status === "active").length },
+    { key: "ended", label: "منتهية", count: contracts.filter((c) => c.status === "ended").length },
+    { key: "cancelled", label: "ملغاة", count: contracts.filter((c) => c.status === "cancelled").length },
   ]
 
-  const filtered = mockContracts
+  const filtered = contracts
     .filter((c) => filter === "all" || c.status === filter)
     .filter((c) =>
       !search ||
@@ -54,11 +87,11 @@ export function ContractsAdminPanel() {
     )
 
   const stats = {
-    pending: mockContracts.filter((c) => c.status === "pending").length,
-    active: mockContracts.filter((c) => c.status === "active").length,
-    ended: mockContracts.filter((c) => c.status === "ended").length,
-    cancelled: mockContracts.filter((c) => c.status === "cancelled").length,
-    total_value: mockContracts.reduce((s, c) => s + c.total_investment, 0),
+    pending: contracts.filter((c) => c.status === "pending").length,
+    active: contracts.filter((c) => c.status === "active").length,
+    ended: contracts.filter((c) => c.status === "ended").length,
+    cancelled: contracts.filter((c) => c.status === "cancelled").length,
+    total_value: contracts.reduce((s, c) => s + c.total_investment, 0),
   }
 
   const closeAll = () => {
@@ -69,44 +102,73 @@ export function ContractsAdminPanel() {
   }
 
   const initEditPercents = () => {
-    if (!selected) return
-    // mockContract has detailed members; check if its id matches selected.id, else use partners shape
-    const detailMembers = mockContract.id === "ct1" && selected.id === "1"
-      ? mockContract.members
-      : []
-    if (detailMembers.length > 0) {
+    // members are loaded async; init defaults from current data
+    if (members.length > 0) {
       const initial: Record<string, number> = {}
-      detailMembers.forEach((m) => { initial[m.user_id] = m.share_percent })
+      members.forEach((m) => { initial[m.id] = m.share_percent })
+      setEditPercents(initial)
+    } else if (selected && mockContract.id === "ct1" && selected.id === "1") {
+      const initial: Record<string, number> = {}
+      mockContract.members.forEach((m) => { initial[m.user_id] = m.share_percent })
       setEditPercents(initial)
     }
   }
 
-  const handleAction = () => {
+  // When members load, refresh the edit percents
+  useEffect(() => {
+    if (selected && members.length > 0) {
+      initEditPercents()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [members, selected])
+
+  const handleAction = async () => {
     if (!selected || !actionMode) return
     if ((actionMode === "force_end" || actionMode === "freeze" || actionMode === "resolve_internal") && !reason.trim()) {
       showError("سبب الإجراء مطلوب")
       return
     }
 
-    if (actionMode === "resolve_internal") {
+    setSubmitting(true)
+    if (actionMode === "force_end") {
+      const result = await adminForceEndContract(selected.id, reason.trim())
+      if (!result.success) { showError("فشل الإنهاء"); setSubmitting(false); return }
+      const fee = Math.round(selected.total_investment * (CONTRACT_END_FEE_PCT / 100))
+      showSuccess(`⛔ تم إنهاء العقد قسرياً + رسوم ${fmtNum(fee)} د.ع`)
+    } else if (actionMode === "freeze") {
+      // Freeze = cancel for now (no separate freeze status in DB)
+      const result = await adminCancelContract(selected.id, reason.trim())
+      if (!result.success) { showError("فشل التجميد"); setSubmitting(false); return }
+      showSuccess("⏸ تم تجميد العقد")
+    } else if (actionMode === "resolve_internal") {
       const total = Object.values(editPercents).reduce((s, v) => s + (v || 0), 0)
       if (Math.abs(total - 100) > 0.01) {
         showError(`مجموع النسب يجب أن يساوي 100% (الحالي: ${total}%)`)
+        setSubmitting(false)
         return
       }
+      const result = await adminResolveContractInternally(selected.id, editPercents, reason.trim())
+      if (!result.success) { showError("فشل التعديل"); setSubmitting(false); return }
+      showSuccess("⚖️ تم تعديل توزيع الحصص")
     }
-
-    if (actionMode === "force_end") {
-      const fee = Math.round(selected.total_investment * (CONTRACT_END_FEE_PCT / 100))
-      showSuccess(`⛔ تم إنهاء العقد قسرياً + خصم رسوم ${fmtNum(fee)} د.ع (0.10%)`)
-    }
-    if (actionMode === "freeze") showSuccess("⏸ تم تجميد العقد مؤقّتاً + إشعار الشركاء")
-    if (actionMode === "resolve_internal") showSuccess("⚖️ تم تعديل توزيع الحصص + توثيق في audit_log")
+    setSubmitting(false)
+    refresh()
     closeAll()
   }
 
-  // Distribution preview for the selected contract (only for ct id == "1" mapping to mockContract)
-  const distribution = selected && selected.id === "1" ? calculateContractDistribution("ct1") : null
+  // Build distribution from real members if loaded; else fall back to mock for ct1
+  const distribution = members.length > 0
+    ? {
+        distribution: members.map((m) => ({
+          member_id: m.id,
+          member_name: m.user_name,
+          percentage: m.share_percent,
+          shares: 0,
+          value: Math.round(((selected?.total_investment ?? 0) * m.share_percent) / 100),
+        })),
+      }
+    : selected && selected.id === "1" ? calculateContractDistribution("ct1") : null
+  void submitting
 
   return (
     <div className="p-6 max-w-screen-2xl">
@@ -277,7 +339,7 @@ export function ContractsAdminPanel() {
                   <div className="text-[10px] text-neutral-500 mb-1">القيمة الإجمالية</div>
                   <div className="text-base font-bold text-yellow-400 font-mono">{fmtNum(selected.total_investment)}</div>
                 </div>
-                {distribution && (
+                {distribution && "total_shares" in distribution && (
                   <div className="bg-white/[0.04] rounded-lg p-2.5 text-center">
                     <div className="text-[10px] text-neutral-500 mb-1">إجمالي الحصص</div>
                     <div className="text-base font-bold text-blue-400 font-mono">{fmtNum(distribution.total_shares)}</div>

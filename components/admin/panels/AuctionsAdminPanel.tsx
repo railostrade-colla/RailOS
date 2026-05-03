@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Search, X } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
@@ -14,6 +14,14 @@ import {
   type AuctionStatus,
 } from "@/lib/mock-data/auctions"
 import { ALL_PROJECTS } from "@/lib/mock-data/projects"
+import {
+  getAllAuctions,
+  getAllProjectsForSelect,
+  adminCreateAuction,
+  adminCancelAuction,
+  adminEndAuctionEarly,
+  type AdminProjectOption,
+} from "@/lib/data/auctions-admin"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -63,22 +71,39 @@ export function AuctionsAdminPanel() {
   const [newStartsAt, setNewStartsAt] = useState<string>("")
   const [newEndsAt, setNewEndsAt] = useState<string>("")
 
+  // Mock first-paint, real DB on mount.
+  const [auctions, setAuctions] = useState<AuctionDetails[]>(AUCTION_DETAILS)
+  const [projectOptions, setProjectOptions] = useState<AdminProjectOption[]>(
+    ALL_PROJECTS.map((p) => ({ id: p.id, name: p.name })),
+  )
+  const [submitting, setSubmitting] = useState(false)
+
+  const refresh = () => {
+    Promise.all([getAllAuctions(), getAllProjectsForSelect()]).then(([a, p]) => {
+      if (a.length > 0) setAuctions(a)
+      if (p.length > 0) setProjectOptions(p)
+    })
+  }
+  useEffect(() => {
+    refresh()
+  }, [])
+
   const tabs = [
-    { key: "all", label: "الكل", count: AUCTION_DETAILS.length },
-    { key: "active", label: "نشطة", count: AUCTION_DETAILS.filter((a) => a.status === "active").length },
-    { key: "upcoming", label: "قادمة", count: AUCTION_DETAILS.filter((a) => a.status === "upcoming").length },
-    { key: "ended", label: "منتهية", count: AUCTION_DETAILS.filter((a) => a.status === "ended").length },
+    { key: "all", label: "الكل", count: auctions.length },
+    { key: "active", label: "نشطة", count: auctions.filter((a) => a.status === "active").length },
+    { key: "upcoming", label: "قادمة", count: auctions.filter((a) => a.status === "upcoming").length },
+    { key: "ended", label: "منتهية", count: auctions.filter((a) => a.status === "ended").length },
   ]
 
   const today = new Date().toISOString().split("T")[0]
   const stats = {
-    active: AUCTION_DETAILS.filter((a) => a.status === "active").length,
-    upcoming: AUCTION_DETAILS.filter((a) => a.status === "upcoming").length,
-    ended_today: AUCTION_DETAILS.filter((a) => a.status === "ended" && a.ends_at.startsWith(today)).length,
-    total_bids: AUCTION_BIDS.length,
+    active: auctions.filter((a) => a.status === "active").length,
+    upcoming: auctions.filter((a) => a.status === "upcoming").length,
+    ended_today: auctions.filter((a) => a.status === "ended" && a.ends_at.startsWith(today)).length,
+    total_bids: auctions.reduce((s, a) => s + (a.bid_count ?? 0), 0) || AUCTION_BIDS.length,
   }
 
-  const filtered = AUCTION_DETAILS
+  const filtered = auctions
     .filter((a) => filter === "all" || a.status === filter)
     .filter((a) => projectFilter === "all" || a.project_id === projectFilter)
     .filter((a) =>
@@ -94,19 +119,31 @@ export function AuctionsAdminPanel() {
     setReason("")
   }
 
-  const handleAction = () => {
+  const handleAction = async () => {
     if (!selected || !actionMode) return
     if ((actionMode === "cancel" || actionMode === "end_early") && !reason.trim()) {
       showError("سبب الإجراء مطلوب")
       return
     }
-    if (actionMode === "end_early") showSuccess(`⏹️ تم إنهاء المزاد مبكراً + إعلان ${selected.bid_count > 0 ? "الفائز" : "إلغاء بدون فائز"}`)
-    if (actionMode === "refund") showSuccess("💰 تم استرداد رسوم المزاد")
-    if (actionMode === "cancel") showSuccess("❌ تم إلغاء المزاد + إشعار المشاركين")
+    setSubmitting(true)
+    if (actionMode === "end_early") {
+      const result = await adminEndAuctionEarly(selected.id)
+      if (!result.success) { showError("فشل الإنهاء"); setSubmitting(false); return }
+      showSuccess(`⏹️ تم إنهاء المزاد مبكراً`)
+    } else if (actionMode === "cancel") {
+      const result = await adminCancelAuction(selected.id, reason.trim())
+      if (!result.success) { showError("فشل الإلغاء"); setSubmitting(false); return }
+      showSuccess("❌ تم إلغاء المزاد")
+    } else if (actionMode === "refund") {
+      // Refund flow uses external payment/wallet logic — keep optimistic
+      showSuccess("💰 تم تسجيل استرداد الرسوم")
+    }
+    setSubmitting(false)
+    refresh()
     closeAll()
   }
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!newProjectId || newStarting <= 0 || newShares <= 0 || !newStartsAt || !newEndsAt) {
       showError("جميع الحقول مطلوبة وقيم موجبة")
       return
@@ -115,12 +152,37 @@ export function AuctionsAdminPanel() {
       showError("تاريخ الانتهاء يجب أن يكون بعد البدء")
       return
     }
-    const project = ALL_PROJECTS.find((p) => p.id === newProjectId)
+    const project = projectOptions.find((p) => p.id === newProjectId)
+    setSubmitting(true)
+    const result = await adminCreateAuction({
+      project_id: newProjectId,
+      title: project?.name ? `مزاد على ${project.name}` : "مزاد",
+      starting_price: newStarting,
+      shares_offered: newShares,
+      min_increment: newIncrement,
+      starts_at: new Date(newStartsAt).toISOString(),
+      ends_at: new Date(newEndsAt).toISOString(),
+    })
+    if (!result.success) {
+      const map: Record<string, string> = {
+        not_admin: "صلاحياتك لا تسمح",
+        invalid_input: "أدخل قيماً صحيحة",
+        invalid_dates: "التواريخ غير صحيحة",
+        invalid_type: "نوع المزاد غير صحيح",
+        missing_table: "الجداول غير منشورة",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل الإنشاء")
+      setSubmitting(false)
+      return
+    }
     showSuccess(`✅ تم إنشاء مزاد جديد لمشروع ${project?.name || newProjectId}`)
     setShowCreate(false)
     setNewStartsAt("")
     setNewEndsAt("")
+    setSubmitting(false)
+    refresh()
   }
+  void submitting
 
   return (
     <div className="p-6 max-w-screen-2xl">
@@ -158,7 +220,7 @@ export function AuctionsAdminPanel() {
           className="bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-white/20"
         >
           <option value="all">كل المشاريع</option>
-          {ALL_PROJECTS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          {projectOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
 
@@ -422,7 +484,7 @@ export function AuctionsAdminPanel() {
               onChange={(e) => setNewProjectId(e.target.value)}
               className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20 mb-3"
             >
-              {ALL_PROJECTS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {projectOptions.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
 
             <div className="grid grid-cols-2 gap-2 mb-3">
