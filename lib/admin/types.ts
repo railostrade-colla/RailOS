@@ -46,6 +46,8 @@ export type AdminTab =
   | "invoices_admin"
   // Phase 9.4 — admin requests hub (locking + 5-tab inbox)
   | "requests_hub"
+  // Phase 9.5 — share modification with two-factor authorization
+  | "share_modification"
 
 export interface AdminNavItem {
   key: AdminTab
@@ -68,6 +70,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { key: "fee_units_requests",  label: "طلبات الرسوم",      icon: "💎", section: "العمليات" },
   { key: "payment_proofs",      label: "إثباتات الدفع",     icon: "🧾", section: "العمليات" },
   { key: "contracts_admin",     label: "العقود",            icon: "🤝", section: "العمليات" },
+  { key: "share_modification",  label: "تعديل الحصص",      icon: "🔐", section: "العمليات" },
 
   { key: "projects",     label: "المشاريع",       icon: "▣",  section: "المشاريع" },
 
