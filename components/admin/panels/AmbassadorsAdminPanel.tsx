@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Search, X, ExternalLink } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
@@ -13,11 +13,18 @@ import {
   REWARD_TYPE_LABELS,
   REWARD_STATUS_LABELS,
   SOCIAL_PLATFORM_ICONS,
-  getAmbassadorsAdminStats,
-  getRewardsStats,
   type AmbassadorAdmin,
-  type AmbassadorRewardType,
+  type AmbassadorRewardAdmin,
 } from "@/lib/mock-data/ambassadors"
+import {
+  getAmbassadorsAdmin,
+  getAmbassadorRewardsAdmin,
+  approveAmbassador,
+  rejectAmbassador,
+  suspendAmbassador,
+  reactivateAmbassador,
+  terminateAmbassador,
+} from "@/lib/data/ambassadors-admin"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -32,6 +39,31 @@ const LEVEL_LABELS: Record<AmbassadorAdmin["user_level"], { label: string; icon:
   pro: { label: "محترف", icon: "👑" },
 }
 
+/** Per-list stats — replaces getAmbassadorsAdminStats. */
+function computeStats(list: AmbassadorAdmin[]) {
+  let pending = 0, active = 0, suspended = 0, rejected = 0
+  let totalReferrals = 0, totalRewards = 0
+  for (const a of list) {
+    if (a.application_status === "pending") pending++
+    else if (a.application_status === "approved" && a.is_active) active++
+    else if (a.application_status === "suspended") suspended++
+    else if (a.application_status === "rejected") rejected++
+    totalReferrals += a.total_referrals
+    totalRewards += a.total_rewards_earned
+  }
+  return { pending, active, suspended, rejected, total: list.length, total_referrals: totalReferrals, total_rewards: totalRewards }
+}
+
+function computeRewardStats(rewards: AmbassadorRewardAdmin[]) {
+  let paid = 0, pending = 0, total = 0
+  for (const r of rewards) {
+    total += r.amount
+    if (r.status === "paid") paid += r.amount
+    else if (r.status === "pending") pending += r.amount
+  }
+  return { paid, pending, total }
+}
+
 export function AmbassadorsAdminPanel() {
   const [tab, setTab] = useState<SubTab>("list")
 
@@ -42,17 +74,47 @@ export function AmbassadorsAdminPanel() {
   const [selected, setSelected] = useState<AmbassadorAdmin | null>(null)
   const [actionMode, setActionMode] = useState<ActionMode>(null)
   const [reason, setReason] = useState("")
+  const [submitting, setSubmitting] = useState(false)
 
   // Tab 2 state
   const [rewardType, setRewardType] = useState<string>("all")
   const [rewardStatus, setRewardStatus] = useState<string>("all")
 
-  const stats = getAmbassadorsAdminStats()
-  const rewardStats = getRewardsStats()
+  // Real data from DB; mock as first-paint fallback so the panel
+  // doesn't blank during the session-bootstrap fetch.
+  const [ambassadors, setAmbassadors] = useState<AmbassadorAdmin[]>(MOCK_AMBASSADORS_ADMIN)
+  const [rewards, setRewards] = useState<AmbassadorRewardAdmin[]>(MOCK_AMBASSADOR_REWARDS_ADMIN)
+
+  const refresh = useCallback(async () => {
+    const [amb, rw] = await Promise.all([
+      getAmbassadorsAdmin(500),
+      getAmbassadorRewardsAdmin(500),
+    ])
+    if (amb.length > 0) setAmbassadors(amb)
+    if (rw.length > 0) setRewards(rw)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      getAmbassadorsAdmin(500),
+      getAmbassadorRewardsAdmin(500),
+    ]).then(([amb, rw]) => {
+      if (cancelled) return
+      if (amb.length > 0) setAmbassadors(amb)
+      if (rw.length > 0) setRewards(rw)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const stats = useMemo(() => computeStats(ambassadors), [ambassadors])
+  const rewardStats = useMemo(() => computeRewardStats(rewards), [rewards])
 
   const tabs = [
-    { key: "list", label: "👥 السفراء + الطلبات", count: MOCK_AMBASSADORS_ADMIN.length },
-    { key: "rewards", label: "🏆 المكافآت", count: MOCK_AMBASSADOR_REWARDS_ADMIN.length },
+    { key: "list", label: "👥 السفراء + الطلبات", count: ambassadors.length },
+    { key: "rewards", label: "🏆 المكافآت", count: rewards.length },
   ]
 
   const listFilterTabs = [
@@ -63,7 +125,7 @@ export function AmbassadorsAdminPanel() {
     { key: "rejected", label: "مرفوضون", count: stats.rejected },
   ]
 
-  const filteredAmbassadors = MOCK_AMBASSADORS_ADMIN
+  const filteredAmbassadors = ambassadors
     .filter((a) => filter === "all" || a.application_status === filter)
     .filter((a) => levelFilter === "all" || a.user_level === levelFilter)
     .filter((a) =>
@@ -72,7 +134,7 @@ export function AmbassadorsAdminPanel() {
       a.user_email.toLowerCase().includes(search.toLowerCase())
     )
 
-  const filteredRewards = MOCK_AMBASSADOR_REWARDS_ADMIN
+  const filteredRewards = rewards
     .filter((r) => rewardType === "all" || r.type === rewardType)
     .filter((r) => rewardStatus === "all" || r.status === rewardStatus)
 
@@ -82,21 +144,44 @@ export function AmbassadorsAdminPanel() {
     setReason("")
   }
 
-  const handleAction = () => {
-    if (!selected || !actionMode) return
-    if ((actionMode === "reject" || actionMode === "suspend" || actionMode === "terminate") && !reason.trim()) {
+  const handleAction = async () => {
+    if (!selected || !actionMode || submitting) return
+    if (
+      (actionMode === "reject" || actionMode === "suspend" || actionMode === "terminate") &&
+      !reason.trim()
+    ) {
       showError("سبب الإجراء مطلوب")
       return
     }
-    const labels: Record<Exclude<ActionMode, null>, string> = {
-      approve: `✅ تم تفعيل ${selected.user_name} كسفير + توليد رابط الإحالة`,
-      reject: "❌ تم رفض الطلب + إرسال السبب للمستخدم",
-      suspend: `⏸️ تم إيقاف ${selected.user_name} مؤقّتاً + إيقاف العائدات`,
-      reactivate: `▶️ تم إعادة تفعيل ${selected.user_name}`,
-      terminate: "🚫 تم إنهاء العضوية نهائياً",
+
+    setSubmitting(true)
+    try {
+      const result = await (
+        actionMode === "approve"    ? approveAmbassador(selected.id) :
+        actionMode === "reject"     ? rejectAmbassador(selected.id, reason) :
+        actionMode === "suspend"    ? suspendAmbassador(selected.id, reason) :
+        actionMode === "reactivate" ? reactivateAmbassador(selected.id) :
+        terminateAmbassador(selected.id, reason)
+      )
+
+      if (!result.success) {
+        showError(result.error || "تعذّر تنفيذ الإجراء")
+        return
+      }
+
+      const labels: Record<Exclude<ActionMode, null>, string> = {
+        approve: `✅ تم تفعيل ${selected.user_name} كسفير + توليد رابط الإحالة`,
+        reject: "❌ تم رفض الطلب + إرسال السبب للمستخدم",
+        suspend: `⏸️ تم إيقاف ${selected.user_name} مؤقّتاً + إيقاف العائدات`,
+        reactivate: `▶️ تم إعادة تفعيل ${selected.user_name}`,
+        terminate: "🚫 تم إنهاء العضوية نهائياً",
+      }
+      showSuccess(labels[actionMode])
+      await refresh()
+      closeAll()
+    } finally {
+      setSubmitting(false)
     }
-    showSuccess(labels[actionMode])
-    closeAll()
   }
 
   return (
@@ -458,14 +543,16 @@ export function AmbassadorsAdminPanel() {
             <div className="flex gap-2">
               <button
                 onClick={() => { setActionMode(null); setReason("") }}
-                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                disabled={submitting}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
               >
                 إلغاء
               </button>
               <button
                 onClick={handleAction}
+                disabled={submitting}
                 className={cn(
-                  "flex-1 py-3 rounded-xl text-sm font-bold border",
+                  "flex-1 py-3 rounded-xl text-sm font-bold border disabled:opacity-50",
                   actionMode === "approve" && "bg-green-500/[0.15] border-green-500/[0.3] text-green-400 hover:bg-green-500/[0.2]",
                   actionMode === "reject" && "bg-red-500/[0.15] border-red-500/[0.3] text-red-400 hover:bg-red-500/[0.2]",
                   actionMode === "suspend" && "bg-yellow-500/[0.15] border-yellow-500/[0.3] text-yellow-400 hover:bg-yellow-500/[0.2]",
@@ -473,7 +560,7 @@ export function AmbassadorsAdminPanel() {
                   actionMode === "terminate" && "bg-red-500/[0.15] border-red-500/[0.3] text-red-400 hover:bg-red-500/[0.2]",
                 )}
               >
-                تأكيد
+                {submitting ? "جاري التنفيذ..." : "تأكيد"}
               </button>
             </div>
           </div>
