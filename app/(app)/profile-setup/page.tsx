@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
   User,
@@ -19,6 +19,8 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
+import { createClient } from "@/lib/supabase/client"
+import { getCurrentUserProfile } from "@/lib/data/profile"
 
 // ─── Static option data ───────────────────────────────────────────────
 const CITIES = [
@@ -72,6 +74,27 @@ export default function ProfileSetupPage() {
   const [gender, setGender] = useState<"male" | "female" | "">("")
   const [city, setCity] = useState<string>("")
   const [phone, setPhone] = useState("")
+
+  // Pre-fill from existing profile so users coming back from /settings
+  // don't lose what they already saved. Only the two columns the schema
+  // currently has — full_name + phone — round-trip; the rest of the
+  // form stays UI-only until a user_profile_extras migration lands.
+  // Local +964 phone format: strip leading "+964" if present so the
+  // input shows just the local digits.
+  useEffect(() => {
+    let cancelled = false
+    getCurrentUserProfile().then((p) => {
+      if (cancelled || !p) return
+      if (p.full_name) setFullName(p.full_name)
+      if (p.phone) {
+        const stripped = p.phone.replace(/^\+?964/, "").replace(/\D/g, "")
+        setPhone(stripped.slice(0, 11))
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Section 2
   const [profession, setProfession] = useState<string>("")
@@ -140,9 +163,49 @@ export default function ProfileSetupPage() {
     }
 
     setSubmitting(true)
-    await new Promise((r) => setTimeout(r, 800))
-    showSuccess("تم حفظ ملفك! ننتقل لـ KYC... 🎉")
-    setTimeout(() => router.push("/kyc"), 600)
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        showError("غير مسجَّل دخول — يرجى إعادة تسجيل الدخول")
+        setSubmitting(false)
+        return
+      }
+
+      // Persist what the schema currently supports. The remaining
+      // fields (birth_date, gender, city, profession, income, goals,
+      // experience, preferred_sectors) will be persisted once the
+      // user_profile_extras migration lands — they're collected here
+      // so we don't lose the answers when that migration goes live.
+      // KYC also captures birth_date / city / phone separately on
+      // kyc_submissions so the user re-enters them with documents.
+      const fullPhone = phone ? `+964${phone}` : null
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          full_name: fullName.trim(),
+          phone: fullPhone,
+        })
+        .eq("id", user.id)
+
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("[profile-setup] update failed:", error.message)
+        showError("تعذّر حفظ الملف — حاول مرّة أخرى")
+        setSubmitting(false)
+        return
+      }
+
+      showSuccess("تم حفظ ملفك! ننتقل لـ KYC... 🎉")
+      setTimeout(() => router.push("/kyc"), 600)
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[profile-setup] submit threw:", err)
+      showError("خطأ غير متوقّع")
+      setSubmitting(false)
+    }
   }
 
   // ─── Render ─────────────────────────────────────────────────────────
