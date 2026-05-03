@@ -12,6 +12,7 @@ import {
   type NewsType,
 } from "@/lib/mock-data"
 import { getAllNews, type DBNews } from "@/lib/data"
+import { incrementNewsViews } from "@/lib/data/news"
 import {
   getMyReaction,
   setReaction,
@@ -63,6 +64,14 @@ export default function NewsPage() {
   const [tab, setTab] = useState<FilterTab>("all")
   const [search, setSearch] = useState("")
   const [openItem, setOpenItem] = useState<PlatformNews | null>(null)
+
+  // Bump views_count whenever a news item opens. Mock IDs aren't
+  // UUIDs so the RPC silently no-ops on those rows — that's fine.
+  useEffect(() => {
+    if (openItem?.id) {
+      incrementNewsViews(openItem.id)
+    }
+  }, [openItem?.id])
 
   // Live news (DB-backed with mock fallback)
   const [allNews, setAllNews] = useState<PlatformNews[]>(PLATFORM_NEWS)

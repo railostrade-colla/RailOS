@@ -70,3 +70,22 @@ export async function getNewsByType(type: string, limit = 10): Promise<DBNews[]>
     return []
   }
 }
+
+/**
+ * Bumps `news.views_count` by 1 for a published row. Calls the
+ * `increment_news_views` SECURITY DEFINER RPC so end users can do
+ * it without direct UPDATE access to the table.
+ *
+ * Best-effort — silently skips on any failure (missing migration,
+ * unauthenticated, RLS, network) so the news modal never blocks on
+ * a view count that's a UI-only signal.
+ */
+export async function incrementNewsViews(newsId: string): Promise<void> {
+  if (!newsId) return
+  try {
+    const supabase = createClient()
+    await supabase.rpc("increment_news_views", { p_news_id: newsId })
+  } catch {
+    /* swallow — view counting is non-critical */
+  }
+}
