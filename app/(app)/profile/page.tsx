@@ -23,11 +23,13 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, StatCard, Badge, Modal } from "@/components/ui"
 import { signOut } from "@/lib/supabase/auth-helpers"
 import { showSuccess, showInfo } from "@/lib/utils/toast"
-// Phase 4.1: profile data is now real (from Supabase). Portfolio
-// numbers and holdings are still mock — they move to DB in Phase 4.2.
-import { getPortfolioSummary, HOLDINGS } from "@/lib/mock-data"
+// Profile + portfolio numbers both come from Supabase now (Phases 4.1 + I).
+// Mock fixtures stay imported only as a first-paint fallback while the
+// async fetch resolves.
+import { getPortfolioSummary } from "@/lib/mock-data"
 import { fmtLimit } from "@/lib/utils/contractLimits"
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/data/profile"
+import { getPortfolioData, type PortfolioSummary } from "@/lib/data/portfolio"
 import { cn } from "@/lib/utils/cn"
 
 // ─── Settings menu category ───────────────────────────────────
@@ -54,27 +56,42 @@ export default function ProfilePage() {
   const [showLogoutModal, setShowLogoutModal] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
 
-  // Real profile from Supabase (Phase 4.1)
+  // Real profile + portfolio from Supabase. Mock summary used as a
+  // first-paint placeholder so the StatCards never render with NaN.
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null)
+  const [dbPortfolio, setDbPortfolio] = useState<PortfolioSummary | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    getCurrentUserProfile().then((p) => {
-      if (cancelled) return
-      setProfile(p)
-      setLoading(false)
-    })
+    Promise.all([getCurrentUserProfile(), getPortfolioData()]).then(
+      ([p, port]) => {
+        if (cancelled) return
+        setProfile(p)
+        if (port) setDbPortfolio(port.summary)
+        setLoading(false)
+      },
+    )
     return () => {
       cancelled = true
     }
   }, [])
 
-  // Portfolio numbers — still mock; will be replaced in Phase 4.2.
-  const portfolio = getPortfolioSummary("me")
-  const sectorsCount = new Set(
-    HOLDINGS.filter((h) => (h.user_id ?? "me") === "me").map((h) => h.project.sector),
-  ).size
+  // Real portfolio when loaded; mock fallback otherwise.
+  const mockSummary = getPortfolioSummary("me")
+  const portfolio = dbPortfolio
+    ? {
+        totalValue: dbPortfolio.totalValue,
+        totalCost: dbPortfolio.totalCost,
+        totalProfit: dbPortfolio.totalProfit,
+        holdingsCount: dbPortfolio.holdingsCount,
+      }
+    : {
+        totalValue: mockSummary.totalValue,
+        totalCost: mockSummary.totalCost,
+        totalProfit: mockSummary.totalProfit,
+        holdingsCount: mockSummary.holdingsCount,
+      }
 
   const handleLogout = async () => {
     setLoggingOut(true)
