@@ -44,6 +44,8 @@ export type AdminTab =
   | "user_stats"
   // Phase Invoices
   | "invoices_admin"
+  // Phase 9.4 — admin requests hub (locking + 5-tab inbox)
+  | "requests_hub"
 
 export interface AdminNavItem {
   key: AdminTab
@@ -54,6 +56,7 @@ export interface AdminNavItem {
 
 export const ADMIN_NAV: AdminNavItem[] = [
   { key: "dashboard",    label: "لوحة التحكم",   icon: "◈",  section: "رئيسي" },
+  { key: "requests_hub", label: "مركز الطلبات",  icon: "🎯", section: "رئيسي" },
   { key: "monitor",      label: "مراقبة السوق",   icon: "📡", section: "رئيسي" },
   { key: "market_health",label: "صحّة السوق",    icon: "📊", section: "رئيسي" },
   { key: "alerts",       label: "التنبيهات",      icon: "🚨", section: "رئيسي" },

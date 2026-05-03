@@ -48,6 +48,8 @@ import { LevelSettingsPanel } from "@/components/admin/panels/LevelSettingsPanel
 import { UserStatsPanel } from "@/components/admin/panels/UserStatsPanel"
 // Phase Invoices
 import { InvoicesAdminPanel } from "@/components/admin/panels/InvoicesAdminPanel"
+// Phase 9.4 — admin requests hub
+import { AdminRequestsHubPanel } from "@/components/admin/panels/AdminRequestsHubPanel"
 
 export default function AdminPage() {
   const searchParams = useSearchParams()
@@ -100,6 +102,8 @@ export default function AdminPage() {
     user_stats: <UserStatsPanel />,
     // Phase Invoices
     invoices_admin: <InvoicesAdminPanel />,
+    // Phase 9.4 — admin requests hub
+    requests_hub: <AdminRequestsHubPanel />,
   }
 
   if (panels[tab]) return <>{panels[tab]}</>
