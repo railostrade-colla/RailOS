@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Search, X, Download } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
@@ -12,14 +12,44 @@ import {
   ENTITY_TYPE_LABELS,
   ROLE_LABELS,
   isDestructive,
-  getAuditLogStats,
   type AuditLogEntry,
   type AuditAction,
   type AuditEntityType,
 } from "@/lib/mock-data/auditLog"
+import { getAuditLog } from "@/lib/data/audit-log"
 import { showSuccess } from "@/lib/utils/toast"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
+
+const DAY_MS = 86_400_000
+const WEEK_MS = 7 * DAY_MS
+
+const DESTRUCTIVE_ACTIONS = new Set<AuditAction>([
+  "freeze_project",
+  "suspend_user",
+  "suspend_ambassador",
+  "ban_user",
+  "remove_council_member",
+  "force_end_contract",
+  "cancel_auction",
+])
+
+/** Per-list stats — replaces getAuditLogStats() which read MOCK_AUDIT_LOG. */
+function computeStats(log: AuditLogEntry[]) {
+  const now = Date.now()
+  let today = 0
+  let thisWeek = 0
+  let destructive = 0
+  for (const e of log) {
+    const t = new Date(e.created_at).getTime()
+    if (Number.isFinite(t)) {
+      if (now - t < DAY_MS) today++
+      if (now - t < WEEK_MS) thisWeek++
+    }
+    if (DESTRUCTIVE_ACTIONS.has(e.action)) destructive++
+  }
+  return { today, this_week: thisWeek, destructive, total: log.length }
+}
 
 export function AuditLogPanel() {
   const [search, setSearch] = useState("")
@@ -32,19 +62,35 @@ export function AuditLogPanel() {
   const [selected, setSelected] = useState<AuditLogEntry | null>(null)
   const [page, setPage] = useState(0)
 
+  // Real audit log from DB; mock as first-paint fallback so the table
+  // renders with sample data while the fetch is in flight (and stays
+  // mock if the user isn't an admin / the migration isn't applied —
+  // RLS returns an empty array for non-admins).
+  const [log, setLog] = useState<AuditLogEntry[]>(MOCK_AUDIT_LOG)
+  useEffect(() => {
+    let cancelled = false
+    getAuditLog(500).then((rows) => {
+      if (cancelled) return
+      if (rows.length > 0) setLog(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const PAGE_SIZE = 10
 
-  const stats = getAuditLogStats()
+  const stats = useMemo(() => computeStats(log), [log])
 
   // Build admin list from log itself
   const admins = useMemo(() => {
     const map = new Map<string, string>()
-    MOCK_AUDIT_LOG.forEach((e) => map.set(e.admin_id, e.admin_name))
+    log.forEach((e) => map.set(e.admin_id, e.admin_name))
     return Array.from(map, ([id, name]) => ({ id, name }))
-  }, [])
+  }, [log])
 
   const filtered = useMemo(() => {
-    return MOCK_AUDIT_LOG
+    return log
       .filter((e) => adminFilter === "all" || e.admin_id === adminFilter)
       .filter((e) => actionFilter === "all" || e.action === actionFilter)
       .filter((e) => entityFilter === "all" || e.entity_type === entityFilter)
@@ -57,7 +103,7 @@ export function AuditLogPanel() {
         e.entity_name.includes(search) ||
         e.id.toLowerCase().includes(search.toLowerCase())
       )
-  }, [search, adminFilter, actionFilter, entityFilter, dateFrom, dateTo, destructiveOnly])
+  }, [log, search, adminFilter, actionFilter, entityFilter, dateFrom, dateTo, destructiveOnly])
 
   const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
