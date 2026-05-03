@@ -12,10 +12,54 @@ import {
   MOCK_LISTINGS,
   PAYMENT_METHODS_PUBLIC as PAYMENT_METHODS,
 } from "@/lib/mock-data"
+import type { Listing } from "@/lib/mock-data/types"
 import { canCreateDeal, createDeal } from "@/lib/escrow"
 import { CURRENT_FEE_BALANCE } from "@/lib/mock-data"
 import { HOLDINGS } from "@/lib/mock-data/holdings"
+import {
+  getExchangeListings,
+  placeDealFromListing,
+  type ExchangeListingRow,
+} from "@/lib/data/listings"
+import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils/cn"
+
+/**
+ * Phase 10 — real listings flow
+ *
+ * Strategy: hybrid. We fetch active sell-listings from DB and merge
+ * them with mock buy-listings (the DB schema doesn't have a separate
+ * "buy" listings concept yet — that's a future migration). DB rows
+ * carry UUID ids; mock rows carry "l1"/"l2" string ids — handleConfirmDeal
+ * uses that distinction to route to the real RPC vs the legacy escrow
+ * lib. When DB has zero rows we fall through to MOCK_LISTINGS so the
+ * page never blanks during demo / staging.
+ */
+function dbToMockListing(row: ExchangeListingRow): Listing {
+  return {
+    id: row.id,
+    type: "sell",
+    project_id: row.project_id,
+    project_name: row.project_name,
+    user_id: row.seller_id,
+    user_name: row.seller_name,
+    // Reputation/stats are not exposed by the listings RPC yet — sensible
+    // defaults that don't lie about high trust.
+    reputation_score: 75,
+    total_trades: 0,
+    success_rate: 90,
+    price: row.price_per_share,
+    shares: row.shares_remaining,
+    min_amount: 0,
+    payment_methods: PAYMENT_METHODS.slice(0, 3) as unknown as string[],
+    created_at: row.created_at,
+  }
+}
+
+/** Heuristic — DB rows are UUIDs (36 chars with dashes). */
+function isDbListingId(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+}
 
 const CURRENT_USER_ID = "me"
 const CURRENT_USER_NAME = "أنا"
@@ -271,8 +315,13 @@ function ExchangeContent() {
   const [paymentFilter, setPaymentFilter] = useState<string[]>([])
 
   // QuantityModal state (نافذة تحديد الكمية الموحَّدة)
-  const [selectedListing, setSelectedListing] = useState<typeof MOCK_LISTINGS[0] | null>(null)
+  const [selectedListing, setSelectedListing] = useState<Listing | null>(null)
   const [conflictDeal, setConflictDeal] = useState<{ id: string; expires_at: string } | null>(null)
+
+  // ─── Phase 10: real DB listings + current user ─────────────
+  const [dbSellListings, setDbSellListings] = useState<Listing[]>([])
+  const [currentUserId, setCurrentUserId] = useState<string>(CURRENT_USER_ID)
+  const [loadingListings, setLoadingListings] = useState(true)
 
   // Apply project filter from URL
   useEffect(() => {
@@ -282,10 +331,49 @@ function ExchangeContent() {
     }
   }, [projectFilter])
 
-  // Filter + Sort
+  // Load real listings + current user on mount
+  useEffect(() => {
+    let cancelled = false
+    const supabase = createClient()
+
+    // current user (best-effort)
+    supabase.auth.getUser().then(({ data }) => {
+      if (cancelled) return
+      if (data?.user?.id) setCurrentUserId(data.user.id)
+    })
+
+    // active sell-listings from DB
+    getExchangeListings()
+      .then((rows) => {
+        if (cancelled) return
+        setDbSellListings(rows.map(dbToMockListing))
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingListings(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Filter + Sort — hybrid pool:
+  //   - "buy" mode (مشترٍ يبحث عن إعلانات بيع): real DB rows first;
+  //     fall back to mock sell-listings only if DB is empty (so the
+  //     page never blanks during demo / staging).
+  //   - "sell" mode (بائع يبحث عن طلبات شراء): pure mock until we
+  //     migrate buy-listings to DB.
   const filtered = useMemo(() => {
-    return MOCK_LISTINGS
-      .filter((l) => l.type === (mode === "buy" ? "sell" : "buy"))
+    const wantType: "sell" | "buy" = mode === "buy" ? "sell" : "buy"
+    const mockPool = MOCK_LISTINGS.filter((l) => l.type === wantType)
+    const pool: Listing[] =
+      wantType === "sell"
+        ? dbSellListings.length > 0
+          ? dbSellListings
+          : mockPool
+        : mockPool
+
+    return pool
       .filter((l) => !selectedProject || l.project_id === selectedProject.id)
       .filter((l) => {
         if (paymentFilter.length === 0) return true
@@ -297,19 +385,22 @@ function ExchangeContent() {
         if (sort === "speed") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         return 0
       })
-  }, [mode, sort, selectedProject, paymentFilter])
+  }, [mode, sort, selectedProject, paymentFilter, dbSellListings])
 
   /** Triggered when user clicks "شراء/بيع" on a listing card. */
-  const onClickListing = (listing: typeof MOCK_LISTINGS[0]) => {
+  const onClickListing = (listing: Listing) => {
     // 0. منع المستخدم من فتح صفقة على إعلانه
-    if (listing.user_id === CURRENT_USER_ID) {
+    if (listing.user_id === currentUserId || listing.user_id === CURRENT_USER_ID) {
       return showError("لا يمكنك فتح صفقة على إعلانك")
     }
-    // 1. Check for active deal على هذا الإعلان
-    const can = canCreateDeal(CURRENT_USER_ID, listing.id)
-    if (!can.allowed && can.activeDeal) {
-      setConflictDeal({ id: can.activeDeal.id, expires_at: can.activeDeal.expires_at })
-      return
+    // 1. Check for active deal على هذا الإعلان (mock-only — DB-side
+    //    enforcement happens inside place_deal_from_listing RPC)
+    if (!isDbListingId(listing.id)) {
+      const can = canCreateDeal(CURRENT_USER_ID, listing.id)
+      if (!can.allowed && can.activeDeal) {
+        setConflictDeal({ id: can.activeDeal.id, expires_at: can.activeDeal.expires_at })
+        return
+      }
     }
     // 2. Open QuantityModal
     setSelectedListing(listing)
@@ -343,6 +434,42 @@ function ExchangeContent() {
   const handleConfirmDeal = async (quantity: number, durationHours: 24 | 48 | 72) => {
     if (!selectedListing) return
 
+    // ─── Phase 10: real DB path ─────────────────────────────
+    // DB rows have UUID ids; route them through the atomic
+    // place_deal_from_listing RPC which: locks the listing, verifies
+    // capacity, freezes seller's shares, and creates the deal row.
+    if (isDbListingId(selectedListing.id)) {
+      const res = await placeDealFromListing(
+        selectedListing.id,
+        quantity,
+        durationHours,
+      )
+      if (!res.success) {
+        const reasonMap: Record<string, string> = {
+          unauthenticated: "يجب تسجيل الدخول أولاً",
+          invalid_quantity: "الكمية غير صحيحة",
+          listing_not_found: "الإعلان غير موجود",
+          listing_inactive: "الإعلان لم يعد نشطاً",
+          cannot_buy_own_listing: "لا يمكنك شراء إعلانك",
+          insufficient_listing_capacity: `الكمية المتاحة: ${res.available ?? "؟"}`,
+          seller_holdings_missing: "البائع لا يملك حصصاً في هذا المشروع",
+          seller_insufficient_unfrozen: `البائع يملك ${res.unfrozen ?? "؟"} حصة فقط غير مجمدة`,
+          missing_table: "الميزة غير مفعّلة بعد على الخادم",
+          rls: "ليس لديك صلاحية لإجراء هذه الصفقة",
+        }
+        const msg = reasonMap[res.reason ?? ""] ?? "تعذّر فتح الصفقة"
+        throw new Error(msg)
+      }
+      showSuccess(`🔒 تم تعليق ${quantity} حصة وفتح الصفقة`)
+      setSelectedListing(null)
+      // Refresh DB listings so capacity reflects immediately
+      getExchangeListings().then((rows) => setDbSellListings(rows.map(dbToMockListing)))
+      if (res.deal_id) router.push("/deals/" + res.deal_id)
+      else router.push("/deals")
+      return
+    }
+
+    // ─── Legacy mock path (until buy-listings migrate) ──────
     const isBuyingFromSellListing = selectedListing.type === "sell"
     const buyerId = isBuyingFromSellListing ? CURRENT_USER_ID : selectedListing.user_id
     const buyerName = isBuyingFromSellListing ? CURRENT_USER_NAME : selectedListing.user_name
@@ -495,7 +622,26 @@ function ExchangeContent() {
           </div>
 
           {/* Listings */}
-          {filtered.length === 0 ? (
+          {loadingListings && filtered.length === 0 ? (
+            <div className="space-y-2.5">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="bg-white/[0.04] border border-white/[0.06] rounded-2xl p-4 animate-pulse"
+                >
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <div className="w-9 h-9 rounded-full bg-white/[0.06]" />
+                    <div className="flex-1">
+                      <div className="h-3 w-24 bg-white/[0.06] rounded mb-1.5" />
+                      <div className="h-2 w-16 bg-white/[0.04] rounded" />
+                    </div>
+                  </div>
+                  <div className="h-9 w-full bg-white/[0.04] rounded mb-3" />
+                  <div className="h-8 w-full bg-white/[0.04] rounded" />
+                </div>
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="text-center py-16 bg-white/[0.03] border border-white/[0.06] rounded-2xl">
               <div className="text-5xl mb-3 opacity-50">📋</div>
               <div className="text-sm text-neutral-400 mb-1">لا توجد عروض حالياً</div>
