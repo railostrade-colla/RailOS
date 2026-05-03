@@ -8,19 +8,16 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
-// NOTE: marketer KPIs + referrals + rewards still come from the mock
-// fixtures — these are out of scope for Phase A1 (Lean). The status,
-// application, submit and cancel flows are now backed by DB.
-import {
-  mockMarketer,
-  mockReferrals,
-  mockRewards,
-} from "@/lib/mock-data"
-
 import {
   getMyAmbassadorStatus,
+  getMyMarketerStats,
+  getMyReferrals,
+  getMyRewards,
   type CurrentAmbassadorStatus,
   type AmbassadorApplicationData,
+  type AmbassadorMarketerStats,
+  type AmbassadorReferralRow,
+  type AmbassadorRewardRow,
 } from "@/lib/data/ambassador"
 
 import { ApplicationForm } from "@/components/ambassador/ApplicationForm"
@@ -150,10 +147,44 @@ function ApprovedDashboard() {
   const router = useRouter()
   const [tab, setTab] = useState<"overview" | "referrals" | "rewards">("overview")
   const [copied, setCopied] = useState(false)
+  const [marketer, setMarketer] = useState<AmbassadorMarketerStats | null>(null)
+  const [referrals, setReferrals] = useState<AmbassadorReferralRow[]>([])
+  const [rewards, setRewards] = useState<AmbassadorRewardRow[]>([])
+  const [dashLoading, setDashLoading] = useState(true)
+
+  // Load all three (KPIs + referrals + rewards) in parallel.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [m, refs, rwds] = await Promise.all([
+          getMyMarketerStats(),
+          getMyReferrals(),
+          getMyRewards(),
+        ])
+        if (cancelled) return
+        setMarketer(m)
+        setReferrals(refs)
+        setRewards(rwds)
+      } finally {
+        if (!cancelled) setDashLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const referralLink = marketer?.referral_link ?? ""
+  const referralCode = marketer?.referral_code ?? ""
 
   const copyLink = async () => {
+    if (!referralLink) {
+      showError("الرابط غير متوفّر بعد")
+      return
+    }
     try {
-      await navigator.clipboard.writeText(mockMarketer.referral_link)
+      await navigator.clipboard.writeText(referralLink)
       setCopied(true)
       showSuccess("تم نسخ الرابط")
       setTimeout(() => setCopied(false), 2000)
@@ -163,18 +194,35 @@ function ApprovedDashboard() {
   }
 
   const shareLink = async () => {
+    if (!referralLink) {
+      showError("الرابط غير متوفّر بعد")
+      return
+    }
     if (typeof navigator !== "undefined" && (navigator as { share?: (data: { title?: string; text?: string; url?: string }) => Promise<void> }).share) {
       try {
         await (navigator as { share: (data: { title?: string; text?: string; url?: string }) => Promise<void> }).share({
           title: "انضم إلى رايلوس",
           text: "سجّل عبر رابطي في رايلوس للاستثمار في حصص المشاريع",
-          url: mockMarketer.referral_link,
+          url: referralLink,
         })
       } catch {}
     } else {
       copyLink()
     }
   }
+
+  if (dashLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 text-neutral-500 animate-spin" strokeWidth={1.5} />
+      </div>
+    )
+  }
+
+  const kpiClicks = marketer?.total_clicks ?? 0
+  const kpiSignups = marketer?.total_signups ?? 0
+  const kpiInvestors = marketer?.total_investors ?? 0
+  const kpiShares = marketer?.total_rewards_shares ?? 0
 
   return (
     <>
@@ -199,11 +247,12 @@ function ApprovedDashboard() {
         </div>
         <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-2.5 flex items-center gap-2">
           <div className="flex-1 text-xs text-white font-mono truncate" dir="ltr">
-            {mockMarketer.referral_link}
+            {referralLink || "— لم يتم إصدار الرابط بعد —"}
           </div>
           <button
             onClick={copyLink}
-            className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] flex items-center justify-center transition-colors flex-shrink-0"
+            disabled={!referralLink}
+            className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-40"
             title="نسخ"
           >
             {copied ? (
@@ -214,7 +263,8 @@ function ApprovedDashboard() {
           </button>
           <button
             onClick={shareLink}
-            className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] flex items-center justify-center transition-colors flex-shrink-0"
+            disabled={!referralLink}
+            className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] flex items-center justify-center transition-colors flex-shrink-0 disabled:opacity-40"
             title="مشاركة"
           >
             <Share2 className="w-4 h-4 text-neutral-400" strokeWidth={1.5} />
@@ -223,7 +273,7 @@ function ApprovedDashboard() {
         <div className="text-[11px] text-neutral-400 mt-2 text-center">
           كود السفير:{" "}
           <span className="text-yellow-400 font-bold tracking-widest">
-            {mockMarketer.referral_code}
+            {referralCode || "—"}
           </span>
         </div>
       </div>
@@ -231,10 +281,10 @@ function ApprovedDashboard() {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
         {[
-          { label: "النقرات", value: mockMarketer.total_clicks, icon: MousePointerClick, color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/20" },
-          { label: "التسجيلات", value: mockMarketer.total_signups, icon: Users, color: "text-green-400", bg: "bg-green-400/10", border: "border-green-400/20" },
-          { label: "المستثمرون", value: mockMarketer.total_investors, icon: TrendingUp, color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/20" },
-          { label: "حصص المكافآت", value: mockMarketer.total_rewards_shares, icon: Coins, color: "text-orange-400", bg: "bg-orange-400/10", border: "border-orange-400/20" },
+          { label: "النقرات", value: kpiClicks, icon: MousePointerClick, color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/20" },
+          { label: "التسجيلات", value: kpiSignups, icon: Users, color: "text-green-400", bg: "bg-green-400/10", border: "border-green-400/20" },
+          { label: "المستثمرون", value: kpiInvestors, icon: TrendingUp, color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/20" },
+          { label: "حصص المكافآت", value: kpiShares, icon: Coins, color: "text-orange-400", bg: "bg-orange-400/10", border: "border-orange-400/20" },
         ].map((kpi, i) => {
           const Icon = kpi.icon
           return (
@@ -251,8 +301,8 @@ function ApprovedDashboard() {
       <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-4">
         {[
           { key: "overview" as const, label: "نظرة عامة" },
-          { key: "referrals" as const, label: `الإحالات (${mockReferrals.length})` },
-          { key: "rewards" as const, label: `المكافآت (${mockRewards.length})` },
+          { key: "referrals" as const, label: `الإحالات (${referrals.length})` },
+          { key: "rewards" as const, label: `المكافآت (${rewards.length})` },
         ].map((t) => (
           <button
             key={t.key}
@@ -302,7 +352,7 @@ function ApprovedDashboard() {
 
       {/* Referrals tab */}
       {tab === "referrals" && (
-        mockReferrals.length === 0 ? (
+        referrals.length === 0 ? (
           <div className="text-center py-12 bg-white/[0.03] border border-white/[0.06] rounded-2xl">
             <Users className="w-12 h-12 text-neutral-600 mx-auto mb-3" strokeWidth={1.5} />
             <div className="text-sm font-bold text-white mb-1">لا توجد إحالات بعد</div>
@@ -310,7 +360,7 @@ function ApprovedDashboard() {
           </div>
         ) : (
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl divide-y divide-white/[0.04]">
-            {mockReferrals.map((r) => (
+            {referrals.map((r) => (
               <div key={r.id} className="p-3.5 flex items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                   <div className="w-9 h-9 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-sm font-bold text-neutral-400 flex-shrink-0">
@@ -352,7 +402,7 @@ function ApprovedDashboard() {
 
       {/* Rewards tab */}
       {tab === "rewards" && (
-        mockRewards.length === 0 ? (
+        rewards.length === 0 ? (
           <div className="text-center py-12 bg-white/[0.03] border border-white/[0.06] rounded-2xl">
             <Award className="w-12 h-12 text-neutral-600 mx-auto mb-3" strokeWidth={1.5} />
             <div className="text-sm font-bold text-white mb-1">لا توجد مكافآت بعد</div>
@@ -362,9 +412,9 @@ function ApprovedDashboard() {
           <>
             <div className="grid grid-cols-3 gap-2 mb-3">
               {[
-                { label: "الإجمالي", value: mockRewards.reduce((s, r) => s + r.shares, 0), color: "text-orange-400" },
-                { label: "مُعتمدة", value: mockRewards.filter((r) => r.status === "approved").reduce((s, r) => s + r.shares, 0), color: "text-green-400" },
-                { label: "قيد الانتظار", value: mockRewards.filter((r) => r.status === "pending").reduce((s, r) => s + r.shares, 0), color: "text-yellow-400" },
+                { label: "الإجمالي", value: rewards.reduce((s, r) => s + r.shares, 0), color: "text-orange-400" },
+                { label: "مُعتمدة", value: rewards.filter((r) => r.status === "approved").reduce((s, r) => s + r.shares, 0), color: "text-green-400" },
+                { label: "قيد الانتظار", value: rewards.filter((r) => r.status === "pending").reduce((s, r) => s + r.shares, 0), color: "text-yellow-400" },
               ].map((s, i) => (
                 <div key={i} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3 text-center">
                   <div className={cn("text-xl font-bold", s.color)}>{s.value}</div>
@@ -374,7 +424,7 @@ function ApprovedDashboard() {
             </div>
 
             <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl divide-y divide-white/[0.04]">
-              {mockRewards.map((r) => (
+              {rewards.map((r) => (
                 <div key={r.id} className="p-3.5 flex items-center justify-between gap-2.5">
                   <div className="flex items-center gap-2.5">
                     <Coins className="w-4 h-4 text-orange-400" strokeWidth={1.5} />
