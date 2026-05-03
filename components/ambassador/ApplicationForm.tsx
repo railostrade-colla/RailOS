@@ -11,12 +11,12 @@
 
 import { useState } from "react"
 import { Star, X, Send, Sparkles, Trophy, BarChart3, Award } from "lucide-react"
-import { showError, showSuccess } from "@/lib/utils/toast"
+import { showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 import {
   submitAmbassadorApplication,
   type SubmitApplicationInput,
-} from "@/lib/mock-data/ambassadors"
+} from "@/lib/data/ambassador"
 
 const MAX_TEXT = 300
 const MIN_TEXT = 50
@@ -86,7 +86,7 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
 
   const handleConfirmSubmit = async () => {
     setSubmitting(true)
-    const result = submitAmbassadorApplication("me", {
+    const result = await submitAmbassadorApplication({
       reason: reason.trim(),
       experience: experience.trim(),
       social_links: filledSocials.map((p) => ({ platform: p.id, url: socials[p.id].trim() })),
@@ -98,7 +98,7 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
       setShowConfirm(false)
       setShowSubmitted(true)
     } else {
-      showError("تعذّر إرسال الطلب — حاول لاحقاً")
+      showError(result.error || "تعذّر إرسال الطلب — حاول لاحقاً")
     }
   }
 

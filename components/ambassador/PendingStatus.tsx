@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils/cn"
 import {
   cancelAmbassadorApplication,
   estimateReviewProgress,
-} from "@/lib/mock-data/ambassadors"
-import type { AmbassadorApplicationData } from "@/lib/mock-data/types"
+  type AmbassadorApplicationData,
+} from "@/lib/data/ambassador"
 
 const SOCIAL_ICONS: Record<string, string> = {
   instagram: "📸",
@@ -34,14 +34,14 @@ export function PendingStatus({
 
   const handleCancel = async () => {
     setCancelling(true)
-    const result = cancelAmbassadorApplication("me")
+    const result = await cancelAmbassadorApplication()
     setCancelling(false)
     if (result.success) {
       showSuccess("تم إلغاء طلبك. يمكنك التقديم مجدداً في أي وقت.")
       setShowCancelConfirm(false)
       onCancelled()
     } else {
-      showError("تعذّر إلغاء الطلب")
+      showError(result.error || "تعذّر إلغاء الطلب")
     }
   }
 

@@ -1,31 +1,55 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Copy, Share2, Check, Users, TrendingUp, Award, Coins, MousePointerClick, Star } from "lucide-react"
+import { Copy, Share2, Check, Users, TrendingUp, Award, Coins, MousePointerClick, Star, Loader2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
+// NOTE: marketer KPIs + referrals + rewards still come from the mock
+// fixtures — these are out of scope for Phase A1 (Lean). The status,
+// application, submit and cancel flows are now backed by DB.
 import {
   mockMarketer,
   mockReferrals,
   mockRewards,
-  getCurrentUserAmbassadorStatus,
-  type CurrentAmbassadorStatus,
 } from "@/lib/mock-data"
+
+import {
+  getMyAmbassadorStatus,
+  type CurrentAmbassadorStatus,
+  type AmbassadorApplicationData,
+} from "@/lib/data/ambassador"
 
 import { ApplicationForm } from "@/components/ambassador/ApplicationForm"
 import { PendingStatus } from "@/components/ambassador/PendingStatus"
 import { RejectedStatus } from "@/components/ambassador/RejectedStatus"
 
 export default function AmbassadorPage() {
-  // Read initial state from canonical user profile.
-  // To test other states: edit `lib/mock-data/profile.ts` → CURRENT_USER.ambassador_status
-  const initial = getCurrentUserAmbassadorStatus("me")
-  const [status, setStatus] = useState<CurrentAmbassadorStatus>(initial.status)
-  const [application] = useState(initial.application)
+  const [loading, setLoading] = useState(true)
+  const [status, setStatus] = useState<CurrentAmbassadorStatus>("none")
+  const [application, setApplication] =
+    useState<AmbassadorApplicationData | null>(null)
+
+  // Load real DB state on mount.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const state = await getMyAmbassadorStatus()
+        if (cancelled) return
+        setStatus(state.status)
+        setApplication(state.application)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <AppLayout>
@@ -43,27 +67,52 @@ export default function AmbassadorPage() {
             }
           />
 
-          {status === "none" && (
-            <ApplicationForm onSubmitted={() => setStatus("pending")} />
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="w-6 h-6 text-neutral-500 animate-spin" strokeWidth={1.5} />
+            </div>
+          ) : (
+            <>
+              {status === "none" && (
+                <ApplicationForm
+                  onSubmitted={async () => {
+                    // Re-fetch after submit so we get the real submitted_at.
+                    const fresh = await getMyAmbassadorStatus()
+                    setStatus(fresh.status)
+                    setApplication(fresh.application)
+                  }}
+                />
+              )}
+
+              {status === "pending" && (
+                <PendingStatus
+                  application={application}
+                  onCancelled={() => {
+                    setStatus("none")
+                    setApplication(null)
+                  }}
+                />
+              )}
+
+              {status === "rejected" && (
+                <RejectedStatus
+                  rejectionReason={application?.rejection_reason}
+                  onRetry={() => {
+                    // Allow re-submission — caller should DELETE the rejected
+                    // row first; for now we just transition to the form.
+                    setStatus("none")
+                    setApplication(null)
+                  }}
+                />
+              )}
+
+              {status === "suspended" && (
+                <SuspendedStatus reason={application?.rejection_reason} />
+              )}
+
+              {status === "approved" && <ApprovedDashboard />}
+            </>
           )}
-
-          {status === "pending" && (
-            <PendingStatus
-              application={application}
-              onCancelled={() => setStatus("none")}
-            />
-          )}
-
-          {status === "rejected" && (
-            <RejectedStatus
-              rejectionReason={application?.rejection_reason}
-              onRetry={() => setStatus("none")}
-            />
-          )}
-
-          {status === "suspended" && <SuspendedStatus />}
-
-          {status === "approved" && <ApprovedDashboard />}
 
         </div>
       </div>
@@ -72,7 +121,7 @@ export default function AmbassadorPage() {
 }
 
 // ─── Suspended state ──────────────────────────────────
-function SuspendedStatus() {
+function SuspendedStatus({ reason }: { reason?: string }) {
   return (
     <>
       <div className="bg-gradient-to-br from-red-400/[0.08] to-transparent border border-red-400/[0.2] rounded-2xl p-8 mb-5 text-center">
@@ -88,7 +137,7 @@ function SuspendedStatus() {
         <div className="bg-red-400/[0.06] border border-red-400/[0.2] rounded-xl p-4">
           <div className="text-[11px] text-neutral-400 mb-1.5">السبب</div>
           <div className="text-sm text-red-400 leading-relaxed">
-            {mockMarketer.rejection_reason || "يرجى التواصل مع الدعم الفني للحصول على التفاصيل."}
+            {reason?.trim() || "يرجى التواصل مع الدعم الفني للحصول على التفاصيل."}
           </div>
         </div>
       </div>
