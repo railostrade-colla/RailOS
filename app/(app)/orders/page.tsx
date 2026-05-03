@@ -7,6 +7,7 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { mockTrades, mockDirectBuys } from "@/lib/mock-data"
+import { submitRating } from "@/lib/data/ratings"
 import { cn } from "@/lib/utils/cn"
 
 type OrderTab = "trades" | "direct_buy"
@@ -69,19 +70,58 @@ export default function OrdersPage() {
     }, 1000)
   }
 
-  const submitRate = () => {
+  const submitRate = async () => {
     if (rateStars < 1 || rateStars > 5) {
       showError("اختر تقييماً من 1 إلى 5")
       return
     }
+    if (!rateTrade) return
+
+    // The "rated" party is whichever side the current user isn't on.
+    const meIsBuyer = (rateTrade.buyer_id ?? "me") === "me"
+    const ratedUserId = meIsBuyer
+      ? rateTrade.seller_id ?? ""
+      : rateTrade.buyer_id ?? ""
+
     setSubmittingRate(true)
-    setTimeout(() => {
+    const result = await submitRating({
+      deal_id: rateTrade.id,
+      rated_user_id: ratedUserId,
+      stars: rateStars,
+      comment: rateComment.trim() || undefined,
+    })
+    setSubmittingRate(false)
+
+    if (result.success) {
       showSuccess("تم إرسال التقييم")
       setRateTrade(null)
       setRateStars(5)
       setRateComment("")
-      setSubmittingRate(false)
-    }, 1000)
+      return
+    }
+
+    // Friendly fallbacks per failure reason.
+    if (result.reason === "already_rated") {
+      showError("قمت بتقييم هذه الصفقة من قبل")
+      setRateTrade(null)
+      return
+    }
+    if (result.reason === "self_rating") {
+      showError("لا يمكنك تقييم نفسك")
+      return
+    }
+    if (result.reason === "missing_table") {
+      // Migration not applied yet — accept locally so user-flow tests
+      // work, but make the toast accurate.
+      showError("ميزة التقييم غير مُفعّلة على الخادم بعد")
+      setRateTrade(null)
+      return
+    }
+    if (result.reason === "unauthenticated") {
+      showError("سجّل دخول لإكمال التقييم")
+      return
+    }
+    showError(result.error || "تعذّر إرسال التقييم")
   }
 
   const pendingDirectBuys = directBuys.filter((r) => r.status === "pending" || r.status === "approved").length
