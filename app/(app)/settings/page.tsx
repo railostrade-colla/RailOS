@@ -17,7 +17,7 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Tabs, Modal } from "@/components/ui"
 import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
 import { CURRENT_USER } from "@/lib/mock-data"
-import { LEVEL_LIMITS, fmtLimit } from "@/lib/utils/contractLimits"
+import { LEVEL_LIMITS, fmtLimit, type InvestorLevel } from "@/lib/utils/contractLimits"
 import {
   isBiometricSupported,
   isBiometricEnabledForUser,
@@ -25,6 +25,7 @@ import {
   disableBiometric,
   resetBiometricPrompt,
 } from "@/lib/auth/biometric"
+import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/data/profile"
 import { cn } from "@/lib/utils/cn"
 
 type SettingsTab = "notifications" | "general" | "security" | "finance" | "appearance"
@@ -169,20 +170,52 @@ function SettingsContent() {
   const [density, setDensity] = useState("comfortable")
   const [animations, setAnimations] = useState(true)
 
+  // Real signed-in user — needed for biometric handle (WebAuthn keys are
+  // bound to the auth.users.id) and for the finance tab's level-based
+  // monthly limit. Falls back to the mock fixture during the brief load
+  // window so the toggles remain interactive.
+  const [profile, setProfile] = useState<CurrentUserProfile | null>(null)
+
   // Security — biometric
   const [bioSupported, setBioSupported] = useState(false)
   const [bioEnabled, setBioEnabled] = useState(false)
   const [bioBusy, setBioBusy] = useState(false)
 
+  // Resolve the user-id used by the biometric layer + level lookup.
+  const userId = profile?.id ?? CURRENT_USER.id
+  const userEmailOrName =
+    profile?.email ||
+    profile?.full_name ||
+    CURRENT_USER.email ||
+    CURRENT_USER.name
+  const levelKey: InvestorLevel = (() => {
+    const raw = profile?.level ?? CURRENT_USER.level
+    return raw === "advanced" || raw === "pro" ? raw : "basic"
+  })()
+
   useEffect(() => {
     setBioSupported(isBiometricSupported())
-    setBioEnabled(isBiometricEnabledForUser(CURRENT_USER.id))
+    let cancelled = false
+    getCurrentUserProfile().then((p) => {
+      if (cancelled || !p) return
+      setProfile(p)
+      setBioEnabled(isBiometricEnabledForUser(p.id))
+    })
+    return () => {
+      cancelled = true
+    }
   }, [])
+
+  // Re-check biometric whenever the resolved user-id changes (also covers
+  // the un-authenticated mock fallback path).
+  useEffect(() => {
+    setBioEnabled(isBiometricEnabledForUser(userId))
+  }, [userId])
 
   const handleToggleBiometric = async (next: boolean) => {
     setBioBusy(true)
     if (next) {
-      const result = await registerBiometric(CURRENT_USER.id, CURRENT_USER.email ?? CURRENT_USER.name)
+      const result = await registerBiometric(userId, userEmailOrName)
       if (result.success) {
         setBioEnabled(true)
         showSuccess("تم تفعيل البصمة 👆")
@@ -190,7 +223,7 @@ function SettingsContent() {
         showError(result.error ?? "تعذّر التفعيل")
       }
     } else {
-      disableBiometric(CURRENT_USER.id)
+      disableBiometric(userId)
       resetBiometricPrompt()
       setBioEnabled(false)
       showSuccess("تم إلغاء تفعيل البصمة")
@@ -400,9 +433,9 @@ function SettingsContent() {
                 <div className="py-2.5 flex justify-between items-center">
                   <div>
                     <div className="text-sm text-white font-medium">حدّي الشهري الحالي</div>
-                    <div className="text-[11px] text-neutral-500 mt-0.5">حسب مستواك ({CURRENT_USER.level})</div>
+                    <div className="text-[11px] text-neutral-500 mt-0.5">حسب مستواك ({levelKey})</div>
                   </div>
-                  <span className="text-sm font-bold text-yellow-400 font-mono">{fmtLimit(LEVEL_LIMITS[CURRENT_USER.level])} د.ع</span>
+                  <span className="text-sm font-bold text-yellow-400 font-mono">{fmtLimit(LEVEL_LIMITS[levelKey])} د.ع</span>
                 </div>
                 <ActionRow label="وحدات الرسوم" description="رصيد + شراء وحدات إضافية" onClick={() => showInfo("ستتاح إدارة وحدات الرسوم قريباً")} />
                 <ActionRow label="البيانات البنكية" description="حسابات السحب والإيداع" onClick={() => router.push("/profile-setup")} />
