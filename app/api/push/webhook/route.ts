@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import webpush from "web-push"
 import { createClient } from "@/lib/supabase/server"
+import { getUserEmail } from "@/lib/supabase/admin"
+import { sendEmail } from "@/lib/email/send"
+import { renderNotificationEmail } from "@/lib/email/templates/notification"
 
 export const runtime = "nodejs"
 
@@ -55,6 +58,7 @@ interface WebhookPayload {
 
 interface PrefsRow {
   push_enabled: boolean
+  email_enabled: boolean
   deals_enabled: boolean
   projects_enabled: boolean
   kyc_enabled: boolean
@@ -147,115 +151,179 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ skipped: true, reason: "already_sent" })
     }
 
-    // 4) Configure web-push.
-    if (!configureWebPush()) {
-      return NextResponse.json(
-        { error: "VAPID keys are not configured on the server" },
-        { status: 500 },
-      )
-    }
-
     const supabase = await createClient()
 
-    // 5) Preferences gate (urgent bypasses every gate below).
+    // 4) Preferences gate — fetch once, derive flags for both channels.
+    //    `urgent` priority overrides every preference (security/abuse).
     const isUrgent = record.priority === "urgent"
+    const isLow = record.priority === "low"
 
-    if (!isUrgent) {
-      const { data: prefsRaw } = await supabase
-        .from("notification_preferences")
-        .select("*")
-        .eq("user_id", record.user_id)
-        .maybeSingle()
-
-      const prefs = prefsRaw as PrefsRow | null
-      if (prefs && !prefs.push_enabled) {
-        return NextResponse.json({ skipped: true, reason: "push_disabled" })
-      }
-
-      const flag = categoryFlag(record.notification_type)
-      if (prefs && flag && prefs[flag] === false) {
-        return NextResponse.json({ skipped: true, reason: "category_disabled" })
-      }
-
-      if (
-        prefs?.quiet_hours_enabled &&
-        isWithinQuietHours(prefs.quiet_hours_start, prefs.quiet_hours_end)
-      ) {
-        return NextResponse.json({ skipped: true, reason: "quiet_hours" })
-      }
-    }
-
-    // 6) Fetch active subscriptions.
-    const { data: subs } = await supabase
-      .from("push_subscriptions")
-      .select("id, endpoint, p256dh_key, auth_key")
+    const { data: prefsRaw } = await supabase
+      .from("notification_preferences")
+      .select("*")
       .eq("user_id", record.user_id)
-      .eq("is_active", true)
+      .maybeSingle()
+    const prefs = prefsRaw as PrefsRow | null
 
-    if (!subs || subs.length === 0) {
-      return NextResponse.json({ skipped: true, reason: "no_subscriptions" })
-    }
+    const flag = categoryFlag(record.notification_type)
+    const categoryAllowed = !flag || !prefs || prefs[flag] !== false
+    const inQuietHours =
+      !!prefs?.quiet_hours_enabled &&
+      isWithinQuietHours(prefs.quiet_hours_start, prefs.quiet_hours_end)
 
-    // 7) Fan out.
-    const pushPayload = JSON.stringify({
-      title: record.title,
-      message: record.message,
-      type: record.notification_type,
-      action_url: record.link_url ?? undefined,
-      action_label: getActionLabel(record.metadata),
-      priority: record.priority,
-      notification_id: record.id,
-    })
+    const pushAllowed =
+      isUrgent ||
+      ((!prefs || prefs.push_enabled !== false) &&
+        categoryAllowed &&
+        !inQuietHours)
 
-    type SubRow = {
-      id: string
-      endpoint: string
-      p256dh_key: string
-      auth_key: string
-    }
+    // Email is opt-in by default (email_enabled defaults TRUE in DB).
+    // Don't email for `low` priority — not worth the inbox clutter.
+    const emailAllowed =
+      !isLow &&
+      (isUrgent ||
+        ((!prefs || prefs.email_enabled !== false) && categoryAllowed))
 
-    const results = await Promise.allSettled(
-      (subs as SubRow[]).map(async (sub) => {
-        try {
-          await webpush.sendNotification(
-            {
-              endpoint: sub.endpoint,
-              keys: { p256dh: sub.p256dh_key, auth: sub.auth_key },
-            },
-            pushPayload,
-          )
-          return { ok: true, id: sub.id }
-        } catch (err) {
-          const status = (err as { statusCode?: number })?.statusCode ?? 0
-          if (status === 404 || status === 410) {
-            // Endpoint gone — deactivate.
-            await supabase
-              .from("push_subscriptions")
-              .update({ is_active: false })
-              .eq("id", sub.id)
-          }
-          throw err
+    let pushSent = 0
+    let pushFailed = 0
+    let pushTotal = 0
+    let emailSent = false
+    let emailSkippedReason: string | undefined
+
+    // ─── PUSH BRANCH ──────────────────────────────────────────
+    if (pushAllowed && configureWebPush()) {
+      const { data: subs } = await supabase
+        .from("push_subscriptions")
+        .select("id, endpoint, p256dh_key, auth_key")
+        .eq("user_id", record.user_id)
+        .eq("is_active", true)
+
+      if (subs && subs.length > 0) {
+        pushTotal = subs.length
+        const pushPayload = JSON.stringify({
+          title: record.title,
+          message: record.message,
+          type: record.notification_type,
+          action_url: record.link_url ?? undefined,
+          action_label: getActionLabel(record.metadata),
+          priority: record.priority,
+          notification_id: record.id,
+        })
+
+        type SubRow = {
+          id: string
+          endpoint: string
+          p256dh_key: string
+          auth_key: string
         }
-      }),
-    )
 
-    const sent = results.filter((r) => r.status === "fulfilled").length
-    const failed = results.filter((r) => r.status === "rejected").length
+        const results = await Promise.allSettled(
+          (subs as SubRow[]).map(async (sub) => {
+            try {
+              await webpush.sendNotification(
+                {
+                  endpoint: sub.endpoint,
+                  keys: { p256dh: sub.p256dh_key, auth: sub.auth_key },
+                },
+                pushPayload,
+              )
+              return { ok: true, id: sub.id }
+            } catch (err) {
+              const status = (err as { statusCode?: number })?.statusCode ?? 0
+              if (status === 404 || status === 410) {
+                await supabase
+                  .from("push_subscriptions")
+                  .update({ is_active: false })
+                  .eq("id", sub.id)
+              }
+              throw err
+            }
+          }),
+        )
 
-    // 8) Idempotency marker — flip sent_via_push so reruns/duplicate
-    //    webhooks don't double-send.
-    if (sent > 0) {
-      await supabase
-        .from("notifications")
-        .update({ sent_via_push: true })
-        .eq("id", record.id)
+        pushSent = results.filter((r) => r.status === "fulfilled").length
+        pushFailed = results.filter((r) => r.status === "rejected").length
+
+        if (pushSent > 0) {
+          await supabase
+            .from("notifications")
+            .update({ sent_via_push: true })
+            .eq("id", record.id)
+        }
+      }
+    }
+
+    // ─── EMAIL BRANCH ─────────────────────────────────────────
+    if (emailAllowed) {
+      // Skip cheaply if Resend isn't configured at all.
+      if (!process.env.RESEND_API_KEY) {
+        emailSkippedReason = "resend_not_configured"
+      } else {
+        const userEmail = await getUserEmail(record.user_id)
+        if (!userEmail) {
+          emailSkippedReason = "no_email"
+        } else {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("full_name, username")
+            .eq("id", record.user_id)
+            .maybeSingle()
+          const profileRow = profile as
+            | { full_name?: string | null; username?: string | null }
+            | null
+
+          const { html, text } = renderNotificationEmail({
+            name:
+              profileRow?.full_name ??
+              profileRow?.username ??
+              undefined,
+            title: record.title,
+            message: record.message,
+            actionUrl: record.link_url ?? undefined,
+            actionLabel: getActionLabel(record.metadata) ?? undefined,
+            priority: record.priority,
+          })
+
+          const result = await sendEmail({
+            to: userEmail,
+            subject: record.title,
+            html,
+            text,
+          })
+
+          if (result.success) {
+            emailSent = true
+            await supabase
+              .from("notifications")
+              .update({ sent_via_email: true })
+              .eq("id", record.id)
+          } else {
+            emailSkippedReason = result.skipped
+              ? "resend_skipped"
+              : `resend_error: ${result.error ?? "unknown"}`
+          }
+        }
+      }
+    } else {
+      emailSkippedReason = !emailAllowed
+        ? isLow
+          ? "low_priority"
+          : "category_or_pref_disabled"
+        : undefined
     }
 
     return NextResponse.json({
       success: true,
-      sent,
-      failed,
-      total: subs.length,
+      push: {
+        sent: pushSent,
+        failed: pushFailed,
+        total: pushTotal,
+        skipped: !pushAllowed,
+      },
+      email: {
+        sent: emailSent,
+        skipped_reason: emailSkippedReason,
+      },
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
