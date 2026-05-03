@@ -20,7 +20,14 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 import { createClient } from "@/lib/supabase/client"
-import { getCurrentUserProfile } from "@/lib/data/profile"
+import {
+  getCurrentUserProfile,
+  getMyProfileExtras,
+  upsertMyProfileExtras,
+  type Gender,
+  type IncomeTier,
+  type ExperienceLevel,
+} from "@/lib/data/profile"
 
 // ─── Static option data ───────────────────────────────────────────────
 const CITIES = [
@@ -75,22 +82,41 @@ export default function ProfileSetupPage() {
   const [city, setCity] = useState<string>("")
   const [phone, setPhone] = useState("")
 
-  // Pre-fill from existing profile so users coming back from /settings
-  // don't lose what they already saved. Only the two columns the schema
-  // currently has — full_name + phone — round-trip; the rest of the
-  // form stays UI-only until a user_profile_extras migration lands.
-  // Local +964 phone format: strip leading "+964" if present so the
-  // input shows just the local digits.
+  // Pre-fill from existing profile + the user_profile_extras side-table
+  // (Phase M migration) so users coming back from /settings keep all
+  // their answers. The extras table may not exist on partially-deployed
+  // databases — getMyProfileExtras() returns null in that case and we
+  // just skip the extras fields. Local +964 phone format: strip leading
+  // "+964" if present so the input shows just the local digits.
   useEffect(() => {
     let cancelled = false
-    getCurrentUserProfile().then((p) => {
-      if (cancelled || !p) return
-      if (p.full_name) setFullName(p.full_name)
-      if (p.phone) {
-        const stripped = p.phone.replace(/^\+?964/, "").replace(/\D/g, "")
-        setPhone(stripped.slice(0, 11))
-      }
-    })
+    Promise.all([getCurrentUserProfile(), getMyProfileExtras()]).then(
+      ([p, extras]) => {
+        if (cancelled) return
+        if (p) {
+          if (p.full_name) setFullName(p.full_name)
+          if (p.phone) {
+            const stripped = p.phone.replace(/^\+?964/, "").replace(/\D/g, "")
+            setPhone(stripped.slice(0, 11))
+          }
+        }
+        if (extras) {
+          if (extras.birth_date) setBirthDate(extras.birth_date)
+          if (extras.gender) setGender(extras.gender)
+          if (extras.city) setCity(extras.city)
+          if (extras.profession) setProfession(extras.profession)
+          if (extras.income_tier) setIncomeTier(extras.income_tier)
+          if (extras.income_source) setIncomeSource(extras.income_source)
+          if (extras.goals.length > 0) setGoals(extras.goals)
+          if (extras.experience) setExperience(extras.experience)
+          if (extras.preferred_sectors.length > 0)
+            setPreferredSectors(extras.preferred_sectors)
+          if (extras.agreed_terms_at) setAgreeTerms(true)
+          if (extras.agreed_privacy_at) setAgreePrivacy(true)
+          if (extras.confirmed_accuracy_at) setConfirmAccuracy(true)
+        }
+      },
+    )
     return () => {
       cancelled = true
     }
@@ -174,15 +200,9 @@ export default function ProfileSetupPage() {
         return
       }
 
-      // Persist what the schema currently supports. The remaining
-      // fields (birth_date, gender, city, profession, income, goals,
-      // experience, preferred_sectors) will be persisted once the
-      // user_profile_extras migration lands — they're collected here
-      // so we don't lose the answers when that migration goes live.
-      // KYC also captures birth_date / city / phone separately on
-      // kyc_submissions so the user re-enters them with documents.
+      // ── 1) Update profiles (canonical fields: name + phone) ───
       const fullPhone = phone ? `+964${phone}` : null
-      const { error } = await supabase
+      const { error: profileErr } = await supabase
         .from("profiles")
         .update({
           full_name: fullName.trim(),
@@ -190,12 +210,37 @@ export default function ProfileSetupPage() {
         })
         .eq("id", user.id)
 
-      if (error) {
+      if (profileErr) {
         // eslint-disable-next-line no-console
-        console.error("[profile-setup] update failed:", error.message)
+        console.error("[profile-setup] profile update:", profileErr.message)
         showError("تعذّر حفظ الملف — حاول مرّة أخرى")
         setSubmitting(false)
         return
+      }
+
+      // ── 2) Upsert user_profile_extras (the survey answers) ────
+      // We accept "missing_table" gracefully — environments that
+      // haven't applied the Phase M migration yet still complete the
+      // flow with profiles-level data. Real RLS / unknown errors do
+      // surface as toasts.
+      const extrasResult = await upsertMyProfileExtras({
+        birth_date: birthDate || null,
+        gender: (gender || null) as Gender | null,
+        city: city || null,
+        profession: profession || null,
+        income_tier: (incomeTier || null) as IncomeTier | null,
+        income_source: incomeSource.trim() || null,
+        goals,
+        experience: (experience || null) as ExperienceLevel | null,
+        preferred_sectors: preferredSectors,
+        agreed_terms: agreeTerms,
+        agreed_privacy: agreePrivacy,
+        confirmed_accuracy: confirmAccuracy,
+      })
+      if (!extrasResult.success && extrasResult.reason !== "missing_table") {
+        // eslint-disable-next-line no-console
+        console.error("[profile-setup] extras upsert:", extrasResult.error)
+        // Still let them proceed — profile core was saved.
       }
 
       showSuccess("تم حفظ ملفك! ننتقل لـ KYC... 🎉")

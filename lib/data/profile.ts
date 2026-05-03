@@ -294,3 +294,206 @@ export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null
     joined_year_month: formatYearMonth(createdAt),
   }
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// Phase M — user_profile_extras (onboarding survey answers)
+// ══════════════════════════════════════════════════════════════════════
+
+export type Gender = "male" | "female"
+export type IncomeTier = "lt_1m" | "1_5m" | "5_15m" | "gt_15m"
+export type ExperienceLevel = "beginner" | "intermediate" | "expert"
+
+/**
+ * Mirrors the `user_profile_extras` table created by migration
+ * 20260503_user_profile_extras.sql. All fields are nullable —
+ * the row may not exist yet for users who skipped /profile-setup.
+ */
+export interface UserProfileExtras {
+  user_id: string
+  birth_date: string | null
+  gender: Gender | null
+  city: string | null
+  profession: string | null
+  income_tier: IncomeTier | null
+  income_source: string | null
+  goals: string[]
+  experience: ExperienceLevel | null
+  preferred_sectors: string[]
+  agreed_terms_at: string | null
+  agreed_privacy_at: string | null
+  confirmed_accuracy_at: string | null
+}
+
+interface ExtrasRow {
+  user_id?: string | null
+  birth_date?: string | null
+  gender?: string | null
+  city?: string | null
+  profession?: string | null
+  income_tier?: string | null
+  income_source?: string | null
+  goals?: string[] | null
+  experience?: string | null
+  preferred_sectors?: string[] | null
+  agreed_terms_at?: string | null
+  agreed_privacy_at?: string | null
+  confirmed_accuracy_at?: string | null
+}
+
+function asGender(s: unknown): Gender | null {
+  return s === "male" || s === "female" ? s : null
+}
+function asIncomeTier(s: unknown): IncomeTier | null {
+  if (s === "lt_1m" || s === "1_5m" || s === "5_15m" || s === "gt_15m") return s
+  return null
+}
+function asExperience(s: unknown): ExperienceLevel | null {
+  if (s === "beginner" || s === "intermediate" || s === "expert") return s
+  return null
+}
+
+/**
+ * Loads the current user's onboarding extras. Returns `null` when:
+ *   • no signed-in user
+ *   • the table doesn't exist yet (migration not applied)
+ *   • the user hasn't filled it out
+ */
+export async function getMyProfileExtras(): Promise<UserProfileExtras | null> {
+  try {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return null
+
+    const { data, error } = await supabase
+      .from("user_profile_extras")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle()
+
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn("[profile] user_profile_extras unavailable:", error.message)
+      return null
+    }
+    if (!data) return null
+
+    const row = data as ExtrasRow
+    return {
+      user_id: row.user_id ?? user.id,
+      birth_date: row.birth_date ?? null,
+      gender: asGender(row.gender),
+      city: row.city ?? null,
+      profession: row.profession ?? null,
+      income_tier: asIncomeTier(row.income_tier),
+      income_source: row.income_source ?? null,
+      goals: Array.isArray(row.goals) ? row.goals.filter((g): g is string => typeof g === "string") : [],
+      experience: asExperience(row.experience),
+      preferred_sectors: Array.isArray(row.preferred_sectors)
+        ? row.preferred_sectors.filter((s): s is string => typeof s === "string")
+        : [],
+      agreed_terms_at: row.agreed_terms_at ?? null,
+      agreed_privacy_at: row.agreed_privacy_at ?? null,
+      confirmed_accuracy_at: row.confirmed_accuracy_at ?? null,
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[profile] getMyProfileExtras threw:", err)
+    return null
+  }
+}
+
+export interface UpsertProfileExtrasInput {
+  birth_date?: string | null
+  gender?: Gender | null
+  city?: string | null
+  profession?: string | null
+  income_tier?: IncomeTier | null
+  income_source?: string | null
+  goals?: string[]
+  experience?: ExperienceLevel | null
+  preferred_sectors?: string[]
+  agreed_terms?: boolean
+  agreed_privacy?: boolean
+  confirmed_accuracy?: boolean
+}
+
+export interface UpsertProfileExtrasResult {
+  success: boolean
+  /** Set to `"missing_table"` when the migration hasn't been applied yet
+   *  — callers can choose to warn the user or silently skip. */
+  reason?: "unauthenticated" | "missing_table" | "rls" | "unknown"
+  error?: string
+}
+
+/**
+ * UPSERTs the current user's profile-extras row. Booleans for the three
+ * agreement flags are turned into NOW() timestamps so we keep an audit
+ * trail of when consent was granted.
+ *
+ * Returns a richer error shape than just `boolean` so the page can
+ * distinguish "the migration isn't applied yet" (silently fall back to
+ * profiles-only persistence) from "real failure" (surface a toast).
+ */
+export async function upsertMyProfileExtras(
+  input: UpsertProfileExtrasInput,
+): Promise<UpsertProfileExtrasResult> {
+  try {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return { success: false, reason: "unauthenticated" }
+
+    const now = new Date().toISOString()
+    const payload: Record<string, unknown> = {
+      user_id: user.id,
+    }
+    if (input.birth_date !== undefined) payload.birth_date = input.birth_date
+    if (input.gender !== undefined) payload.gender = input.gender
+    if (input.city !== undefined) payload.city = input.city
+    if (input.profession !== undefined) payload.profession = input.profession
+    if (input.income_tier !== undefined) payload.income_tier = input.income_tier
+    if (input.income_source !== undefined) payload.income_source = input.income_source
+    if (input.goals !== undefined) payload.goals = input.goals
+    if (input.experience !== undefined) payload.experience = input.experience
+    if (input.preferred_sectors !== undefined)
+      payload.preferred_sectors = input.preferred_sectors
+    if (input.agreed_terms === true) payload.agreed_terms_at = now
+    if (input.agreed_privacy === true) payload.agreed_privacy_at = now
+    if (input.confirmed_accuracy === true)
+      payload.confirmed_accuracy_at = now
+
+    const { error } = await supabase
+      .from("user_profile_extras")
+      .upsert(payload, { onConflict: "user_id" })
+
+    if (error) {
+      // PostgREST surfaces missing tables as `42P01`. We fall back
+      // gracefully so the page doesn't toast scary errors during
+      // partial deployments.
+      if (
+        error.code === "42P01" ||
+        /relation .* does not exist/i.test(error.message)
+      ) {
+        return { success: false, reason: "missing_table", error: error.message }
+      }
+      if (error.code === "42501" || /permission/i.test(error.message)) {
+        return { success: false, reason: "rls", error: error.message }
+      }
+      // eslint-disable-next-line no-console
+      console.error("[profile] upsertMyProfileExtras:", error.message)
+      return { success: false, reason: "unknown", error: error.message }
+    }
+    return { success: true }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[profile] upsertMyProfileExtras threw:", err)
+    return {
+      success: false,
+      reason: "unknown",
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
