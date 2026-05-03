@@ -6,16 +6,26 @@ import { Camera, Upload, Check, X, Lock, ChevronLeft, Wifi, FileText, Smartphone
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
-// Phase 5: KYC reads real status from profiles + uploads to Supabase
-// Storage. The actual DB INSERT into kyc_submissions still needs four
-// extra form fields (DOB, address, city, document_number) — that's
-// Phase 5.5 below the fold.
+// Phase 5.5: full KYC submission — Storage upload + DB INSERT.
 import { getCurrentUserProfile } from "@/lib/data/profile"
 import { uploadKycSelfie, uploadKycDocument } from "@/lib/storage/upload"
+import { submitKycRequest, type KycDocTypeApi } from "@/lib/data/kyc"
 import { cn } from "@/lib/utils/cn"
 
-type Step = "status" | "instructions" | "selfie" | "document" | "review" | "submitted"
+type Step =
+  | "status"
+  | "instructions"
+  | "personal"
+  | "selfie"
+  | "document"
+  | "review"
+  | "submitted"
 type DocType = "id" | "passport"
+
+/** Maps the friendly UI doc type to the DB `id_document_type` enum. */
+function toApiDocType(t: DocType): KycDocTypeApi {
+  return t === "passport" ? "passport" : "national_id"
+}
 
 /**
  * Maps the DB `kyc_status` enum (`not_submitted | pending | approved | rejected`)
@@ -57,11 +67,21 @@ export default function KYCPage() {
   const [kycStatus, setKycStatus] = useState<KycView>("not_submitted")
   const [loadingStatus, setLoadingStatus] = useState(true)
 
+  // Personal info (Phase 5.5) — full_name + phone are pre-filled from profile.
+  const [fullName, setFullName] = useState("")
+  const [dob, setDob] = useState("")
+  const [address, setAddress] = useState("")
+  const [city, setCity] = useState("")
+  const [phone, setPhone] = useState("")
+  const [docNumber, setDocNumber] = useState("")
+
   useEffect(() => {
     let cancelled = false
     getCurrentUserProfile().then((p) => {
       if (cancelled) return
       setKycStatus(dbToView(p?.kyc_status))
+      setFullName(p?.full_name ?? "")
+      setPhone(p?.phone ?? "")
       setLoadingStatus(false)
     })
     return () => {
@@ -69,8 +89,25 @@ export default function KYCPage() {
     }
   }, [])
 
-  const steps: Step[] = ["status", "instructions", "selfie", "document", "review", "submitted"]
+  const steps: Step[] = [
+    "status",
+    "instructions",
+    "personal",
+    "selfie",
+    "document",
+    "review",
+    "submitted",
+  ]
   const stepPct = (steps.indexOf(step) / (steps.length - 1)) * 100
+
+  /** Quick check whether all 6 personal fields are filled. */
+  const personalReady =
+    fullName.trim().length >= 2 &&
+    /^\d{4}-\d{2}-\d{2}$/.test(dob) &&
+    address.trim().length >= 5 &&
+    city.trim().length >= 2 &&
+    phone.trim().length >= 8 &&
+    docNumber.trim().length >= 4
 
   async function handleSelfieFile(file: File) {
     setUploading("selfie")
@@ -97,20 +134,32 @@ export default function KYCPage() {
   }
 
   const submitKYC = async () => {
+    if (!personalReady) return showError("أكمل البيانات الشخصية أوّلاً")
     if (!selfiePath) return showError("الرجاء التقاط صورة السيلفي")
     if (!docPath) return showError("الرجاء رفع وثيقة الهوية")
     setSubmitting(true)
 
-    // Phase 5 Lean: files uploaded to Storage successfully. The DB
-    // INSERT into kyc_submissions requires more fields (DOB, address,
-    // city, document_number) — those will be wired in Phase 5.5
-    // alongside additional form steps.
-    // TODO Phase 5.5 — call submitKycRequest({ selfie_url, doc_url, ... })
-    await new Promise((r) => setTimeout(r, 600))
+    const result = await submitKycRequest({
+      full_name: fullName.trim(),
+      date_of_birth: dob,
+      address: address.trim(),
+      city: city.trim(),
+      phone: phone.trim(),
+      document_type: toApiDocType(docType),
+      document_number: docNumber.trim(),
+      selfie_url: selfiePath,
+      document_front_url: docPath,
+    })
 
-    showSuccess("تم رفع وثائقك بنجاح — ميزة الإرسال للمراجعة قادمة قريباً")
-    setStep("submitted")
     setSubmitting(false)
+
+    if (result.success) {
+      showSuccess("تم إرسال طلب التوثيق! 🎉 سنُعلمك بالنتيجة")
+      setKycStatus("pending")
+      setStep("submitted")
+    } else {
+      showError(result.error ?? "تعذّر إرسال الطلب")
+    }
   }
 
   return (
@@ -136,6 +185,7 @@ export default function KYCPage() {
               <div className="flex justify-between mt-2 text-[10px] text-neutral-500">
                 <span>الحالة</span>
                 <span>التعليمات</span>
+                <span>البيانات</span>
                 <span>السيلفي</span>
                 <span>الوثيقة</span>
                 <span>المراجعة</span>
@@ -220,11 +270,122 @@ export default function KYCPage() {
               </div>
 
               <button
-                onClick={() => setStep("selfie")}
+                onClick={() => setStep("personal")}
                 className="w-full py-3.5 rounded-xl bg-neutral-100 text-black text-sm font-bold hover:bg-neutral-200 transition-colors"
               >
                 فهمت، ابدأ التوثيق
               </button>
+            </>
+          )}
+
+          {/* البيانات الشخصية (Phase 5.5) */}
+          {step === "personal" && (
+            <>
+              <div className="text-2xl font-bold text-white mb-2">البيانات الشخصية</div>
+              <div className="text-sm text-neutral-400 mb-5">يجب أن تطابق هذه البيانات وثيقة هويتك تماماً</div>
+
+              <div className="space-y-3 mb-5">
+                {/* Full name */}
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1.5">الاسم الكامل (كما في الوثيقة)</label>
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="مثال: محمد علي حسين"
+                    className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-white/[0.25] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none transition-colors"
+                  />
+                </div>
+
+                {/* DOB */}
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1.5">تاريخ الميلاد</label>
+                  <input
+                    type="date"
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().slice(0, 10)}
+                    className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-white/[0.25] rounded-xl px-4 py-3 text-sm text-white outline-none transition-colors"
+                    dir="ltr"
+                  />
+                </div>
+
+                {/* City + Phone (grid) */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-neutral-400 mb-1.5">المدينة</label>
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="بغداد"
+                      className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-white/[0.25] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-neutral-400 mb-1.5">رقم الهاتف</label>
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+9647701234567"
+                      className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-white/[0.25] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none transition-colors"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                {/* Address */}
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1.5">العنوان التفصيلي</label>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="المحلّة، الزقاق، رقم الدار"
+                    className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-white/[0.25] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none transition-colors"
+                  />
+                </div>
+
+                {/* Document number */}
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-1.5">رقم الوثيقة</label>
+                  <input
+                    type="text"
+                    value={docNumber}
+                    onChange={(e) => setDocNumber(e.target.value)}
+                    placeholder="مثال: 12345678"
+                    className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-white/[0.25] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none transition-colors"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setStep("instructions")}
+                  className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                >
+                  رجوع
+                </button>
+                <button
+                  onClick={() => {
+                    if (!personalReady) {
+                      return showError("أكمل جميع الحقول بشكل صحيح")
+                    }
+                    setStep("selfie")
+                  }}
+                  disabled={!personalReady}
+                  className={cn(
+                    "flex-[2] py-3 rounded-xl text-sm font-bold transition-colors",
+                    personalReady
+                      ? "bg-neutral-100 text-black hover:bg-neutral-200"
+                      : "bg-white/[0.05] text-neutral-600 cursor-not-allowed",
+                  )}
+                >
+                  التالي
+                </button>
+              </div>
             </>
           )}
 
@@ -274,11 +435,11 @@ export default function KYCPage() {
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => setSelfiePath("")}
+                  onClick={() => setStep("personal")}
                   disabled={uploading === "selfie"}
                   className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
                 >
-                  إعادة
+                  رجوع
                 </button>
                 <button
                   onClick={() => {
@@ -396,6 +557,34 @@ export default function KYCPage() {
               <div className="text-2xl font-bold text-white mb-2">مراجعة قبل الإرسال</div>
               <div className="text-sm text-neutral-400 mb-5">تأكد من صحة البيانات</div>
 
+              {/* Personal info summary */}
+              <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3.5 mb-3 space-y-1.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-neutral-500">الاسم</span>
+                  <span className="text-white font-bold">{fullName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-neutral-500">تاريخ الميلاد</span>
+                  <span className="text-white font-mono" dir="ltr">{dob}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-neutral-500">المدينة</span>
+                  <span className="text-white">{city}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-neutral-500">الهاتف</span>
+                  <span className="text-white font-mono" dir="ltr">{phone}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-neutral-500">العنوان</span>
+                  <span className="text-white truncate max-w-[60%]">{address}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-neutral-500">رقم الوثيقة</span>
+                  <span className="text-white font-mono" dir="ltr">{docNumber}</span>
+                </div>
+              </div>
+
               <div className="space-y-2.5 mb-4">
                 {[
                   {
@@ -437,15 +626,16 @@ export default function KYCPage() {
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => setStep("document")}
-                  className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                  onClick={() => setStep("personal")}
+                  disabled={submitting}
+                  className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
                 >
                   تعديل
                 </button>
                 <button
                   onClick={submitKYC}
                   disabled={submitting}
-                  className="flex-[2] py-3 rounded-xl bg-neutral-100 text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-50"
+                  className="flex-[2] py-3 rounded-xl bg-neutral-100 text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {submitting ? "جاري الإرسال..." : "إرسال للمراجعة"}
                 </button>
