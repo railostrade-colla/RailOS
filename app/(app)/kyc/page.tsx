@@ -1,49 +1,116 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Camera, Upload, Check, X, Lock, ChevronLeft, Wifi, FileText, Smartphone } from "lucide-react"
+import { Camera, Upload, Check, X, Lock, ChevronLeft, Wifi, FileText, Smartphone, Loader2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
-import { mockProfileKYC as mockProfile } from "@/lib/mock-data"
+// Phase 5: KYC reads real status from profiles + uploads to Supabase
+// Storage. The actual DB INSERT into kyc_submissions still needs four
+// extra form fields (DOB, address, city, document_number) — that's
+// Phase 5.5 below the fold.
+import { getCurrentUserProfile } from "@/lib/data/profile"
+import { uploadKycSelfie, uploadKycDocument } from "@/lib/storage/upload"
 import { cn } from "@/lib/utils/cn"
 
 type Step = "status" | "instructions" | "selfie" | "document" | "review" | "submitted"
 type DocType = "id" | "passport"
 
-const statusColors = {
-  pending: "#FBBF24",
-  verified: "#4ADE80",
-  rejected: "#F87171",
+/**
+ * Maps the DB `kyc_status` enum (`not_submitted | pending | approved | rejected`)
+ * to the legacy in-page palette (which used `verified` for approved).
+ */
+type KycView = "not_submitted" | "pending" | "verified" | "rejected"
+
+const statusColors: Record<KycView, string> = {
+  not_submitted: "#888888",
+  pending:       "#FBBF24",
+  verified:      "#4ADE80",
+  rejected:      "#F87171",
 }
 
-const statusLabels = {
-  pending: "قيد المراجعة",
-  verified: "موثق",
-  rejected: "مرفوض",
+const statusLabels: Record<KycView, string> = {
+  not_submitted: "غير موثق",
+  pending:       "قيد المراجعة",
+  verified:      "موثق",
+  rejected:      "مرفوض",
+}
+
+function dbToView(s: string | undefined | null): KycView {
+  if (s === "approved") return "verified"
+  if (s === "pending") return "pending"
+  if (s === "rejected") return "rejected"
+  return "not_submitted"
 }
 
 export default function KYCPage() {
   const router = useRouter()
   const [step, setStep] = useState<Step>("status")
-  const [selfieData, setSelfieData] = useState("")
-  const [docData, setDocData] = useState("")
+  // For each upload we now keep the storage path (not the local filename).
+  const [selfiePath, setSelfiePath] = useState("")
+  const [docPath, setDocPath] = useState("")
   const [docType, setDocType] = useState<DocType>("id")
   const [submitting, setSubmitting] = useState(false)
+  // Per-input upload spinner (so the button shows progress).
+  const [uploading, setUploading] = useState<"selfie" | "doc" | null>(null)
+  const [kycStatus, setKycStatus] = useState<KycView>("not_submitted")
+  const [loadingStatus, setLoadingStatus] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    getCurrentUserProfile().then((p) => {
+      if (cancelled) return
+      setKycStatus(dbToView(p?.kyc_status))
+      setLoadingStatus(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const steps: Step[] = ["status", "instructions", "selfie", "document", "review", "submitted"]
   const stepPct = (steps.indexOf(step) / (steps.length - 1)) * 100
 
-  const submitKYC = () => {
-    if (!selfieData) return showError("الرجاء التقاط صورة السيلفي")
-    if (!docData) return showError("الرجاء رفع وثيقة الهوية")
+  async function handleSelfieFile(file: File) {
+    setUploading("selfie")
+    const result = await uploadKycSelfie(file)
+    setUploading(null)
+    if (result.success && result.path) {
+      setSelfiePath(result.path)
+      showSuccess("تم رفع صورة السيلفي")
+    } else {
+      showError(result.error ?? "تعذّر رفع الصورة")
+    }
+  }
+
+  async function handleDocFile(file: File) {
+    setUploading("doc")
+    const result = await uploadKycDocument(file, "front")
+    setUploading(null)
+    if (result.success && result.path) {
+      setDocPath(result.path)
+      showSuccess("تم رفع الوثيقة")
+    } else {
+      showError(result.error ?? "تعذّر رفع الوثيقة")
+    }
+  }
+
+  const submitKYC = async () => {
+    if (!selfiePath) return showError("الرجاء التقاط صورة السيلفي")
+    if (!docPath) return showError("الرجاء رفع وثيقة الهوية")
     setSubmitting(true)
-    setTimeout(() => {
-      showSuccess("تم إرسال طلب التوثيق! 🎉")
-      setStep("submitted")
-      setSubmitting(false)
-    }, 1500)
+
+    // Phase 5 Lean: files uploaded to Storage successfully. The DB
+    // INSERT into kyc_submissions requires more fields (DOB, address,
+    // city, document_number) — those will be wired in Phase 5.5
+    // alongside additional form steps.
+    // TODO Phase 5.5 — call submitKycRequest({ selfie_url, doc_url, ... })
+    await new Promise((r) => setTimeout(r, 600))
+
+    showSuccess("تم رفع وثائقك بنجاح — ميزة الإرسال للمراجعة قادمة قريباً")
+    setStep("submitted")
+    setSubmitting(false)
   }
 
   return (
@@ -83,32 +150,44 @@ export default function KYCPage() {
                 <div
                   className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-4 border-2"
                   style={{
-                    background: `${mockProfile.kyc_status ? statusColors[mockProfile.kyc_status] : "#888"}15`,
-                    borderColor: `${mockProfile.kyc_status ? statusColors[mockProfile.kyc_status] : "#888"}30`,
+                    background: `${statusColors[kycStatus]}15`,
+                    borderColor: `${statusColors[kycStatus]}30`,
                   }}
                 >
                   <span className="text-4xl">
-                    {mockProfile.kyc_status === "verified" ? "✓" : mockProfile.kyc_status === "rejected" ? "✗" : "🔍"}
+                    {loadingStatus
+                      ? "⏳"
+                      : kycStatus === "verified"
+                        ? "✓"
+                        : kycStatus === "rejected"
+                          ? "✗"
+                          : kycStatus === "pending"
+                            ? "🔍"
+                            : "🛡️"}
                   </span>
                 </div>
                 <div className="text-2xl font-bold text-white mb-2">
-                  {mockProfile.kyc_status ? statusLabels[mockProfile.kyc_status] : "غير موثق"}
+                  {loadingStatus ? "..." : statusLabels[kycStatus]}
                 </div>
                 <div className="text-sm text-neutral-400 leading-relaxed">
-                  {mockProfile.kyc_status === "verified"
-                    ? "حسابك موثق بالكامل"
-                    : mockProfile.kyc_status === "rejected"
-                      ? "تم رفض طلبك، يرجى إعادة المحاولة"
-                      : "يمكنك الآن البدء بتوثيق حسابك"}
+                  {loadingStatus
+                    ? "جاري التحقّق من حالتك..."
+                    : kycStatus === "verified"
+                      ? "حسابك موثق بالكامل"
+                      : kycStatus === "pending"
+                        ? "طلبك قيد المراجعة من قبل الإدارة"
+                        : kycStatus === "rejected"
+                          ? "تم رفض طلبك، يرجى إعادة المحاولة"
+                          : "يمكنك الآن البدء بتوثيق حسابك"}
                 </div>
               </div>
 
-              {mockProfile.kyc_status !== "verified" && (
+              {!loadingStatus && kycStatus !== "verified" && kycStatus !== "pending" && (
                 <button
                   onClick={() => setStep("instructions")}
                   className="w-full py-3.5 rounded-xl bg-neutral-100 text-black text-sm font-bold hover:bg-neutral-200 transition-colors"
                 >
-                  {mockProfile.kyc_status === "rejected" ? "إعادة التوثيق" : "بدء التوثيق"}
+                  {kycStatus === "rejected" ? "إعادة التوثيق" : "بدء التوثيق"}
                 </button>
               )}
             </>
@@ -156,14 +235,20 @@ export default function KYCPage() {
               <div className="text-sm text-neutral-400 mb-5">التقط صورة واضحة لوجهك مع الهوية</div>
 
               <button
-                onClick={() => document.getElementById("selfie-input")?.click()}
-                className="w-full bg-white/[0.05] border-2 border-dashed border-white/[0.15] rounded-2xl p-10 mb-5 hover:bg-white/[0.07] hover:border-white/[0.25] transition-colors"
+                onClick={() => uploading !== "selfie" && document.getElementById("selfie-input")?.click()}
+                disabled={uploading === "selfie"}
+                className="w-full bg-white/[0.05] border-2 border-dashed border-white/[0.15] rounded-2xl p-10 mb-5 hover:bg-white/[0.07] hover:border-white/[0.25] transition-colors disabled:opacity-60 disabled:cursor-wait"
               >
-                {selfieData ? (
+                {uploading === "selfie" ? (
+                  <div>
+                    <Loader2 className="w-12 h-12 text-blue-400 mx-auto mb-3 animate-spin" strokeWidth={1.5} />
+                    <div className="text-sm font-bold text-blue-400 mb-1">جاري الرفع...</div>
+                  </div>
+                ) : selfiePath ? (
                   <div>
                     <div className="text-5xl mb-3">✅</div>
                     <div className="text-sm font-bold text-green-400 mb-1">تم التقاط الصورة</div>
-                    <div className="text-[11px] text-neutral-500">{selfieData}</div>
+                    <div className="text-[11px] text-neutral-500 break-all">{selfiePath.split("/").slice(-1)[0]}</div>
                   </div>
                 ) : (
                   <div>
@@ -176,31 +261,36 @@ export default function KYCPage() {
               <input
                 id="selfie-input"
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 capture="user"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0]
-                  if (f) setSelfieData(f.name)
+                  if (f) void handleSelfieFile(f)
+                  // reset input so the same file can be selected again
+                  e.target.value = ""
                 }}
               />
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => setSelfieData("")}
-                  className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                  onClick={() => setSelfiePath("")}
+                  disabled={uploading === "selfie"}
+                  className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
                 >
                   إعادة
                 </button>
                 <button
                   onClick={() => {
-                    if (!selfieData) return showError("الرجاء التقاط صورة أولاً")
+                    if (!selfiePath) return showError("الرجاء التقاط صورة أولاً")
                     setStep("document")
                   }}
-                  disabled={!selfieData}
+                  disabled={!selfiePath || uploading === "selfie"}
                   className={cn(
                     "flex-[2] py-3 rounded-xl text-sm font-bold transition-colors",
-                    selfieData ? "bg-neutral-100 text-black hover:bg-neutral-200" : "bg-white/[0.05] text-neutral-600 cursor-not-allowed"
+                    selfiePath && uploading !== "selfie"
+                      ? "bg-neutral-100 text-black hover:bg-neutral-200"
+                      : "bg-white/[0.05] text-neutral-600 cursor-not-allowed",
                   )}
                 >
                   التالي
@@ -238,50 +328,60 @@ export default function KYCPage() {
 
               {/* رفع */}
               <button
-                onClick={() => document.getElementById("doc-input")?.click()}
-                className="w-full bg-white/[0.05] border-2 border-dashed border-white/[0.15] rounded-2xl p-10 mb-5 hover:bg-white/[0.07] hover:border-white/[0.25] transition-colors"
+                onClick={() => uploading !== "doc" && document.getElementById("doc-input")?.click()}
+                disabled={uploading === "doc"}
+                className="w-full bg-white/[0.05] border-2 border-dashed border-white/[0.15] rounded-2xl p-10 mb-5 hover:bg-white/[0.07] hover:border-white/[0.25] transition-colors disabled:opacity-60 disabled:cursor-wait"
               >
-                {docData ? (
+                {uploading === "doc" ? (
+                  <div>
+                    <Loader2 className="w-12 h-12 text-blue-400 mx-auto mb-3 animate-spin" strokeWidth={1.5} />
+                    <div className="text-sm font-bold text-blue-400 mb-1">جاري الرفع...</div>
+                  </div>
+                ) : docPath ? (
                   <div>
                     <div className="text-5xl mb-3">✅</div>
                     <div className="text-sm font-bold text-green-400 mb-1">تم رفع الوثيقة</div>
-                    <div className="text-[11px] text-neutral-500">{docData}</div>
+                    <div className="text-[11px] text-neutral-500 break-all">{docPath.split("/").slice(-1)[0]}</div>
                   </div>
                 ) : (
                   <div>
                     <Upload className="w-12 h-12 text-neutral-400 mx-auto mb-3" strokeWidth={1.5} />
                     <div className="text-sm font-bold text-white mb-1">اضغط لرفع الوثيقة</div>
-                    <div className="text-xs text-neutral-500">JPG أو PNG — حجم أقصى 10MB</div>
+                    <div className="text-xs text-neutral-500">JPG أو PNG أو WEBP — حجم أقصى 10MB</div>
                   </div>
                 )}
               </button>
               <input
                 id="doc-input"
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0]
-                  if (f) setDocData(f.name)
+                  if (f) void handleDocFile(f)
+                  e.target.value = ""
                 }}
               />
 
               <div className="flex gap-2">
                 <button
                   onClick={() => setStep("selfie")}
-                  className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                  disabled={uploading === "doc"}
+                  className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
                 >
                   رجوع
                 </button>
                 <button
                   onClick={() => {
-                    if (!docData) return showError("الرجاء رفع الوثيقة أولاً")
+                    if (!docPath) return showError("الرجاء رفع الوثيقة أولاً")
                     setStep("review")
                   }}
-                  disabled={!docData}
+                  disabled={!docPath || uploading === "doc"}
                   className={cn(
                     "flex-[2] py-3 rounded-xl text-sm font-bold transition-colors",
-                    docData ? "bg-neutral-100 text-black hover:bg-neutral-200" : "bg-white/[0.05] text-neutral-600 cursor-not-allowed"
+                    docPath && uploading !== "doc"
+                      ? "bg-neutral-100 text-black hover:bg-neutral-200"
+                      : "bg-white/[0.05] text-neutral-600 cursor-not-allowed",
                   )}
                 >
                   التالي
@@ -298,8 +398,16 @@ export default function KYCPage() {
 
               <div className="space-y-2.5 mb-4">
                 {[
-                  { label: "صورة السيلفي", value: selfieData, ok: !!selfieData },
-                  { label: `وثيقة ${docType === "id" ? "الهوية الوطنية" : "جواز السفر"}`, value: docData, ok: !!docData },
+                  {
+                    label: "صورة السيلفي",
+                    value: selfiePath ? selfiePath.split("/").slice(-1)[0] : "—",
+                    ok: !!selfiePath,
+                  },
+                  {
+                    label: `وثيقة ${docType === "id" ? "الهوية الوطنية" : "جواز السفر"}`,
+                    value: docPath ? docPath.split("/").slice(-1)[0] : "—",
+                    ok: !!docPath,
+                  },
                 ].map((item, i) => (
                   <div key={i} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3.5 flex justify-between items-center">
                     <div>
