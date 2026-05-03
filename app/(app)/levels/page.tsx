@@ -1,9 +1,11 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Check } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { LEVEL_SETTINGS_STORE, type LevelSetting } from "@/lib/mock-data/levels"
+import { getLevelSettings } from "@/lib/data/levels"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -15,8 +17,28 @@ const fmtVolume = (n: number) => {
 }
 
 export default function LevelsPage() {
-  // البيانات حيّة من LEVEL_SETTINGS_STORE — تعكس تعديلات الأدمن فوراً
-  const levels = [...LEVEL_SETTINGS_STORE].sort((a, b) => a.level_order - b.level_order)
+  // البيانات تأتي من DB أولاً، مع mock fallback إذا لم يتمّ تطبيق migration 10
+  // أو فشل الاتصال. ترتيب نهائي حسب `level_order`.
+  const [levels, setLevels] = useState<LevelSetting[]>(
+    [...LEVEL_SETTINGS_STORE].sort((a, b) => a.level_order - b.level_order),
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    getLevelSettings()
+      .then((rows) => {
+        if (cancelled) return
+        if (rows.length > 0) {
+          setLevels([...rows].sort((a, b) => a.level_order - b.level_order))
+        }
+      })
+      .catch(() => {
+        /* keep mock */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <AppLayout>

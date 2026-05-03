@@ -5,6 +5,7 @@
  * في Production: يستخدم Supabase RPC + insert في level_history.
  */
 
+import { createClient } from "@/lib/supabase/client"
 import {
   LEVEL_SETTINGS_STORE,
   MOCK_USER_STATS,
@@ -246,4 +247,103 @@ export const CHANGE_TYPE_META: Record<
   auto_downgrade: { label: "تنزيل تلقائي",       icon: "↘️", color: "red"    },
   admin_override: { label: "تجاوز يدوي",          icon: "🛡️", color: "purple" },
   admin_revert:   { label: "إزالة التجاوز",       icon: "🔄", color: "blue"   },
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Phase C — DB-backed level settings (read-only, public)
+// ══════════════════════════════════════════════════════════════════════
+
+interface LevelSettingsRow {
+  level: string | null
+  display_name_ar: string | null
+  level_order: number | null
+  min_volume: number | string | null
+  min_total_trades: number | null
+  min_successful_trades: number | null
+  min_success_rate: number | string | null
+  min_days_active: number | null
+  max_disputes_lost: number | null
+  max_reports_received: number | null
+  max_dispute_rate: number | string | null
+  required_kyc: string | null
+  min_rating: number | string | null
+  monthly_trade_limit: number | string | null
+  fee_discount: number | string | null
+  benefits: unknown
+  color: string | null
+  icon: string | null
+}
+
+function isLevelId(s: string): s is LevelId {
+  return s === "basic" || s === "advanced" || s === "pro" || s === "elite"
+}
+
+function isKycKind(s: string | null): s is "basic" | "advanced" | "pro" {
+  return s === "basic" || s === "advanced" || s === "pro"
+}
+
+function dbRowToLevelSetting(row: LevelSettingsRow): LevelSetting | null {
+  if (!row.level || !isLevelId(row.level)) return null
+
+  const benefits = Array.isArray(row.benefits)
+    ? row.benefits.filter((b): b is string => typeof b === "string")
+    : []
+
+  return {
+    level: row.level,
+    display_name_ar: row.display_name_ar ?? row.level,
+    level_order: Number(row.level_order ?? 0),
+    min_volume: Number(row.min_volume ?? 0),
+    min_total_trades: Number(row.min_total_trades ?? 0),
+    min_successful_trades: Number(row.min_successful_trades ?? 0),
+    min_success_rate: Number(row.min_success_rate ?? 0),
+    min_days_active: Number(row.min_days_active ?? 0),
+    max_disputes_lost: Number(row.max_disputes_lost ?? 999),
+    max_reports_received: Number(row.max_reports_received ?? 999),
+    max_dispute_rate: Number(row.max_dispute_rate ?? 100),
+    required_kyc: isKycKind(row.required_kyc) ? row.required_kyc : "basic",
+    min_rating: Number(row.min_rating ?? 0),
+    monthly_trade_limit: Number(row.monthly_trade_limit ?? 0),
+    fee_discount: Number(row.fee_discount ?? 0),
+    benefits,
+    color: row.color ?? "#60A5FA",
+    icon: row.icon ?? "⭐",
+  }
+}
+
+/**
+ * Loads the public level catalogue from the `level_settings` table.
+ *
+ * Returns an empty array on any failure — pages should fall back to
+ * the seeded `LEVEL_SETTINGS_STORE` (mock) when this returns nothing,
+ * so a missing migration never breaks the page.
+ */
+export async function getLevelSettings(): Promise<LevelSetting[]> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("level_settings")
+      .select(
+        "level, display_name_ar, level_order, min_volume, min_total_trades, min_successful_trades, min_success_rate, min_days_active, max_disputes_lost, max_reports_received, max_dispute_rate, required_kyc, min_rating, monthly_trade_limit, fee_discount, benefits, color, icon",
+      )
+      .order("level_order", { ascending: true })
+
+    if (error || !data) {
+      if (error)
+        // eslint-disable-next-line no-console
+        console.warn("[levels] getLevelSettings:", error.message)
+      return []
+    }
+
+    const out: LevelSetting[] = []
+    for (const row of data as LevelSettingsRow[]) {
+      const mapped = dbRowToLevelSetting(row)
+      if (mapped) out.push(mapped)
+    }
+    return out
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[levels] getLevelSettings threw:", err)
+    return []
+  }
 }
