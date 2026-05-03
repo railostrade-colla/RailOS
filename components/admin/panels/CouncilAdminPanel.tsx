@@ -34,6 +34,7 @@ import {
   adminAnnounceElection,
   adminFinalizeProposal,
 } from "@/lib/data/council-admin"
+import { UserPicker } from "@/components/admin/UserPicker"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -164,8 +165,11 @@ export function CouncilAdminPanel() {
   const [memberBio, setMemberBio] = useState("")
   const [removeReason, setRemoveReason] = useState("")
   const [showAddMember, setShowAddMember] = useState(false)
-  const [newMemberName, setNewMemberName] = useState("")
   const [newMemberTitle, setNewMemberTitle] = useState("")
+  // Phase 8.1 — real user picker state
+  const [pickedUser, setPickedUser] = useState<{ id: string; display_name: string } | null>(null)
+  const [newMemberRole, setNewMemberRole] = useState<"appointed" | "elected">("appointed")
+  const [newMemberBio, setNewMemberBio] = useState("")
 
   // Proposal actions
   const [selectedProposal, setSelectedProposal] = useState<CouncilProposal | null>(null)
@@ -277,18 +281,41 @@ export function CouncilAdminPanel() {
   }
 
   const handleAddMember = async () => {
-    if (!newMemberName.trim() || !newMemberTitle.trim()) {
-      showError("الاسم والمنصب مطلوبان")
+    if (!pickedUser) {
+      showError("اختر مستخدماً")
       return
     }
-    // The user_id mapping needs admin selection — for now, show a hint.
-    // The form is missing a user picker. Keep optimistic toast until we
-    // add a profile-search input.
-    showSuccess(`✅ ${newMemberName} (الإضافة الفعلية تحتاج اختيار user_id من قائمة الملفات)`)
+    if (!newMemberTitle.trim()) {
+      showError("المنصب مطلوب")
+      return
+    }
+    setSubmitting(true)
+    const result = await adminAddCouncilMember({
+      user_id: pickedUser.id,
+      role: newMemberRole,
+      position_title: newMemberTitle.trim(),
+      bio: newMemberBio.trim() || undefined,
+    })
+    setSubmitting(false)
+
+    if (!result.success) {
+      const map: Record<string, string> = {
+        unauthenticated: "سجّل دخولك أولاً",
+        not_admin: "صلاحياتك لا تسمح",
+        missing_table: "الجداول غير منشورة بعد",
+        rls: "صلاحياتك لا تسمح",
+      }
+      showError(map[result.reason ?? ""] ?? "فشلت الإضافة")
+      return
+    }
+
+    showSuccess(`✅ تم تعيين ${pickedUser.display_name} كعضو ${newMemberRole === "appointed" ? "معيّن" : "منتخب"}`)
     setShowAddMember(false)
-    setNewMemberName("")
+    setPickedUser(null)
     setNewMemberTitle("")
-    void adminAddCouncilMember
+    setNewMemberRole("appointed")
+    setNewMemberBio("")
+    refresh()
   }
 
   const handleExecuteDecision = async () => {
@@ -736,48 +763,103 @@ export function CouncilAdminPanel() {
       {/* Add member modal */}
       {showAddMember && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-w-md">
+          <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start mb-4">
               <div className="text-base font-bold text-white">+ تعيين عضو جديد</div>
-              <button onClick={() => setShowAddMember(false)} className="text-neutral-500 hover:text-white">
+              <button
+                onClick={() => {
+                  setShowAddMember(false)
+                  setPickedUser(null)
+                  setNewMemberTitle("")
+                  setNewMemberBio("")
+                }}
+                className="text-neutral-500 hover:text-white"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <label className="text-xs text-neutral-400 mb-2 block font-bold">اسم العضو</label>
-            <input
-              type="text"
-              value={newMemberName}
-              onChange={(e) => setNewMemberName(e.target.value)}
-              placeholder="مثلاً: محمد العبيدي"
-              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20 mb-3"
-            />
+            {/* User picker */}
+            <div className="mb-3">
+              <UserPicker
+                label="اختر المستخدم *"
+                placeholder="ابحث بالاسم أو username..."
+                value={pickedUser}
+                onChange={setPickedUser}
+                excludeIds={members.map((m) => m.user_id)}
+                hideCouncilMembers
+                helper="لا تظهر الأعضاء الحاليون في المجلس"
+              />
+            </div>
 
-            <label className="text-xs text-neutral-400 mb-2 block font-bold">المنصب</label>
+            {/* Role */}
+            <label className="text-xs text-neutral-400 mb-1.5 block font-bold">نوع العضوية *</label>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <button
+                onClick={() => setNewMemberRole("appointed")}
+                className={cn(
+                  "py-2.5 rounded-xl border text-xs font-bold transition-colors",
+                  newMemberRole === "appointed"
+                    ? "bg-blue-500/[0.15] border-blue-500/[0.3] text-blue-400"
+                    : "bg-white/[0.04] border-white/[0.08] text-neutral-400",
+                )}
+              >
+                🛡️ معيّن
+              </button>
+              <button
+                onClick={() => setNewMemberRole("elected")}
+                className={cn(
+                  "py-2.5 rounded-xl border text-xs font-bold transition-colors",
+                  newMemberRole === "elected"
+                    ? "bg-green-500/[0.15] border-green-500/[0.3] text-green-400"
+                    : "bg-white/[0.04] border-white/[0.08] text-neutral-400",
+                )}
+              >
+                🗳️ منتخب
+              </button>
+            </div>
+
+            <label className="text-xs text-neutral-400 mb-1.5 block font-bold">المنصب *</label>
             <input
               type="text"
               value={newMemberTitle}
               onChange={(e) => setNewMemberTitle(e.target.value)}
               placeholder="مثلاً: مستشار قانوني"
-              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20 mb-4"
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20 mb-3"
             />
 
-            <div className="bg-purple-400/[0.05] border border-purple-400/[0.2] rounded-xl p-3 mb-4 text-xs text-purple-300">
-              العضو الجديد سيكون من نوع <span className="font-bold">"معيّن"</span> ولن يحضر الدورة الانتخابية القادمة افتراضياً.
+            <label className="text-xs text-neutral-400 mb-1.5 block font-bold">نبذة (اختياري)</label>
+            <textarea
+              value={newMemberBio}
+              onChange={(e) => setNewMemberBio(e.target.value)}
+              rows={2}
+              placeholder="نبذة قصيرة عن العضو..."
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20 resize-none mb-4"
+            />
+
+            <div className="bg-purple-400/[0.05] border border-purple-400/[0.2] rounded-xl p-3 mb-4 text-xs text-purple-300 leading-relaxed">
+              العضو الجديد يُسجَّل فوراً في DB. لتعديل النبذة لاحقاً استخدم زر &quot;عرض&quot; على بطاقته.
             </div>
 
             <div className="flex gap-2">
               <button
-                onClick={() => setShowAddMember(false)}
-                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                onClick={() => {
+                  setShowAddMember(false)
+                  setPickedUser(null)
+                  setNewMemberTitle("")
+                  setNewMemberBio("")
+                }}
+                disabled={submitting}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
               >
                 إلغاء
               </button>
               <button
                 onClick={handleAddMember}
-                className="flex-1 py-3 rounded-xl bg-purple-500/[0.15] border border-purple-500/[0.3] text-purple-400 text-sm font-bold hover:bg-purple-500/[0.2]"
+                disabled={submitting || !pickedUser || !newMemberTitle.trim()}
+                className="flex-1 py-3 rounded-xl bg-purple-500/[0.15] border border-purple-500/[0.3] text-purple-400 text-sm font-bold hover:bg-purple-500/[0.2] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                تعيين
+                {submitting ? "جاري التعيين..." : "تعيين"}
               </button>
             </div>
           </div>

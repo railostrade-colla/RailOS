@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react"
-import { Gift, Search, Trash2, X } from "lucide-react"
+import { Gift, Trash2 } from "lucide-react"
 import {
   Badge,
   ActionBtn,
@@ -25,12 +25,11 @@ import {
 } from "@/components/admin/ui"
 import {
   getAllUserGifts,
-  searchUsersForGift,
   adminGrantGift,
   adminRevokeGift,
   type UserGiftRow,
-  type UserSearchRow,
 } from "@/lib/data/gifts"
+import { UserPicker } from "@/components/admin/UserPicker"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -53,10 +52,8 @@ export function GiftsAdminPanel() {
   const [submitting, setSubmitting] = useState(false)
   const [gifts, setGifts] = useState<UserGiftRow[]>([])
 
-  // Grant form
-  const [searchQuery, setSearchQuery] = useState("")
-  const [searchResults, setSearchResults] = useState<UserSearchRow[]>([])
-  const [selectedUser, setSelectedUser] = useState<UserSearchRow | null>(null)
+  // Grant form (now uses the reusable UserPicker)
+  const [selectedUser, setSelectedUser] = useState<{ id: string; display_name: string } | null>(null)
   const [giftType, setGiftType] = useState<string>("free_contract")
   const [reason, setReason] = useState("")
   const [expiresAt, setExpiresAt] = useState("")
@@ -70,21 +67,6 @@ export function GiftsAdminPanel() {
   useEffect(() => {
     refresh()
   }, [refresh])
-
-  // Live search (debounced lightly via the natural state updates)
-  useEffect(() => {
-    if (!searchQuery || searchQuery.trim().length < 2) {
-      setSearchResults([])
-      return
-    }
-    let cancelled = false
-    searchUsersForGift(searchQuery).then((rows) => {
-      if (!cancelled) setSearchResults(rows)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [searchQuery])
 
   const handleGrant = async () => {
     if (!selectedUser) {
@@ -119,7 +101,6 @@ export function GiftsAdminPanel() {
 
     showSuccess(`🎁 تم منح الهدية لـ ${selectedUser.display_name}`)
     setSelectedUser(null)
-    setSearchQuery("")
     setReason("")
     setExpiresAt("")
     refresh()
@@ -205,55 +186,14 @@ export function GiftsAdminPanel() {
             <div className="text-sm font-bold text-white">منح هدية جديدة</div>
           </div>
 
-          {/* User search */}
+          {/* User picker */}
           <div className="mb-4">
-            <label className="text-xs text-neutral-400 mb-1.5 block">المستخدم *</label>
-            {selectedUser ? (
-              <div className="bg-purple-500/[0.08] border border-purple-500/30 rounded-xl px-4 py-3 flex items-center justify-between">
-                <div className="text-sm text-white font-bold">
-                  {selectedUser.display_name}
-                </div>
-                <button
-                  onClick={() => {
-                    setSelectedUser(null)
-                    setSearchQuery("")
-                  }}
-                  className="text-neutral-400 hover:text-white"
-                  aria-label="إزالة"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="relative">
-                  <Search className="w-4 h-4 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="ابحث بالاسم أو username (حرفان على الأقل)..."
-                    className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl pr-10 pl-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
-                  />
-                </div>
-                {searchResults.length > 0 && (
-                  <div className="mt-2 bg-[#0a0a0a] border border-white/[0.1] rounded-xl overflow-hidden">
-                    {searchResults.map((u) => (
-                      <button
-                        key={u.id}
-                        onClick={() => {
-                          setSelectedUser(u)
-                          setSearchResults([])
-                        }}
-                        className="w-full px-4 py-2.5 text-right text-xs text-white hover:bg-white/[0.04] transition-colors border-b border-white/[0.05] last:border-0"
-                      >
-                        {u.display_name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
+            <UserPicker
+              label="المستخدم *"
+              value={selectedUser}
+              onChange={setSelectedUser}
+              placeholder="ابحث بالاسم أو username..."
+            />
           </div>
 
           {/* Gift type */}
