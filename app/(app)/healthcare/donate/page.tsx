@@ -1,12 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Heart } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card } from "@/components/ui"
-import { getActiveCases, makeDonation, DISEASE_LABELS } from "@/lib/mock-data/healthcare"
+import {
+  getActiveCases,
+  DISEASE_LABELS,
+  type HealthcareCase,
+} from "@/lib/mock-data/healthcare"
+import {
+  donateHealthcare,
+  getHealthcareCases,
+} from "@/lib/data/healthcare"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -15,7 +23,20 @@ const QUICK_AMOUNTS = [5_000, 10_000, 25_000, 50_000, 100_000, 250_000]
 
 export default function HealthcareDonatePage() {
   const router = useRouter()
-  const cases = getActiveCases()
+  // Mock first-paint, then real DB.
+  const [cases, setCases] = useState<HealthcareCase[]>(getActiveCases())
+  useEffect(() => {
+    let cancelled = false
+    getHealthcareCases().then((rows) => {
+      if (cancelled) return
+      const active = rows.filter((c) => c.status === "urgent" || c.status === "active")
+      if (active.length > 0) setCases(active)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const [amount, setAmount] = useState<number>(25_000)
   const [customAmount, setCustomAmount] = useState("")
   const [target, setTarget] = useState<"general" | string>("general")
@@ -25,13 +46,13 @@ export default function HealthcareDonatePage() {
 
   const finalAmount = customAmount ? Number(customAmount) : amount
 
-  const handleDonate = () => {
+  const handleDonate = async () => {
     if (!finalAmount || finalAmount < 1000) {
       showError("الحدّ الأدنى للتبرّع 1,000 د.ع")
       return
     }
     setSubmitting(true)
-    const result = makeDonation("me", {
+    const result = await donateHealthcare({
       case_id: target === "general" ? undefined : target,
       amount: finalAmount,
       is_anonymous: isAnonymous,
@@ -41,6 +62,8 @@ export default function HealthcareDonatePage() {
     if (result.success) {
       showSuccess(`✅ تم تبرّعك بـ ${fmtNum(finalAmount)} د.ع${isRecurring ? " · شهري متكرّر" : ""} — شكراً لك!`)
       router.push("/healthcare")
+    } else {
+      showError(result.error || "تعذّر إتمام التبرّع")
     }
   }
 

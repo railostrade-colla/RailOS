@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Heart, Users, Gift, BookOpen, ChevronLeft } from "lucide-react"
@@ -7,12 +8,18 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, StatCard, SectionHeader, Badge } from "@/components/ui"
 import {
-  getOrphansStats,
+  getOrphansStats as getOrphansStatsMock,
   MOCK_TESTIMONIALS,
   MOCK_ORPHAN_CHILDREN,
   CHILD_STATUS_LABELS,
   EDUCATION_LABELS,
+  type OrphanChild,
 } from "@/lib/mock-data/orphans"
+import {
+  getOrphanChildren,
+  getOrphansStats,
+  type OrphansStats,
+} from "@/lib/data/orphans"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -33,8 +40,26 @@ const COLOR_CLASSES = {
 
 export default function OrphansPage() {
   const router = useRouter()
-  const stats = getOrphansStats()
-  const featured = MOCK_ORPHAN_CHILDREN.slice(0, 3)
+  // First-paint mock fallback so the section renders instantly;
+  // real DB values swap in on mount.
+  const [stats, setStats] = useState<OrphansStats>(() => getOrphansStatsMock())
+  const [featured, setFeatured] = useState<OrphanChild[]>(
+    MOCK_ORPHAN_CHILDREN.slice(0, 3),
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([getOrphansStats(), getOrphanChildren()]).then(
+      ([s, children]) => {
+        if (cancelled) return
+        if (s.total_children > 0) setStats(s)
+        if (children.length > 0) setFeatured(children.slice(0, 3))
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <AppLayout>

@@ -1,6 +1,6 @@
 "use client"
 
-import { use } from "react"
+import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Heart, BookOpen, Activity, Users } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -9,10 +9,11 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, StatCard, SectionHeader, Badge, EmptyState } from "@/components/ui"
 import {
   getChildById,
-  getSponsorshipsByChild,
   CHILD_STATUS_LABELS,
   EDUCATION_LABELS,
+  type OrphanChild,
 } from "@/lib/mock-data/orphans"
+import { getOrphanChildById } from "@/lib/data/orphans"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -20,7 +21,18 @@ const fmtNum = (n: number) => n.toLocaleString("en-US")
 export default function ChildDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const child = getChildById(id)
+  // Mock first-paint, real DB on mount.
+  const [child, setChild] = useState<OrphanChild | null>(getChildById(id) ?? null)
+  useEffect(() => {
+    let cancelled = false
+    getOrphanChildById(id).then((c) => {
+      if (cancelled) return
+      if (c) setChild(c)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
 
   if (!child) {
     return (
@@ -39,7 +51,17 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
   const pct = Math.round((child.sponsored_amount / child.needs_amount_monthly) * 100)
   const remaining = Math.max(0, child.needs_amount_monthly - child.sponsored_amount)
   const status = CHILD_STATUS_LABELS[child.status]
-  const sponsors = getSponsorshipsByChild(child.id)
+  // Sponsorships per child are not exposed publicly (privacy);
+  // only the sponsor sees their own. Hide the breakdown for now —
+  // shape kept in sync with the mock so JSX continues to compile.
+  const sponsors: {
+    id: string
+    sponsor_name: string
+    amount: number
+    type: string
+    is_anonymous: boolean
+    started_at: string
+  }[] = []
 
   const healthLabel = child.health_status === "good" ? "صحّة جيدة" : child.health_status === "monitoring" ? "تحت متابعة" : "يحتاج رعاية"
   const healthColor = child.health_status === "good" ? "green" as const : child.health_status === "monitoring" ? "yellow" as const : "red" as const

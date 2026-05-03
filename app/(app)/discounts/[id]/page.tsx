@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Sparkles, Copy, Check, Calendar, MapPin } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -9,11 +9,15 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, Modal, Badge, EmptyState } from "@/components/ui"
 import {
   getDiscountById,
-  claimCoupon,
   CATEGORY_LABELS,
   LEVEL_LABELS,
   type UserCoupon,
+  type Discount,
 } from "@/lib/mock-data/discounts"
+import {
+  getDiscountById as getDiscountByIdDB,
+  claimDiscount,
+} from "@/lib/data/discounts-real"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -42,9 +46,21 @@ function Barcode({ value }: { value: string }) {
 export default function DiscountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const discount = getDiscountById(id)
+  const [discount, setDiscount] = useState<Discount | null>(getDiscountById(id) ?? null)
   const [showCoupon, setShowCoupon] = useState<UserCoupon | null>(null)
   const [copied, setCopied] = useState(false)
+  const [claiming, setClaiming] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    getDiscountByIdDB(id).then((d) => {
+      if (cancelled) return
+      if (d) setDiscount(d)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
 
   if (!discount) {
     return (
@@ -64,10 +80,47 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
   const lvl = LEVEL_LABELS[discount.required_level]
   const daysLeft = Math.max(0, Math.ceil((new Date(discount.ends_at).getTime() - Date.now()) / 86_400_000))
 
-  const handleClaim = () => {
-    const coupon = claimCoupon("me", discount)
-    setShowCoupon(coupon)
-    showSuccess("✅ تم الحصول على القسيمة")
+  const handleClaim = async () => {
+    if (claiming) return
+    setClaiming(true)
+    const result = await claimDiscount(discount.id)
+    setClaiming(false)
+    if (result.success && result.code && result.barcode && result.coupon_id) {
+      // Build a UserCoupon-shape from the RPC result so the existing
+      // modal renders without reshuffling.
+      const coupon: UserCoupon = {
+        id: result.coupon_id,
+        user_id: "self",
+        discount_id: discount.id,
+        brand_name: discount.brand_name,
+        brand_logo_emoji: discount.brand_logo_emoji,
+        discount_percent: discount.discount_percent,
+        code: result.code,
+        barcode: result.barcode,
+        status: "active",
+        claimed_at: new Date().toISOString().slice(0, 16).replace("T", " "),
+        expires_at: discount.ends_at,
+      }
+      setShowCoupon(coupon)
+      showSuccess("✅ تم الحصول على القسيمة")
+      return
+    }
+    // Failure paths.
+    if (result.reason === "already_claimed") {
+      showError("لديك قسيمة بالفعل لهذا العرض")
+    } else if (result.reason === "fully_claimed") {
+      showError("نفذت كل القسائم لهذا العرض")
+    } else if (result.reason === "insufficient_level") {
+      showError(`هذا العرض يحتاج مستوى ${result.required_level} — مستواك الحالي ${result.current_level}`)
+    } else if (result.reason === "inactive") {
+      showError("العرض غير نشط حالياً")
+    } else if (result.reason === "expired" || result.reason === "not_started") {
+      showError("العرض خارج فترة الصلاحية")
+    } else if (result.reason === "missing_table") {
+      showError("الميزة غير متاحة على الخادم بعد")
+    } else {
+      showError(result.error || "تعذّر الحصول على القسيمة")
+    }
   }
 
   const handleCopy = async () => {

@@ -9,9 +9,9 @@ import { Card, Modal } from "@/components/ui"
 import { CURRENT_USER } from "@/lib/mock-data/profile"
 import {
   DISEASE_LABELS,
-  submitHealthcareApplication,
   type DiseaseType,
 } from "@/lib/mock-data/healthcare"
+import { submitHealthcareApplication } from "@/lib/data/healthcare"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -69,10 +69,10 @@ export default function HealthcareApplyPage() {
     setShowConfirm(true)
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    if (submitting) return
     setSubmitting(true)
-    const result = submitHealthcareApplication("me", {
-      user_id: CURRENT_USER.id,
+    const result = await submitHealthcareApplication({
       disease_type: disease as DiseaseType,
       diagnosis: diagnosis.trim(),
       doctor_name: doctor.trim(),
@@ -80,12 +80,23 @@ export default function HealthcareApplyPage() {
       total_cost: totalCostNum,
       user_available: availableNum,
       requested_amount: requested,
+      attachments: Object.entries(attachments)
+        .filter(([, v]) => v)
+        .map(([k]) => k),
     })
     setSubmitting(false)
     if (result.success) {
       showSuccess("✅ تم تقديم طلبك — ستصلك النتيجة خلال 5-7 أيام")
       setShowConfirm(false)
       router.push("/healthcare/my-applications")
+    } else {
+      if (result.reason === "missing_table") {
+        showError("الميزة غير متاحة على الخادم بعد")
+      } else if (result.reason === "unauthenticated") {
+        showError("سجّل دخول للمتابعة")
+      } else {
+        showError(result.error || "تعذّر إرسال الطلب")
+      }
     }
   }
 

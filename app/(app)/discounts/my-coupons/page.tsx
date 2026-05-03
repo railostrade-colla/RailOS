@@ -1,16 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Eye } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Tabs, Badge, EmptyState, Modal } from "@/components/ui"
 import {
-  getMyCoupons,
+  getMyCoupons as getMyCouponsMock,
   COUPON_STATUS_LABELS,
   type UserCoupon,
 } from "@/lib/mock-data/discounts"
+import { getMyCoupons } from "@/lib/data/discounts-real"
 import { cn } from "@/lib/utils/cn"
 
 function MiniBarcode({ value }: { value: string }) {
@@ -55,7 +56,21 @@ export default function MyCouponsPage() {
   const router = useRouter()
   const [tab, setTab] = useState<"active" | "used" | "expired">("active")
   const [zoomCoupon, setZoomCoupon] = useState<UserCoupon | null>(null)
-  const allCoupons = getMyCoupons("abc123def456")
+  const [allCoupons, setAllCoupons] = useState<UserCoupon[]>(
+    getMyCouponsMock("abc123def456"),
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    getMyCoupons().then((rows) => {
+      if (cancelled) return
+      // Show real list always — empty means user has no coupons.
+      setAllCoupons(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const filtered = allCoupons.filter((c) => c.status === tab)
 

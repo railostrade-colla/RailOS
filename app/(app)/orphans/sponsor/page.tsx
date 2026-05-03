@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useState, useMemo } from "react"
+import { Suspense, useState, useMemo, useEffect } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Heart } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -9,9 +9,10 @@ import { Card, Modal } from "@/components/ui"
 import {
   MOCK_ORPHAN_CHILDREN,
   SPONSORSHIP_PLANS,
-  sponsorChild,
   type SponsorshipType,
+  type OrphanChild,
 } from "@/lib/mock-data/orphans"
+import { getOrphanChildren, createSponsorship } from "@/lib/data/orphans"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -22,8 +23,30 @@ function SponsorContent() {
   const router = useRouter()
   const initialChild = sp?.get("child") || ""
 
-  const availableChildren = useMemo(() => MOCK_ORPHAN_CHILDREN.filter((c) => c.status !== "fully_sponsored"), [])
-  const [childId, setChildId] = useState<string>(initialChild || availableChildren[0]?.id || "")
+  // Children list with mock first-paint fallback.
+  const [allChildren, setAllChildren] = useState<OrphanChild[]>(MOCK_ORPHAN_CHILDREN)
+  useEffect(() => {
+    let cancelled = false
+    getOrphanChildren().then((rows) => {
+      if (cancelled) return
+      if (rows.length > 0) setAllChildren(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const availableChildren = useMemo(
+    () => allChildren.filter((c) => c.status !== "fully_sponsored"),
+    [allChildren],
+  )
+  const [childId, setChildId] = useState<string>(initialChild)
+  // Seed selection once children load.
+  useEffect(() => {
+    if (!childId && availableChildren.length > 0) {
+      setChildId(initialChild || availableChildren[0].id)
+    }
+  }, [availableChildren, childId, initialChild])
   const [type, setType] = useState<SponsorshipType>("monthly")
   const [planId, setPlanId] = useState<string>("advanced")
   const [customAmount, setCustomAmount] = useState("")
@@ -33,7 +56,7 @@ function SponsorContent() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  const child = MOCK_ORPHAN_CHILDREN.find((c) => c.id === childId)
+  const child = allChildren.find((c) => c.id === childId)
   const plan = SPONSORSHIP_PLANS.find((p) => p.id === planId)
   const monthlyAmount = customAmount ? Number(customAmount) : (plan?.monthly || 100_000)
   const totalAmount = type === "onetime" ? monthlyAmount : monthlyAmount * (type === "annual" ? 12 : duration)
@@ -44,13 +67,14 @@ function SponsorContent() {
     setShowConfirm(true)
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    if (submitting) return
     setSubmitting(true)
-    const result = sponsorChild("me", {
+    const result = await createSponsorship({
       child_id: childId,
       type,
       amount: monthlyAmount,
-      duration_months: duration,
+      duration_months: type === "annual" ? 12 : duration,
       is_anonymous: isAnonymous,
       receive_reports: receiveReports,
     })
@@ -59,6 +83,14 @@ function SponsorContent() {
       showSuccess(`✅ بدأت كفالة ${child?.first_name} — شكراً لكرمك!`)
       setShowConfirm(false)
       router.push("/orphans/my-sponsorships")
+    } else {
+      if (result.reason === "missing_table") {
+        showError("الميزة غير متاحة على الخادم بعد")
+      } else if (result.reason === "unauthenticated") {
+        showError("سجّل دخول للمتابعة")
+      } else {
+        showError(result.error || "تعذّر تنفيذ الكفالة")
+      }
     }
   }
 

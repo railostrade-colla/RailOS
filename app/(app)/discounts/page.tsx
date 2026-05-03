@@ -1,18 +1,24 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Search, Gift, Ticket, Sparkles } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, StatCard, Badge, EmptyState } from "@/components/ui"
 import {
-  getActiveDiscounts,
+  getActiveDiscounts as getActiveDiscountsMock,
+  getDiscountsStats as getDiscountsStatsMock,
   CATEGORY_LABELS,
   LEVEL_LABELS,
-  getDiscountsStats,
   type DiscountCategory,
+  type Discount,
 } from "@/lib/mock-data/discounts"
+import {
+  getActiveDiscounts,
+  getDiscountsStats,
+  type DiscountsStats,
+} from "@/lib/data/discounts-real"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -21,15 +27,31 @@ type SortKey = "newest" | "most_used" | "highest_value"
 
 export default function DiscountsPage() {
   const router = useRouter()
-  const stats = getDiscountsStats()
+  const [stats, setStats] = useState<DiscountsStats>(() => {
+    const m = getDiscountsStatsMock()
+    return { total_brands: m.total_brands, active_discounts: m.active_discounts }
+  })
+  const [allDiscounts, setAllDiscounts] = useState<Discount[]>(getActiveDiscountsMock())
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([getActiveDiscounts(), getDiscountsStats()]).then(([rows, s]) => {
+      if (cancelled) return
+      if (rows.length > 0) setAllDiscounts(rows)
+      if (s.total_brands > 0) setStats(s)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState<DiscountCategory | "all">("all")
   const [minDiscount, setMinDiscount] = useState<number>(0)
   const [sort, setSort] = useState<SortKey>("highest_value")
 
   const discounts = useMemo(() => {
-    const active = getActiveDiscounts()
-    let filtered = active.filter((d) => {
+    let filtered = allDiscounts.filter((d) => {
       if (category !== "all" && d.category !== category) return false
       if (d.discount_percent < minDiscount) return false
       if (search && !d.brand_name.includes(search) && !d.description.includes(search)) return false
@@ -39,7 +61,7 @@ export default function DiscountsPage() {
     if (sort === "most_used")     filtered = [...filtered].sort((a, b) => b.used_count - a.used_count)
     if (sort === "highest_value") filtered = [...filtered].sort((a, b) => b.discount_percent - a.discount_percent)
     return filtered
-  }, [search, category, minDiscount, sort])
+  }, [allDiscounts, search, category, minDiscount, sort])
 
   return (
     <AppLayout>

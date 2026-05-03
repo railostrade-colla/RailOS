@@ -1,33 +1,67 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, ChevronLeft, FileText } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Tabs, Badge, EmptyState, Modal } from "@/components/ui"
 import {
+  getMySponsorships as getMySponsorshipsMock,
+  getMyReports as getMyReportsMock,
+  SPONSORSHIP_TYPE_LABELS,
+  type Sponsorship,
+  type OrphanReport,
+} from "@/lib/mock-data/orphans"
+import {
   getMySponsorships,
   getMyReports,
-  SPONSORSHIP_TYPE_LABELS,
-} from "@/lib/mock-data/orphans"
-import { showSuccess } from "@/lib/utils/toast"
+  cancelSponsorship,
+} from "@/lib/data/orphans"
+import { showSuccess, showError } from "@/lib/utils/toast"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 export default function MySponsorshipsPage() {
   const router = useRouter()
   const [tab, setTab] = useState<"active" | "ended">("active")
-  const sponsorships = getMySponsorships("abc123def456")
-  const reports = getMyReports("abc123def456")
+  // Mock first-paint, real on mount.
+  const [sponsorships, setSponsorships] = useState<Sponsorship[]>(
+    getMySponsorshipsMock("abc123def456"),
+  )
+  const [reports, setReports] = useState<OrphanReport[]>(
+    getMyReportsMock("abc123def456"),
+  )
   const [showStopId, setShowStopId] = useState<string | null>(null)
+
+  const refresh = async () => {
+    const [s, r] = await Promise.all([getMySponsorships(), getMyReports()])
+    if (s.length > 0) setSponsorships(s)
+    if (r.length > 0) setReports(r)
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    refresh().catch(() => {
+      if (cancelled) return
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const filtered = sponsorships.filter((s) => s.status === tab)
 
-  const handleStop = () => {
+  const handleStop = async () => {
     if (!showStopId) return
-    showSuccess("✅ تم إيقاف الكفالة. شكراً لمساهمتك")
-    setShowStopId(null)
+    const result = await cancelSponsorship(showStopId)
+    if (result.success) {
+      showSuccess("✅ تم إيقاف الكفالة. شكراً لمساهمتك")
+      setShowStopId(null)
+      await refresh()
+    } else {
+      showError(result.error || "تعذّر إيقاف الكفالة")
+    }
   }
 
   return (

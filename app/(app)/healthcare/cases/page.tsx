@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Search, Heart } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -11,7 +11,9 @@ import {
   CASE_STATUS_LABELS,
   DISEASE_LABELS,
   type CaseStatus,
+  type HealthcareCase,
 } from "@/lib/mock-data/healthcare"
+import { getHealthcareCases } from "@/lib/data/healthcare"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
@@ -19,9 +21,21 @@ export default function HealthcareCasesPage() {
   const router = useRouter()
   const [tab, setTab] = useState<CaseStatus>("urgent")
   const [search, setSearch] = useState("")
+  const [allCases, setAllCases] = useState<HealthcareCase[]>(MOCK_HEALTHCARE_CASES)
+
+  useEffect(() => {
+    let cancelled = false
+    getHealthcareCases().then((rows) => {
+      if (cancelled) return
+      if (rows.length > 0) setAllCases(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const cases = useMemo(() => {
-    return MOCK_HEALTHCARE_CASES
+    return allCases
       .filter((c) => c.status === tab)
       .filter((c) =>
         !search ||
@@ -29,12 +43,12 @@ export default function HealthcareCasesPage() {
         c.diagnosis.includes(search) ||
         c.city.includes(search)
       )
-  }, [tab, search])
+  }, [allCases, tab, search])
 
   const counts = {
-    urgent:    MOCK_HEALTHCARE_CASES.filter((c) => c.status === "urgent").length,
-    active:    MOCK_HEALTHCARE_CASES.filter((c) => c.status === "active").length,
-    completed: MOCK_HEALTHCARE_CASES.filter((c) => c.status === "completed").length,
+    urgent:    allCases.filter((c) => c.status === "urgent").length,
+    active:    allCases.filter((c) => c.status === "active").length,
+    completed: allCases.filter((c) => c.status === "completed").length,
   }
 
   return (

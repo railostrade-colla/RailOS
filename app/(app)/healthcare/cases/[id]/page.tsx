@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Heart, Hospital, Stethoscope, Users, X } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -12,8 +12,14 @@ import {
   getCaseDonors,
   CASE_STATUS_LABELS,
   DISEASE_LABELS,
-  makeDonation,
+  type HealthcareCase,
+  type HealthcareDonation,
 } from "@/lib/mock-data/healthcare"
+import {
+  getHealthcareCaseById,
+  getDonationsForCase,
+  donateHealthcare,
+} from "@/lib/data/healthcare"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -23,12 +29,36 @@ const QUICK_AMOUNTS = [5_000, 10_000, 25_000, 50_000, 100_000]
 export default function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const c = getCaseById(id)
+  // Mock first-paint fallback, real DB on mount.
+  const [c, setC] = useState<HealthcareCase | null>(getCaseById(id) ?? null)
+  const [donors, setDonors] = useState<HealthcareDonation[]>(
+    c ? getCaseDonors(c.id) : [],
+  )
   const [showDonate, setShowDonate] = useState(false)
   const [amount, setAmount] = useState<number>(25_000)
   const [customAmount, setCustomAmount] = useState("")
   const [isAnonymous, setIsAnonymous] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+
+  const refreshCase = async () => {
+    const [fresh, d] = await Promise.all([
+      getHealthcareCaseById(id),
+      getDonationsForCase(id),
+    ])
+    if (fresh) setC(fresh)
+    if (d.length > 0) setDonors(d)
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    refreshCase().catch(() => {
+      if (cancelled) return
+    })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
 
   if (!c) {
     return (
@@ -47,21 +77,28 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
   const pct = Math.round((c.amount_collected / c.total_required) * 100)
   const remaining = Math.max(0, c.total_required - c.amount_collected)
   const disease = DISEASE_LABELS[c.disease_type]
-  const donors = getCaseDonors(c.id)
 
-  const handleDonate = () => {
+  const handleDonate = async () => {
     const final = customAmount ? Number(customAmount) : amount
     if (!final || final < 1000) {
       showError("الحدّ الأدنى للتبرّع 1,000 د.ع")
       return
     }
     setSubmitting(true)
-    const result = makeDonation("me", { case_id: c.id, amount: final, is_anonymous: isAnonymous, is_recurring: false })
+    const result = await donateHealthcare({
+      case_id: c.id,
+      amount: final,
+      is_anonymous: isAnonymous,
+      is_recurring: false,
+    })
     setSubmitting(false)
     if (result.success) {
       showSuccess(`✅ تم تبرّعك بـ ${fmtNum(final)} د.ع — شكراً لك!`)
       setShowDonate(false)
       setCustomAmount("")
+      await refreshCase()
+    } else {
+      showError(result.error || "تعذّر إتمام التبرّع")
     }
   }
 

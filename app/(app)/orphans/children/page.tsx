@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Search, BookOpen } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -11,7 +11,9 @@ import {
   CHILD_STATUS_LABELS,
   EDUCATION_LABELS,
   type ChildSponsorshipStatus,
+  type OrphanChild,
 } from "@/lib/mock-data/orphans"
+import { getOrphanChildren } from "@/lib/data/orphans"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -23,17 +25,30 @@ export default function ChildrenPage() {
   const [tab, setTab] = useState<FilterTab>("needs_sponsor")
   const [search, setSearch] = useState("")
 
+  // Real children list with mock first-paint fallback.
+  const [allChildren, setAllChildren] = useState<OrphanChild[]>(MOCK_ORPHAN_CHILDREN)
+  useEffect(() => {
+    let cancelled = false
+    getOrphanChildren().then((rows) => {
+      if (cancelled) return
+      if (rows.length > 0) setAllChildren(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const children = useMemo(() => {
-    return MOCK_ORPHAN_CHILDREN
+    return allChildren
       .filter((c) => tab === "all" || c.status === tab)
       .filter((c) => !search || c.first_name.includes(search) || c.city.includes(search))
-  }, [tab, search])
+  }, [allChildren, tab, search])
 
   const counts = {
-    all:              MOCK_ORPHAN_CHILDREN.length,
-    needs_sponsor:    MOCK_ORPHAN_CHILDREN.filter((c) => c.status === "needs_sponsor").length,
-    partial:          MOCK_ORPHAN_CHILDREN.filter((c) => c.status === "partial").length,
-    fully_sponsored:  MOCK_ORPHAN_CHILDREN.filter((c) => c.status === "fully_sponsored").length,
+    all:              allChildren.length,
+    needs_sponsor:    allChildren.filter((c) => c.status === "needs_sponsor").length,
+    partial:          allChildren.filter((c) => c.status === "partial").length,
+    fully_sponsored:  allChildren.filter((c) => c.status === "fully_sponsored").length,
   }
 
   return (

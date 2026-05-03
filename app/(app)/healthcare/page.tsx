@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { HeartPulse, FileText, Shield, Heart, ChevronLeft, BookOpen } from "lucide-react"
@@ -7,13 +8,20 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, StatCard, SectionHeader, Badge } from "@/components/ui"
 import {
-  getHealthcareStats,
+  getHealthcareStats as getHealthcareStatsMock,
   getUrgentCases,
   MOCK_SUCCESS_STORIES,
   MOCK_AWARENESS_ARTICLES,
+  MOCK_HEALTHCARE_CASES,
   CASE_STATUS_LABELS,
   DISEASE_LABELS,
+  type HealthcareCase,
 } from "@/lib/mock-data/healthcare"
+import {
+  getHealthcareCases,
+  getHealthcareStats,
+  type HealthcareStats,
+} from "@/lib/data/healthcare"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -27,8 +35,37 @@ const QUICK_LINKS = [
 
 export default function HealthcarePage() {
   const router = useRouter()
-  const stats = getHealthcareStats()
-  const urgent = getUrgentCases(5)
+  // The page reads the mock's stats shape (total_donated, cases_completed,
+  // insurance_subscribers, donors_count). Mock first-paint, then we
+  // override only the fields the DB exposes.
+  const [stats, setStats] = useState(() => getHealthcareStatsMock())
+  const [urgent, setUrgent] = useState<HealthcareCase[]>(getUrgentCases(5))
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([getHealthcareStats(), getHealthcareCases()]).then(
+      ([dbStats, cases]) => {
+        if (cancelled) return
+        if (dbStats.total_cases > 0) {
+          setStats((prev) => ({
+            ...prev,
+            total_donated: dbStats.total_collected,
+            cases_completed: dbStats.completed_cases,
+            cases_active: dbStats.active_cases,
+            donors_count: dbStats.total_donors,
+            // insurance_subscribers comes from mock — separate count(*)
+            // query is out of scope for Phase 6.1.
+          }))
+        }
+        if (cases.length > 0) {
+          setUrgent(cases.filter((c) => c.status === "urgent").slice(0, 5))
+        }
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <AppLayout>

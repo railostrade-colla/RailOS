@@ -1,17 +1,21 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Shield, Check, X } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, Modal, Badge } from "@/components/ui"
 import {
   MOCK_INSURANCE_PLANS,
+  getMyInsurance as getMyInsuranceMock,
+  type InsurancePlan,
+  type InsuranceSubscription,
+} from "@/lib/mock-data/healthcare"
+import {
   getMyInsurance,
   subscribeInsurance,
-  type InsurancePlan,
-} from "@/lib/mock-data/healthcare"
-import { showSuccess } from "@/lib/utils/toast"
+} from "@/lib/data/healthcare"
+import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -39,19 +43,45 @@ function fmtAnnualLimit(n: number): string {
 }
 
 export default function InsurancePage() {
-  const myInsurance = getMyInsurance()
+  // Mock first-paint, real DB on mount.
+  const [myInsurance, setMyInsurance] = useState<InsuranceSubscription | null>(
+    getMyInsuranceMock() ?? null,
+  )
   const [selectedPlan, setSelectedPlan] = useState<InsurancePlan | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  const handleSubscribe = () => {
-    if (!selectedPlan) return
+  const refresh = async () => {
+    const ins = await getMyInsurance()
+    setMyInsurance(ins)
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    refresh().catch(() => {
+      if (cancelled) return
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleSubscribe = async () => {
+    if (!selectedPlan || submitting) return
+    const plan = MOCK_INSURANCE_PLANS.find((p) => p.plan === selectedPlan)
+    if (!plan) return
     setSubmitting(true)
-    const result = subscribeInsurance("me", selectedPlan)
+    const result = await subscribeInsurance({
+      plan: selectedPlan,
+      monthly_fee: plan.monthly_fee,
+      annual_limit: plan.annual_limit,
+    })
     setSubmitting(false)
     if (result.success) {
-      const plan = MOCK_INSURANCE_PLANS.find((p) => p.plan === selectedPlan)
-      showSuccess(`✅ تم اشتراكك في خطّة "${plan?.name}" — سيُخصم ${fmtNum(plan?.monthly_fee || 0)} د.ع شهرياً`)
+      showSuccess(`✅ تم اشتراكك في خطّة "${plan.name}" — سيُخصم ${fmtNum(plan.monthly_fee)} د.ع شهرياً`)
       setSelectedPlan(null)
+      await refresh()
+    } else {
+      showError(result.error || "تعذّر الاشتراك")
     }
   }
 

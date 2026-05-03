@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
 import { Plus, Hospital } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -9,13 +10,28 @@ import {
   getMyApplications,
   APP_STATUS_LABELS,
   DISEASE_LABELS,
+  type HealthcareApplication,
 } from "@/lib/mock-data/healthcare"
+import { getMyHealthcareApplications } from "@/lib/data/healthcare"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 export default function MyApplicationsPage() {
   const router = useRouter()
-  const apps = getMyApplications("abc123def456")
+  const [apps, setApps] = useState<HealthcareApplication[]>(
+    getMyApplications("abc123def456"),
+  )
+  useEffect(() => {
+    let cancelled = false
+    getMyHealthcareApplications().then((rows) => {
+      if (cancelled) return
+      // Show real list — even if empty (means user truly has no apps).
+      setApps(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <AppLayout>
