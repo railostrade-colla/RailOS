@@ -14,6 +14,10 @@ import {
   getProjectWalletsStats,
   type ProjectWallet,
 } from "@/lib/mock-data/projectWallets"
+import {
+  adminFreezeProjectWallet,
+  adminUnfreezeProjectWallet,
+} from "@/lib/data/admin-utilities"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -35,17 +39,39 @@ export function ProjectWalletsPanel() {
     .filter((w) => filter === "all" || w.status === filter)
     .filter((w) => !search || w.project_name.includes(search))
 
-  const handleAction = () => {
+  const handleAction = async () => {
     if (!selected || !action) return
     if (action === "freeze" && !reason.trim()) return showError("سبب التجميد مطلوب")
     if (action === "transfer") {
       const amt = Number(transferAmount)
       if (!amt || amt < 1000) return showError("المبلغ غير صحيح (الحدّ الأدنى 1000)")
       if (amt > selected.balance) return showError("المبلغ أكبر من الرصيد المتاح")
-      showSuccess(`✅ تم تحويل ${fmtNum(amt)} د.ع من محفظة ${selected.project_name}`)
+      // NOTE: actual cash transfer requires a separate flow + RPC.
+      // For now keep optimistic toast — the freeze/unfreeze paths
+      // below are real DB operations.
+      showSuccess(`✅ تم تسجيل تحويل ${fmtNum(amt)} د.ع من محفظة ${selected.project_name}`)
     }
-    if (action === "freeze") showSuccess(`❄️ تم تجميد محفظة ${selected.project_name}`)
-    if (action === "unfreeze") showSuccess(`✅ تم فكّ تجميد محفظة ${selected.project_name}`)
+    if (action === "freeze") {
+      const result = await adminFreezeProjectWallet(selected.id)
+      if (!result.success) {
+        const map: Record<string, string> = {
+          not_admin: "صلاحياتك لا تسمح",
+          not_found: "المحفظة غير موجودة",
+          missing_table: "الجداول غير منشورة بعد",
+        }
+        showError(map[result.reason ?? ""] ?? "فشل التجميد")
+        return
+      }
+      showSuccess(`❄️ تم تجميد محفظة ${selected.project_name} (${fmtNum(result.frozen ?? 0)} حصة)`)
+    }
+    if (action === "unfreeze") {
+      const result = await adminUnfreezeProjectWallet(selected.id)
+      if (!result.success) {
+        showError("فشل فكّ التجميد")
+        return
+      }
+      showSuccess(`✅ تم فكّ تجميد محفظة ${selected.project_name} (${fmtNum(result.unfrozen ?? 0)} حصة)`)
+    }
     setAction(null)
     setSelected(null)
     setReason("")

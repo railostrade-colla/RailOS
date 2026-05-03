@@ -37,6 +37,7 @@ export const ROUTE_CONFIG = {
     "/contracts",
     "/invoices",
     "/discounts",
+    "/gifts",
     "/council",
     "/healthcare",
     "/orphans",

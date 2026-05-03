@@ -32,6 +32,8 @@ import {
 } from "@/lib/data/contracts"
 import { AccountSwitcher } from "@/components/wallet/AccountSwitcher"
 import { useActiveAccount } from "@/contexts/ActiveAccountContext"
+import { ShareTransferModal } from "@/components/portfolio/ShareTransferModal"
+import { ArrowRightLeft } from "lucide-react"
 
 // TODO Phase 4.X — derive from this month's deals.total_amount sum.
 const CURRENT_USER_USED_THIS_MONTH = 0
@@ -112,6 +114,14 @@ function PortfolioContent() {
   const { active } = useActiveAccount()
   const [contractHoldings, setContractHoldings] = useState<ContractHoldingRow[]>([])
   const [contractTxns, setContractTxns] = useState<ContractTransactionRow[]>([])
+
+  // Phase 10 — share-transfer modal state
+  const [transferTarget, setTransferTarget] = useState<{
+    project_id: string
+    project_name: string
+    available_shares: number
+    price_per_share: number
+  } | null>(null)
 
   // Re-fetch contract-specific data whenever the active account flips.
   useEffect(() => {
@@ -468,40 +478,62 @@ function PortfolioContent() {
                   const change = (pct * 0.12).toFixed(1)
                   const up = parseFloat(change) >= 0
                   return (
-                    <button
+                    <div
                       key={h.id}
-                      onClick={() => router.push(`/project/${h.project_id}`)}
-                      className="w-full bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 hover:bg-white/[0.07] transition-colors text-right"
+                      className="relative bg-white/[0.05] border border-white/[0.08] rounded-2xl hover:bg-white/[0.07] transition-colors"
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-10 h-10 rounded-xl bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-lg">
-                            {sectorIcon(h.project?.sector || "")}
+                      <button
+                        onClick={() => router.push(`/project/${h.project_id}`)}
+                        className="w-full p-4 text-right"
+                      >
+                        <div className="flex items-center justify-between mb-3 pe-9">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-10 h-10 rounded-xl bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-lg">
+                              {sectorIcon(h.project?.sector || "")}
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold text-white">{h.project?.name}</div>
+                              <div className="text-[10px] text-neutral-500 mt-0.5">
+                                {h.shares_owned} حصة • {fmtIQD(h.project?.share_price || 0)} IQD
+                              </div>
+                            </div>
                           </div>
-                          <div>
-                            <div className="text-sm font-bold text-white">{h.project?.name}</div>
-                            <div className="text-[10px] text-neutral-500 mt-0.5">
-                              {h.shares_owned} حصة • {fmtIQD(h.project?.share_price || 0)} IQD
+                          <div className="text-left">
+                            <div className="text-sm font-bold text-white font-mono">{fmtIQD(value)}</div>
+                            <div className={cn("text-[11px] font-bold mt-0.5", up ? "text-green-400" : "text-red-400")}>
+                              {up ? "↑" : "↓"} {change}%
                             </div>
                           </div>
                         </div>
-                        <div className="text-left">
-                          <div className="text-sm font-bold text-white font-mono">{fmtIQD(value)}</div>
-                          <div className={cn("text-[11px] font-bold mt-0.5", up ? "text-green-400" : "text-red-400")}>
-                            {up ? "↑" : "↓"} {change}%
-                          </div>
+                        <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                          <div className="h-full bg-white/60 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
                         </div>
-                      </div>
-                      <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
-                        <div className="h-full bg-white/60 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
-                      </div>
-                      <div className="flex justify-between mt-1.5">
-                        <span className="text-[10px] text-neutral-500">مُموَّل {pct}%</span>
-                        <span className={cn("text-[10px]", up ? "text-green-400" : "text-red-400")}>
-                          {up ? "+" : ""}{fmtIQD((value * parseFloat(change)) / 100)} IQD
-                        </span>
-                      </div>
-                    </button>
+                        <div className="flex justify-between mt-1.5">
+                          <span className="text-[10px] text-neutral-500">مُموَّل {pct}%</span>
+                          <span className={cn("text-[10px]", up ? "text-green-400" : "text-red-400")}>
+                            {up ? "+" : ""}{fmtIQD((value * parseFloat(change)) / 100)} IQD
+                          </span>
+                        </div>
+                      </button>
+                      {active.kind === "personal" && h.shares_owned > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setTransferTarget({
+                              project_id: h.project_id,
+                              project_name: h.project?.name ?? "—",
+                              available_shares: h.shares_owned,
+                              price_per_share: h.project?.share_price || 0,
+                            })
+                          }}
+                          className="absolute top-3 left-3 w-8 h-8 rounded-lg bg-purple-500/[0.12] border border-purple-500/[0.3] hover:bg-purple-500/[0.2] flex items-center justify-center transition-colors"
+                          title="نقل حصص"
+                          aria-label="نقل حصص"
+                        >
+                          <ArrowRightLeft className="w-3.5 h-3.5 text-purple-300" strokeWidth={2.5} />
+                        </button>
+                      )}
+                    </div>
                   )
                 })}
               </div>
@@ -746,6 +778,22 @@ function PortfolioContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Phase 10 — share transfer modal */}
+      {transferTarget && (
+        <ShareTransferModal
+          open={true}
+          onClose={() => setTransferTarget(null)}
+          onSuccess={() => {
+            setTransferTarget(null)
+            void refresh()
+          }}
+          projectId={transferTarget.project_id}
+          projectName={transferTarget.project_name}
+          availableShares={transferTarget.available_shares}
+          pricePerShare={transferTarget.price_per_share}
+        />
       )}
     </AppLayout>
   )

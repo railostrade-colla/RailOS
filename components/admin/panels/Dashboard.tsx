@@ -1,15 +1,43 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { KPI, Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader } from "@/components/admin/ui"
 import { mockAdminStats, mockPendingTrades, mockKYCPending } from "@/lib/admin/mock-data"
+import { getDashboardStats, type DashboardStats } from "@/lib/data/admin-utilities"
 import { showSuccess } from "@/lib/utils/toast"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 export function DashboardPanel() {
   const router = useRouter()
-  const stats = mockAdminStats
+
+  // Phase 10 — pull real KPIs on mount, fall back to mock fields for
+  // dimensions the RPC doesn't yet cover (market health, etc.).
+  const [liveStats, setLiveStats] = useState<DashboardStats | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    getDashboardStats().then((s) => {
+      if (!cancelled && s) setLiveStats(s)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  const stats = liveStats
+    ? {
+        ...mockAdminStats,
+        totalTrades: liveStats.total_deals,
+        pendingTrades: liveStats.pending_deals,
+        activeProjects: liveStats.active_projects,
+        activeContracts: liveStats.active_contracts,
+        openAuctions: liveStats.active_auctions,
+        openDisputes: liveStats.open_disputes,
+        pendingKYC: liveStats.pending_kyc,
+        pendingFeeRequests: liveStats.pending_fee_requests,
+        totalUsers: liveStats.users,
+      }
+    : mockAdminStats
 
   const healthColor =
     stats.marketHealth >= 75 ? "#4ADE80" :
