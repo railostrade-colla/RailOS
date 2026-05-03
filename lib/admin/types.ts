@@ -48,6 +48,8 @@ export type AdminTab =
   | "requests_hub"
   // Phase 9.5 — share modification with two-factor authorization
   | "share_modification"
+  // Phase 9.6 — user gifts (admin grants, user redeems)
+  | "gifts_admin"
 
 export interface AdminNavItem {
   key: AdminTab
@@ -71,6 +73,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { key: "payment_proofs",      label: "إثباتات الدفع",     icon: "🧾", section: "العمليات" },
   { key: "contracts_admin",     label: "العقود",            icon: "🤝", section: "العمليات" },
   { key: "share_modification",  label: "تعديل الحصص",      icon: "🔐", section: "العمليات" },
+  { key: "gifts_admin",         label: "الهدايا",           icon: "🎁", section: "العمليات" },
 
   { key: "projects",     label: "المشاريع",       icon: "▣",  section: "المشاريع" },
 

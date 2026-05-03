@@ -52,6 +52,8 @@ import { InvoicesAdminPanel } from "@/components/admin/panels/InvoicesAdminPanel
 import { AdminRequestsHubPanel } from "@/components/admin/panels/AdminRequestsHubPanel"
 // Phase 9.5 — share modification with two-factor authorization
 import { ShareModificationPanel } from "@/components/admin/panels/ShareModificationPanel"
+// Phase 9.6 — user gifts
+import { GiftsAdminPanel } from "@/components/admin/panels/GiftsAdminPanel"
 
 export default function AdminPage() {
   const searchParams = useSearchParams()
@@ -108,6 +110,8 @@ export default function AdminPage() {
     requests_hub: <AdminRequestsHubPanel />,
     // Phase 9.5 — share modification (two-factor)
     share_modification: <ShareModificationPanel />,
+    // Phase 9.6 — user gifts
+    gifts_admin: <GiftsAdminPanel />,
   }
 
   if (panels[tab]) return <>{panels[tab]}</>

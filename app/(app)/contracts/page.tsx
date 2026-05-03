@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { mockContracts, type ContractStatus } from "@/lib/mock-data"
 import type { ContractListItem } from "@/lib/mock-data/types"
 import { getMyContracts } from "@/lib/data/contracts"
+import { hasUnusedGift } from "@/lib/data/gifts"
 import { cn } from "@/lib/utils/cn"
 
 type Tab = "active" | "ended"
@@ -27,6 +28,8 @@ export default function ContractsPage() {
   const [tab, setTab] = useState<Tab>("active")
   // Mock first-paint, real DB on mount.
   const [contracts, setContracts] = useState<ContractListItem[]>(mockContracts)
+  // Phase 9.6 — gift availability for the "create" CTA badge.
+  const [hasGift, setHasGift] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -34,6 +37,9 @@ export default function ContractsPage() {
       if (cancelled) return
       // Show real list always — empty means user has no contracts.
       setContracts(rows)
+    })
+    hasUnusedGift("free_contract").then((has) => {
+      if (!cancelled) setHasGift(has)
     })
     return () => {
       cancelled = true
@@ -55,10 +61,15 @@ export default function ContractsPage() {
             rightAction={
               <button
                 onClick={() => router.push("/contracts/create")}
-                className="bg-neutral-100 text-black px-3.5 py-2 rounded-lg text-xs font-bold hover:bg-neutral-200 flex items-center gap-1.5 transition-colors"
+                className={cn(
+                  "px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors relative",
+                  hasGift
+                    ? "bg-purple-500/[0.15] border border-purple-500/[0.3] text-purple-300 hover:bg-purple-500/[0.2]"
+                    : "bg-neutral-100 text-black hover:bg-neutral-200",
+                )}
               >
-                <Plus className="w-3.5 h-3.5" />
-                إنشاء عقد
+                {hasGift ? <span>🎁</span> : <Plus className="w-3.5 h-3.5" />}
+                {hasGift ? "إنشاء عقد (مجاناً)" : "إنشاء عقد"}
               </button>
             }
           />

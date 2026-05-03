@@ -18,6 +18,8 @@ import {
   FEE_BALANCE_CONTRACTS as mockFeeBalance,
 } from "@/lib/mock-data"
 import { createContract as createContractDB } from "@/lib/data/contracts"
+import { hasUnusedGift, redeemFreeContractGift } from "@/lib/data/gifts"
+import { Gift } from "lucide-react"
 
 // رسوم العقد - 2% من قيمة الاستثمار
 const CONTRACT_FEE_PERCENT = 2
@@ -42,6 +44,20 @@ export default function CreateContractPage() {
   const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [showFeeBlock, setShowFeeBlock] = useState(false)
+
+  // Phase 9.6 — gift state
+  const [hasGift, setHasGift] = useState(false)
+  const [useGift, setUseGift] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    hasUnusedGift("free_contract").then((has) => {
+      if (!cancelled) setHasGift(has)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Search results
   const searchResults = searchQuery.length > 0
@@ -103,7 +119,9 @@ export default function CreateContractPage() {
     if (partners.length < 2) return showError("يجب إضافة شريك واحد على الأقل")
     if (!sharesValid) return showError("مجموع النسب يجب أن يساوي 100%")
     if (!agreed) return showError("يجب الموافقة على الشروط")
-    if (!hasEnoughFees) {
+    // Skip the fee gate when the user is redeeming a free_contract gift —
+    // the end-fee will be waived server-side when the gift is consumed.
+    if (!useGift && !hasEnoughFees) {
       setShowFeeBlock(true)
       return
     }
@@ -118,13 +136,31 @@ export default function CreateContractPage() {
         share_percent: p.share_percentage,
       })),
     })
-    setLoading(false)
 
     if (result.success) {
-      showSuccess("تم إنشاء العقد وإرسال الدعوات للشركاء! 🎉")
+      // Best-effort gift redemption — the contract is already created
+      // even if this fails (we fall back to the normal end-fee).
+      if (useGift && result.contract_id) {
+        const redeem = await redeemFreeContractGift(result.contract_id)
+        if (!redeem.success) {
+          // Soft warn but don't block — contract is created.
+          showError(
+            redeem.reason === "no_gift_available"
+              ? "لم يتم العثور على هدية صالحة — العقد أُنشئ بدون استخدام الهدية"
+              : "تعذّر استخدام الهدية — العقد أُنشئ كالمعتاد",
+          )
+        } else {
+          showSuccess("🎁 تم إنشاء العقد مجاناً باستخدام هديتك!")
+        }
+      }
+      setLoading(false)
+      if (!useGift) {
+        showSuccess("تم إنشاء العقد وإرسال الدعوات للشركاء! 🎉")
+      }
       router.push("/contracts")
       return
     }
+    setLoading(false)
     if (result.reason === "share_percent_not_100") {
       showError(result.error || "مجموع النسب يجب أن يساوي 100%")
     } else if (result.reason === "missing_table") {
@@ -166,6 +202,39 @@ export default function CreateContractPage() {
               </span>
             </div>
           </div>
+
+          {/* Phase 9.6 — Free contract gift banner */}
+          {hasGift && (
+            <div className="bg-gradient-to-l from-purple-500/[0.12] to-pink-500/[0.08] border border-purple-500/30 rounded-2xl p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/[0.2] border border-purple-500/[0.3] flex items-center justify-center flex-shrink-0">
+                  <Gift className="w-5 h-5 text-purple-300" strokeWidth={2} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-white mb-0.5">
+                    🎁 لديك هدية متاحة
+                  </div>
+                  <div className="text-[11px] text-neutral-300 leading-relaxed mb-3">
+                    استخدم هديتك لإنشاء عقد جماعي مجاني — يتجاوز رسوم الإنهاء (10%).
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useGift}
+                      onChange={(e) => setUseGift(e.target.checked)}
+                      className="w-4 h-4 rounded bg-white/[0.05] border border-purple-400/[0.3]"
+                    />
+                    <span className={cn(
+                      "text-xs font-bold",
+                      useGift ? "text-purple-300" : "text-neutral-400",
+                    )}>
+                      استخدم الهدية لهذا العقد
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* اسم العقد */}
           <div className="mb-4">
