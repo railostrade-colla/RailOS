@@ -42,6 +42,8 @@ import {
   getLatestNews as dbGetLatestNews,
   getAllProjects as dbGetAllProjects,
 } from "@/lib/data"
+import { getActiveAds, type DBAd } from "@/lib/data/ads"
+import type { Ad } from "@/lib/mock-data/types"
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/data/profile"
 import { getPortfolioData, type PortfolioSummary as DBPortfolioSummary } from "@/lib/data/portfolio"
 import { LEVEL_LABELS, LEVEL_ICONS } from "@/lib/utils/contractLimits"
@@ -60,6 +62,21 @@ function getGreeting(): string {
   const h = new Date().getHours()
   if (h >= 5 && h < 12) return "صباح الخير"
   return "مساء الخير"
+}
+
+/** Map a DB ad row → the slider's legacy Ad shape (Phase N). */
+function dbAdToMockShape(row: DBAd): Ad {
+  const isExternal = /^https?:\/\//i.test(row.link_url ?? "")
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description ?? "",
+    icon: "📢",
+    action_label: "اعرف أكثر",
+    link_type: isExternal ? "external" : "internal",
+    link_url: row.link_url ?? "/",
+    type: row.image_url ? "image" : "text",
+  }
 }
 
 const sectorIcon = (s: string) => {
@@ -200,6 +217,8 @@ export default function DashboardPage() {
   const [userProfile, setUserProfile] = useState<CurrentUserProfile | null>(null)
   const [dbPortfolio, setDbPortfolio] = useState<DBPortfolioSummary | null>(null)
   const [dbProjects, setDbProjects] = useState<Project[]>([])
+  // Phase N — real ads from the `ads` table (mock fallback when empty).
+  const [dbAds, setDbAds] = useState<Ad[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -210,8 +229,9 @@ export default function DashboardPage() {
       getCurrentUserProfile(),
       getPortfolioData(),
       dbGetAllProjects(),
+      getActiveAds("dashboard"),
     ])
-      .then(([t, n, ns, prof, port, allProj]) => {
+      .then(([t, n, ns, prof, port, allProj, ads]) => {
         if (cancelled) return
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (t.length > 0) setTrending(t as any as ProjectCardData[])
@@ -237,6 +257,14 @@ export default function DashboardPage() {
           setSelectedProject((cur) =>
             cur && cur.id === mockProjects[0]?.id ? allProj[0] : cur,
           )
+        }
+        // Map DB ads into the legacy mock Ad shape the slider expects.
+        // The `ads` table doesn't have `icon`/`action_label`/`subtitle`
+        // columns, so we apply sensible defaults for each. `link_type`
+        // is derived from the URL (anything starting with http(s) is
+        // treated as external).
+        if (ads.length > 0) {
+          setDbAds(ads.map(dbAdToMockShape))
         }
         setLoading(false)
       })
@@ -618,7 +646,7 @@ export default function DashboardPage() {
           {/* ═════════════ § 6: Ads banner — standalone container ═════════════ */}
           <div className="bg-gradient-to-br from-purple-400/[0.06] via-blue-400/[0.04] to-transparent border border-purple-400/20 rounded-2xl p-5 mb-7 backdrop-blur">
             <AdsSlider
-              ads={mockAds}
+              ads={dbAds.length > 0 ? dbAds : mockAds}
               autoPlayInterval={5000}
               onAdClick={(ad) => {
                 if (ad.link_type === "internal" && ad.link_url) router.push(ad.link_url)
