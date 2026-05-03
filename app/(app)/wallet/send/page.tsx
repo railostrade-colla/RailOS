@@ -20,6 +20,7 @@ import {
   type WalletHolding,
   type RecipientUser,
 } from "@/lib/data/wallet"
+import { getCurrentUserProfile } from "@/lib/data/profile"
 import { cn } from "@/lib/utils/cn"
 
 // TODO Phase 4.X — these stay hardcoded until:
@@ -73,14 +74,15 @@ export default function SendSharesPage() {
       getCurrentWalletInfo(),
       getMyHoldingsForSend(),
       getCurrentFeeBalanceSimple(),
-    ]).then(([info, hold, bal]) => {
+      getCurrentUserProfile(),
+    ]).then(([info, hold, bal, profile]) => {
       if (cancelled) return
       setCurrentUserId(info?.id ?? "")
       setHoldings(hold)
       setFeeBalance(bal)
-      // Level is currently not in WalletUserInfo — keep as basic for now.
-      // (Phase 4.X: pull from profiles.level via a separate query or extend WalletUserInfo)
-      setUserLevel(safeInvestorLevel(null))
+      // Pull the user's real level from the profile so the monthly
+      // limit row shows their actual ceiling instead of always "basic".
+      setUserLevel(safeInvestorLevel(profile?.level))
       setLoading(false)
     })
     return () => {
