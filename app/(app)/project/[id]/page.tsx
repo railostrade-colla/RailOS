@@ -25,6 +25,7 @@ import {
   type Project as MockProject,
 } from "@/lib/mock-data"
 import { getProjectById } from "@/lib/data"
+import { getProjectUpdates, type ProjectUpdate } from "@/lib/data/projects"
 import { Card, SectionHeader, StatCard, Badge, SkeletonCard } from "@/components/ui"
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts"
 
@@ -107,14 +108,20 @@ export default function ProjectDetailPage() {
   const investors = 247
   const myShares = 0 // Mock - في الإنتاج: من holdings
 
+  // Real DB-backed project updates (Phase O). Fetched in parallel with
+  // the project itself so the "تحديثات" tab is ready when the user
+  // clicks it. Empty array ⇒ section renders an empty-state.
+  const [updates, setUpdates] = useState<ProjectUpdate[]>([])
+
   // Try DB first; fall back to mock projectsById on miss/error
   useEffect(() => {
     let cancelled = false
-    getProjectById(id)
-      .then((p) => {
+    Promise.all([getProjectById(id), getProjectUpdates(id, 20)])
+      .then(([p, ups]) => {
         if (cancelled) return
         if (p) setProject(p)
         else if (!project) setProject(mockProjects[id] || mockProjects["1"])
+        setUpdates(ups)
         setLoading(false)
       })
       .catch(() => {
@@ -126,7 +133,7 @@ export default function ProjectDetailPage() {
   }, [id])
 
   const [period, setPeriod] = useState<"1D" | "7D" | "30D" | "كل">("7D")
-  const [tab, setTab] = useState<"info" | "gallery" | "history">("info")
+  const [tab, setTab] = useState<"info" | "updates" | "gallery" | "history">("info")
   const [following, setFollowing] = useState(false)
   const [showBuyOptions, setShowBuyOptions] = useState(false)
   const [showCreateDeal, setShowCreateDeal] = useState(false)
@@ -347,6 +354,7 @@ export default function ProjectDetailPage() {
           <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-3">
             {([
               { key: "info", label: "المعلومات" },
+              { key: "updates", label: `التحديثات${updates.length > 0 ? ` (${updates.length})` : ""}` },
               { key: "gallery", label: "معرض الصور" },
               { key: "history", label: "السجل" },
             ] as const).map((t) => (
@@ -587,6 +595,84 @@ export default function ProjectDetailPage() {
                 </div>
               )}
             </>
+          )}
+
+          {/* Updates Tab — real project_updates rows */}
+          {tab === "updates" && (
+            <div className="space-y-3 mb-3">
+              {updates.length === 0 ? (
+                <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl text-center py-12">
+                  <div className="text-3xl mb-2 opacity-50">📰</div>
+                  <div className="text-sm font-bold text-white mb-1">لا توجد تحديثات بعد</div>
+                  <div className="text-xs text-neutral-500">
+                    ستظهر هنا عند نشر تحديثات جديدة من قِبل صاحب المشروع
+                  </div>
+                </div>
+              ) : (
+                updates.map((u) => {
+                  const date = new Date(u.created_at)
+                  const dateStr = Number.isNaN(date.getTime())
+                    ? "—"
+                    : date.toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                      })
+                  return (
+                    <div
+                      key={u.id}
+                      className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-bold text-white leading-tight">
+                            {u.title}
+                          </div>
+                          <div
+                            className="text-[10px] text-neutral-500 mt-1 font-mono"
+                            dir="ltr"
+                          >
+                            {dateStr}
+                          </div>
+                        </div>
+                        {u.progress_percentage !== null && (
+                          <div className="bg-green-400/[0.08] border border-green-400/30 rounded-lg px-2 py-1 text-[10px] font-bold text-green-400 font-mono flex-shrink-0">
+                            {u.progress_percentage}%
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs text-neutral-300 leading-relaxed whitespace-pre-wrap">
+                        {u.content}
+                      </div>
+                      {u.progress_percentage !== null && (
+                        <div className="mt-3 h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-green-400 transition-all"
+                            style={{ width: `${Math.min(100, u.progress_percentage)}%` }}
+                          />
+                        </div>
+                      )}
+                      {u.images.length > 0 && (
+                        <div className="grid grid-cols-2 gap-2 mt-3">
+                          {u.images.slice(0, 4).map((img, i) => (
+                            // Image URLs in project_updates are admin-uploaded
+                            // public Supabase Storage paths — render as plain
+                            // <img> to avoid Next/image domain config drift.
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              key={i}
+                              src={img}
+                              alt={u.title}
+                              className="aspect-[4/3] object-cover rounded-xl bg-white/[0.04] border border-white/[0.06]"
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+            </div>
           )}
 
           {/* Gallery Tab */}
