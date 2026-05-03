@@ -5,6 +5,7 @@ import { X, Zap, Check } from "lucide-react"
 import {
   subscribeToQuickSale,
   getFeeUnitsBalance,
+  getSubscriptionStatus,
   QS_SUBSCRIPTION_FEE,
 } from "@/lib/data/quick-sale"
 import { showSuccess, showError } from "@/lib/utils/toast"
@@ -21,7 +22,7 @@ const FEATURES: string[] = [
   "كميات مفتوحة أو محدّدة",
   "صفقات فورية مع مشتركين موثوقين",
   "تفاصيل كاملة عن البائع/المشتري",
-  "وصول دائم لا ينتهي",
+  "اشتراك شهري قابل للتجديد",
 ]
 
 export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps) {
@@ -29,13 +30,22 @@ export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps
   const [balance, setBalance] = useState<number>(0)
   const [loadingBalance, setLoadingBalance] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  // When the user already has an active subscription, the same modal
+  // is re-used for renewal — show how much time is being added on top.
+  const [existingDaysLeft, setExistingDaysLeft] = useState<number>(0)
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const b = await getFeeUnitsBalance()
-        if (!cancelled) setBalance(b)
+        const [b, status] = await Promise.all([
+          getFeeUnitsBalance(),
+          getSubscriptionStatus(),
+        ])
+        if (!cancelled) {
+          setBalance(b)
+          if (status.active) setExistingDaysLeft(status.days_left)
+        }
       } finally {
         if (!cancelled) setLoadingBalance(false)
       }
@@ -44,6 +54,8 @@ export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps
       cancelled = true
     }
   }, [])
+
+  const isRenewal = existingDaysLeft > 0
 
   const canAfford = balance >= QS_SUBSCRIPTION_FEE
   const shortBy = Math.max(0, QS_SUBSCRIPTION_FEE - balance)
@@ -55,7 +67,7 @@ export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps
     const result = await subscribeToQuickSale()
 
     if (result.success) {
-      showSuccess("🎉 تم الاشتراك بنجاح")
+      showSuccess(isRenewal ? "🔁 تم تجديد الاشتراك (+30 يوم)" : "🎉 تم الاشتراك بنجاح (30 يوم)")
       onSuccess()
     } else {
       showError(result.error || "فشل الاشتراك")
@@ -80,8 +92,14 @@ export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps
             <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-[#FB923C] to-[#F87171] flex items-center justify-center shadow-lg">
               <Zap size={32} className="text-white" strokeWidth={2.5} />
             </div>
-            <h2 className="text-xl font-bold text-white">اشتراك البيع السريع</h2>
-            <p className="text-sm text-neutral-400 mt-1">وصول دائم لعروض حصرية</p>
+            <h2 className="text-xl font-bold text-white">
+              {isRenewal ? "تجديد اشتراك البيع السريع" : "اشتراك البيع السريع"}
+            </h2>
+            <p className="text-sm text-neutral-400 mt-1">
+              {isRenewal
+                ? `يضيف 30 يوماً للوقت المتبقّي (${existingDaysLeft} يوم)`
+                : "اشتراك شهري — صالح لـ 30 يوم"}
+            </p>
           </div>
         </div>
 
@@ -92,9 +110,9 @@ export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps
             <div className="text-4xl font-bold font-mono text-white">
               {QS_SUBSCRIPTION_FEE.toLocaleString("en-US")}
             </div>
-            <div className="text-sm text-neutral-400 mt-1">وحدة رسوم</div>
+            <div className="text-sm text-neutral-400 mt-1">وحدة رسوم / شهر</div>
             <div className="text-xs text-[#4ADE80] mt-2 font-bold">
-              اشتراك لمرّة واحدة — وصول دائم
+              30 يوم وصول كامل — قابل للتجديد
             </div>
           </div>
 
@@ -158,11 +176,11 @@ export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps
             }`}
           >
             {submitting
-              ? "جاري الاشتراك..."
+              ? (isRenewal ? "جاري التجديد..." : "جاري الاشتراك...")
               : loadingBalance
               ? "..."
               : canAfford
-              ? "⚡ اشترك الآن"
+              ? (isRenewal ? "🔁 جدّد الآن (+30 يوم)" : "⚡ اشترك الآن (30 يوم)")
               : "الرصيد غير كافٍ"}
           </button>
 

@@ -94,13 +94,43 @@ const HOUR_MS = 60 * 60 * 1000
 
 // ─── Subscription ──────────────────────────────────────────────
 
-/** Returns the current user's active subscription, or null. */
+/** Detailed subscription status for the UI. */
+export interface SubscriptionStatus {
+  active: boolean
+  expires_at: string | null
+  days_left: number
+  /** True when 0 < days_left ≤ 7 — used to show the renewal banner. */
+  near_expiry: boolean
+  /** Raw row (or null when none). */
+  row: QuickSaleSubscription | null
+}
+
+/** Returns the current user's active subscription row, or null when
+ *  there's no row OR the row exists but has expired.
+ *
+ *  This is the legacy entry point — kept for backwards compatibility
+ *  with code that just needs a quick "is the user a subscriber" check.
+ *  New code should prefer getSubscriptionStatus() for richer info. */
 export async function checkSubscription(): Promise<QuickSaleSubscription | null> {
+  const status = await getSubscriptionStatus()
+  return status.active ? status.row : null
+}
+
+/** Pulls the row + computes days_left + active flag in one shot. */
+export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
+  const empty: SubscriptionStatus = {
+    active: false,
+    expires_at: null,
+    days_left: 0,
+    near_expiry: false,
+    row: null,
+  }
+
   const supabase = createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return null
+  if (!user) return empty
 
   const { data } = await supabase
     .from("quick_sale_subscriptions")
@@ -109,13 +139,38 @@ export async function checkSubscription(): Promise<QuickSaleSubscription | null>
     .eq("is_active", true)
     .maybeSingle()
 
-  return data as QuickSaleSubscription | null
+  const row = (data as QuickSaleSubscription | null) ?? null
+  if (!row) return empty
+
+  const expiresAt = row.expires_at
+  const expiresMs = expiresAt ? new Date(expiresAt).getTime() : 0
+  const nowMs = Date.now()
+  const active = expiresAt != null && expiresMs > nowMs
+
+  const daysLeft = active
+    ? Math.max(0, Math.ceil((expiresMs - nowMs) / DAY_MS))
+    : 0
+
+  return {
+    active,
+    expires_at: expiresAt,
+    days_left: daysLeft,
+    near_expiry: active && daysLeft > 0 && daysLeft <= 7,
+    row,
+  }
 }
 
-/** Subscribes the current user via the `subscribe_to_quick_sale` RPC. */
+/**
+ * Subscribes / renews the current user via the new monthly RPC.
+ *
+ * Renewal stacks: if the user is already active, the new 30-day window
+ * starts from the existing expiry (so they don't lose any remaining
+ * time). Otherwise it starts from NOW.
+ */
 export async function subscribeToQuickSale(): Promise<{
   success: boolean
   error?: string
+  expires_at?: string
 }> {
   const supabase = createClient()
   const {
@@ -123,19 +178,45 @@ export async function subscribeToQuickSale(): Promise<{
   } = await supabase.auth.getUser()
   if (!user) return { success: false, error: "يجب تسجيل الدخول" }
 
-  const { data, error } = await supabase.rpc("subscribe_to_quick_sale", {
-    p_user_id: user.id,
-  })
+  const { data, error } = await supabase.rpc("subscribe_to_quick_sale_monthly")
 
-  if (error) return { success: false, error: error.message }
-
-  // RPC returns a JSONB { success, error?, ... }
-  const result = (data ?? {}) as { success?: boolean; error?: string }
-  if (!result.success) {
-    return { success: false, error: result.error || "فشل الاشتراك" }
+  if (error) {
+    // If the new RPC isn't deployed yet, fall back to the legacy one
+    // so the page keeps working until the migration is applied.
+    if (
+      error.code === "42883" ||
+      /function .* does not exist/i.test(error.message ?? "")
+    ) {
+      const legacy = await supabase.rpc("subscribe_to_quick_sale", {
+        p_user_id: user.id,
+      })
+      if (legacy.error) return { success: false, error: legacy.error.message }
+      const r = (legacy.data ?? {}) as { success?: boolean; error?: string }
+      if (!r.success) return { success: false, error: r.error || "فشل الاشتراك" }
+      return { success: true }
+    }
+    return { success: false, error: error.message }
   }
-  return { success: true }
+
+  const result = (data ?? {}) as {
+    success?: boolean
+    error?: string
+    expires_at?: string
+  }
+  if (!result.success) {
+    const msg =
+      result.error === "insufficient_balance"
+        ? "الرصيد غير كافٍ"
+        : result.error === "unauthenticated"
+          ? "يجب تسجيل الدخول"
+          : result.error || "فشل الاشتراك"
+    return { success: false, error: msg }
+  }
+  return { success: true, expires_at: result.expires_at }
 }
+
+/** Convenience alias — same call, semantically clearer at the renewal site. */
+export const renewMonthlySubscription = subscribeToQuickSale
 
 /** Reads the current user's fee-units balance from profiles. */
 export async function getFeeUnitsBalance(): Promise<number> {

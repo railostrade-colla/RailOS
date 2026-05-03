@@ -1,26 +1,37 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
-import { Zap, Lock, ShoppingCart, TrendingDown, Plus } from "lucide-react"
+import { Zap, Lock, ShoppingCart, TrendingDown, Plus, Clock, RefreshCw } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import {
-  checkSubscription,
+  getSubscriptionStatus,
   getQuickSaleListings,
   QS_SUBSCRIPTION_FEE,
   type QuickSaleListing,
+  type SubscriptionStatus,
 } from "@/lib/data/quick-sale"
 import { SubscriptionModal } from "@/components/quick-sale/SubscriptionModal"
 import { CreateListingModal } from "@/components/quick-sale/CreateListingModal"
 import { QuickSaleListingCard } from "@/components/quick-sale/QuickSaleListingCard"
 
+const EMPTY_STATUS: SubscriptionStatus = {
+  active: false,
+  expires_at: null,
+  days_left: 0,
+  near_expiry: false,
+  row: null,
+}
+
 export default function QuickSalePage() {
   const [loading, setLoading] = useState(true)
-  const [isSubscribed, setIsSubscribed] = useState(false)
+  const [status, setStatus] = useState<SubscriptionStatus>(EMPTY_STATUS)
   const [showSubModal, setShowSubModal] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [listings, setListings] = useState<QuickSaleListing[]>([])
   const [activeTab, setActiveTab] = useState<"sell" | "buy">("sell")
+
+  const isSubscribed = status.active
 
   const loadListings = useCallback(async () => {
     const data = await getQuickSaleListings()
@@ -29,16 +40,11 @@ export default function QuickSalePage() {
 
   const checkAccess = useCallback(async () => {
     setLoading(true)
-    const sub = await checkSubscription()
-
-    if (!sub) {
-      setIsSubscribed(false)
-      setLoading(false)
-      return
+    const s = await getSubscriptionStatus()
+    setStatus(s)
+    if (s.active) {
+      await loadListings()
     }
-
-    setIsSubscribed(true)
-    await loadListings()
     setLoading(false)
   }, [loadListings])
 
@@ -134,11 +140,11 @@ export default function QuickSalePage() {
                 className="inline-flex items-center gap-2 px-8 py-3.5 bg-gradient-to-r from-[#FB923C] to-[#F87171] hover:opacity-90 rounded-xl font-bold text-white transition-opacity shadow-lg"
               >
                 <Lock size={16} strokeWidth={2.5} />
-                اشترك للوصول ({QS_SUBSCRIPTION_FEE.toLocaleString("en-US")} وحدة
-                رسوم)
+                اشترك الآن ({QS_SUBSCRIPTION_FEE.toLocaleString("en-US")} وحدة
+                رسوم / شهر)
               </button>
               <p className="text-[11px] text-neutral-500 mt-3">
-                اشتراك لمرّة واحدة • وصول دائم
+                اشتراك شهري — صالح لـ 30 يوم وقابل للتجديد
               </p>
             </div>
           </div>
@@ -149,8 +155,7 @@ export default function QuickSalePage() {
             onClose={() => setShowSubModal(false)}
             onSuccess={() => {
               setShowSubModal(false)
-              setIsSubscribed(true)
-              loadListings()
+              checkAccess()
             }}
           />
         )}
@@ -194,6 +199,40 @@ export default function QuickSalePage() {
               إعلان جديد
             </button>
           </div>
+
+          {/* Subscription status banner */}
+          {status.active && (
+            <div
+              className={`mb-4 p-3 rounded-xl border flex items-center justify-between gap-3 flex-wrap text-xs ${
+                status.near_expiry
+                  ? "bg-[#FBBF24]/[0.08] border-[#FBBF24]/30 text-[#FBBF24]"
+                  : "bg-[#4ADE80]/[0.06] border-[#4ADE80]/25 text-[#4ADE80]"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Clock size={14} strokeWidth={2.5} />
+                <span className="font-bold">
+                  {status.near_expiry
+                    ? `اشتراكك ينتهي خلال ${status.days_left} يوم`
+                    : `اشتراكك نشط — متبقّي ${status.days_left} يوم`}
+                </span>
+                {status.expires_at && (
+                  <span className="text-[10px] opacity-80 font-mono" dir="ltr">
+                    · ينتهي {status.expires_at.split("T")[0]}
+                  </span>
+                )}
+              </div>
+              {status.near_expiry && (
+                <button
+                  onClick={() => setShowSubModal(true)}
+                  className="bg-[#FBBF24]/20 hover:bg-[#FBBF24]/30 border border-[#FBBF24]/40 rounded-lg px-3 py-1.5 text-[11px] font-bold flex items-center gap-1.5"
+                >
+                  <RefreshCw size={11} strokeWidth={2.5} />
+                  جدّد الآن (+30 يوم)
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Tabs */}
           <div className="flex gap-2 mb-4 bg-white/[0.04] p-1 rounded-xl">
@@ -271,6 +310,17 @@ export default function QuickSalePage() {
           onSuccess={() => {
             setShowCreateModal(false)
             loadListings()
+          }}
+        />
+      )}
+
+      {/* Renewal modal (re-uses SubscriptionModal — shows "تجديد" copy) */}
+      {showSubModal && (
+        <SubscriptionModal
+          onClose={() => setShowSubModal(false)}
+          onSuccess={() => {
+            setShowSubModal(false)
+            checkAccess()
           }}
         />
       )}
