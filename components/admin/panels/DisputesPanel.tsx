@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Search, X, ZoomIn } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
@@ -11,16 +11,33 @@ import {
   DISPUTE_REASON_LABELS,
   DISPUTE_STATUS_LABELS,
   DISPUTE_PRIORITY_LABELS,
-  getDisputeStats,
   type Dispute,
   type DisputeResolution,
 } from "@/lib/mock-data/disputes"
+import {
+  getDisputesAdmin,
+  resolveDisputeBuyerFavor,
+  resolveDisputeSellerFavor,
+  resolveDisputeSplit,
+  requestDisputeEvidence,
+} from "@/lib/data/disputes-admin"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 type ActionMode = null | "buyer_favor" | "seller_favor" | "split" | "request_evidence"
+
+function computeDisputeStats(list: Dispute[]) {
+  let open = 0, inReview = 0, resolved = 0, closed = 0
+  for (const d of list) {
+    if (d.status === "open") open++
+    else if (d.status === "in_review") inReview++
+    else if (d.status === "resolved") resolved++
+    else if (d.status === "closed") closed++
+  }
+  return { total: list.length, open, in_review: inReview, resolved, closed }
+}
 
 export function DisputesPanel() {
   const [filter, setFilter] = useState<string>("open")
@@ -31,8 +48,29 @@ export function DisputesPanel() {
   const [zoomImage, setZoomImage] = useState<string | null>(null)
   const [actionMode, setActionMode] = useState<ActionMode>(null)
   const [adminNotes, setAdminNotes] = useState("")
+  const [submitting, setSubmitting] = useState(false)
 
-  const stats = getDisputeStats()
+  // Real disputes from DB; mock as first-paint fallback so the panel
+  // doesn't blank during the admin's session-bootstrap fetch.
+  const [disputes, setDisputes] = useState<Dispute[]>(MOCK_DISPUTES)
+
+  const refresh = useCallback(async () => {
+    const rows = await getDisputesAdmin(500)
+    if (rows.length > 0) setDisputes(rows)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    getDisputesAdmin(500).then((rows) => {
+      if (cancelled) return
+      if (rows.length > 0) setDisputes(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const stats = useMemo(() => computeDisputeStats(disputes), [disputes])
 
   const tabs = [
     { key: "all", label: "الكل", count: stats.total },
@@ -42,7 +80,7 @@ export function DisputesPanel() {
     { key: "closed", label: "مُغلقة", count: stats.closed },
   ]
 
-  const filtered = MOCK_DISPUTES
+  const filtered = disputes
     .filter((d) => filter === "all" || d.status === filter)
     .filter((d) => reasonFilter === "all" || d.reason === reasonFilter)
     .filter((d) => priorityFilter === "all" || d.priority === priorityFilter)
@@ -60,20 +98,47 @@ export function DisputesPanel() {
     setAdminNotes("")
   }
 
-  const handleResolve = () => {
-    if (!selected || !actionMode) return
+  const handleResolve = async () => {
+    if (!selected || !actionMode || submitting) return
     if (!adminNotes.trim()) {
       showError("ملاحظات الإدارة مطلوبة قبل أي قرار")
       return
     }
-    const labels: Record<Exclude<ActionMode, null>, string> = {
-      buyer_favor: "✅ تم تحرير الحصص للمشتري + غرامة 2% على البائع",
-      seller_favor: "✅ تم إعادة الحصص للبائع + غرامة 2% على المشتري",
-      split: "⚖️ تم تقسيم الحصص 50/50 بين الطرفين",
-      request_evidence: "📎 تم طلب أدلّة إضافية من الطرفين — تجميد 7 أيام",
+
+    setSubmitting(true)
+    try {
+      const result = await (
+        actionMode === "buyer_favor"      ? resolveDisputeBuyerFavor(selected.id, adminNotes) :
+        actionMode === "seller_favor"     ? resolveDisputeSellerFavor(selected.id, adminNotes) :
+        actionMode === "split"            ? resolveDisputeSplit(selected.id, adminNotes) :
+        requestDisputeEvidence(selected.id, adminNotes)
+      )
+
+      if (!result.success) {
+        if (result.reason === "rls") {
+          showError("لا تملك صلاحيات الحلّ")
+          return
+        }
+        if (result.reason === "missing_table") {
+          showError("الجدول غير موجود — طبّق migration النزاعات")
+          return
+        }
+        showError(result.error || "تعذّر حلّ النزاع")
+        return
+      }
+
+      const labels: Record<Exclude<ActionMode, null>, string> = {
+        buyer_favor: "✅ تم تحرير الحصص للمشتري + غرامة 2% على البائع",
+        seller_favor: "✅ تم إعادة الحصص للبائع + غرامة 2% على المشتري",
+        split: "⚖️ تم تقسيم الحصص 50/50 بين الطرفين",
+        request_evidence: "📎 تم طلب أدلّة إضافية من الطرفين — تجميد 7 أيام",
+      }
+      showSuccess(labels[actionMode])
+      await refresh()
+      closeAll()
+    } finally {
+      setSubmitting(false)
     }
-    showSuccess(labels[actionMode])
-    closeAll()
   }
 
   const resolutionLabels: Record<DisputeResolution, string> = {
@@ -368,21 +433,23 @@ export function DisputesPanel() {
             <div className="flex gap-2">
               <button
                 onClick={() => { setActionMode(null); setAdminNotes("") }}
-                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                disabled={submitting}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
               >
                 إلغاء
               </button>
               <button
                 onClick={handleResolve}
+                disabled={submitting}
                 className={cn(
-                  "flex-1 py-3 rounded-xl text-sm font-bold border",
+                  "flex-1 py-3 rounded-xl text-sm font-bold border disabled:opacity-50",
                   actionMode === "buyer_favor" && "bg-green-500/[0.15] border-green-500/[0.3] text-green-400 hover:bg-green-500/[0.2]",
                   actionMode === "seller_favor" && "bg-blue-500/[0.15] border-blue-500/[0.3] text-blue-400 hover:bg-blue-500/[0.2]",
                   actionMode === "split" && "bg-yellow-500/[0.15] border-yellow-500/[0.3] text-yellow-400 hover:bg-yellow-500/[0.2]",
                   actionMode === "request_evidence" && "bg-white/[0.08] border-white/[0.15] text-white hover:bg-white/[0.12]",
                 )}
               >
-                تأكيد القرار
+                {submitting ? "جاري التنفيذ..." : "تأكيد القرار"}
               </button>
             </div>
           </div>
