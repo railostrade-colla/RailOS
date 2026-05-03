@@ -21,6 +21,8 @@ export * from "./news"
 export * from "./ads"
 export * from "./listings"
 export * from "./deals"
+export * from "./support"
+export * from "./friendships"
 
 // Re-export shared types from mock-data so callers can use the same shapes.
 export type { Project, Company, Holding, Trade, AppNotification, Auction, Listing, Ad } from "@/lib/mock-data/types"

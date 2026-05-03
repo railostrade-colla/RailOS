@@ -17,11 +17,20 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, StatCard, Badge, Modal } from "@/components/ui"
 import {
-  getCurrentElection,
-  getCandidates,
-  checkEligibility,
+  getCurrentElection as getCurrentElectionMock,
+  getCandidates as getCandidatesMock,
+  checkEligibility as checkEligibilityMock,
   type CouncilCandidate,
+  type CouncilElection,
 } from "@/lib/mock-data"
+import {
+  getCurrentElection as dbGetCurrentElection,
+  getCandidates as dbGetCandidates,
+  checkEligibility as dbCheckEligibility,
+  hasVotedInElection,
+  castElectionVote,
+  registerAsCandidate,
+} from "@/lib/data/council"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -52,11 +61,11 @@ function useCountdown(endsAt: string) {
 
 export default function ElectionsPage() {
   const router = useRouter()
-  const election = useMemo(() => getCurrentElection(), [])
-  const initialCandidates = useMemo(() => getCandidates(), [])
-  const eligibility = useMemo(() => checkEligibility("me"), [])
 
-  const [candidates, setCandidates] = useState<CouncilCandidate[]>(initialCandidates)
+  // Mock first-paint, real DB on mount.
+  const [election, setElection] = useState<CouncilElection>(() => getCurrentElectionMock())
+  const [candidates, setCandidates] = useState<CouncilCandidate[]>(() => getCandidatesMock())
+  const [eligibility, setEligibility] = useState(() => checkEligibilityMock("me"))
   const [votedFor, setVotedFor] = useState<string | null>(null)
   const [voteTarget, setVoteTarget] = useState<CouncilCandidate | null>(null)
   const [showRegisterModal, setShowRegisterModal] = useState(false)
@@ -64,6 +73,54 @@ export default function ElectionsPage() {
   const [submitting, setSubmitting] = useState(false)
   const [sortBy, setSortBy] = useState<SortBy>("votes")
   const [sortOpen, setSortOpen] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    dbGetCurrentElection().then(async (e) => {
+      if (cancelled || !e) return
+      const mappedElection: CouncilElection = {
+        id: e.id,
+        title: e.title,
+        status: e.status,
+        registration_starts: e.registration_starts,
+        registration_ends: e.registration_ends,
+        voting_starts: e.voting_starts,
+        voting_ends: e.voting_ends,
+        seats_available: e.seats_available,
+        candidates_count: e.candidates_count,
+        votes_cast: e.votes_cast,
+        total_eligible_voters: e.total_eligible_voters,
+      }
+      setElection(mappedElection)
+
+      const [cands, voted, elig] = await Promise.all([
+        dbGetCandidates(e.id),
+        hasVotedInElection(e.id),
+        dbCheckEligibility(),
+      ])
+      if (cancelled) return
+      if (cands.length > 0) {
+        setCandidates(
+          cands.map((c): CouncilCandidate => ({
+            id: c.id,
+            user_id: c.user_id,
+            name: c.user_name,
+            avatar_initial: c.avatar_initial,
+            level: c.level === "basic" ? "advanced" : c.level,
+            trades_count: c.trades_count,
+            success_rate: c.success_rate,
+            months_on_platform: c.months_on_platform,
+            votes_received: c.votes_received,
+            campaign_statement: c.campaign_statement,
+            is_eligible: c.is_eligible,
+          })),
+        )
+      }
+      if (voted.voted && voted.candidate_id) setVotedFor(voted.candidate_id)
+      if (elig) setEligibility(elig)
+    }).catch(() => { /* keep mock */ })
+    return () => { cancelled = true }
+  }, [])
 
   const countdown = useCountdown(election.voting_ends)
   const participation = Math.round((election.votes_cast / election.total_eligible_voters) * 100)
@@ -82,7 +139,24 @@ export default function ElectionsPage() {
   const handleVote = async () => {
     if (!voteTarget) return
     setSubmitting(true)
-    await new Promise((r) => setTimeout(r, 600))
+
+    const result = await castElectionVote(election.id, voteTarget.id)
+    if (!result.success) {
+      const map: Record<string, string> = {
+        unauthenticated: "سجّل دخولك أولاً",
+        election_not_found: "الانتخابات غير موجودة",
+        voting_not_open: "التصويت مُغلق",
+        voting_expired: "انتهى وقت التصويت",
+        invalid_candidate: "المرشّح غير صحيح",
+        already_voted: "لقد صوّت سابقاً",
+        missing_table: "الجداول غير منشورة بعد",
+        rls: "صلاحياتك لا تسمح بالتصويت",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل التصويت")
+      setSubmitting(false)
+      return
+    }
+
     setCandidates((prev) =>
       prev.map((c) => (c.id === voteTarget.id ? { ...c, votes_received: c.votes_received + 1 } : c)),
     )
@@ -98,8 +172,25 @@ export default function ElectionsPage() {
       return
     }
     setSubmitting(true)
-    await new Promise((r) => setTimeout(r, 800))
-    showSuccess("تم تسجيل ترشّحك بنجاح! ستظهر في قائمة المرشّحين خلال 24 ساعة")
+
+    const result = await registerAsCandidate(election.id, campaignStatement.trim())
+    if (!result.success) {
+      const map: Record<string, string> = {
+        unauthenticated: "سجّل دخولك أولاً",
+        statement_too_short: "بيان الحملة قصير جداً",
+        election_not_found: "الانتخابات غير موجودة",
+        registration_closed: "باب الترشّح مُغلق",
+        kyc_not_approved: "أكمل التوثيق KYC أولاً",
+        level_too_low: "مستواك لا يسمح بالترشّح",
+        missing_table: "الجداول غير منشورة بعد",
+        rls: "صلاحياتك لا تسمح بالترشّح",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل التسجيل")
+      setSubmitting(false)
+      return
+    }
+
+    showSuccess("تم تسجيل ترشّحك بنجاح!")
     setShowRegisterModal(false)
     setCampaignStatement("")
     setSubmitting(false)

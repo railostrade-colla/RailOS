@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Calendar, ChevronLeft, Clock } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -8,10 +8,15 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, StatCard, Tabs, Badge, EmptyState } from "@/components/ui"
 import {
   COUNCIL_PROPOSALS,
-  getCouncilStats,
+  getCouncilStats as getCouncilStatsMock,
   type ProposalStatus,
   type ProposalType,
+  type CouncilProposal,
 } from "@/lib/mock-data"
+import {
+  getCouncilStats as dbGetCouncilStats,
+  getCouncilProposals as dbGetCouncilProposals,
+} from "@/lib/data/council"
 import { cn } from "@/lib/utils/cn"
 
 type TabId = "voting" | "approved" | "rejected" | "all"
@@ -36,16 +41,54 @@ export default function ProposalsPage() {
   const [tab, setTab] = useState<TabId>("voting")
   const [typeFilter, setTypeFilter] = useState<ProposalType | "all">("all")
 
-  const stats = useMemo(() => getCouncilStats(), [])
+  // Mock first-paint, real DB on mount.
+  const [proposals, setProposals] = useState<CouncilProposal[]>(COUNCIL_PROPOSALS)
+  const [stats, setStats] = useState(getCouncilStatsMock())
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([dbGetCouncilStats(), dbGetCouncilProposals()])
+      .then(([s, props]) => {
+        if (cancelled) return
+        if (s) setStats(s)
+        if (props.length > 0) {
+          setProposals(
+            props.map((p): CouncilProposal => ({
+              id: p.id,
+              title: p.title,
+              description: p.description,
+              type: p.type as CouncilProposal["type"],
+              submitted_by: p.submitted_by,
+              submitted_by_name: p.submitted_by_name,
+              submitted_by_role: p.submitted_by_role as CouncilProposal["submitted_by_role"],
+              status: p.status,
+              votes_approve: p.votes_approve ?? 0,
+              votes_object: p.votes_object ?? 0,
+              votes_abstain: p.votes_abstain ?? 0,
+              total_eligible_voters: p.total_eligible_voters ?? 5,
+              voting_ends_at: p.voting_ends_at,
+              final_decision: p.final_decision ?? undefined,
+              final_decision_by: p.final_decision_by ?? undefined,
+              final_decision_at: p.final_decision_at?.split("T")[0] ?? undefined,
+              council_recommendation: (p.council_recommendation ?? undefined) as CouncilProposal["council_recommendation"],
+              related_project_id: p.related_project_id ?? undefined,
+              submitted_at: p.created_at?.split("T")[0] ?? "—",
+            })),
+          )
+        }
+      })
+      .catch(() => { /* keep mock */ })
+    return () => { cancelled = true }
+  }, [])
 
   const filtered = useMemo(() => {
-    let rows = [...COUNCIL_PROPOSALS]
+    let rows = [...proposals]
     if (tab === "voting") rows = rows.filter((p) => p.status === "voting" || p.status === "pending")
     else if (tab === "approved") rows = rows.filter((p) => p.status === "approved")
     else if (tab === "rejected") rows = rows.filter((p) => p.status === "rejected")
     if (typeFilter !== "all") rows = rows.filter((p) => p.type === typeFilter)
     return rows.sort((a, b) => (a.submitted_at < b.submitted_at ? 1 : -1))
-  }, [tab, typeFilter])
+  }, [tab, typeFilter, proposals])
 
   return (
     <AppLayout>

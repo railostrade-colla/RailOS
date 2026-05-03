@@ -65,8 +65,8 @@ export default function CouncilPage() {
             votes_abstain: p.votes_abstain ?? 0,
             total_eligible_voters: p.total_eligible_voters ?? 5,
             voting_ends_at: p.voting_ends_at,
-            council_recommendation: p.council_recommendation as CouncilProposal["council_recommendation"],
-            related_project_id: p.related_project_id,
+            council_recommendation: (p.council_recommendation ?? undefined) as CouncilProposal["council_recommendation"],
+            related_project_id: p.related_project_id ?? undefined,
             submitted_at: p.created_at?.split("T")[0] ?? "—",
           }))
           setRecentProposals(mapped)

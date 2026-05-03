@@ -2,15 +2,25 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Search, MessageCircle, UserPlus, UserMinus, X } from "lucide-react"
+import { Search, MessageCircle, UserPlus, UserMinus, X, Check } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
-import { showSuccess } from "@/lib/utils/toast"
+import { showSuccess, showError } from "@/lib/utils/toast"
 import { mockUsers, mockChats } from "@/lib/mock-data"
 import { getCommunityUsers, type CommunityUserRow } from "@/lib/data/community"
+import {
+  getFriendIdSet,
+  getOutgoingPendingSet,
+  getMyFriendRequests,
+  sendFriendRequest,
+  respondToFriendRequest,
+  cancelFriendRequest,
+  unfriend,
+  type DBFriendRequest,
+} from "@/lib/data/friendships"
 import { cn } from "@/lib/utils/cn"
 
-type CommunityTab = "all" | "friends" | "partners" | "chats"
+type CommunityTab = "all" | "friends" | "requests" | "partners" | "chats"
 
 const levelColor = (l: string) => l === "pro" ? "#fbbf5a" : l === "advanced" ? "#4ade9e" : "rgba(255,255,255,0.35)"
 const levelLabel = (l: string) => l === "pro" ? "محترف" : l === "advanced" ? "متقدم" : "أساسي"
@@ -19,38 +29,114 @@ export default function CommunityPage() {
   const router = useRouter()
   const [tab, setTab] = useState<CommunityTab>("all")
   const [search, setSearch] = useState("")
-  // Friendships aren't persisted to DB yet (no `friendships` table) —
-  // this Set is per-session client state. The "+إضافة" button still
-  // works for UX, just doesn't survive a reload.
   const [friendIds, setFriendIds] = useState<Set<string>>(new Set())
+  const [pendingOutgoing, setPendingOutgoing] = useState<Set<string>>(new Set())
+  const [requests, setRequests] = useState<{ incoming: DBFriendRequest[]; outgoing: DBFriendRequest[] }>({
+    incoming: [],
+    outgoing: [],
+  })
   const [selectedUser, setSelectedUser] = useState<CommunityUserRow | null>(null)
 
   // Real users from DB with mock fallback so the layout never blanks.
   const [users, setUsers] = useState<CommunityUserRow[]>(mockUsers)
 
+  // Pull users + friend graph in parallel.
   useEffect(() => {
     let cancelled = false
-    getCommunityUsers(50).then((rows) => {
+    Promise.all([
+      getCommunityUsers(50),
+      getFriendIdSet(),
+      getOutgoingPendingSet(),
+      getMyFriendRequests(),
+    ]).then(([rows, fIds, outIds, reqs]) => {
       if (cancelled) return
       if (rows.length > 0) setUsers(rows)
+      setFriendIds(fIds)
+      setPendingOutgoing(outIds)
+      setRequests(reqs)
     })
     return () => {
       cancelled = true
     }
   }, [])
 
-  const addFriend = (id: string) => {
-    setFriendIds((prev) => new Set([...prev, id]))
-    showSuccess("تمت إضافة الصديق")
+  const refreshGraph = async () => {
+    const [fIds, outIds, reqs] = await Promise.all([
+      getFriendIdSet(),
+      getOutgoingPendingSet(),
+      getMyFriendRequests(),
+    ])
+    setFriendIds(fIds)
+    setPendingOutgoing(outIds)
+    setRequests(reqs)
   }
 
-  const removeFriend = (id: string) => {
+  const addFriend = async (id: string) => {
+    // Optimistic
+    setPendingOutgoing((prev) => new Set([...prev, id]))
+    const result = await sendFriendRequest(id)
+    if (!result.success) {
+      // Roll back optimistic update
+      setPendingOutgoing((prev) => {
+        const s = new Set(prev)
+        s.delete(id)
+        return s
+      })
+      const map: Record<string, string> = {
+        unauthenticated: "سجّل دخولك أولاً",
+        cannot_befriend_self: "لا يمكن إضافة نفسك",
+        already_friends: "أنتما أصدقاء بالفعل",
+        request_pending: "هناك طلب قيد الانتظار",
+        missing_table: "الجداول غير منشورة بعد",
+        rls: "صلاحياتك لا تسمح بذلك",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل إرسال الطلب")
+      return
+    }
+    showSuccess("تم إرسال طلب الصداقة")
+    refreshGraph()
+  }
+
+  const removeFriend = async (id: string) => {
+    const result = await unfriend(id)
+    if (!result.success) {
+      showError("فشلت إزالة الصديق")
+      return
+    }
     setFriendIds((prev) => {
       const s = new Set(prev)
       s.delete(id)
       return s
     })
     showSuccess("تمت إزالة الصديق")
+  }
+
+  const handleAcceptRequest = async (requestId: string) => {
+    const result = await respondToFriendRequest(requestId, true)
+    if (!result.success) {
+      showError("فشل قبول الطلب")
+      return
+    }
+    showSuccess("تمت إضافة الصديق")
+    refreshGraph()
+  }
+
+  const handleDeclineRequest = async (requestId: string) => {
+    const result = await respondToFriendRequest(requestId, false)
+    if (!result.success) {
+      showError("فشل رفض الطلب")
+      return
+    }
+    refreshGraph()
+  }
+
+  const handleCancelRequest = async (requestId: string) => {
+    const result = await cancelFriendRequest(requestId)
+    if (!result.success) {
+      showError("فشل إلغاء الطلب")
+      return
+    }
+    refreshGraph()
   }
 
   const filteredUsers = users.filter((u) =>
@@ -60,9 +146,10 @@ export default function CommunityPage() {
   const friends = users.filter((u) => friendIds.has(u.id))
   const partners = users.filter((u) => u.level === "pro" || u.level === "advanced")
 
-  const tabs: { key: CommunityTab; label: string }[] = [
+  const tabs: { key: CommunityTab; label: string; badge?: number }[] = [
     { key: "all", label: "المجتمع" },
     { key: "friends", label: "الأصدقاء" },
+    { key: "requests", label: "الطلبات", badge: requests.incoming.length },
     { key: "partners", label: "الشركاء" },
     { key: "chats", label: "الدردشة" },
   ]
@@ -121,6 +208,13 @@ export default function CommunityPage() {
                   إزالة
                 </button>
               </>
+            ) : pendingOutgoing.has(u.id) ? (
+              <button
+                disabled
+                className="bg-yellow-400/[0.08] border border-yellow-400/[0.2] text-yellow-400 rounded-lg px-2.5 py-1.5 text-[10px] cursor-not-allowed"
+              >
+                طلب مرسل
+              </button>
             ) : (
               <button
                 onClick={() => addFriend(u.id)}
@@ -153,13 +247,18 @@ export default function CommunityPage() {
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 className={cn(
-                  "flex-1 py-2 rounded-lg text-[11px] transition-colors",
+                  "flex-1 py-2 rounded-lg text-[11px] transition-colors flex items-center justify-center gap-1",
                   tab === t.key
                     ? "bg-white/[0.08] text-white font-bold border border-white/[0.1]"
                     : "text-neutral-500 hover:text-white"
                 )}
               >
-                {t.label}
+                <span>{t.label}</span>
+                {t.badge !== undefined && t.badge > 0 && (
+                  <span className="bg-red-400 text-black text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                    {t.badge}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -202,6 +301,80 @@ export default function CommunityPage() {
                 {friends.map((u) => <UserCard key={u.id} u={u} />)}
               </div>
             )
+          )}
+
+          {/* Requests Tab */}
+          {tab === "requests" && (
+            <div className="space-y-4">
+              {/* Incoming */}
+              <div>
+                <div className="text-xs text-neutral-400 font-bold mb-2 px-1">
+                  واردة ({requests.incoming.length})
+                </div>
+                {requests.incoming.length === 0 ? (
+                  <div className="text-center py-6 text-xs text-neutral-500">لا توجد طلبات واردة</div>
+                ) : (
+                  <div className="space-y-2">
+                    {requests.incoming.map((r) => (
+                      <div key={r.id} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3.5 flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-full bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-base font-bold text-white flex-shrink-0">
+                          {r.other_user_avatar}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-bold text-white">{r.other_user_name}</div>
+                          {r.message && <div className="text-[10px] text-neutral-500 truncate mt-0.5">{r.message}</div>}
+                        </div>
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => handleAcceptRequest(r.id)}
+                            className="bg-green-400/[0.12] border border-green-400/[0.25] text-green-400 rounded-lg px-2.5 py-1.5 text-[10px] flex items-center gap-1"
+                          >
+                            <Check className="w-3 h-3" strokeWidth={2.5} />
+                            قبول
+                          </button>
+                          <button
+                            onClick={() => handleDeclineRequest(r.id)}
+                            className="bg-red-400/[0.1] border border-red-400/[0.18] text-red-400 rounded-lg px-2.5 py-1.5 text-[10px]"
+                          >
+                            رفض
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Outgoing */}
+              <div>
+                <div className="text-xs text-neutral-400 font-bold mb-2 px-1">
+                  صادرة ({requests.outgoing.length})
+                </div>
+                {requests.outgoing.length === 0 ? (
+                  <div className="text-center py-6 text-xs text-neutral-500">لا توجد طلبات صادرة</div>
+                ) : (
+                  <div className="space-y-2">
+                    {requests.outgoing.map((r) => (
+                      <div key={r.id} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3.5 flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-full bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-base font-bold text-white flex-shrink-0">
+                          {r.other_user_avatar}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-bold text-white">{r.other_user_name}</div>
+                          <div className="text-[10px] text-yellow-400 mt-0.5">قيد الانتظار</div>
+                        </div>
+                        <button
+                          onClick={() => handleCancelRequest(r.id)}
+                          className="bg-white/[0.05] border border-white/[0.1] text-neutral-400 rounded-lg px-2.5 py-1.5 text-[10px]"
+                        >
+                          إلغاء
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {/* Partners Tab */}
@@ -326,6 +499,13 @@ export default function CommunityPage() {
                   إزالة
                 </button>
               </div>
+            ) : pendingOutgoing.has(selectedUser.id) ? (
+              <button
+                disabled
+                className="w-full py-3 rounded-xl bg-yellow-400/[0.08] border border-yellow-400/[0.2] text-yellow-400 text-sm font-bold cursor-not-allowed"
+              >
+                طلب الصداقة مرسل
+              </button>
             ) : (
               <button
                 onClick={() => {

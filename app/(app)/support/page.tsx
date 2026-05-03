@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
   Search,
   ChevronDown,
@@ -16,7 +16,7 @@ import {
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, Tabs, Badge, EmptyState, Modal } from "@/components/ui"
-import { showSuccess, showInfo } from "@/lib/utils/toast"
+import { showSuccess, showInfo, showError } from "@/lib/utils/toast"
 import {
   FAQS,
   FAQ_CATEGORIES,
@@ -25,6 +25,11 @@ import {
   type FAQ,
   type SupportTicket,
 } from "@/lib/mock-data"
+import {
+  getMyTickets,
+  createSupportTicket,
+  type DBSupportTicket,
+} from "@/lib/data/support"
 import { cn } from "@/lib/utils/cn"
 
 type CategoryTab = "all" | (typeof FAQ_CATEGORIES)[number]
@@ -42,6 +47,24 @@ const PRIORITY_META: Record<SupportTicket["priority"], { label: string; color: "
   high:   { label: "عاجل",   color: "red" },
 }
 
+// Map DB ticket → page's SupportTicket shape (last_update is mock-only).
+function dbToTicket(t: DBSupportTicket): SupportTicket {
+  // DB status enum: new | in_progress | replied | closed
+  // Page status enum: open | answered | closed
+  const status: SupportTicket["status"] =
+    t.status === "closed" ? "closed"
+    : t.status === "replied" ? "answered"
+    : "open"
+  return {
+    id: t.id,
+    subject: t.subject,
+    status,
+    priority: t.priority,
+    created_at: t.created_at?.split("T")[0] ?? "",
+    last_update: t.last_message_at?.split("T")[0] ?? "",
+  }
+}
+
 export default function SupportPage() {
   const [tab, setTab] = useState<CategoryTab>("all")
   const [search, setSearch] = useState("")
@@ -50,6 +73,20 @@ export default function SupportPage() {
   const [showNewTicket, setShowNewTicket] = useState(false)
   const [newTicketSubject, setNewTicketSubject] = useState("")
   const [newTicketMessage, setNewTicketMessage] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  // Mock first-paint, real DB on mount.
+  const [tickets, setTickets] = useState<SupportTicket[]>(USER_TICKETS)
+
+  useEffect(() => {
+    let cancelled = false
+    getMyTickets().then((rows) => {
+      if (cancelled) return
+      // Empty array = either no tickets OR table missing — only swap
+      // if we got real rows; otherwise keep the demo placeholders.
+      if (rows.length > 0) setTickets(rows.map(dbToTicket))
+    })
+    return () => { cancelled = true }
+  }, [])
 
   // Filter FAQs by search → category
   const filteredFAQs = useMemo(() => {
@@ -68,15 +105,36 @@ export default function SupportPage() {
     return counts
   }, [search])
 
-  const handleSubmitTicket = () => {
+  const handleSubmitTicket = async () => {
     if (!newTicketSubject.trim() || !newTicketMessage.trim()) {
       showInfo("املأ كل الحقول")
+      return
+    }
+    setSubmitting(true)
+    const result = await createSupportTicket({
+      subject: newTicketSubject.trim(),
+      body: newTicketMessage.trim(),
+    })
+    if (!result.success) {
+      const map: Record<string, string> = {
+        unauthenticated: "سجّل دخولك أولاً",
+        invalid_input: "املأ الموضوع والرسالة",
+        missing_table: "الجداول غير منشورة بعد",
+        rls: "صلاحياتك لا تسمح بإرسال التذكرة",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل إرسال الطلب — حاول مجدداً")
+      setSubmitting(false)
       return
     }
     showSuccess("تم إرسال طلبك! سنرد خلال 24 ساعة")
     setShowNewTicket(false)
     setNewTicketSubject("")
     setNewTicketMessage("")
+    setSubmitting(false)
+    // Refresh list
+    getMyTickets().then((rows) => {
+      if (rows.length > 0) setTickets(rows.map(dbToTicket))
+    })
   }
 
   return (
@@ -236,15 +294,15 @@ export default function SupportPage() {
           </div>
 
           {/* ═══ § 4 My Tickets ═══ */}
-          {USER_TICKETS.length > 0 && (
+          {tickets.length > 0 && (
             <div className="mb-7">
               <SectionHeader
                 title="🎫 طلباتي السابقة"
-                subtitle={`${USER_TICKETS.length} طلب`}
+                subtitle={`${tickets.length} طلب`}
                 action={{ label: "طلب جديد", onClick: () => setShowNewTicket(true) }}
               />
               <div className="space-y-2">
-                {USER_TICKETS.map((t) => {
+                {tickets.map((t) => {
                   const status = STATUS_META[t.status]
                   const priority = PRIORITY_META[t.priority]
                   return (
@@ -288,9 +346,10 @@ export default function SupportPage() {
             </button>
             <button
               onClick={handleSubmitTicket}
-              className="flex-1 bg-neutral-100 text-black py-2.5 rounded-xl text-sm font-bold hover:bg-neutral-200 transition-colors"
+              disabled={submitting}
+              className="flex-1 bg-neutral-100 text-black py-2.5 rounded-xl text-sm font-bold hover:bg-neutral-200 disabled:opacity-50 transition-colors"
             >
-              إرسال
+              {submitting ? "جاري..." : "إرسال"}
             </button>
           </>
         }

@@ -8,14 +8,21 @@ import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, Badge, Modal, EmptyState } from "@/components/ui"
 import {
-  getProposalById,
-  getProposalVotes,
-  isCouncilMember,
+  getProposalById as getProposalByIdMock,
+  getProposalVotes as getProposalVotesMock,
   type VoteChoice,
   type ProposalStatus,
   type ProposalType,
   type CouncilVote,
+  type CouncilProposal,
 } from "@/lib/mock-data"
+import {
+  getProposalById as dbGetProposalById,
+  getProposalVotes as dbGetProposalVotes,
+  amCouncilMember,
+  castProposalVote,
+  getMyProposalVote,
+} from "@/lib/data/council"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -68,15 +75,72 @@ export default function ProposalDetailsPage() {
   const params = useParams()
   const proposalId = (params?.id as string) ?? ""
 
-  const proposal = useMemo(() => getProposalById(proposalId), [proposalId])
-  const initialVotes = useMemo(() => getProposalVotes(proposalId), [proposalId])
-
+  // Mock first-paint, real DB on mount.
+  const [proposal, setProposal] = useState<CouncilProposal | undefined>(
+    () => getProposalByIdMock(proposalId),
+  )
+  const [initialVotes, setInitialVotes] = useState<CouncilVote[]>(
+    () => getProposalVotesMock(proposalId),
+  )
   const [votes, setVotes] = useState<CouncilVote[]>(initialVotes)
   const [choice, setChoice] = useState<VoteChoice | null>(null)
   const [reason, setReason] = useState("")
   const [showConfirm, setShowConfirm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [hasVoted, setHasVoted] = useState(false)
+  const [isMember, setIsMember] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      dbGetProposalById(proposalId),
+      dbGetProposalVotes(proposalId),
+      amCouncilMember(),
+      getMyProposalVote(proposalId),
+    ]).then(([p, vs, member, mine]) => {
+      if (cancelled) return
+      if (p) {
+        setProposal({
+          id: p.id,
+          title: p.title,
+          description: p.description,
+          type: p.type as ProposalType,
+          submitted_by: p.submitted_by,
+          submitted_by_name: p.submitted_by_name,
+          submitted_by_role: p.submitted_by_role as CouncilProposal["submitted_by_role"],
+          status: p.status,
+          votes_approve: p.votes_approve,
+          votes_object: p.votes_object,
+          votes_abstain: p.votes_abstain,
+          total_eligible_voters: p.total_eligible_voters,
+          voting_ends_at: p.voting_ends_at,
+          final_decision: p.final_decision ?? undefined,
+          final_decision_by: p.final_decision_by ?? undefined,
+          final_decision_at: p.final_decision_at?.split("T")[0] ?? undefined,
+          council_recommendation: (p.council_recommendation ?? undefined) as CouncilProposal["council_recommendation"],
+          related_project_id: p.related_project_id ?? undefined,
+          submitted_at: p.created_at?.split("T")[0] ?? "—",
+        })
+      }
+      if (vs.length > 0) {
+        const mapped: CouncilVote[] = vs.map((v) => ({
+          id: v.id,
+          proposal_id: v.proposal_id,
+          member_id: v.member_id,
+          member_name: v.member_name,
+          member_avatar: v.member_avatar,
+          choice: v.choice,
+          reason: v.reason ?? undefined,
+          voted_at: v.voted_at,
+        }))
+        setInitialVotes(mapped)
+        setVotes(mapped)
+      }
+      setIsMember(member)
+      if (mine) setHasVoted(true)
+    }).catch(() => { /* keep mock */ })
+    return () => { cancelled = true }
+  }, [proposalId])
 
   const countdown = useCountdown(proposal?.voting_ends_at ?? new Date().toISOString())
 
@@ -102,8 +166,8 @@ export default function ProposalDetailsPage() {
 
   const status = STATUS_META[proposal.status]
   const type = TYPE_META[proposal.type]
-  const isMember = isCouncilMember("me")
   const canVote = isMember && proposal.status === "voting" && !hasVoted
+  void canVote
 
   // Live counts (incorporating new vote if cast)
   const liveCounts = useMemo(() => {
@@ -119,7 +183,24 @@ export default function ProposalDetailsPage() {
       return
     }
     setSubmitting(true)
-    await new Promise((r) => setTimeout(r, 600))
+
+    const result = await castProposalVote(proposalId, choice, reason.trim() || undefined)
+    if (!result.success) {
+      const map: Record<string, string> = {
+        unauthenticated: "سجّل دخولك أولاً",
+        not_council_member: "التصويت محصور بأعضاء المجلس",
+        not_found: "القرار غير موجود",
+        voting_closed: "التصويت مُغلق",
+        voting_expired: "انتهى وقت التصويت",
+        missing_table: "الجداول غير منشورة بعد",
+        rls: "صلاحياتك لا تسمح بالتصويت",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل التصويت — حاول مجدداً")
+      setSubmitting(false)
+      return
+    }
+
+    // Optimistic local update so UI reflects the vote immediately
     const newVote: CouncilVote = {
       id: "new-" + Date.now(),
       proposal_id: proposalId,
@@ -135,6 +216,23 @@ export default function ProposalDetailsPage() {
     setShowConfirm(false)
     showSuccess(`تم تسجيل صوتك: ${CHOICE_META[choice].label}`)
     setSubmitting(false)
+
+    // Re-pull authoritative votes in the background
+    dbGetProposalVotes(proposalId).then((vs) => {
+      if (vs.length > 0) {
+        const mapped: CouncilVote[] = vs.map((v) => ({
+          id: v.id,
+          proposal_id: v.proposal_id,
+          member_id: v.member_id,
+          member_name: v.member_name,
+          member_avatar: v.member_avatar,
+          choice: v.choice,
+          reason: v.reason ?? undefined,
+          voted_at: v.voted_at,
+        }))
+        setVotes(mapped)
+      }
+    })
   }
 
   return (

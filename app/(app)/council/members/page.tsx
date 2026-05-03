@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Calendar, Vote } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Badge, Tabs } from "@/components/ui"
-import { COUNCIL_MEMBERS, type CouncilRole } from "@/lib/mock-data"
+import { COUNCIL_MEMBERS, type CouncilRole, type CouncilMember } from "@/lib/mock-data"
+import { getCouncilMembers as dbGetCouncilMembers } from "@/lib/data/council"
 import { cn } from "@/lib/utils/cn"
 
 type TabId = "all" | "admin" | "elected"
@@ -18,17 +19,41 @@ const ROLE_META: Record<CouncilRole, { label: string; color: "purple" | "blue" |
 
 export default function CouncilMembersPage() {
   const [tab, setTab] = useState<TabId>("all")
+  // Mock first-paint, real DB on mount.
+  const [members, setMembers] = useState<CouncilMember[]>(COUNCIL_MEMBERS)
+
+  useEffect(() => {
+    let cancelled = false
+    dbGetCouncilMembers().then((rows) => {
+      if (cancelled || rows.length === 0) return
+      setMembers(
+        rows.map((m): CouncilMember => ({
+          id: m.id,
+          user_id: m.user_id,
+          name: m.user_name ?? "—",
+          avatar_initial: m.avatar_initial ?? "?",
+          role: m.role,
+          position_title: m.position_title ?? "",
+          joined_at: m.joined_at?.split("T")[0] ?? "—",
+          term_ends_at: m.term_ends_at ?? undefined,
+          votes_received: m.votes_received,
+          bio: m.bio ?? undefined,
+        })),
+      )
+    })
+    return () => { cancelled = true }
+  }, [])
 
   const filtered = useMemo(() => {
-    if (tab === "all") return COUNCIL_MEMBERS
-    if (tab === "admin") return COUNCIL_MEMBERS.filter((m) => m.role === "founder" || m.role === "appointed")
-    return COUNCIL_MEMBERS.filter((m) => m.role === "elected")
-  }, [tab])
+    if (tab === "all") return members
+    if (tab === "admin") return members.filter((m) => m.role === "founder" || m.role === "appointed")
+    return members.filter((m) => m.role === "elected")
+  }, [tab, members])
 
   const counts = {
-    all: COUNCIL_MEMBERS.length,
-    admin: COUNCIL_MEMBERS.filter((m) => m.role === "founder" || m.role === "appointed").length,
-    elected: COUNCIL_MEMBERS.filter((m) => m.role === "elected").length,
+    all: members.length,
+    admin: members.filter((m) => m.role === "founder" || m.role === "appointed").length,
+    elected: members.filter((m) => m.role === "elected").length,
   }
 
   return (
@@ -38,7 +63,7 @@ export default function CouncilMembersPage() {
 
           <PageHeader
             title="👥 أعضاء المجلس"
-            subtitle={`${COUNCIL_MEMBERS.length} أعضاء — الدورة الحالية`}
+            subtitle={`${members.length} أعضاء — الدورة الحالية`}
             backHref="/council"
           />
 
