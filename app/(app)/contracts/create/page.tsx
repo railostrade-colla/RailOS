@@ -17,6 +17,7 @@ import {
   mockUsersDB,
   FEE_BALANCE_CONTRACTS as mockFeeBalance,
 } from "@/lib/mock-data"
+import { createContract as createContractDB } from "@/lib/data/contracts"
 
 // رسوم العقد - 2% من قيمة الاستثمار
 const CONTRACT_FEE_PERCENT = 2
@@ -95,7 +96,7 @@ export default function CreateContractPage() {
   const feeAmount = Math.ceil((investmentNum * CONTRACT_FEE_PERCENT) / 100)
   const hasEnoughFees = mockFeeBalance >= feeAmount
 
-  const createContract = () => {
+  const createContract = async () => {
     if (!title.trim()) return showError("أدخل اسم العقد")
     if (!description.trim()) return showError("أدخل وصف العقد")
     if (investmentNum < 1) return showError("أدخل قيمة استثمار صحيحة")
@@ -108,11 +109,31 @@ export default function CreateContractPage() {
     }
 
     setLoading(true)
-    setTimeout(() => {
+    const result = await createContractDB({
+      title: title.trim(),
+      description: description.trim(),
+      total_investment: investmentNum,
+      members: partners.map((p) => ({
+        user_id: p.user.id,
+        share_percent: p.share_percentage,
+      })),
+    })
+    setLoading(false)
+
+    if (result.success) {
       showSuccess("تم إنشاء العقد وإرسال الدعوات للشركاء! 🎉")
-      setLoading(false)
       router.push("/contracts")
-    }, 1500)
+      return
+    }
+    if (result.reason === "share_percent_not_100") {
+      showError(result.error || "مجموع النسب يجب أن يساوي 100%")
+    } else if (result.reason === "missing_table") {
+      showError("الميزة غير متاحة على الخادم بعد")
+    } else if (result.reason === "unauthenticated") {
+      showError("سجّل دخول للمتابعة")
+    } else {
+      showError(result.error || "تعذّر إنشاء العقد")
+    }
   }
 
   return (

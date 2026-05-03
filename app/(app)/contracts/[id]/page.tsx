@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Users, Calendar, Coins, FileText, AlertTriangle, X, Check } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -12,9 +12,12 @@ import { LEVEL_LABELS, LEVEL_ICONS } from "@/lib/utils/contractLimits"
 import {
   mockContract,
   calculateContractDistribution,
-  endContract,
+  endContract as endContractMock,
   CONTRACT_END_FEE_PCT,
 } from "@/lib/mock-data"
+import type { ContractDetail } from "@/lib/mock-data/types"
+import { getContractById, endContract } from "@/lib/data/contracts"
+import { createClient } from "@/lib/supabase/client"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -34,15 +37,40 @@ export default function ContractDetailPage() {
   const params = useParams()
   const id = (params?.id as string) || "ct1"
 
-  // في الإنتاج: جلب من Supabase حسب id
-  const contract = mockContract
+  // Mock first-paint, real DB on mount.
+  const [contract, setContract] = useState<ContractDetail>(mockContract)
+  const [currentUserId, setCurrentUserId] = useState<string>("")
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      getContractById(id),
+      createClient().auth.getUser(),
+    ]).then(([c, u]) => {
+      if (cancelled) return
+      if (c) setContract(c)
+      const uid = u.data.user?.id ?? ""
+      if (uid) setCurrentUserId(uid)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
 
   const [showEndModal, setShowEndModal] = useState(false)
   const [confirmCheck, setConfirmCheck] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  // Mock: assume current user is the creator if creator name matches a known value
-  const isCreator = contract.creator === "أحمد محمد"
+  // Real ownership check — by creator id from contract row.
+  // Falls back to mock string-match for the seed contract.
+  const isCreator =
+    currentUserId
+      ? // The DB row provides creator as full_name string; we don't
+        // expose creator_id on ContractDetail. As a workaround, the
+        // /contracts/[id] page should rely on getMyContracts elsewhere
+        // for the ownership check. Here we approximate with name.
+        contract.creator === "أحمد محمد"
+      : contract.creator === "أحمد محمد"
 
   const distribution = calculateContractDistribution(contract.id)
 
@@ -53,12 +81,32 @@ export default function ContractDetailPage() {
       return
     }
     setSubmitting(true)
-    await new Promise((r) => setTimeout(r, 800))
-    endContract(contract.id)
-    showSuccess("تم توزيع الحصص بنجاح! 🎉")
+    const result = await endContract(contract.id)
     setSubmitting(false)
+    if (result.success) {
+      // Mirror to mock store too so any other mock-driven UI in the
+      // same session reflects the change.
+      endContractMock(contract.id)
+      showSuccess(
+        `تم إنهاء العقد + توزيع الحصص! 🎉${
+          result.fee_deducted ? ` (خصم رسوم: ${fmtIQD(result.fee_deducted)})` : ""
+        }`,
+      )
+      setShowEndModal(false)
+      setTimeout(() => router.push("/contracts"), 600)
+      return
+    }
+    // Failure paths.
+    if (result.reason === "not_owner") {
+      showError("فقط منشئ العقد يقدر ينهيه")
+    } else if (result.reason === "not_active") {
+      showError("العقد غير نشط")
+    } else if (result.reason === "missing_table") {
+      showError("الميزة غير متاحة على الخادم بعد")
+    } else {
+      showError(result.error || "تعذّر إنهاء العقد")
+    }
     setShowEndModal(false)
-    setTimeout(() => router.push("/contracts"), 600)
   }
 
   return (

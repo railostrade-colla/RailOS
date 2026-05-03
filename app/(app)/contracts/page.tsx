@@ -1,11 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, FileText } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { mockContracts, type ContractStatus } from "@/lib/mock-data"
+import type { ContractListItem } from "@/lib/mock-data/types"
+import { getMyContracts } from "@/lib/data/contracts"
 import { cn } from "@/lib/utils/cn"
 
 type Tab = "active" | "ended"
@@ -23,8 +25,22 @@ const statusBadge = (s: ContractStatus) => {
 export default function ContractsPage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>("active")
+  // Mock first-paint, real DB on mount.
+  const [contracts, setContracts] = useState<ContractListItem[]>(mockContracts)
 
-  const filtered = mockContracts.filter((c) =>
+  useEffect(() => {
+    let cancelled = false
+    getMyContracts().then((rows) => {
+      if (cancelled) return
+      // Show real list always — empty means user has no contracts.
+      setContracts(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const filtered = contracts.filter((c) =>
     tab === "active" ? ["pending", "active"].includes(c.status) : ["ended", "cancelled"].includes(c.status)
   )
 

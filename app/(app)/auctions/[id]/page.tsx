@@ -15,10 +15,16 @@ import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, StatCard, Badge, Modal, EmptyState } from "@/components/ui"
 import {
+  getAuctionById as getAuctionByIdMock,
+  getAuctionBids as getAuctionBidsMock,
+  type AuctionBid,
+  type AuctionDetails,
+} from "@/lib/mock-data/auctions"
+import {
   getAuctionById,
   getAuctionBids,
-  type AuctionBid,
-} from "@/lib/mock-data/auctions"
+  placeBid,
+} from "@/lib/data/auctions-real"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -66,14 +72,37 @@ export default function AuctionDetailsPage() {
   const params = useParams()
   const auctionId = (params?.id as string) ?? ""
 
-  const auction = useMemo(() => getAuctionById(auctionId), [auctionId])
-  const initialBids = useMemo(() => getAuctionBids(auctionId, 10), [auctionId])
-
-  const [bids, setBids] = useState<AuctionBid[]>(initialBids)
+  // Mock first-paint, real DB on mount.
+  const [auction, setAuction] = useState<AuctionDetails | undefined>(
+    getAuctionByIdMock(auctionId),
+  )
+  const [bids, setBids] = useState<AuctionBid[]>(
+    getAuctionBidsMock(auctionId, 10),
+  )
   const [showBidModal, setShowBidModal] = useState(false)
   const [bidShares, setBidShares] = useState("1")
   const [bidPrice, setBidPrice] = useState("")
   const [submitting, setSubmitting] = useState(false)
+
+  const refresh = async () => {
+    const [a, b] = await Promise.all([
+      getAuctionById(auctionId),
+      getAuctionBids(auctionId, 10),
+    ])
+    if (a) setAuction(a)
+    if (b.length > 0) setBids(b)
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    refresh().catch(() => {
+      if (cancelled) return
+    })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auctionId])
 
   const countdown = useCountdown(auction?.ends_at ?? new Date().toISOString())
 
@@ -132,24 +161,36 @@ export default function AuctionDetailsPage() {
       return
     }
     setSubmitting(true)
-    await new Promise((r) => setTimeout(r, 600))
-
-    const newBid: AuctionBid = {
-      id: "new-" + Date.now(),
-      auction_id: auctionId,
-      bidder_id: "me",
-      bidder_name: "أنت",
-      amount: priceNum,
-      shares: sharesNum,
-      is_current_user: true,
-      created_at: new Date().toISOString(),
-    }
-    setBids((prev) => [newBid, ...prev].slice(0, 10))
-    showSuccess(`تم تقديم عرضك بنجاح: ${fmt(total)} د.ع`)
-    setShowBidModal(false)
-    setBidShares("1")
-    setBidPrice("")
+    const result = await placeBid(auctionId, priceNum, sharesNum)
     setSubmitting(false)
+
+    if (result.success) {
+      showSuccess(`تم تقديم عرضك بنجاح: ${fmt(total)} د.ع`)
+      setShowBidModal(false)
+      setBidShares("1")
+      setBidPrice("")
+      await refresh()
+      return
+    }
+
+    // Friendly error mapping.
+    if (result.reason === "amount_below_min" && result.min_required) {
+      showError(`الحد الأدنى لعرضك: ${fmt(result.min_required)} د.ع`)
+    } else if (result.reason === "shares_exceed_offered") {
+      showError(`الحد الأقصى للحصص: ${result.max_shares}`)
+    } else if (result.reason === "auction_not_active") {
+      showError("المزاد غير نشط حالياً")
+    } else if (result.reason === "expired") {
+      showError("انتهى المزاد")
+    } else if (result.reason === "not_started") {
+      showError("لم يبدأ المزاد بعد")
+    } else if (result.reason === "unauthenticated") {
+      showError("سجّل دخول للمزايدة")
+    } else if (result.reason === "missing_table") {
+      showError("الميزة غير متاحة على الخادم بعد")
+    } else {
+      showError(result.error || "تعذّر تقديم العرض")
+    }
   }
 
   return (

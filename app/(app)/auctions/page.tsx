@@ -6,6 +6,7 @@ import { Gavel, Clock, AlertCircle } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { mockAuctions } from "@/lib/mock-data"
+import { getActiveAuctions } from "@/lib/data/auctions-real"
 import { cn } from "@/lib/utils/cn"
 
 const fmtIQD = (n: number) => n.toLocaleString("en-US")
@@ -92,6 +93,32 @@ function AuctionCard({ auction, onClick }: { auction: typeof mockAuctions[0]; on
 
 export default function AuctionsPage() {
   const router = useRouter()
+  // Mock first-paint, real DB on mount.
+  const [auctions, setAuctions] = useState<typeof mockAuctions>(mockAuctions)
+
+  useEffect(() => {
+    let cancelled = false
+    getActiveAuctions().then((rows) => {
+      if (cancelled || rows.length === 0) return
+      // Map DB AuctionDetails shape → the page's list shape.
+      // AuctionDetails doesn't expose `title` — derive it from the project name.
+      setAuctions(
+        rows.map((a) => ({
+          id: a.id,
+          title: `مزاد على ${a.project_name}`,
+          project: { name: a.project_name },
+          shares: a.shares_offered,
+          opening_price: a.starting_price,
+          current_price: a.current_highest_bid > 0 ? a.current_highest_bid : a.starting_price,
+          ends_at: a.ends_at,
+          bids_count: a.bid_count,
+        })),
+      )
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <AppLayout>
@@ -107,11 +134,11 @@ export default function AuctionsPage() {
           <div className="bg-green-400/[0.06] border border-green-400/20 rounded-xl p-3 mb-4 flex items-center gap-2.5">
             <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             <span className="text-xs text-green-400 font-bold">نشط الآن</span>
-            <span className="text-xs text-neutral-400">• {mockAuctions.length} مزاد متاح حالياً</span>
+            <span className="text-xs text-neutral-400">• {auctions.length} مزاد متاح حالياً</span>
           </div>
 
           {/* Empty state */}
-          {mockAuctions.length === 0 ? (
+          {auctions.length === 0 ? (
             <div className="text-center py-20">
               <div className="w-16 h-16 rounded-2xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center mx-auto mb-4">
                 <Gavel className="w-7 h-7 text-neutral-400" strokeWidth={1.5} />
@@ -121,7 +148,7 @@ export default function AuctionsPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {mockAuctions.map((a) => (
+              {auctions.map((a) => (
                 <AuctionCard key={a.id} auction={a} onClick={() => router.push(`/auctions/${a.id}`)} />
               ))}
             </div>
