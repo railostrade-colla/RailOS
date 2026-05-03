@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Search, X, ZoomIn } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
@@ -11,15 +11,47 @@ import {
   FEE_REQUEST_PAYMENT_LABELS,
   FEE_REQUEST_STATUS_LABELS,
   USER_LEVEL_LABELS,
-  getFeeRequestsStats,
   type FeeUnitRequest,
 } from "@/lib/mock-data/feeUnits"
+import {
+  getFeeRequestsAdmin,
+  approveFeeRequest,
+  rejectFeeRequest,
+} from "@/lib/data/fee-requests-admin"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 type ActionMode = null | "approve" | "approve_modified" | "reject"
+
+const DAY_MS = 86_400_000
+
+function computeStats(list: FeeUnitRequest[]) {
+  let pendingCount = 0
+  let pendingAmount = 0
+  let approvedToday = 0
+  let totalInflow = 0
+  const now = Date.now()
+  for (const r of list) {
+    if (r.status === "pending") {
+      pendingCount++
+      pendingAmount += r.requested_units
+    }
+    if (r.status === "approved") {
+      const credited = r.approved_units ?? r.requested_units
+      totalInflow += credited
+      const t = new Date(r.submitted_at).getTime()
+      if (Number.isFinite(t) && now - t < DAY_MS) approvedToday++
+    }
+  }
+  return {
+    pending_count: pendingCount,
+    pending_amount: pendingAmount,
+    approved_today: approvedToday,
+    total_inflow: totalInflow,
+  }
+}
 
 export function FeeUnitsRequestsPanel() {
   const [filter, setFilter] = useState<string>("pending")
@@ -30,17 +62,37 @@ export function FeeUnitsRequestsPanel() {
   const [actionMode, setActionMode] = useState<ActionMode>(null)
   const [reason, setReason] = useState("")
   const [modifiedAmount, setModifiedAmount] = useState<number>(0)
+  const [submitting, setSubmitting] = useState(false)
 
-  const stats = getFeeRequestsStats()
+  // Real fee-unit requests from DB; mock as first-paint fallback.
+  const [requests, setRequests] = useState<FeeUnitRequest[]>(MOCK_FEE_REQUESTS)
+
+  const refresh = useCallback(async () => {
+    const rows = await getFeeRequestsAdmin(500)
+    if (rows.length > 0) setRequests(rows)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    getFeeRequestsAdmin(500).then((rows) => {
+      if (cancelled) return
+      if (rows.length > 0) setRequests(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const stats = useMemo(() => computeStats(requests), [requests])
 
   const tabs = [
-    { key: "all", label: "الكل", count: MOCK_FEE_REQUESTS.length },
-    { key: "pending", label: "معلّقة", count: MOCK_FEE_REQUESTS.filter((r) => r.status === "pending").length },
-    { key: "approved", label: "مُوافَق", count: MOCK_FEE_REQUESTS.filter((r) => r.status === "approved").length },
-    { key: "rejected", label: "مرفوض", count: MOCK_FEE_REQUESTS.filter((r) => r.status === "rejected").length },
+    { key: "all", label: "الكل", count: requests.length },
+    { key: "pending", label: "معلّقة", count: requests.filter((r) => r.status === "pending").length },
+    { key: "approved", label: "مُوافَق", count: requests.filter((r) => r.status === "approved").length },
+    { key: "rejected", label: "مرفوض", count: requests.filter((r) => r.status === "rejected").length },
   ]
 
-  const filtered = MOCK_FEE_REQUESTS
+  const filtered = requests
     .filter((r) => filter === "all" || r.status === filter)
     .filter((r) => methodFilter === "all" || r.payment_method === methodFilter)
     .filter((r) =>
@@ -63,24 +115,46 @@ export function FeeUnitsRequestsPanel() {
     setReason("")
   }
 
-  const handleConfirm = () => {
-    if (!selected || !actionMode) return
+  const handleConfirm = async () => {
+    if (!selected || !actionMode || submitting) return
     if (actionMode === "reject" && !reason.trim()) {
       showError("اكتب سبب الرفض")
       return
     }
-    if (actionMode === "approve_modified") {
-      if (modifiedAmount <= 0) {
-        showError("الرقم المُعدَّل يجب أن يكون موجباً")
-        return
+    if (actionMode === "approve_modified" && modifiedAmount <= 0) {
+      showError("الرقم المُعدَّل يجب أن يكون موجباً")
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      if (actionMode === "approve") {
+        const r = await approveFeeRequest(selected.id)
+        if (!r.success) {
+          showError(r.error || "تعذّر تنفيذ الموافقة")
+          return
+        }
+        showSuccess(`✅ تمت الموافقة + شحن ${fmtNum(r.amount_credited ?? selected.requested_units)} وحدة`)
+      } else if (actionMode === "approve_modified") {
+        const r = await approveFeeRequest(selected.id, modifiedAmount)
+        if (!r.success) {
+          showError(r.error || "تعذّر تنفيذ الموافقة المعدّلة")
+          return
+        }
+        showSuccess(`✅ تمت الموافقة بـ ${fmtNum(r.amount_credited ?? modifiedAmount)} وحدة`)
+      } else if (actionMode === "reject") {
+        const r = await rejectFeeRequest(selected.id, reason)
+        if (!r.success) {
+          showError(r.error || "تعذّر تنفيذ الرفض")
+          return
+        }
+        showSuccess("❌ تم رفض الطلب + إرسال السبب للمستخدم")
       }
-      showSuccess(`✅ تمت الموافقة بـ ${fmtNum(modifiedAmount)} وحدة + تحديث الرصيد`)
+      await refresh()
+      closeAll()
+    } finally {
+      setSubmitting(false)
     }
-    if (actionMode === "approve") {
-      showSuccess(`✅ تمت الموافقة + شحن ${fmtNum(selected.requested_units)} وحدة + تحديث الرصيد`)
-    }
-    if (actionMode === "reject") showSuccess("❌ تم رفض الطلب + إرسال السبب للمستخدم")
-    closeAll()
   }
 
   return (
@@ -332,20 +406,22 @@ export function FeeUnitsRequestsPanel() {
             <div className="flex gap-2">
               <button
                 onClick={() => { setActionMode(null); setReason("") }}
-                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                disabled={submitting}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
               >
                 إلغاء
               </button>
               <button
                 onClick={handleConfirm}
+                disabled={submitting}
                 className={cn(
-                  "flex-1 py-3 rounded-xl text-sm font-bold border",
+                  "flex-1 py-3 rounded-xl text-sm font-bold border disabled:opacity-50",
                   actionMode === "approve" && "bg-green-500/[0.15] border-green-500/[0.3] text-green-400 hover:bg-green-500/[0.2]",
                   actionMode === "approve_modified" && "bg-yellow-500/[0.15] border-yellow-500/[0.3] text-yellow-400 hover:bg-yellow-500/[0.2]",
                   actionMode === "reject" && "bg-red-500/[0.15] border-red-500/[0.3] text-red-400 hover:bg-red-500/[0.2]"
                 )}
               >
-                تأكيد
+                {submitting ? "جاري التنفيذ..." : "تأكيد"}
               </button>
             </div>
           </div>
@@ -369,7 +445,7 @@ export function FeeUnitsRequestsPanel() {
       )}
 
       <div className="mt-6 text-[10px] text-neutral-600 font-mono">
-        {fmtNum(filtered.length)} من {fmtNum(MOCK_FEE_REQUESTS.length)} طلب
+        {fmtNum(filtered.length)} من {fmtNum(requests.length)} طلب
       </div>
     </div>
   )
