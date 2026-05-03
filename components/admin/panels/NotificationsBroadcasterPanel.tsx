@@ -6,6 +6,12 @@ import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
   SectionHeader,
 } from "@/components/admin/ui"
+import {
+  sendBroadcast,
+  type BroadcastSubtype,
+  type BroadcastPriority,
+  type BroadcastAudience,
+} from "@/lib/data/admin-broadcast"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -89,6 +95,7 @@ export function NotificationsBroadcasterPanel() {
   const [emailEnabled, setEmailEnabled] = useState(false)
 
   const [showConfirm, setShowConfirm] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [historyDetail, setHistoryDetail] = useState<BroadcastHistoryEntry | null>(null)
 
   const audienceMeta = AUDIENCE_META[audience]
@@ -113,10 +120,53 @@ export function NotificationsBroadcasterPanel() {
     setShowConfirm(true)
   }
 
-  const handleConfirmSend = () => {
-    showSuccess(`✅ تم إرسال الإشعار لـ ${fmtNum(recipientEstimate)} مستخدم`)
+  const handleConfirmSend = async () => {
+    if (submitting) return
+
+    // Resolve audience param.
+    let audienceParam: string | undefined
+    if (audience === "specific_user") audienceParam = specificUserId.trim()
+    else if (audience === "by_city") audienceParam = city
+
+    setSubmitting(true)
+    const result = await sendBroadcast({
+      title: title.trim(),
+      message: body.trim(),
+      priority: priority as BroadcastPriority,
+      audience: audience as BroadcastAudience,
+      audience_param: audienceParam,
+      subtype: type as BroadcastSubtype,
+      link_url: (linkPage as string) || undefined,
+      link_text: linkText.trim() || undefined,
+    })
+    setSubmitting(false)
+
+    if (!result.success) {
+      // The push/email checkboxes are intentionally read-only: the
+      // notifications-realtime channel + /api/push/webhook fan-out
+      // already handle them per the user's preferences. We just
+      // surface a friendly error per failure reason.
+      if (result.reason === "missing_table") {
+        showError("RPC غير متاح على الخادم — طبّق migration الإذاعة")
+        return
+      }
+      if (result.reason === "rls") {
+        showError("لا تملك صلاحيات الإذاعة")
+        return
+      }
+      if (result.reason === "unauthenticated") {
+        showError("سجّل دخول كمسؤول")
+        return
+      }
+      showError(result.error || "تعذّر إرسال الإذاعة")
+      return
+    }
+
+    showSuccess(
+      `✅ تم إرسال الإشعار لـ ${fmtNum(result.recipients_count ?? 0)} مستخدم`,
+    )
     setShowConfirm(false)
-    // Reset form
+    // Reset form so a duplicate-send can't happen by accident.
     setTitle("")
     setBody("")
     setLinkPage("")
@@ -486,20 +536,22 @@ export function NotificationsBroadcasterPanel() {
             <div className="flex gap-2">
               <button
                 onClick={() => setShowConfirm(false)}
-                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                disabled={submitting}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
               >
                 إلغاء
               </button>
               <button
                 onClick={handleConfirmSend}
+                disabled={submitting}
                 className={cn(
-                  "flex-1 py-3 rounded-xl text-sm font-bold border",
+                  "flex-1 py-3 rounded-xl text-sm font-bold border disabled:opacity-50",
                   priority === "urgent"
                     ? "bg-red-500/[0.15] border-red-500/[0.3] text-red-400 hover:bg-red-500/[0.2]"
                     : "bg-blue-500/[0.15] border-blue-500/[0.3] text-blue-400 hover:bg-blue-500/[0.2]"
                 )}
               >
-                تأكيد الإرسال
+                {submitting ? "جاري الإرسال..." : "تأكيد الإرسال"}
               </button>
             </div>
           </div>
