@@ -35,6 +35,9 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ─── 1. support_tickets ──────────────────────────────────────
+-- Self-healing: if a legacy `support_tickets` table already exists
+-- with a different shape, ADD COLUMN IF NOT EXISTS brings it up to
+-- the spec we need without dropping data.
 CREATE TABLE IF NOT EXISTS public.support_tickets (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -50,6 +53,30 @@ CREATE TABLE IF NOT EXISTS public.support_tickets (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Bring legacy tables up to spec (no-op if columns already exist)
+ALTER TABLE public.support_tickets
+  ADD COLUMN IF NOT EXISTS subject TEXT;
+ALTER TABLE public.support_tickets
+  ADD COLUMN IF NOT EXISTS body TEXT;
+ALTER TABLE public.support_tickets
+  ADD COLUMN IF NOT EXISTS category ticket_category NOT NULL DEFAULT 'other';
+ALTER TABLE public.support_tickets
+  ADD COLUMN IF NOT EXISTS priority ticket_priority NOT NULL DEFAULT 'medium';
+ALTER TABLE public.support_tickets
+  ADD COLUMN IF NOT EXISTS status ticket_status NOT NULL DEFAULT 'new';
+ALTER TABLE public.support_tickets
+  ADD COLUMN IF NOT EXISTS assigned_to UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
+ALTER TABLE public.support_tickets
+  ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE public.support_tickets
+  ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
+ALTER TABLE public.support_tickets
+  ADD COLUMN IF NOT EXISTS closed_reason TEXT;
+ALTER TABLE public.support_tickets
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE public.support_tickets
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_support_tickets_user
   ON public.support_tickets(user_id);
@@ -73,6 +100,20 @@ CREATE TABLE IF NOT EXISTS public.ticket_messages (
   attachments JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Bring legacy ticket_messages up to spec
+ALTER TABLE public.ticket_messages
+  ADD COLUMN IF NOT EXISTS ticket_id UUID;
+ALTER TABLE public.ticket_messages
+  ADD COLUMN IF NOT EXISTS sender_id UUID;
+ALTER TABLE public.ticket_messages
+  ADD COLUMN IF NOT EXISTS sender_type ticket_sender_type;
+ALTER TABLE public.ticket_messages
+  ADD COLUMN IF NOT EXISTS body TEXT;
+ALTER TABLE public.ticket_messages
+  ADD COLUMN IF NOT EXISTS attachments JSONB;
+ALTER TABLE public.ticket_messages
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_ticket_messages_ticket
   ON public.ticket_messages(ticket_id);
