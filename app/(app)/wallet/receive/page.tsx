@@ -1,30 +1,37 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Copy, Download, Share2, Check, ShieldCheck, Clock, ArrowDownToLine, Link2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
+// Phase 4.3: user info is real (from Supabase). Recent senders + receive
+// stats stay mock — they need a `share_transfers` table that doesn't
+// exist yet (Phase 4.X).
 import { RECENT_SENDERS } from "@/lib/mock-data"
+import { getCurrentWalletInfo, type WalletUserInfo } from "@/lib/data/wallet"
 import { cn } from "@/lib/utils/cn"
 
-const CURRENT_USER = {
-  id: "u_a8f9_3c2b",
-  name: "محمد المثنى",
-  verified: true,
-}
-
+// TODO Phase 4.X — derive from a real share_transfers table.
 const RECEIVE_STATS = {
-  total_received: 47,
-  last_received: "منذ يومين",
-  total_senders: 12,
+  total_received: 0,
+  last_received: "—",
+  total_senders: 0,
 }
 
-const formatID = (id: string) => {
-  const cleaned = id.toUpperCase().replace(/^U_/, "")
-  const parts = cleaned.match(/.{1,4}/g) || []
-  return "RX-" + parts.join("-")
+/**
+ * Format a UUID into a human-readable wallet ID:
+ *   "8ee1e529-03ae-4a89-..."  →  "RX-8EE1-E529"
+ *
+ * The QR encodes the FULL UUID (so scanners get the full identifier);
+ * this short form is just for the on-screen label and copy button.
+ */
+const formatID = (id: string): string => {
+  if (!id) return "RX-—"
+  const cleaned = id.replace(/-/g, "").toUpperCase().slice(0, 8)
+  if (cleaned.length < 8) return "RX-" + cleaned
+  return "RX-" + cleaned.slice(0, 4) + "-" + cleaned.slice(4, 8)
 }
 
 export default function ReceivePage() {
@@ -33,13 +40,38 @@ export default function ReceivePage() {
   const [copiedLink, setCopiedLink] = useState(false)
   const [downloading, setDownloading] = useState(false)
 
-  const formattedID = formatID(CURRENT_USER.id)
-  const inviteLink = "https://railos.app/send?to=" + CURRENT_USER.id
-  const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=" + encodeURIComponent(CURRENT_USER.id) + "&bgcolor=0a0a0a&color=ffffff&qzone=2&format=png"
+  // Real user info from Supabase (Phase 4.3)
+  const [user, setUser] = useState<WalletUserInfo | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    getCurrentWalletInfo().then((u) => {
+      if (cancelled) return
+      setUser(u)
+      setLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const userId = user?.id ?? ""
+  const userName = user?.full_name || user?.username || "مستخدم"
+  const userVerified = user?.is_verified ?? false
+
+  const formattedID = formatID(userId)
+  const inviteLink = userId
+    ? "https://railos.app/send?to=" + userId
+    : "https://railos.app/send"
+  const qrUrl = userId
+    ? "https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=" + encodeURIComponent(userId) + "&bgcolor=0a0a0a&color=ffffff&qzone=2&format=png"
+    : ""
 
   const handleCopyID = async () => {
+    if (!userId) return
     try {
-      await navigator.clipboard.writeText(CURRENT_USER.id)
+      await navigator.clipboard.writeText(userId)
       setCopiedID(true)
       showSuccess("تم نسخ الـ ID")
       setTimeout(() => setCopiedID(false), 2000)
@@ -60,6 +92,7 @@ export default function ReceivePage() {
   }
 
   const handleDownload = async () => {
+    if (!qrUrl) return
     setDownloading(true)
     try {
       const response = await fetch(qrUrl)
@@ -67,7 +100,7 @@ export default function ReceivePage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = "railos-qr-" + CURRENT_USER.id.slice(0, 8) + ".png"
+      a.download = "railos-qr-" + userId.slice(0, 8) + ".png"
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -82,7 +115,7 @@ export default function ReceivePage() {
   const handleShare = async () => {
     const shareData = {
       title: "باركود استلام الحصص — رايلوس",
-      text: CURRENT_USER.name + "\nID المحفظة: " + formattedID + "\n\nاستخدم هذا الرابط لإرسال الحصص:\n" + inviteLink,
+      text: userName + "\nID المحفظة: " + formattedID + "\n\nاستخدم هذا الرابط لإرسال الحصص:\n" + inviteLink,
       url: inviteLink,
     }
     if (navigator.share) {
@@ -119,12 +152,18 @@ export default function ReceivePage() {
             {/* اسم المستخدم */}
             <div className="text-center mb-5">
               <div className="flex items-center justify-center gap-2 mb-2">
-                <div className="text-lg font-bold text-white">{CURRENT_USER.name}</div>
-                {CURRENT_USER.verified && (
-                  <div className="bg-green-400/[0.15] border border-green-400/30 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
-                    <Check className="w-2.5 h-2.5" strokeWidth={3} />
-                    موثق
-                  </div>
+                {loading ? (
+                  <span className="inline-block h-5 w-32 bg-white/[0.08] rounded animate-pulse" />
+                ) : (
+                  <>
+                    <div className="text-lg font-bold text-white">{userName}</div>
+                    {userVerified && (
+                      <div className="bg-green-400/[0.15] border border-green-400/30 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
+                        <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                        موثق
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -144,12 +183,16 @@ export default function ReceivePage() {
 
             {/* QR Code */}
             <div className="bg-[#0a0a0a] border border-white/[0.08] rounded-2xl p-5 flex items-center justify-center mb-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={qrUrl}
-                alt="QR Code"
-                className="w-full max-w-[280px] aspect-square rounded-lg"
-              />
+              {qrUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={qrUrl}
+                  alt="QR Code"
+                  className="w-full max-w-[280px] aspect-square rounded-lg"
+                />
+              ) : (
+                <div className="w-full max-w-[280px] aspect-square rounded-lg bg-white/[0.04] animate-pulse" />
+              )}
             </div>
 
             {/* نوع الاستلام */}

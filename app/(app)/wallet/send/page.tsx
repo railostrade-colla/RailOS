@@ -1,23 +1,32 @@
 "use client"
 
-import { useState, useMemo, useRef } from "react"
+import { useEffect, useState, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { ChevronDown, X, AlertTriangle, Check, Search, Camera, Upload, ArrowDownToLine, Coins, Send, Users, Clock } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
 import { createInvoice } from "@/lib/data/invoices"
-import { LEVEL_LIMITS, fmtLimit } from "@/lib/utils/contractLimits"
+import { LEVEL_LIMITS, fmtLimit, type InvestorLevel } from "@/lib/utils/contractLimits"
+// Phase 4.3: user identity, holdings, fee balance and recipient verify
+// are real (Supabase). Recent recipients stays mock until a transfers
+// table exists (Phase 4.X).
+import { RECENT_RECIPIENTS } from "@/lib/mock-data"
 import {
-  CURRENT_USER_ID_WALLET as CURRENT_USER_ID,
-  CURRENT_USER_LEVEL,
-  CURRENT_USER_USED_THIS_MONTH,
-  CURRENT_FEE_BALANCE,
-  MOCK_HOLDINGS_SEND as MOCK_HOLDINGS,
-  RECENT_RECIPIENTS,
-  MOCK_USERS_DB,
-} from "@/lib/mock-data"
+  getCurrentWalletInfo,
+  getMyHoldingsForSend,
+  getCurrentFeeBalanceSimple,
+  verifyRecipient,
+  type WalletHolding,
+  type RecipientUser,
+} from "@/lib/data/wallet"
 import { cn } from "@/lib/utils/cn"
+
+// TODO Phase 4.X — these stay hardcoded until:
+//   • profiles.level is migrated/standardized
+//   • monthly limits use realtime computation from deals.total_amount
+const FALLBACK_LEVEL: InvestorLevel = "basic"
+const CURRENT_USER_USED_THIS_MONTH = 0
 
 const sectorIcon = (s: string) =>
   s?.includes("زراع") ? "🌾" :
@@ -25,19 +34,65 @@ const sectorIcon = (s: string) =>
   s?.includes("صناع") ? "🏭" :
   s?.includes("عقار") ? "🏢" : "💼"
 
-// تنسيق ID للعرض
-const formatID = (id: string) => id.toUpperCase().replace(/^U_/, "RX-")
+/**
+ * Format a UUID into the public wallet ID label:
+ *   "8ee1e529-03ae-4a89-..."  →  "RX-8EE1-E529"
+ * Non-UUID inputs (legacy or partial) get a best-effort upper-case
+ * passthrough so the UI never crashes.
+ */
+const formatID = (id: string): string => {
+  if (!id) return "RX-—"
+  const cleaned = id.replace(/-/g, "").toUpperCase()
+  if (cleaned.length >= 8) {
+    return "RX-" + cleaned.slice(0, 4) + "-" + cleaned.slice(4, 8)
+  }
+  return "RX-" + cleaned
+}
+
+/** Map raw DB level → InvestorLevel supported by contractLimits. */
+function safeInvestorLevel(raw: string | undefined | null): InvestorLevel {
+  if (raw === "advanced" || raw === "pro") return raw
+  return "basic"
+}
 
 // ─── المكوّن الرئيسي ───
 export default function SendSharesPage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Phase 4.3 — Real DB-backed state
+  const [currentUserId, setCurrentUserId] = useState<string>("")
+  const [holdings, setHoldings] = useState<WalletHolding[]>([])
+  const [feeBalance, setFeeBalance] = useState<number>(0)
+  const [userLevel, setUserLevel] = useState<InvestorLevel>(FALLBACK_LEVEL)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      getCurrentWalletInfo(),
+      getMyHoldingsForSend(),
+      getCurrentFeeBalanceSimple(),
+    ]).then(([info, hold, bal]) => {
+      if (cancelled) return
+      setCurrentUserId(info?.id ?? "")
+      setHoldings(hold)
+      setFeeBalance(bal)
+      // Level is currently not in WalletUserInfo — keep as basic for now.
+      // (Phase 4.X: pull from profiles.level via a separate query or extend WalletUserInfo)
+      setUserLevel(safeInvestorLevel(null))
+      setLoading(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   // Form state
   const [recipientId, setRecipientId] = useState("")
-  const [recipientUser, setRecipientUser] = useState<typeof MOCK_USERS_DB[string] | null>(null)
+  const [recipientUser, setRecipientUser] = useState<RecipientUser | null>(null)
   const [verifying, setVerifying] = useState(false)
-  const [selectedHolding, setSelectedHolding] = useState<typeof MOCK_HOLDINGS[0] | null>(null)
+  const [selectedHolding, setSelectedHolding] = useState<WalletHolding | null>(null)
   const [showHoldingDropdown, setShowHoldingDropdown] = useState(false)
   const [qty, setQty] = useState("")
   const [note, setNote] = useState("")
@@ -58,10 +113,10 @@ export default function SendSharesPage() {
   const transferFee = Math.ceil((totalValue * TRANSFER_FEE_PERCENT) / 100)
 
   // Validations
-  const isSelfSending = recipientUser?.id === CURRENT_USER_ID
+  const isSelfSending = recipientUser?.id === currentUserId
   const hasEnoughBalance = selectedHolding ? qtyNum <= selectedHolding.shares_owned : false
-  const hasEnoughFeeBalance = CURRENT_FEE_BALANCE >= transferFee
-  const monthlyLimit = LEVEL_LIMITS[CURRENT_USER_LEVEL]
+  const hasEnoughFeeBalance = feeBalance >= transferFee
+  const monthlyLimit = LEVEL_LIMITS[userLevel]
   const monthlyRemaining = monthlyLimit - CURRENT_USER_USED_THIS_MONTH
   const exceedsMonthlyLimit = totalValue > monthlyRemaining
 
@@ -77,27 +132,31 @@ export default function SendSharesPage() {
 
   // Handlers
   const handleVerifyRecipient = async (id?: string) => {
-    const targetId = (id || recipientId).trim().toLowerCase()
+    const targetId = (id || recipientId).trim()
     if (!targetId) {
       showError("أدخل ID المستلم أولاً")
       return
     }
-    if (targetId === CURRENT_USER_ID) {
-      showError("لا يمكن الإرسال إلى نفسك")
-      setRecipientUser(null)
+    setVerifying(true)
+    const result = await verifyRecipient(targetId)
+    setVerifying(false)
+
+    if (result.found && result.user) {
+      setRecipientUser(result.user)
+      showSuccess("تم التحقق من المستلم")
       return
     }
-    setVerifying(true)
-    await new Promise((r) => setTimeout(r, 600))
-    const found = MOCK_USERS_DB[targetId]
-    if (found) {
-      setRecipientUser(found)
-      showSuccess("تم التحقق من المستلم")
+
+    setRecipientUser(null)
+    if (result.reason === "self") {
+      showError("لا يمكن الإرسال إلى نفسك")
+    } else if (result.reason === "banned") {
+      showError("هذا الحساب موقوف")
+    } else if (result.reason === "inactive") {
+      showError("هذا الحساب غير نشط")
     } else {
-      setRecipientUser(null)
       showError("المستخدم غير موجود")
     }
-    setVerifying(false)
   }
 
   const handleSelectRecent = (recipient: typeof RECENT_RECIPIENTS[0]) => {
@@ -167,7 +226,7 @@ export default function SendSharesPage() {
     // ─── 📄 إنشاء الفاتورة الرسمية للتحويل ───
     const invoice = createInvoice({
       type: "transfer_send",
-      from: { id: CURRENT_USER_ID, name: "أنا" },
+      from: { id: currentUserId, name: "أنا" },
       to: { id: recipientUser.id, name: recipientUser.name },
       project_id: selectedHolding.project_id,
       project_name: selectedHolding.project.name,
@@ -225,7 +284,7 @@ export default function SendSharesPage() {
                 وحدات الرسوم
               </div>
               <div className="text-base font-bold text-yellow-400 font-mono">
-                {CURRENT_FEE_BALANCE.toLocaleString("en-US")}
+                {feeBalance.toLocaleString("en-US")}
               </div>
               <div className="text-[10px] text-neutral-600 mt-1">رصيد متاح</div>
             </div>
@@ -348,7 +407,7 @@ export default function SendSharesPage() {
           <div className="mb-5">
             <div className="text-[11px] text-neutral-400 mb-2 font-bold">الحصة المراد إرسالها</div>
 
-            {MOCK_HOLDINGS.length === 0 ? (
+            {holdings.length === 0 ? (
               <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-5 text-center">
                 <div className="text-3xl mb-2 opacity-40">📦</div>
                 <div className="text-xs text-neutral-500">لا توجد حصص في محفظتك</div>
@@ -386,7 +445,7 @@ export default function SendSharesPage() {
 
                 {showHoldingDropdown && (
                   <div className="absolute top-full left-0 right-0 z-30 bg-[#0a0a0a] border border-white/[0.08] border-t-white/[0.04] rounded-b-xl overflow-hidden shadow-2xl">
-                    {MOCK_HOLDINGS.map((h) => (
+                    {holdings.map((h) => (
                       <button
                         key={h.id}
                         onClick={() => {
@@ -493,7 +552,7 @@ export default function SendSharesPage() {
                   { label: "يستلم المستلم", value: qtyNum + " حصة (كاملاً)", color: "green" },
                   { label: "رصيدك بعد الإرسال", value: (selectedHolding.shares_owned - qtyNum) + " حصة", color: "white" },
                   { label: "رسوم التحويل", value: transferFee.toLocaleString("en-US") + " وحدة", color: "yellow" },
-                  { label: "رصيد وحدات الرسوم بعد الخصم", value: (CURRENT_FEE_BALANCE - transferFee).toLocaleString("en-US") + " وحدة", color: "yellow" },
+                  { label: "رصيد وحدات الرسوم بعد الخصم", value: (feeBalance - transferFee).toLocaleString("en-US") + " وحدة", color: "yellow" },
                 ].map((row, i) => (
                   <div key={i} className="flex justify-between items-center py-1.5 border-b border-white/[0.04] last:border-0">
                     <span className="text-[11px] text-neutral-500">{row.label}</span>
