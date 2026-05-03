@@ -12,6 +12,12 @@ import {
   type NewsType,
 } from "@/lib/mock-data"
 import { getAllNews, type DBNews } from "@/lib/data"
+import {
+  getMyReaction,
+  setReaction,
+  type ReactionType,
+} from "@/lib/data/news-reactions"
+import { showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 /** Map DB news row → PlatformNews shape (used by UI). */
@@ -237,8 +243,90 @@ export default function NewsPage() {
           <p className="text-xs text-neutral-500 mt-4 leading-relaxed">
             للمزيد من التفاصيل أو الأسئلة حول هذا الإعلان، تواصل مع الدعم.
           </p>
+
+          {/* Reactions strip — Phase P. Persists in news_reactions
+              when the user is signed in; no-ops gracefully otherwise. */}
+          <NewsReactions newsId={openItem.id} />
         </Modal>
       )}
     </AppLayout>
+  )
+}
+
+// ─── News reactions strip ────────────────────────────────────
+const REACTIONS: ReadonlyArray<{ id: ReactionType; emoji: string; label: string }> = [
+  { id: "like",      emoji: "👍", label: "إعجاب" },
+  { id: "love",      emoji: "❤️", label: "حب" },
+  { id: "celebrate", emoji: "🎉", label: "احتفال" },
+  { id: "applause",  emoji: "👏", label: "تصفيق" },
+  { id: "fire",      emoji: "🔥", label: "نار" },
+]
+
+function NewsReactions({ newsId }: { newsId: string }) {
+  const [active, setActive] = useState<ReactionType | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  // Load the user's existing reaction (if any) when the modal opens.
+  useEffect(() => {
+    let cancelled = false
+    setActive(null)
+    getMyReaction(newsId).then((r) => {
+      if (cancelled) return
+      setActive(r)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [newsId])
+
+  const handleClick = async (type: ReactionType) => {
+    if (busy) return
+    setBusy(true)
+    // Optimistic toggle so the tap feels instant.
+    const next: ReactionType | null = active === type ? null : type
+    const previous = active
+    setActive(next)
+
+    const result = await setReaction(newsId, type)
+    if (!result.success) {
+      // Roll back on failure and surface a toast.
+      setActive(previous)
+      showError(result.error || "تعذّر حفظ التفاعل")
+    } else {
+      // Trust the server's view (handles edge-cases where DB state
+      // diverged from client state — e.g. another tab reacted).
+      setActive(result.reaction)
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="mt-5 pt-4 border-t border-white/[0.06]">
+      <div className="text-[11px] text-neutral-400 mb-2">كيف وجدت هذا الإعلان؟</div>
+      <div className="flex gap-1.5 flex-wrap">
+        {REACTIONS.map((r) => {
+          const selected = active === r.id
+          return (
+            <button
+              key={r.id}
+              onClick={() => handleClick(r.id)}
+              disabled={busy}
+              aria-label={r.label}
+              aria-pressed={selected}
+              className={cn(
+                "flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs transition-colors",
+                selected
+                  ? "bg-white/[0.12] border-white/[0.25] text-white"
+                  : "bg-white/[0.04] border-white/[0.08] text-neutral-300 hover:bg-white/[0.08]",
+                busy && "opacity-60 cursor-not-allowed",
+              )}
+            >
+              <span className="text-base leading-none">{r.emoji}</span>
+              <span className="text-[10px]">{r.label}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
