@@ -15,6 +15,7 @@ import { Image as ImageIcon, Sprout, Building2, Factory, Briefcase, Stethoscope,
 import { ActionBtn } from "@/components/admin/ui"
 import { ALL_COMPANIES } from "@/lib/mock-data/companies"
 import { createProjectWallet } from "@/lib/mock-data/projectWallets"
+import { adminCreateCompany } from "@/lib/data/companies"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { calculateTotalShares, calculateOfferedShares } from "@/lib/utils/finance"
 import type {
@@ -214,7 +215,7 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
     ? "استمارة شاملة لمشروع — يُنشأ wallet تلقائياً عند النشر"
     : "استمارة شاملة للشركة — حصص قابلة للتداول + wallet تلقائي"
 
-  const handleSave = (status: EntityStatus) => {
+  const handleSave = async (status: EntityStatus) => {
     if (status === "active" && !isValid) {
       showError("بعض الحقول الإجبارية فارغة أو النسب لا تساوي 100%")
       return
@@ -224,14 +225,48 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
         ? `✅ تم حفظ التعديلات + نشر${isProject ? " المشروع" : " الشركة"}`
         : "💾 تم حفظ التعديلات كمسودّة"
       )
-    } else {
-      if (status === "active") {
-        const newId = `${isProject ? "p" : "c"}-${Date.now()}`
-        const wallet = createProjectWallet(newId, name)
-        showSuccess(`✅ تم نشر "${name}" + إنشاء محفظة (${wallet.id})`)
-      } else {
-        showSuccess("💾 تم حفظ المسودّة")
+      onDone?.()
+      return
+    }
+
+    // ── Phase 8.3: companies create now writes to DB. Projects still
+    //    use the legacy mock flow (out of scope for this phase). ──
+    if (!isProject && status === "active") {
+      const result = await adminCreateCompany({
+        name: name.trim(),
+        sector: sector,
+        city: city.trim() || undefined,
+        description: shortDesc.trim() || longDesc.trim() || undefined,
+        share_price: Number(sharePrice) || 0,
+        risk_level: riskLevel,
+        founded_year: durationMonths ? Number(durationMonths) : undefined,
+      })
+      if (!result.success) {
+        const map: Record<string, string> = {
+          unauthenticated: "سجّل دخولك أولاً",
+          not_admin: "صلاحياتك لا تسمح",
+          invalid_name: "اسم الشركة مطلوب",
+          invalid_sector: "القطاع مطلوب",
+          invalid_risk: "مستوى الخطر غير صحيح",
+          invalid_share_price: "سعر الحصة غير صحيح",
+          missing_table: "الجداول غير منشورة بعد",
+        }
+        showError(map[result.reason ?? ""] ?? "فشل إنشاء الشركة")
+        return
       }
+      showSuccess(`✅ تم نشر شركة "${name}" في قاعدة البيانات`)
+      onDone?.()
+      return
+    }
+
+    // Legacy fallback: projects + draft companies stay on mock flow
+    // until a future migration rewires them.
+    if (status === "active") {
+      const newId = `${isProject ? "p" : "c"}-${Date.now()}`
+      const wallet = createProjectWallet(newId, name)
+      showSuccess(`✅ تم نشر "${name}" + إنشاء محفظة (${wallet.id})`)
+    } else {
+      showSuccess("💾 تم حفظ المسودّة")
     }
     onDone?.()
   }
