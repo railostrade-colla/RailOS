@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Mail, Lock, Eye, EyeOff, Loader2, Fingerprint, X } from "lucide-react"
 import { AuthLayout } from "@/components/layout/AuthLayout"
-import { signInWithEmail } from "@/lib/supabase/auth-helpers"
+import { signInWithEmail, signInWithGoogle } from "@/lib/supabase/auth-helpers"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import {
   isBiometricSupported,
@@ -18,7 +18,18 @@ import {
 import { cn } from "@/lib/utils/cn"
 
 export default function LoginPage() {
+  // Wrap the inner component (which uses useSearchParams) in a
+  // Suspense boundary so Next.js doesn't bail out of static rendering.
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
+  )
+}
+
+function LoginPageInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -31,11 +42,34 @@ export default function LoginPage() {
   const [pendingBioUser, setPendingBioUser] = useState<{ id: string; email: string } | null>(null)
   const [dontAskAgain, setDontAskAgain] = useState(false)
 
+  // Google OAuth state
+  const [googleLoading, setGoogleLoading] = useState(false)
+
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true)
+    const { error } = await signInWithGoogle("/dashboard")
+    if (error) {
+      showError(error.message || "تعذّر فتح صفحة Google")
+      setGoogleLoading(false)
+    }
+    // On success the browser navigates to Google — no need to reset state.
+  }
+
   useEffect(() => {
     if (isBiometricSupported() && hasAnyBiometricEnabled()) {
       setBioAvailable(true)
     }
   }, [])
+
+  // Show OAuth error toast if the callback bounced us back with ?error=…
+  useEffect(() => {
+    const err = searchParams?.get("error")
+    if (err === "oauth_failed") {
+      showError("فشل تسجيل الدخول بـ Google — حاول مرة أخرى")
+    } else if (err === "oauth_exchange_failed") {
+      showError("تعذّر إكمال تسجيل الدخول، حاول مجدداً")
+    }
+  }, [searchParams])
 
   // ─────── Standard email/password login ───────
   const handleSubmit = async (e: React.FormEvent) => {
@@ -150,6 +184,33 @@ export default function LoginPage() {
           </div>
         </>
       )}
+
+      {/* Google OAuth button */}
+      <button
+        onClick={handleGoogleLogin}
+        disabled={googleLoading || loading || bioLoading}
+        className="w-full bg-white text-black hover:bg-neutral-100 disabled:opacity-50 py-3 rounded-xl font-medium text-sm transition-colors flex items-center justify-center gap-2 mb-4"
+      >
+        {googleLoading ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <>
+            {/* Inline Google G logo (brand-accurate, no asset needed) */}
+            <svg className="w-4 h-4" viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16.1 19 13.3 24 13.3c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.4 6.3 14.7z" />
+              <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.3-7.3 2.3-5.2 0-9.7-3.3-11.3-8l-6.5 5C9.4 39.4 16.1 44 24 44z" />
+              <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.8-5 6.8-14.8 0-1.3-.1-2.4-.4-3.5z" />
+            </svg>
+            متابعة بـ Google
+          </>
+        )}
+      </button>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="flex-1 h-px bg-white/[0.08]" />
+        <span className="text-[10px] text-neutral-500">أو بالبريد الإلكتروني</span>
+        <div className="flex-1 h-px bg-white/[0.08]" />
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
