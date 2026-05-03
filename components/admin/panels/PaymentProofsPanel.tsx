@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Search, X, ZoomIn } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
@@ -11,15 +11,33 @@ import {
   PAYMENT_METHOD_LABELS,
   PROOF_STATUS_LABELS,
   MATCH_STATUS_META,
-  getPaymentProofsStats,
   type PaymentProof,
 } from "@/lib/mock-data/payments"
+import { getPaymentProofsAdmin } from "@/lib/data/payment-proofs-admin"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 type ActionMode = null | "confirm" | "reject" | "resubmit"
+
+const DAY_MS = 86_400_000
+
+function computeStats(list: PaymentProof[]) {
+  const now = Date.now()
+  let pending = 0
+  let confirmedToday = 0
+  let disputed = 0
+  for (const p of list) {
+    if (p.status === "pending") pending++
+    if (p.status === "confirmed") {
+      const t = new Date(p.submitted_at).getTime()
+      if (Number.isFinite(t) && now - t < DAY_MS) confirmedToday++
+    }
+    if (p.match_status === "mismatch") disputed++
+  }
+  return { total: list.length, pending, confirmed_today: confirmedToday, disputed }
+}
 
 export function PaymentProofsPanel() {
   const [filter, setFilter] = useState<string>("pending")
@@ -31,16 +49,33 @@ export function PaymentProofsPanel() {
   const [actionMode, setActionMode] = useState<ActionMode>(null)
   const [reason, setReason] = useState("")
 
-  const stats = getPaymentProofsStats()
+  // Real proofs from DB (read-only); mock as first-paint fallback.
+  // Confirm/reject actions are still surface-only — the deal-status
+  // workflow is owned by the buyer/seller flow, and admin overrides
+  // happen via /admin?tab=disputes (separate phase).
+  const [proofs, setProofs] = useState<PaymentProof[]>(MOCK_PAYMENT_PROOFS)
+
+  useEffect(() => {
+    let cancelled = false
+    getPaymentProofsAdmin(500).then((rows) => {
+      if (cancelled) return
+      if (rows.length > 0) setProofs(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const stats = useMemo(() => computeStats(proofs), [proofs])
 
   const tabs = [
     { key: "all", label: "الكل", count: stats.total },
-    { key: "pending", label: "معلّق", count: MOCK_PAYMENT_PROOFS.filter((p) => p.status === "pending").length },
-    { key: "confirmed", label: "مؤكّد", count: MOCK_PAYMENT_PROOFS.filter((p) => p.status === "confirmed").length },
-    { key: "rejected", label: "مرفوض", count: MOCK_PAYMENT_PROOFS.filter((p) => p.status === "rejected").length },
+    { key: "pending", label: "معلّق", count: proofs.filter((p) => p.status === "pending").length },
+    { key: "confirmed", label: "مؤكّد", count: proofs.filter((p) => p.status === "confirmed").length },
+    { key: "rejected", label: "مرفوض", count: proofs.filter((p) => p.status === "rejected").length },
   ]
 
-  const filtered = MOCK_PAYMENT_PROOFS
+  const filtered = proofs
     .filter((p) => filter === "all" || p.status === filter)
     .filter((p) => !minAmount || p.amount_paid >= Number(minAmount))
     .filter((p) => !maxAmount || p.amount_paid <= Number(maxAmount))
@@ -350,7 +385,7 @@ export function PaymentProofsPanel() {
       )}
 
       <div className="mt-6 text-[10px] text-neutral-600 font-mono">
-        {fmtNum(filtered.length)} من {fmtNum(MOCK_PAYMENT_PROOFS.length)} إثبات
+        {fmtNum(filtered.length)} من {fmtNum(proofs.length)} إثبات
       </div>
     </div>
   )
