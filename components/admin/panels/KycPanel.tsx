@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Search, X, ZoomIn } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
@@ -10,15 +10,40 @@ import {
   MOCK_KYC_SUBMISSIONS,
   KYC_DOC_TYPE_LABELS,
   KYC_STATUS_LABELS,
-  getKycStats,
   type KycSubmission,
 } from "@/lib/mock-data/kyc"
+import {
+  getKycSubmissions,
+  approveKyc,
+  rejectKyc,
+} from "@/lib/data/kyc-admin"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 type ActionMode = null | "approve" | "reject" | "resubmit"
+
+const DAY_MS = 86_400_000
+
+/** Per-list stats — replaces getKycStats() which read MOCK_KYC_SUBMISSIONS. */
+function computeKycStats(submissions: KycSubmission[]) {
+  const now = Date.now()
+  let pending = 0
+  let verified = 0
+  let rejected = 0
+  let resubmission = 0
+  let todayCount = 0
+  for (const s of submissions) {
+    if (s.status === "pending") pending++
+    if (s.status === "verified") verified++
+    if (s.status === "rejected") rejected++
+    if (s.status === "needs_resubmission") resubmission++
+    const t = new Date(s.submitted_at).getTime()
+    if (Number.isFinite(t) && now - t < DAY_MS) todayCount++
+  }
+  return { pending, verified, rejected, resubmission, today_count: todayCount }
+}
 
 export function KycPanel() {
   const [filter, setFilter] = useState<string>("pending")
@@ -30,20 +55,46 @@ export function KycPanel() {
   const [actionMode, setActionMode] = useState<ActionMode>(null)
   const [reason, setReason] = useState("")
   const [resubmitField, setResubmitField] = useState<"front" | "back" | "selfie">("selfie")
+  const [submitting, setSubmitting] = useState(false)
 
-  const stats = getKycStats()
+  // Real submissions from DB, mock as first-paint fallback so the
+  // panel renders while the admin's session boots. Non-admins (RLS)
+  // get an empty list — they shouldn't be on /admin in the first
+  // place, but we don't pop their session.
+  const [submissions, setSubmissions] = useState<KycSubmission[]>(MOCK_KYC_SUBMISSIONS)
+
+  const refresh = useCallback(async () => {
+    const rows = await getKycSubmissions(500)
+    if (rows.length > 0) setSubmissions(rows)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    getKycSubmissions(500).then((rows) => {
+      if (cancelled) return
+      if (rows.length > 0) setSubmissions(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const stats = useMemo(() => computeKycStats(submissions), [submissions])
 
   const tabs = [
-    { key: "all", label: "الكل", count: MOCK_KYC_SUBMISSIONS.length },
+    { key: "all", label: "الكل", count: submissions.length },
     { key: "pending", label: "معلّق", count: stats.pending },
     { key: "verified", label: "موثّق", count: stats.verified },
     { key: "rejected", label: "مرفوض", count: stats.rejected },
     { key: "needs_resubmission", label: "إعادة رفع", count: stats.resubmission },
   ]
 
-  const cities = Array.from(new Set(MOCK_KYC_SUBMISSIONS.map((k) => k.city).filter(Boolean) as string[]))
+  const cities = useMemo(
+    () => Array.from(new Set(submissions.map((k) => k.city).filter(Boolean) as string[])),
+    [submissions],
+  )
 
-  const filtered = MOCK_KYC_SUBMISSIONS
+  const filtered = submissions
     .filter((k) => filter === "all" || k.status === filter)
     .filter((k) => docFilter === "all" || k.document_type === docFilter)
     .filter((k) => cityFilter === "all" || k.city === cityFilter)
@@ -59,16 +110,47 @@ export function KycPanel() {
     setReason("")
   }
 
-  const handleConfirm = () => {
-    if (!selected || !actionMode) return
+  const handleConfirm = async () => {
+    if (!selected || !actionMode || submitting) return
     if ((actionMode === "reject" || actionMode === "resubmit") && !reason.trim()) {
       showError("اكتب سبب الإجراء")
       return
     }
-    if (actionMode === "approve") showSuccess("✅ تم توثيق الحساب + إرسال إشعار للمستخدم")
-    if (actionMode === "reject") showSuccess("❌ تم رفض الطلب + إرسال السبب للمستخدم")
-    if (actionMode === "resubmit") showSuccess("🔄 تم طلب إعادة رفع الصورة")
-    closeAll()
+
+    setSubmitting(true)
+    try {
+      if (actionMode === "approve") {
+        const r = await approveKyc(selected.id)
+        if (!r.success) {
+          showError(r.error || "تعذّر التوثيق")
+          return
+        }
+        showSuccess("✅ تم توثيق الحساب + إرسال إشعار للمستخدم")
+      } else if (actionMode === "reject") {
+        const r = await rejectKyc(selected.id, reason)
+        if (!r.success) {
+          showError(r.error || "تعذّر الرفض")
+          return
+        }
+        showSuccess("❌ تم رفض الطلب + إرسال السبب للمستخدم")
+      } else if (actionMode === "resubmit") {
+        // No dedicated 'needs_resubmission' status in the DB enum
+        // (the schema only has pending/approved/rejected). We treat
+        // resubmit-request as a soft rejection — the user gets the
+        // reason + the chance to re-upload from /kyc.
+        const note = `[resubmit:${resubmitField}] ${reason}`
+        const r = await rejectKyc(selected.id, note)
+        if (!r.success) {
+          showError(r.error || "تعذّر طلب إعادة الرفع")
+          return
+        }
+        showSuccess("🔄 تم طلب إعادة رفع الصورة")
+      }
+      await refresh()
+      closeAll()
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -305,20 +387,22 @@ export function KycPanel() {
             <div className="flex gap-2">
               <button
                 onClick={() => { setActionMode(null); setReason("") }}
-                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                disabled={submitting}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
               >
                 إلغاء
               </button>
               <button
                 onClick={handleConfirm}
+                disabled={submitting}
                 className={cn(
-                  "flex-1 py-3 rounded-xl text-sm font-bold border",
+                  "flex-1 py-3 rounded-xl text-sm font-bold border disabled:opacity-50",
                   actionMode === "approve" && "bg-green-500/[0.15] border-green-500/[0.3] text-green-400 hover:bg-green-500/[0.2]",
                   actionMode === "reject" && "bg-red-500/[0.15] border-red-500/[0.3] text-red-400 hover:bg-red-500/[0.2]",
                   actionMode === "resubmit" && "bg-yellow-500/[0.15] border-yellow-500/[0.3] text-yellow-400 hover:bg-yellow-500/[0.2]",
                 )}
               >
-                تأكيد
+                {submitting ? "جاري التنفيذ..." : "تأكيد"}
               </button>
             </div>
           </div>
