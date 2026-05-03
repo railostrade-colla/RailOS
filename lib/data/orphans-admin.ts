@@ -255,6 +255,34 @@ export async function adminRemoveOrphanChild(childId: string): Promise<AdminRpcR
   return callRpc("admin_remove_orphan_child", { p_child_id: childId })
 }
 
+/** Edit any subset of fields on a child. Pass undefined to leave a
+ *  field unchanged. */
+export async function adminUpdateOrphanChild(input: {
+  child_id: string
+  first_name?: string
+  age?: number
+  gender?: "male" | "female"
+  city?: string
+  education_level?: EducationLevel
+  needs_amount_monthly?: number
+  story?: string
+  health_status?: "good" | "monitoring" | "needs_care"
+  blur_photo?: boolean
+}): Promise<AdminRpcResult> {
+  return callRpc("admin_update_orphan_child", {
+    p_child_id: input.child_id,
+    p_first_name: input.first_name ?? null,
+    p_age: input.age ?? null,
+    p_gender: input.gender ?? null,
+    p_city: input.city ?? null,
+    p_education_level: input.education_level ?? null,
+    p_needs_amount_monthly: input.needs_amount_monthly ?? null,
+    p_story: input.story ?? null,
+    p_health_status: input.health_status ?? null,
+    p_blur_photo: input.blur_photo ?? null,
+  })
+}
+
 export async function adminSendOrphanReport(input: {
   child_id: string
   period: string

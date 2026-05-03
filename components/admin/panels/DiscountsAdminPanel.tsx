@@ -20,6 +20,7 @@ import {
   getAllUserCoupons,
   adminCreateDiscount,
   adminSetDiscountActive,
+  adminUpdateDiscount,
 } from "@/lib/data/discounts-admin"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
@@ -43,6 +44,36 @@ export function DiscountsAdminPanel() {
   const [newDescription, setNewDescription] = useState("")
   const [newEnds, setNewEnds] = useState("")
 
+  // Edit form (Phase 8.2) — populated when actionMode flips to "edit"
+  const [editName, setEditName] = useState("")
+  const [editPercent, setEditPercent] = useState<number>(20)
+  const [editCategory, setEditCategory] = useState<DiscountCategory>("restaurants")
+  const [editDescription, setEditDescription] = useState("")
+  const [editEnds, setEditEnds] = useState("")
+  const [editLevel, setEditLevel] = useState<"basic" | "advanced" | "pro" | "elite">("basic")
+  const [editColor, setEditColor] = useState<"red" | "blue" | "purple" | "orange" | "green" | "yellow">("blue")
+  const [editMaxUses, setEditMaxUses] = useState<number>(1000)
+
+  // When the user opens the edit modal, hydrate the form with the row.
+  useEffect(() => {
+    if (actionMode === "edit" && selectedDiscount) {
+      setEditName(selectedDiscount.brand_name)
+      setEditPercent(selectedDiscount.discount_percent)
+      setEditCategory(selectedDiscount.category)
+      setEditDescription(selectedDiscount.description)
+      setEditEnds(selectedDiscount.ends_at?.split("T")[0] ?? "")
+      setEditLevel(
+        selectedDiscount.required_level === "pro"
+          ? "pro"
+          : selectedDiscount.required_level === "advanced"
+            ? "advanced"
+            : "basic",
+      )
+      setEditColor(selectedDiscount.cover_color)
+      setEditMaxUses(selectedDiscount.max_uses)
+    }
+  }, [actionMode, selectedDiscount])
+
   // Mock first-paint, real DB on mount.
   const [discounts, setDiscounts] = useState<Discount[]>(MOCK_DISCOUNTS)
   const [coupons, setCoupons] = useState<UserCoupon[]>(MOCK_USER_COUPONS)
@@ -64,9 +95,11 @@ export function DiscountsAdminPanel() {
 
   const handleAction = async () => {
     if (!selectedDiscount || !actionMode) return
+
     if (actionMode === "deactivate") {
       setSubmitting(true)
       const result = await adminSetDiscountActive(selectedDiscount.id, false)
+      setSubmitting(false)
       if (!result.success) {
         const map: Record<string, string> = {
           not_admin: "صلاحياتك لا تسمح",
@@ -74,15 +107,52 @@ export function DiscountsAdminPanel() {
           missing_table: "الجداول غير منشورة بعد",
         }
         showError(map[result.reason ?? ""] ?? "فشل الإيقاف")
-      } else {
-        showSuccess("✅ تم إيقاف الخصم")
-        refresh()
+        return
       }
-      setSubmitting(false)
-    } else {
-      // Edit form is a TODO — keep optimistic toast for now.
-      showSuccess("✅ تم حفظ التعديلات")
+      showSuccess("✅ تم إيقاف الخصم")
+      refresh()
+      setActionMode(null)
+      setSelectedDiscount(null)
+      return
     }
+
+    // ── Edit (Phase 8.2 — wired to admin_update_discount RPC) ──
+    if (!editName.trim() || !editDescription.trim() || !editEnds) {
+      return showError("املأ جميع الحقول الإجبارية")
+    }
+    if (editPercent < 1 || editPercent > 99) {
+      return showError("النسبة بين 1 و99")
+    }
+    setSubmitting(true)
+    const result = await adminUpdateDiscount({
+      discount_id: selectedDiscount.id,
+      brand_name: editName.trim(),
+      discount_percent: editPercent,
+      category: editCategory,
+      description: editDescription.trim(),
+      ends_at: new Date(editEnds).toISOString(),
+      required_level: editLevel,
+      cover_color: editColor,
+      max_uses: editMaxUses,
+    })
+    setSubmitting(false)
+
+    if (!result.success) {
+      const map: Record<string, string> = {
+        not_admin: "صلاحياتك لا تسمح",
+        not_found: "الخصم غير موجود",
+        invalid_percent: "النسبة بين 1 و99",
+        invalid_dates: "تاريخ غير صحيح (الانتهاء بعد البدء)",
+        invalid_level: "المستوى غير صحيح",
+        invalid_color: "اللون غير صحيح",
+        max_uses_below_used: "السقف أقل من عدد المُطالبين به",
+        missing_table: "الجداول غير منشورة بعد",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل الحفظ")
+      return
+    }
+    showSuccess("✅ تم حفظ التعديلات")
+    refresh()
     setActionMode(null)
     setSelectedDiscount(null)
   }
@@ -373,31 +443,166 @@ export function DiscountsAdminPanel() {
       {/* Action modal */}
       {actionMode && selectedDiscount && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-w-md">
+          <div className={cn(
+            "bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-h-[90vh] overflow-y-auto",
+            actionMode === "deactivate" ? "max-w-md" : "max-w-2xl",
+          )}>
             <div className="flex justify-between items-start mb-4">
               <div className="text-base font-bold text-white">
                 {actionMode === "deactivate" ? "🔴 إيقاف الخصم" : "✏️ تعديل الخصم"}
               </div>
               <button onClick={() => { setActionMode(null); setSelectedDiscount(null) }} className="text-neutral-500 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
-            <div className={cn(
-              "rounded-xl p-3 mb-4 text-xs border",
-              actionMode === "deactivate"
-                ? "bg-red-400/[0.05] border-red-400/[0.2] text-red-400"
-                : "bg-blue-400/[0.05] border-blue-400/[0.2] text-blue-400"
-            )}>
-              {actionMode === "deactivate"
-                ? `سيتم إيقاف خصم "${selectedDiscount.brand_name}" — لن يستطيع المستخدمون المطالبة بقسائم جديدة. القسائم المُصدَرة تبقى صالحة.`
-                : `تعديل خصم "${selectedDiscount.brand_name}" (Form كامل قيد التطوير).`
-              }
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => { setActionMode(null); setSelectedDiscount(null) }} className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إلغاء</button>
-              <button onClick={handleAction} className={cn(
-                "flex-1 py-2.5 rounded-xl text-sm font-bold border",
-                actionMode === "deactivate" ? "bg-red-500/[0.15] border-red-500/[0.3] text-red-400" : "bg-blue-500/[0.15] border-blue-500/[0.3] text-blue-400"
-              )}>تأكيد</button>
-            </div>
+
+            {actionMode === "deactivate" && (
+              <>
+                <div className="rounded-xl p-3 mb-4 text-xs border bg-red-400/[0.05] border-red-400/[0.2] text-red-400">
+                  سيتم إيقاف خصم &quot;{selectedDiscount.brand_name}&quot; — لن يستطيع المستخدمون المطالبة بقسائم جديدة. القسائم المُصدَرة تبقى صالحة.
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setActionMode(null); setSelectedDiscount(null) }}
+                    disabled={submitting}
+                    className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    onClick={handleAction}
+                    disabled={submitting}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold border bg-red-500/[0.15] border-red-500/[0.3] text-red-400 hover:bg-red-500/[0.2] disabled:opacity-50"
+                  >
+                    {submitting ? "جاري الإيقاف..." : "تأكيد الإيقاف"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {actionMode === "edit" && (
+              <>
+                <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-xl p-3 mb-4 text-xs text-blue-300">
+                  تعديل خصم <span className="font-bold">{selectedDiscount.brand_name}</span>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-neutral-400 mb-1.5 block">اسم الماركة *</label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-neutral-400 mb-1.5 block">نسبة الخصم (%) *</label>
+                      <input
+                        type="number"
+                        value={editPercent}
+                        onChange={(e) => setEditPercent(Number(e.target.value))}
+                        min={1}
+                        max={99}
+                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-neutral-400 mb-1.5 block">الفئة *</label>
+                      <select
+                        value={editCategory}
+                        onChange={(e) => setEditCategory(e.target.value as DiscountCategory)}
+                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
+                      >
+                        {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
+                          <option key={k} value={k}>{v.icon} {v.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-neutral-400 mb-1.5 block">الوصف *</label>
+                    <textarea
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      rows={3}
+                      className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20 resize-none"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-neutral-400 mb-1.5 block">تاريخ الانتهاء *</label>
+                      <input
+                        type="date"
+                        value={editEnds}
+                        onChange={(e) => setEditEnds(e.target.value)}
+                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-neutral-400 mb-1.5 block">السقف</label>
+                      <input
+                        type="number"
+                        value={editMaxUses}
+                        onChange={(e) => setEditMaxUses(Number(e.target.value))}
+                        min={selectedDiscount.used_count}
+                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-neutral-400 mb-1.5 block">المستوى المطلوب</label>
+                      <select
+                        value={editLevel}
+                        onChange={(e) => setEditLevel(e.target.value as typeof editLevel)}
+                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
+                      >
+                        <option value="basic">أساسي</option>
+                        <option value="advanced">متقدم</option>
+                        <option value="pro">محترف</option>
+                        <option value="elite">elite</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-neutral-400 mb-1.5 block">اللون</label>
+                      <select
+                        value={editColor}
+                        onChange={(e) => setEditColor(e.target.value as typeof editColor)}
+                        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
+                      >
+                        <option value="red">أحمر</option>
+                        <option value="blue">أزرق</option>
+                        <option value="purple">بنفسجي</option>
+                        <option value="orange">برتقالي</option>
+                        <option value="green">أخضر</option>
+                        <option value="yellow">أصفر</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mt-5">
+                  <button
+                    onClick={() => { setActionMode(null); setSelectedDiscount(null) }}
+                    disabled={submitting}
+                    className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    onClick={handleAction}
+                    disabled={submitting}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold border bg-blue-500/[0.15] border-blue-500/[0.3] text-blue-400 hover:bg-blue-500/[0.2] disabled:opacity-50"
+                  >
+                    {submitting ? "جاري الحفظ..." : "حفظ التعديلات"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

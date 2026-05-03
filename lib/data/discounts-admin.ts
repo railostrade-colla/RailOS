@@ -203,3 +203,39 @@ export async function adminSetDiscountActive(
     p_is_active: isActive,
   })
 }
+
+/**
+ * Edit any subset of fields on an existing discount. Pass undefined
+ * for fields you don't want to change.
+ */
+export async function adminUpdateDiscount(input: {
+  discount_id: string
+  brand_name?: string
+  brand_logo_emoji?: string
+  category?: DiscountCategory
+  discount_percent?: number
+  description?: string
+  starts_at?: string
+  ends_at?: string
+  max_uses?: number
+  required_level?: "basic" | "advanced" | "pro" | "elite"
+  cover_color?: "red" | "blue" | "purple" | "orange" | "green" | "yellow"
+  conditions?: string[]
+  branches?: string[]
+}): Promise<AdminRpcResult> {
+  return callRpc("admin_update_discount", {
+    p_discount_id: input.discount_id,
+    p_brand_name: input.brand_name ?? null,
+    p_brand_logo_emoji: input.brand_logo_emoji ?? null,
+    p_category: input.category ?? null,
+    p_discount_percent: input.discount_percent ?? null,
+    p_description: input.description ?? null,
+    p_starts_at: input.starts_at ?? null,
+    p_ends_at: input.ends_at ?? null,
+    p_max_uses: input.max_uses ?? null,
+    p_required_level: input.required_level ?? null,
+    p_cover_color: input.cover_color ?? null,
+    p_conditions: input.conditions ?? null,
+    p_branches: input.branches ?? null,
+  })
+}
