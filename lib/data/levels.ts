@@ -535,6 +535,117 @@ export async function getMyLevelHistory(
   }
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Phase S — admin upsert for level_settings (used by LevelSettingsPanel)
+// ──────────────────────────────────────────────────────────────────────
+
+export interface UpsertLevelSettingsResult {
+  success: boolean
+  /** Count of rows successfully written. */
+  written: number
+  /** Stable reason on failure (so the UI can branch). */
+  reason?: "unauthenticated" | "rls" | "missing_table" | "unknown"
+  error?: string
+}
+
+/**
+ * Bulk-UPSERTs the level catalogue. The `level` column is the PK so
+ * `onConflict: "level"` keeps id-stability across saves. We strip the
+ * UI-only fields (`benefits` is JSONB so it round-trips fine) and let
+ * the DB defaults handle anything we don't touch.
+ *
+ * Returns a structured result so the panel can distinguish "RLS denied
+ * me" (the user is not actually an admin) from "table missing" (fresh
+ * DB pre-migration) from real failures.
+ */
+export async function upsertLevelSettings(
+  rows: LevelSetting[],
+): Promise<UpsertLevelSettingsResult> {
+  if (!rows.length) {
+    return { success: true, written: 0 }
+  }
+  try {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      return { success: false, written: 0, reason: "unauthenticated" }
+    }
+
+    // Map UI shape → DB column names. `display_name_en` doesn't exist
+    // in the local LevelSetting type — leave it untouched in the DB
+    // by omitting it from the upsert payload.
+    const payload = rows.map((r) => ({
+      level: r.level,
+      display_name_ar: r.display_name_ar,
+      level_order: r.level_order,
+      min_volume: r.min_volume,
+      min_total_trades: r.min_total_trades,
+      min_successful_trades: r.min_successful_trades ?? 0,
+      min_success_rate: r.min_success_rate,
+      min_days_active: r.min_days_active,
+      max_disputes_lost: r.max_disputes_lost,
+      max_reports_received: r.max_reports_received,
+      max_dispute_rate: r.max_dispute_rate,
+      required_kyc: r.required_kyc,
+      min_rating: r.min_rating,
+      monthly_trade_limit: r.monthly_trade_limit,
+      fee_discount: r.fee_discount,
+      benefits: r.benefits ?? [],
+      color: r.color,
+      icon: r.icon,
+      updated_at: new Date().toISOString(),
+      updated_by: user.id,
+    }))
+
+    const { error, count } = await supabase
+      .from("level_settings")
+      .upsert(payload, { onConflict: "level", count: "exact" })
+
+    if (error) {
+      if (
+        error.code === "42P01" ||
+        /relation .* does not exist/i.test(error.message)
+      ) {
+        return {
+          success: false,
+          written: 0,
+          reason: "missing_table",
+          error: error.message,
+        }
+      }
+      if (error.code === "42501" || /permission/i.test(error.message)) {
+        return {
+          success: false,
+          written: 0,
+          reason: "rls",
+          error: error.message,
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.error("[levels] upsertLevelSettings:", error.message)
+      return {
+        success: false,
+        written: 0,
+        reason: "unknown",
+        error: error.message,
+      }
+    }
+
+    return { success: true, written: count ?? rows.length }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[levels] upsertLevelSettings threw:", err)
+    return {
+      success: false,
+      written: 0,
+      reason: "unknown",
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
 /**
  * Loads the public level catalogue from the `level_settings` table.
  *

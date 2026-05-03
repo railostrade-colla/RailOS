@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { AlertTriangle, Save, X } from "lucide-react"
 import { ActionBtn, KPI } from "@/components/admin/ui"
 import {
@@ -8,18 +8,40 @@ import {
   type LevelSetting,
   type LevelId,
 } from "@/lib/mock-data/levels"
-import { updateLevelSettings } from "@/lib/data/levels"
-import { showSuccess } from "@/lib/utils/toast"
+import {
+  updateLevelSettings,
+  upsertLevelSettings,
+  getLevelSettings,
+} from "@/lib/data/levels"
+import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 export function LevelSettingsPanel() {
-  // Local state — يبدأ بنسخة من LEVEL_SETTINGS_STORE
+  // Local state seeded with the in-memory mock so the form is
+  // editable immediately. The DB read replaces it on mount when
+  // available — keeps offline / partial-deploy environments working.
   const [settings, setSettings] = useState<LevelSetting[]>(() =>
     LEVEL_SETTINGS_STORE.map((l) => ({ ...l }))
   )
   const [showConfirm, setShowConfirm] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  // Pull live values from `level_settings` so admin edits start from
+  // the source-of-truth instead of the local mock.
+  useEffect(() => {
+    let cancelled = false
+    getLevelSettings().then((rows) => {
+      if (cancelled) return
+      if (rows.length > 0) {
+        setSettings([...rows].sort((a, b) => a.level_order - b.level_order))
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const updateField = <K extends keyof LevelSetting>(
     levelId: LevelId,
@@ -35,10 +57,41 @@ export function LevelSettingsPanel() {
     setShowConfirm(true)
   }
 
-  const handleConfirm = () => {
-    updateLevelSettings(settings)
-    setShowConfirm(false)
-    showSuccess("✅ تم تحديث إعدادات المستويات — ستُطبَّق على الفحص التلقائي القادم")
+  const handleConfirm = async () => {
+    if (saving) return
+    setSaving(true)
+    const result = await upsertLevelSettings(settings)
+    setSaving(false)
+
+    if (result.success) {
+      // Mirror to the local mock store so any other mock-driven code
+      // (e.g. the user-side /levels page during the same session)
+      // sees the updated values immediately.
+      updateLevelSettings(settings)
+      setShowConfirm(false)
+      showSuccess(
+        `✅ تم تحديث ${result.written} مستوى — ستُطبَّق على الفحص التلقائي القادم`,
+      )
+      return
+    }
+
+    if (result.reason === "missing_table") {
+      // Fresh DB / pre-migration — keep the mock store in sync so the
+      // admin's local session reflects the change at least.
+      updateLevelSettings(settings)
+      setShowConfirm(false)
+      showError("الجدول غير موجود على الخادم — حُفظ محلياً فقط")
+      return
+    }
+    if (result.reason === "rls") {
+      showError("لا تملك صلاحيات التعديل — تحقّق من حسابك")
+      return
+    }
+    if (result.reason === "unauthenticated") {
+      showError("سجّل دخول كمسؤول للحفظ")
+      return
+    }
+    showError(result.error || "تعذّر حفظ التغييرات")
   }
 
   const handleReset = () => {
@@ -223,16 +276,27 @@ export function LevelSettingsPanel() {
             <div className="flex gap-2">
               <button
                 onClick={() => setShowConfirm(false)}
-                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                disabled={saving}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
               >
                 إلغاء
               </button>
               <button
                 onClick={handleConfirm}
-                className="flex-1 py-3 rounded-xl bg-green-500/[0.15] border border-green-500/[0.3] text-green-400 text-sm font-bold hover:bg-green-500/[0.2] flex items-center justify-center gap-2"
+                disabled={saving}
+                className="flex-1 py-3 rounded-xl bg-green-500/[0.15] border border-green-500/[0.3] text-green-400 text-sm font-bold hover:bg-green-500/[0.2] disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                <Save className="w-4 h-4" />
-                تأكيد الحفظ
+                {saving ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+                    جاري الحفظ...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    تأكيد الحفظ
+                  </>
+                )}
               </button>
             </div>
           </div>
