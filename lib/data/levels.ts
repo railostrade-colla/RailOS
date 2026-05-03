@@ -311,6 +311,230 @@ function dbRowToLevelSetting(row: LevelSettingsRow): LevelSetting | null {
   }
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Phase G — DB-backed user stats + level history (replaces mock fixtures)
+// ──────────────────────────────────────────────────────────────────────
+
+interface UserStatsViewRow {
+  id: string
+  display_name: string | null
+  level: string | null
+  kyc_status: string | null
+  total_trade_volume: number | string | null
+  total_trades: number | null
+  successful_trades: number | null
+  failed_trades: number | null
+  cancelled_trades: number | null
+  success_rate: number | string | null
+  disputes_total: number | null
+  disputes_won: number | null
+  disputes_lost: number | null
+  dispute_rate: number | string | null
+  reports_received: number | null
+  reports_against_others: number | null
+  rating_average: number | string | null
+  rating_count: number | null
+  days_active: number | null
+  first_trade_at: string | null
+  last_trade_at: string | null
+  account_age_days: number | null
+  level_override: string | null
+  level_overridden_at: string | null
+}
+
+interface LevelHistoryRow {
+  id: string
+  user_id: string | null
+  from_level: string | null
+  to_level: string | null
+  change_type: string | null
+  reason: string | null
+  changed_by: string | null
+  created_at: string | null
+}
+
+/** Defensive coerce: PostgREST returns BIGINT/NUMERIC as string. */
+function num(v: unknown, fallback = 0): number {
+  if (v == null) return fallback
+  const x = typeof v === "string" ? Number(v) : (v as number)
+  return Number.isFinite(x) ? x : fallback
+}
+
+/**
+ * Loads the current user's level / trading / disputes stats from the
+ * `user_stats_view` (created by migration 10). Returns `null` only when
+ * the user is unauthenticated or the view is unavailable — callers
+ * should fall back to the mock UserStats fixture in that case.
+ *
+ * Booleans for `level_locked` aren't on the view; we read them from
+ * profiles separately to avoid changing the migration.
+ */
+export async function getMyUserStats(): Promise<UserStats | null> {
+  try {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return null
+
+    const { data, error } = await supabase
+      .from("user_stats_view")
+      .select(
+        "id, display_name, level, kyc_status, total_trade_volume, total_trades, successful_trades, failed_trades, cancelled_trades, success_rate, disputes_total, disputes_won, disputes_lost, dispute_rate, reports_received, reports_against_others, rating_average, rating_count, days_active, first_trade_at, last_trade_at, account_age_days, level_override, level_overridden_at",
+      )
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn("[levels] user_stats_view unavailable:", error.message)
+      return null
+    }
+    if (!data) return null
+
+    const row = data as UserStatsViewRow
+    const level = isLevelId(row.level ?? "") ? (row.level as LevelId) : "basic"
+    const kycRaw = row.kyc_status
+    const kyc: UserStats["kyc_status"] =
+      kycRaw === "advanced" ? "advanced" : kycRaw === "pro" ? "pro" : "basic"
+
+    // level_locked + level_upgraded_at + level_override_reason live on
+    // profiles (not on the view) — fetch them as a best-effort top-up.
+    let levelLocked = false
+    let levelUpgradedAt: string | undefined
+    let levelOverrideReason: string | undefined
+    try {
+      const { data: pdata } = await supabase
+        .from("profiles")
+        .select("level_locked, level_upgraded_at, level_override_reason")
+        .eq("id", user.id)
+        .maybeSingle()
+      if (pdata) {
+        const p = pdata as {
+          level_locked?: boolean | null
+          level_upgraded_at?: string | null
+          level_override_reason?: string | null
+        }
+        levelLocked = p.level_locked ?? false
+        levelUpgradedAt = p.level_upgraded_at ?? undefined
+        levelOverrideReason = p.level_override_reason ?? undefined
+      }
+    } catch {
+      /* keep defaults */
+    }
+
+    const overrideRaw = row.level_override
+    const levelOverride: LevelId | null =
+      overrideRaw && isLevelId(overrideRaw) ? overrideRaw : null
+
+    return {
+      id: row.id,
+      display_name: row.display_name ?? "—",
+      level,
+      kyc_status: kyc,
+
+      total_trade_volume: num(row.total_trade_volume),
+      total_trades: num(row.total_trades),
+      successful_trades: num(row.successful_trades),
+      failed_trades: num(row.failed_trades),
+      cancelled_trades: num(row.cancelled_trades),
+      success_rate: num(row.success_rate),
+
+      disputes_total: num(row.disputes_total),
+      disputes_won: num(row.disputes_won),
+      disputes_lost: num(row.disputes_lost),
+      dispute_rate: num(row.dispute_rate),
+
+      reports_received: num(row.reports_received),
+      reports_against_others: num(row.reports_against_others),
+
+      rating_average: num(row.rating_average),
+      rating_count: num(row.rating_count),
+
+      days_active: num(row.days_active),
+      account_age_days: num(row.account_age_days),
+      first_trade_at: row.first_trade_at ?? undefined,
+      last_trade_at: row.last_trade_at ?? undefined,
+
+      level_override: levelOverride,
+      level_override_reason: levelOverrideReason,
+      level_overridden_at: row.level_overridden_at ?? undefined,
+      level_locked: levelLocked,
+      level_upgraded_at: levelUpgradedAt,
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[levels] getMyUserStats threw:", err)
+    return null
+  }
+}
+
+/** Maps a raw `change_type` text to the strict UI enum. */
+function asChangeType(s: string | null): LevelChangeType | null {
+  if (s === "auto_upgrade" || s === "auto_downgrade") return s
+  if (s === "admin_override" || s === "admin_revert") return s
+  return null
+}
+
+/**
+ * Loads the current user's level-history rows (latest first), validated
+ * against the strict UI types. Drops malformed rows silently so a single
+ * bad record can't break the whole list.
+ */
+export async function getMyLevelHistory(
+  limit: number = 20,
+): Promise<LevelHistoryEntry[]> {
+  try {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return []
+
+    const { data, error } = await supabase
+      .from("level_history")
+      .select(
+        "id, user_id, from_level, to_level, change_type, reason, changed_by, created_at",
+      )
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(limit)
+
+    if (error || !data) {
+      if (error)
+        // eslint-disable-next-line no-console
+        console.warn("[levels] level_history:", error.message)
+      return []
+    }
+
+    const out: LevelHistoryEntry[] = []
+    for (const row of data as LevelHistoryRow[]) {
+      const changeType = asChangeType(row.change_type)
+      if (!changeType) continue
+      const fromLevel =
+        row.from_level && isLevelId(row.from_level)
+          ? (row.from_level as LevelId)
+          : null
+      if (!row.to_level || !isLevelId(row.to_level)) continue
+      out.push({
+        id: row.id,
+        user_id: row.user_id ?? user.id,
+        from_level: fromLevel,
+        to_level: row.to_level as LevelId,
+        change_type: changeType,
+        reason: row.reason ?? "",
+        changed_by: row.changed_by ?? undefined,
+        created_at: row.created_at ?? new Date().toISOString(),
+      })
+    }
+    return out
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[levels] getMyLevelHistory threw:", err)
+    return []
+  }
+}
+
 /**
  * Loads the public level catalogue from the `level_settings` table.
  *

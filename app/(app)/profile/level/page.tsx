@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { TrendingUp, AlertTriangle, Flag, Star } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -9,18 +10,41 @@ import {
   getLevelSetting,
   getNextLevel,
   getRequirementChecklist,
+  type UserStats,
+  type LevelHistoryEntry,
 } from "@/lib/mock-data/levels"
-import { getUserLevelHistory, CHANGE_TYPE_META } from "@/lib/data/levels"
+import {
+  getMyUserStats,
+  getMyLevelHistory,
+  CHANGE_TYPE_META,
+} from "@/lib/data/levels"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 export default function MyLevelPage() {
-  const stats = MOCK_USER_STATS
+  // Initial paint uses mock fixture so the layout never flashes empty.
+  // Real DB-backed values swap in on mount.
+  const [stats, setStats] = useState<UserStats>(MOCK_USER_STATS)
+  const [history, setHistory] = useState<LevelHistoryEntry[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([getMyUserStats(), getMyLevelHistory(5)]).then(
+      ([dbStats, dbHistory]) => {
+        if (cancelled) return
+        if (dbStats) setStats(dbStats)
+        setHistory(dbHistory)
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const levelSetting = getLevelSetting(stats.level)
   const nextLevel = getNextLevel(stats.level)
   const checklist = nextLevel ? getRequirementChecklist(stats, nextLevel.level) : []
-  const history = getUserLevelHistory(stats.id, 5)
 
   return (
     <AppLayout>
