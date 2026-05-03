@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Search, MessageCircle, UserPlus, UserMinus, X } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess } from "@/lib/utils/toast"
 import { mockUsers, mockChats } from "@/lib/mock-data"
+import { getCommunityUsers, type CommunityUserRow } from "@/lib/data/community"
 import { cn } from "@/lib/utils/cn"
 
 type CommunityTab = "all" | "friends" | "partners" | "chats"
@@ -18,8 +19,25 @@ export default function CommunityPage() {
   const router = useRouter()
   const [tab, setTab] = useState<CommunityTab>("all")
   const [search, setSearch] = useState("")
-  const [friendIds, setFriendIds] = useState<Set<string>>(new Set(["1", "2", "5"]))
-  const [selectedUser, setSelectedUser] = useState<typeof mockUsers[0] | null>(null)
+  // Friendships aren't persisted to DB yet (no `friendships` table) —
+  // this Set is per-session client state. The "+إضافة" button still
+  // works for UX, just doesn't survive a reload.
+  const [friendIds, setFriendIds] = useState<Set<string>>(new Set())
+  const [selectedUser, setSelectedUser] = useState<CommunityUserRow | null>(null)
+
+  // Real users from DB with mock fallback so the layout never blanks.
+  const [users, setUsers] = useState<CommunityUserRow[]>(mockUsers)
+
+  useEffect(() => {
+    let cancelled = false
+    getCommunityUsers(50).then((rows) => {
+      if (cancelled) return
+      if (rows.length > 0) setUsers(rows)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const addFriend = (id: string) => {
     setFriendIds((prev) => new Set([...prev, id]))
@@ -35,12 +53,12 @@ export default function CommunityPage() {
     showSuccess("تمت إزالة الصديق")
   }
 
-  const filteredUsers = mockUsers.filter((u) =>
+  const filteredUsers = users.filter((u) =>
     !search || u.name.toLowerCase().includes(search.toLowerCase())
   )
 
-  const friends = mockUsers.filter((u) => friendIds.has(u.id))
-  const partners = mockUsers.filter((u) => u.level === "pro" || u.level === "advanced")
+  const friends = users.filter((u) => friendIds.has(u.id))
+  const partners = users.filter((u) => u.level === "pro" || u.level === "advanced")
 
   const tabs: { key: CommunityTab; label: string }[] = [
     { key: "all", label: "المجتمع" },
@@ -49,7 +67,7 @@ export default function CommunityPage() {
     { key: "chats", label: "الدردشة" },
   ]
 
-  const UserCard = ({ u, showActions = true }: { u: typeof mockUsers[0]; showActions?: boolean }) => (
+  const UserCard = ({ u, showActions = true }: { u: CommunityUserRow; showActions?: boolean }) => (
     <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3.5">
       <div className="flex items-center gap-3">
         <button
