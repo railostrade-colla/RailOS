@@ -24,6 +24,14 @@ import {
   submitFeeRequest as apiSubmitFeeRequest,
   type PortfolioData,
 } from "@/lib/data/portfolio"
+import {
+  getContractHoldings,
+  getContractTransactions,
+  type ContractHoldingRow,
+  type ContractTransactionRow,
+} from "@/lib/data/contracts"
+import { AccountSwitcher } from "@/components/wallet/AccountSwitcher"
+import { useActiveAccount } from "@/contexts/ActiveAccountContext"
 
 // TODO Phase 4.X — derive from this month's deals.total_amount sum.
 const CURRENT_USER_USED_THIS_MONTH = 0
@@ -99,6 +107,30 @@ function PortfolioContent() {
   const [data, setData] = useState<PortfolioData | null>(null)
   const [loading, setLoading] = useState(true)
   const [submittingFee, setSubmittingFee] = useState(false)
+
+  // Phase 9.3a — multi-account state.
+  const { active } = useActiveAccount()
+  const [contractHoldings, setContractHoldings] = useState<ContractHoldingRow[]>([])
+  const [contractTxns, setContractTxns] = useState<ContractTransactionRow[]>([])
+
+  // Re-fetch contract-specific data whenever the active account flips.
+  useEffect(() => {
+    let cancelled = false
+    if (active.kind !== "contract") {
+      setContractHoldings([])
+      setContractTxns([])
+      return
+    }
+    Promise.all([
+      getContractHoldings(active.contractId),
+      getContractTransactions(active.contractId),
+    ]).then(([h, t]) => {
+      if (cancelled) return
+      setContractHoldings(h)
+      setContractTxns(t)
+    })
+    return () => { cancelled = true }
+  }, [active])
 
   const refresh = async () => {
     const fresh = await getPortfolioData()
@@ -177,10 +209,47 @@ function PortfolioContent() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
 
           <PageHeader
-            title="المحفظة"
-            subtitle="حصصك والمعاملات والوحدات في مكان واحد"
+            title={
+              active.kind === "contract"
+                ? `محفظة العقد · ${active.contractTitle}`
+                : "المحفظة"
+            }
+            subtitle={
+              active.kind === "contract"
+                ? `صلاحيتك: ${
+                    active.isCreator
+                      ? "منشئ"
+                      : active.permission === "buy_and_sell"
+                        ? "شراء وبيع"
+                        : active.permission === "buy_only"
+                          ? "شراء فقط"
+                          : "عرض فقط"
+                  }`
+                : "حصصك والمعاملات والوحدات في مكان واحد"
+            }
+            rightAction={<AccountSwitcher />}
           />
 
+          {/* ═══ Contract-account view (Phase 9.3a) ═══════════════
+             When the active account is a contract, render the
+             contract's balance + holdings + transactions instead of
+             the personal portfolio. The personal view is hidden in
+             this branch (only shown when active.kind === "personal"). */}
+          {active.kind === "contract" && (
+            <ContractPortfolioPanel
+              contractTitle={active.contractTitle}
+              isCreator={active.isCreator}
+              permission={active.permission}
+              totalBalance={active.totalBalance}
+              holdings={contractHoldings}
+              transactions={contractTxns}
+              onOpenContract={() => router.push(`/contracts/${active.contractId}`)}
+            />
+          )}
+
+          {/* ═══ Personal view (only when on personal account) ═══ */}
+          {active.kind === "personal" && (
+          <>
           {/* بطاقة الحدود الشهرية */}
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-5 backdrop-blur">
 
@@ -589,6 +658,9 @@ function PortfolioContent() {
             </div>
           )}
 
+          </>
+          )}
+
         </div>
       </div>
 
@@ -676,6 +748,187 @@ function PortfolioContent() {
         </div>
       )}
     </AppLayout>
+  )
+}
+
+// ─── ContractPortfolioPanel (Phase 9.3a) ────────────────────────
+// Renders the contract-side wallet view: balance summary + per-project
+// holdings + recent transactions. Read-only — trade execution from a
+// contract is deferred to phase 9.3b.
+
+interface ContractPortfolioPanelProps {
+  contractTitle: string
+  isCreator: boolean
+  permission: "creator" | "view_only" | "buy_only" | "buy_and_sell"
+  totalBalance: number
+  holdings: ContractHoldingRow[]
+  transactions: ContractTransactionRow[]
+  onOpenContract: () => void
+}
+
+function ContractPortfolioPanel({
+  contractTitle,
+  isCreator,
+  permission,
+  totalBalance,
+  holdings,
+  transactions,
+  onOpenContract,
+}: ContractPortfolioPanelProps) {
+  void contractTitle
+  void isCreator
+  const totalShares = holdings.reduce((s, h) => s + h.shares, 0)
+  const totalInvested = holdings.reduce((s, h) => s + h.total_invested, 0)
+  const currentValue = holdings.reduce(
+    (s, h) => s + (h.current_market_price ?? 0) * h.shares,
+    0,
+  )
+
+  const permLabel =
+    permission === "creator" ? "منشئ"
+    : permission === "buy_and_sell" ? "شراء وبيع"
+    : permission === "buy_only" ? "شراء فقط"
+    : "عرض فقط"
+
+  return (
+    <>
+      {/* Balance summary */}
+      <div className="bg-purple-400/[0.06] border border-purple-400/[0.25] rounded-2xl p-5 mb-5">
+        <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+          <div>
+            <div className="text-[11px] text-purple-400 mb-1 flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5" strokeWidth={2.5} />
+              <span className="font-bold">حساب عقد جماعي · {permLabel}</span>
+            </div>
+            <div className="text-3xl font-bold text-white font-mono">
+              {fmtIQD(totalBalance)}
+            </div>
+            <div className="text-xs text-neutral-400 mt-1">
+              الرصيد المتاح للعقد (IQD)
+            </div>
+          </div>
+          <button
+            onClick={onOpenContract}
+            className="bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-lg px-3 py-2 text-[11px] text-white font-bold transition-colors"
+          >
+            تفاصيل العقد ←
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5 text-center">
+            <div className="text-[10px] text-neutral-500 mb-1">حصص</div>
+            <div className="text-sm font-bold text-white font-mono">
+              {totalShares}
+            </div>
+          </div>
+          <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5 text-center">
+            <div className="text-[10px] text-neutral-500 mb-1">المستثمر</div>
+            <div className="text-sm font-bold text-white font-mono">
+              {fmtIQD(totalInvested)}
+            </div>
+          </div>
+          <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5 text-center">
+            <div className="text-[10px] text-neutral-500 mb-1">القيمة الحالية</div>
+            <div className="text-sm font-bold text-green-400 font-mono">
+              {fmtIQD(currentValue)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Holdings */}
+      <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-3">
+        <div className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+          <Briefcase className="w-4 h-4 text-purple-400" strokeWidth={2} />
+          حصص العقد ({holdings.length})
+        </div>
+        {holdings.length === 0 ? (
+          <div className="text-center py-8 text-xs text-neutral-500">
+            لا توجد حصص في العقد بعد
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {holdings.map((h) => {
+              const value = (h.current_market_price ?? 0) * h.shares
+              return (
+                <div
+                  key={h.id}
+                  className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3 flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs text-white font-bold truncate">
+                      {h.project_name}
+                    </div>
+                    <div className="text-[10px] text-neutral-500 mt-0.5">
+                      {h.shares} حصة · مستثمر {fmtIQD(h.total_invested)}
+                    </div>
+                  </div>
+                  <div className="text-left flex-shrink-0">
+                    <div className="text-sm font-bold text-green-400 font-mono">
+                      {fmtIQD(value)}
+                    </div>
+                    <div className="text-[10px] text-neutral-500">IQD</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Recent transactions */}
+      <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-3">
+        <div className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+          <History className="w-4 h-4 text-purple-400" strokeWidth={2} />
+          آخر المعاملات ({transactions.length})
+        </div>
+        {transactions.length === 0 ? (
+          <div className="text-center py-8 text-xs text-neutral-500">
+            لا توجد معاملات بعد
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {transactions.slice(0, 10).map((t) => {
+              const isOutflow = t.transaction_type === "buy" || t.transaction_type === "withdraw"
+              const sign = isOutflow ? "-" : "+"
+              const typeLabel =
+                t.transaction_type === "buy" ? "شراء"
+                : t.transaction_type === "sell" ? "بيع"
+                : t.transaction_type === "deposit" ? "إيداع"
+                : t.transaction_type === "withdraw" ? "سحب"
+                : "توزيع"
+              return (
+                <div
+                  key={t.id}
+                  className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3 flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="text-xs text-white font-bold">
+                      {typeLabel}
+                      {t.project_name ? ` · ${t.project_name}` : ""}
+                    </div>
+                    <div className="text-[10px] text-neutral-500 mt-0.5">
+                      بواسطة {t.initiator_name} ·{" "}
+                      <span dir="ltr">{t.created_at?.slice(0, 10)}</span>
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      "text-sm font-bold font-mono flex-shrink-0",
+                      isOutflow ? "text-red-400" : "text-green-400",
+                    )}
+                  >
+                    {sign}
+                    {fmtIQD(Math.abs(t.amount))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </>
   )
 }
 

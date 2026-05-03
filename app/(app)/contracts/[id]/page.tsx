@@ -16,7 +16,13 @@ import {
   CONTRACT_END_FEE_PCT,
 } from "@/lib/mock-data"
 import type { ContractDetail } from "@/lib/mock-data/types"
-import { getContractById, endContract } from "@/lib/data/contracts"
+import {
+  getContractById,
+  endContract,
+  getContractMembersFull,
+  updateMemberPermission,
+  type ContractMemberFull,
+} from "@/lib/data/contracts"
 import { createClient } from "@/lib/supabase/client"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
@@ -40,37 +46,80 @@ export default function ContractDetailPage() {
   // Mock first-paint, real DB on mount.
   const [contract, setContract] = useState<ContractDetail>(mockContract)
   const [currentUserId, setCurrentUserId] = useState<string>("")
+  const [members, setMembers] = useState<ContractMemberFull[]>([])
+  const [savingPermFor, setSavingPermFor] = useState<string | null>(null)
+
+  const refreshMembers = async () => {
+    const m = await getContractMembersFull(id)
+    setMembers(m)
+  }
 
   useEffect(() => {
     let cancelled = false
     Promise.all([
       getContractById(id),
       createClient().auth.getUser(),
-    ]).then(([c, u]) => {
+      getContractMembersFull(id),
+    ]).then(([c, u, m]) => {
       if (cancelled) return
       if (c) setContract(c)
       const uid = u.data.user?.id ?? ""
       if (uid) setCurrentUserId(uid)
+      setMembers(m)
     })
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  const handlePermissionChange = async (
+    memberId: string,
+    perm: "view_only" | "buy_only" | "buy_and_sell",
+  ) => {
+    setSavingPermFor(memberId)
+    const result = await updateMemberPermission(memberId, perm)
+    setSavingPermFor(null)
+    if (!result.success) {
+      const map: Record<string, string> = {
+        unauthenticated: "سجّل دخولك أولاً",
+        not_creator: "فقط منشئ العقد يقدر يغيّر الصلاحيات",
+        not_found: "العضو غير موجود",
+        missing_table: "الجداول غير منشورة بعد",
+        rls: "صلاحياتك لا تسمح",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل تحديث الصلاحية")
+      return
+    }
+    showSuccess("✅ تم تحديث الصلاحية")
+    refreshMembers()
+  }
 
   const [showEndModal, setShowEndModal] = useState(false)
   const [confirmCheck, setConfirmCheck] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  // Real ownership check — by creator id from contract row.
+  // Real ownership check — derived from the user_contracts list.
   // Falls back to mock string-match for the seed contract.
+  const [creatorContractIds, setCreatorContractIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    let cancelled = false
+    import("@/lib/data/contracts").then(({ getUserContracts }) => {
+      getUserContracts().then((rows) => {
+        if (cancelled) return
+        setCreatorContractIds(
+          new Set(rows.filter((r) => r.is_creator).map((r) => r.contract_id)),
+        )
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const isCreator =
-    currentUserId
-      ? // The DB row provides creator as full_name string; we don't
-        // expose creator_id on ContractDetail. As a workaround, the
-        // /contracts/[id] page should rely on getMyContracts elsewhere
-        // for the ownership check. Here we approximate with name.
-        contract.creator === "أحمد محمد"
-      : contract.creator === "أحمد محمد"
+    creatorContractIds.has(contract.id) ||
+    (!currentUserId && contract.creator === "أحمد محمد")
 
   const distribution = calculateContractDistribution(contract.id)
 
@@ -201,6 +250,75 @@ export default function ContractDetailPage() {
               ))}
             </div>
           </div>
+
+          {/* ═══ Member permissions (creator only) ═══ */}
+          {isCreator && members.length > 0 && (
+            <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Users className="w-4 h-4 text-purple-400" strokeWidth={2} />
+                <div className="text-sm font-bold text-white">صلاحيات الشركاء</div>
+              </div>
+              <div className="text-[11px] text-neutral-500 mb-3">
+                تحكّم بما يستطيع كل شريك فعله من حساب العقد (الشراء/البيع/العرض فقط).
+              </div>
+              <div className="space-y-2">
+                {members
+                  .filter((m) => m.user_id !== currentUserId)
+                  .map((m) => {
+                    const isSaving = savingPermFor === m.id
+                    return (
+                      <div
+                        key={m.id}
+                        className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3 flex items-center gap-3"
+                      >
+                        <div className="w-9 h-9 rounded-full bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
+                          {m.user_name.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-white font-bold truncate">
+                            {m.user_name}
+                          </div>
+                          <div className="text-[10px] text-neutral-500 mt-0.5">
+                            حصة <span className="text-yellow-400 font-mono">{m.share_percent}%</span>
+                            {" · "}
+                            <span
+                              className={cn(
+                                m.invite_status === "accepted"
+                                  ? "text-green-400"
+                                  : m.invite_status === "pending"
+                                    ? "text-yellow-400"
+                                    : "text-red-400",
+                              )}
+                            >
+                              {m.invite_status === "accepted"
+                                ? "قابل الدعوة"
+                                : m.invite_status === "pending"
+                                  ? "قيد الانتظار"
+                                  : "رفض"}
+                            </span>
+                          </div>
+                        </div>
+                        <select
+                          value={m.permission === "creator" ? "view_only" : m.permission}
+                          disabled={isSaving || m.invite_status !== "accepted"}
+                          onChange={(e) =>
+                            handlePermissionChange(
+                              m.id,
+                              e.target.value as "view_only" | "buy_only" | "buy_and_sell",
+                            )
+                          }
+                          className="bg-white/[0.05] border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-[11px] text-white outline-none disabled:opacity-50 cursor-pointer"
+                        >
+                          <option value="view_only">عرض فقط</option>
+                          <option value="buy_only">شراء فقط</option>
+                          <option value="buy_and_sell">شراء وبيع</option>
+                        </select>
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+          )}
 
           {/* ═══ End contract button (creator + active only) ═══ */}
           {isCreator && contract.status === "active" && (

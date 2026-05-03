@@ -376,6 +376,277 @@ export interface EndContractResult {
   error?: string
 }
 
+// ─── Phase 9.3a — Multi-account additions ─────────────────────
+
+export type ContractMemberPermission =
+  | "creator"
+  | "view_only"
+  | "buy_only"
+  | "buy_and_sell"
+
+export interface UserContractRow {
+  contract_id: string
+  contract_title: string
+  is_creator: boolean
+  permission: ContractMemberPermission
+  total_balance: number
+  status: ContractStatus
+}
+
+export interface ContractHoldingRow {
+  id: string
+  contract_id: string
+  project_id: string
+  project_name: string
+  shares: number
+  total_invested: number
+  current_market_price?: number
+}
+
+export interface ContractTransactionRow {
+  id: string
+  contract_id: string
+  initiator_id: string
+  initiator_name: string
+  transaction_type: "buy" | "sell" | "deposit" | "withdraw" | "distribution"
+  amount: number
+  shares: number | null
+  project_id: string | null
+  project_name: string | null
+  notes: string | null
+  created_at: string
+}
+
+/** Active contracts the caller is a part of — powers AccountSwitcher. */
+export async function getUserContracts(): Promise<UserContractRow[]> {
+  try {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return []
+
+    const { data, error } = await supabase.rpc("get_user_contracts")
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn("[contracts] getUserContracts:", error.message)
+      return []
+    }
+    return ((data ?? []) as UserContractRow[]).map((r) => ({
+      ...r,
+      total_balance: num(r.total_balance),
+    }))
+  } catch {
+    return []
+  }
+}
+
+interface HoldingRow {
+  id: string
+  contract_id: string
+  project_id: string
+  shares: number | string
+  total_invested: number | string
+  project?:
+    | { name?: string | null; current_market_price?: number | string | null }
+    | { name?: string | null; current_market_price?: number | string | null }[]
+    | null
+}
+
+export async function getContractHoldings(
+  contractId: string,
+): Promise<ContractHoldingRow[]> {
+  if (!contractId) return []
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("contract_holdings")
+      .select(
+        `id, contract_id, project_id, shares, total_invested,
+         project:projects!project_id ( name, current_market_price )`,
+      )
+      .eq("contract_id", contractId)
+
+    if (error || !data) return []
+    return (data as HoldingRow[]).map((h): ContractHoldingRow => {
+      const project = unwrap(h.project)
+      return {
+        id: h.id,
+        contract_id: h.contract_id,
+        project_id: h.project_id,
+        project_name: project?.name?.trim() || "—",
+        shares: num(h.shares),
+        total_invested: num(h.total_invested),
+        current_market_price: project?.current_market_price != null
+          ? num(project.current_market_price)
+          : undefined,
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
+interface TxnRow {
+  id: string
+  contract_id: string
+  initiator_id: string
+  transaction_type: "buy" | "sell" | "deposit" | "withdraw" | "distribution"
+  amount: number | string
+  shares: number | string | null
+  project_id: string | null
+  notes: string | null
+  created_at: string
+  initiator?:
+    | { full_name?: string | null; username?: string | null }
+    | { full_name?: string | null; username?: string | null }[]
+    | null
+  project?:
+    | { name?: string | null }
+    | { name?: string | null }[]
+    | null
+}
+
+export async function getContractTransactions(
+  contractId: string,
+  limit = 50,
+): Promise<ContractTransactionRow[]> {
+  if (!contractId) return []
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("contract_transactions")
+      .select(
+        `id, contract_id, initiator_id, transaction_type, amount, shares,
+         project_id, notes, created_at,
+         initiator:profiles!initiator_id ( full_name, username ),
+         project:projects!project_id ( name )`,
+      )
+      .eq("contract_id", contractId)
+      .order("created_at", { ascending: false })
+      .limit(limit)
+
+    if (error || !data) return []
+    return (data as TxnRow[]).map((t): ContractTransactionRow => {
+      const init = unwrap(t.initiator)
+      const proj = unwrap(t.project)
+      return {
+        id: t.id,
+        contract_id: t.contract_id,
+        initiator_id: t.initiator_id,
+        initiator_name:
+          init?.full_name?.trim() || init?.username?.trim() || "—",
+        transaction_type: t.transaction_type,
+        amount: num(t.amount),
+        shares: t.shares != null ? num(t.shares) : null,
+        project_id: t.project_id,
+        project_name: proj?.name?.trim() ?? null,
+        notes: t.notes,
+        created_at: t.created_at,
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
+export interface UpdatePermissionResult {
+  success: boolean
+  reason?: string
+  error?: string
+}
+
+export async function updateMemberPermission(
+  memberId: string,
+  permission: "view_only" | "buy_only" | "buy_and_sell",
+): Promise<UpdatePermissionResult> {
+  if (!memberId) return { success: false, reason: "missing_id" }
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("update_member_permission", {
+      p_member_id: memberId,
+      p_permission: permission,
+    })
+    if (error) {
+      const code = error.code ?? ""
+      if (code === "42883" || code === "42P01") {
+        return { success: false, reason: "missing_table", error: error.message }
+      }
+      if (code === "42501") return { success: false, reason: "rls", error: error.message }
+      return { success: false, reason: "unknown", error: error.message }
+    }
+    const result = (data ?? {}) as { success?: boolean; error?: string }
+    if (!result.success) {
+      return { success: false, reason: result.error ?? "unknown" }
+    }
+    return { success: true }
+  } catch (err) {
+    return {
+      success: false,
+      reason: "unknown",
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
+/** Member rows for a contract — used by the permissions panel. */
+export interface ContractMemberFull {
+  id: string // contract_members.id
+  user_id: string
+  user_name: string
+  share_percent: number
+  invite_status: "pending" | "accepted" | "declined"
+  permission: ContractMemberPermission
+}
+
+export async function getContractMembersFull(
+  contractId: string,
+): Promise<ContractMemberFull[]> {
+  if (!contractId) return []
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("contract_members")
+      .select(
+        `id, user_id, share_percent, invite_status, permission,
+         member:profiles!user_id ( full_name, username )`,
+      )
+      .eq("contract_id", contractId)
+      .order("created_at", { ascending: true })
+
+    if (error || !data) return []
+
+    interface Row {
+      id: string
+      user_id: string
+      share_percent: number | string
+      invite_status: "pending" | "accepted" | "declined"
+      permission: ContractMemberPermission
+      member?:
+        | { full_name?: string | null; username?: string | null }
+        | { full_name?: string | null; username?: string | null }[]
+        | null
+    }
+
+    return (data as Row[]).map((m) => {
+      const member = unwrap(m.member)
+      return {
+        id: m.id,
+        user_id: m.user_id,
+        user_name:
+          member?.full_name?.trim() || member?.username?.trim() || "—",
+        share_percent: num(m.share_percent),
+        invite_status: m.invite_status,
+        permission: m.permission ?? "view_only",
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
+// ─── End-contract (existing) ──────────────────────────────────
+
 export async function endContract(contractId: string): Promise<EndContractResult> {
   if (!contractId) return { success: false, reason: "not_found" }
   try {
