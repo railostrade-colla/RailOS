@@ -35,11 +35,15 @@ import {
   getProjectPriceTrend,
   type ProjectCardData,
 } from "@/lib/mock-data"
+import type { Project } from "@/lib/mock-data/types"
 import {
   getNewProjects as dbGetNewProjects,
   getTrendingProjects as dbGetTrendingProjects,
   getLatestNews as dbGetLatestNews,
+  getAllProjects as dbGetAllProjects,
 } from "@/lib/data"
+import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/data/profile"
+import { getPortfolioData, type PortfolioSummary as DBPortfolioSummary } from "@/lib/data/portfolio"
 import { LEVEL_LABELS, LEVEL_ICONS } from "@/lib/utils/contractLimits"
 import { cn } from "@/lib/utils/cn"
 
@@ -172,15 +176,19 @@ const QUICK_ACTIONS = [
 // ════════════════════════════════════════════════════════════════
 export default function DashboardPage() {
   const router = useRouter()
-  const [selectedProject, setSelectedProject] = useState(mockProjects[0])
+  const [selectedProject, setSelectedProject] = useState<Project>(mockProjects[0])
   const [showDropdown, setShowDropdown] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [discoverTab, setDiscoverTab] = useState<"trending" | "closing" | "new">("trending")
 
-  // ─── Centralized data ─────────────────────────────────────────
-  const portfolio = useMemo(() => getPortfolioSummary("me"), [])
+  // ─── Mock-derived defaults (used as fallbacks during load) ────
+  const mockPortfolio = useMemo(() => getPortfolioSummary("me"), [])
   const alerts = useMemo(() => getActiveAlerts("me"), [])
   const closing = useMemo(() => getClosingSoonProjects(15).slice(0, 3), [])
+  const mockSectorsCount = useMemo(
+    () => new Set(HOLDINGS.filter((h) => (h.user_id ?? "me") === "me").map((h) => h.project.sector)).size,
+    [],
+  )
 
   // Live data (DB-backed with mock fallback)
   const [trending, setTrending] = useState<ProjectCardData[]>(getTrendingProjectsMock().slice(0, 3))
@@ -188,10 +196,22 @@ export default function DashboardPage() {
   const [news, setNews] = useState(getRecentNews(4))
   const [loading, setLoading] = useState(true)
 
+  // Phase B — DB-backed user/portfolio/projects (mock fallback per-field)
+  const [userProfile, setUserProfile] = useState<CurrentUserProfile | null>(null)
+  const [dbPortfolio, setDbPortfolio] = useState<DBPortfolioSummary | null>(null)
+  const [dbProjects, setDbProjects] = useState<Project[]>([])
+
   useEffect(() => {
     let cancelled = false
-    Promise.all([dbGetTrendingProjects(3), dbGetNewProjects(3), dbGetLatestNews(4)])
-      .then(([t, n, ns]) => {
+    Promise.all([
+      dbGetTrendingProjects(3),
+      dbGetNewProjects(3),
+      dbGetLatestNews(4),
+      getCurrentUserProfile(),
+      getPortfolioData(),
+      dbGetAllProjects(),
+    ])
+      .then(([t, n, ns, prof, port, allProj]) => {
         if (cancelled) return
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (t.length > 0) setTrending(t as any as ProjectCardData[])
@@ -207,6 +227,17 @@ export default function DashboardPage() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           })) as any)
         }
+
+        if (prof) setUserProfile(prof)
+        if (port) setDbPortfolio(port.summary)
+        if (allProj.length > 0) {
+          setDbProjects(allProj)
+          // Promote the first real project to the selector if we still
+          // have the placeholder mock selection.
+          setSelectedProject((cur) =>
+            cur && cur.id === mockProjects[0]?.id ? allProj[0] : cur,
+          )
+        }
         setLoading(false)
       })
       .catch(() => {
@@ -216,12 +247,34 @@ export default function DashboardPage() {
     return () => { cancelled = true }
   }, [])
 
-  const sectorsCount = useMemo(
-    () => new Set(HOLDINGS.filter((h) => (h.user_id ?? "me") === "me").map((h) => h.project.sector)).size,
-    [],
-  )
+  // ─── Resolved values (real → fallback to mock) ────────────────
+  const userName =
+    userProfile?.full_name?.trim() ||
+    userProfile?.username?.trim() ||
+    CURRENT_USER.name
+  const userLevel = (
+    userProfile?.level && (userProfile.level in LEVEL_LABELS)
+      ? userProfile.level
+      : CURRENT_USER.level
+  ) as keyof typeof LEVEL_LABELS
 
-  const filteredProjects = mockProjects.filter(
+  const portfolio = dbPortfolio
+    ? {
+        totalValue: dbPortfolio.totalValue,
+        // We don't have per-day P&L wired up yet — show 0 / 0% rather
+        // than fake mock numbers when the user has real holdings.
+        dailyChange: 0,
+        dailyChangePercent: 0,
+        holdingsCount: dbPortfolio.holdingsCount,
+      }
+    : mockPortfolio
+
+  const sectorsCount = dbPortfolio ? dbPortfolio.sectorsCount : mockSectorsCount
+
+  // Use real projects for the selector dropdown when available.
+  const allProjects = dbProjects.length > 0 ? dbProjects : mockProjects
+
+  const filteredProjects = allProjects.filter(
     (p) => !searchQuery.trim() || p.name.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
@@ -309,10 +362,10 @@ export default function DashboardPage() {
               <div className="lg:col-span-2 min-w-0">
                 <div className="text-xs text-neutral-400 mb-1">{getGreeting()} 👋</div>
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
-                  <h1 className="text-base font-bold text-white truncate">{CURRENT_USER.name}</h1>
+                  <h1 className="text-base font-bold text-white truncate">{userName}</h1>
                   <span className="bg-white/[0.08] border border-white/[0.12] text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <span>{LEVEL_ICONS[CURRENT_USER.level]}</span>
-                    <span className="text-neutral-200">{LEVEL_LABELS[CURRENT_USER.level]}</span>
+                    <span>{LEVEL_ICONS[userLevel]}</span>
+                    <span className="text-neutral-200">{LEVEL_LABELS[userLevel]}</span>
                   </span>
                 </div>
 
