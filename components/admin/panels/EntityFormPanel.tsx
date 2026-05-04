@@ -10,15 +10,17 @@
  * - CreateCompanyPanel (URL: /admin?tab=create_company)
  */
 
-import { useState } from "react"
-import { Image as ImageIcon, Sprout, Building2, Factory, Briefcase, Stethoscope, FileText, X, Plus } from "lucide-react"
+import { useState, useEffect, useMemo, useRef } from "react"
+import { Image as ImageIcon, Sprout, Building2, Factory, Briefcase, Stethoscope, FileText, X, Plus, Upload, RefreshCw } from "lucide-react"
 import { ActionBtn } from "@/components/admin/ui"
 import { ALL_COMPANIES } from "@/lib/mock-data/companies"
 import { createProjectWallet } from "@/lib/mock-data/projectWallets"
 import { adminCreateCompany } from "@/lib/data/companies"
-import { adminCreateProject } from "@/lib/data/projects"
+import { adminCreateProject, getAllProjects } from "@/lib/data/projects"
+import { getAllCompanies } from "@/lib/data/companies"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { calculateTotalShares, calculateOfferedShares } from "@/lib/utils/finance"
+import { generateSymbol } from "@/lib/utils/symbol-generator"
 import type {
   ProjectEntityType,
   ProjectBuildStatus,
@@ -79,6 +81,14 @@ export interface EntityFormData {
   owner_email?: string
   detailed_address?: string
   logo?: string
+  /** Image upload (data URL or Supabase Storage URL). */
+  logo_url?: string
+  /** Cover/main image. */
+  cover_url?: string
+  /** Structured description sections (NEW Phase 10.22). */
+  vision?: string
+  goals?: string
+  management?: string
   project_images?: string[]
   company_images?: string[]
   documents?: ProjectDocument[]
@@ -113,13 +123,31 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
 
   // §1
   const [name, setName] = useState(initialData?.name ?? "")
+  // Auto-generated 3-letter UPPERCASE symbol (transliterated from
+  // Arabic name). Editable by the admin if they want a custom one.
+  const [symbol, setSymbol] = useState(initialData?.symbol ?? "")
+  const [symbolEditedManually, setSymbolEditedManually] = useState(false)
+  // Image uploads — store as base64 data URLs locally; in production
+  // these would upload to Supabase Storage and store the URL.
+  const [logoUrl, setLogoUrl] = useState<string>(initialData?.logo_url ?? "")
+  const [coverUrl, setCoverUrl] = useState<string>(initialData?.cover_url ?? "")
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const coverInputRef = useRef<HTMLInputElement>(null)
+
   // Default to "بلا" (empty string) for new projects so the admin
   // explicitly opts into a parent company instead of inheriting the
   // first one in the list by mistake.
   const [companyId, setCompanyId] = useState<string>(initialData?.parent_company_id ?? "")
   const [sector, setSector] = useState<EntitySector>(initialData?.sector ?? "real_estate")
   const [shortDesc, setShortDesc] = useState(initialData?.short_desc ?? "")
+  // Three structured description sections (NEW)
+  const [visionText, setVisionText] = useState<string>(initialData?.vision ?? "")
+  const [goalsText, setGoalsText] = useState<string>(initialData?.goals ?? "")
+  const [managementText, setManagementText] = useState<string>(initialData?.management ?? "")
   const [longDesc, setLongDesc] = useState(initialData?.long_desc ?? "")
+  // Symbols already taken on the platform — used to auto-pick a
+  // unique 3-letter symbol when admin types a new project name.
+  const [takenSymbols, setTakenSymbols] = useState<string[]>([])
   // §3 location
   const [city, setCity] = useState(initialData?.city ?? "")
   const [address, setAddress] = useState(initialData?.address ?? "")
@@ -127,8 +155,8 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
   // §4 price
   const [sharePrice, setSharePrice] = useState(initialData?.share_price ?? "")
   const [totalShares, setTotalShares] = useState(initialData?.total_shares ?? "")
-  // §5 split
-  const [offeringPct, setOfferingPct] = useState(initialData?.offering_pct ?? "90")
+  // §5 split — defaults sum to 100% INCLUDING owner% (60+30+2+8=100)
+  const [offeringPct, setOfferingPct] = useState(initialData?.offering_pct ?? "30")
   const [ambassadorPct, setAmbassadorPct] = useState(initialData?.ambassador_pct ?? "2")
   const [reservePct, setReservePct] = useState(initialData?.reserve_pct ?? "8")
   // §6 dates
@@ -140,8 +168,7 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
   const [durationMonths, setDurationMonths] = useState(initialData?.duration_months ?? "36")
   const [riskLevel, setRiskLevel] = useState<RiskLevel>(initialData?.risk_level ?? "medium")
 
-  // ─── §8 Extended classification ───
-  const [symbol, setSymbol] = useState(initialData?.symbol ?? "")
+  // ─── §8 Extended classification (symbol moved to §1) ───
   const [entityTypeField, setEntityTypeField] = useState<ProjectEntityType>(
     initialData?.entity_type ?? (isProject ? "project" : "company")
   )
@@ -174,9 +201,60 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
   const [newDocUrl, setNewDocUrl] = useState("")
 
   const sharePriceNum = Number(sharePrice) || 0
+  const projectValueNum0 = Number(projectValue) || 0
+
+  // ─── Auto-calc total_shares from project_value / share_price ───
+  // The user requested: "عند ادخال سعر الحصة الابتدائي يتم تقسيم
+  //   قيمة المشروع الكلية على سعر الحصة" — the result is a fixed,
+  //   read-only count that the admin can't override.
+  useEffect(() => {
+    if (sharePriceNum > 0 && projectValueNum0 > 0) {
+      const auto = Math.floor(projectValueNum0 / sharePriceNum)
+      setTotalShares(String(auto))
+    }
+  }, [sharePriceNum, projectValueNum0])
+
   const totalSharesNum = Number(totalShares) || 0
   const totalValue = sharePriceNum * totalSharesNum
-  const totalPct = (Number(offeringPct) || 0) + (Number(ambassadorPct) || 0) + (Number(reservePct) || 0)
+  // Owner% is now part of the 100% wallet split (see §5 below).
+  const ownerPctNum = Number(ownerPercent) || 0
+  const totalPct =
+    ownerPctNum +
+    (Number(offeringPct) || 0) +
+    (Number(ambassadorPct) || 0) +
+    (Number(reservePct) || 0)
+
+  // ─── Load taken symbols once + auto-generate on name change ───
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([getAllProjects(), getAllCompanies()])
+      .then(([projects, companies]) => {
+        if (cancelled) return
+        const takenP = (projects as Array<{ symbol?: string }>)
+          .map((p) => p.symbol)
+          .filter((s): s is string => Boolean(s))
+        const takenC = (companies as Array<{ symbol?: string }>)
+          .map((c) => c.symbol)
+          .filter((s): s is string => Boolean(s))
+        setTakenSymbols([...takenP, ...takenC])
+      })
+      .catch(() => {
+        // best-effort; symbol generator falls back to random on collision
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  // Auto-regenerate the symbol whenever the name changes — unless the
+  // admin has manually edited it (then we respect their choice).
+  useEffect(() => {
+    if (symbolEditedManually) return
+    if (!name.trim()) {
+      setSymbol("")
+      return
+    }
+    const next = generateSymbol(name, takenSymbols)
+    setSymbol(next)
+  }, [name, takenSymbols, symbolEditedManually])
 
   // ─── Auto-calculations for preview cards ───
   const projectValueNum = Number(projectValue) || 0
@@ -186,6 +264,17 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
   const capitalProgress = Number(capitalNeeded) > 0
     ? Math.min(100, (Number(capitalRaised) / Number(capitalNeeded)) * 100)
     : 0
+
+  // ─── Owner% drives offered% automatically ───
+  // User requested: "نسبة المالك بعدها يحدد تلقائي نسبة المطروح في
+  //   السوق للتداول ويحدد عدد الحصص المطروحة والباقية ملك المالك."
+  useEffect(() => {
+    const offered = Math.max(0, 100 - ownerPctNum)
+    setOfferPercent(String(offered))
+  }, [ownerPctNum])
+
+  const ownerSharesCount = Math.floor(totalSharesNum * ownerPctNum / 100)
+  const offeredSharesCount = Math.max(0, totalSharesNum - ownerSharesCount)
 
   const addDocument = () => {
     if (!newDocName.trim() || !newDocUrl.trim()) {
@@ -263,18 +352,34 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
       return
     }
 
-    // ── Projects → DB (Phase 10.20) ──
+    // ── Projects → DB (Phase 10.20+) ──
     if (isProject && status === "active") {
+      // Build a single description blob from the structured sections
+      // so the existing single-column `description` field captures
+      // everything until we add separate columns later.
+      const fullDescription = [
+        longDesc.trim(),
+        visionText.trim() ? `# الرؤية\n${visionText.trim()}` : "",
+        goalsText.trim() ? `# الأهداف\n${goalsText.trim()}` : "",
+        managementText.trim() ? `# الإدارة\n${managementText.trim()}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n")
+
       const result = await adminCreateProject({
         name: name.trim(),
         short_description: shortDesc.trim(),
-        description: longDesc.trim() || shortDesc.trim(),
+        description: fullDescription || shortDesc.trim(),
         project_type: sector,
         share_price: Number(sharePrice) || 0,
         total_shares: Number(totalShares) || 0,
-        offering_percentage: 90,
-        ambassador_percentage: 2,
-        reserve_percentage: 8,
+        // Wallet split now includes owner% — but the RPC still takes
+        // only the 3 wallet percentages (offering/ambassador/reserve).
+        // We pass the 3 sub-percentages directly; owner% lives outside
+        // the wallet system as a top-level "kept by owner" tag.
+        offering_percentage: Number(offeringPct) || 30,
+        ambassador_percentage: Number(ambassadorPct) || 2,
+        reserve_percentage: Number(reservePct) || 8,
         location_city: city.trim() || undefined,
         offering_start_date: offeringStart || undefined,
         offering_end_date: offeringEnd || undefined,
@@ -387,6 +492,43 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
             </div>
           </div>
 
+          {/* الرمز التلقائي (Symbol) — يُولّد من اسم المشروع */}
+          <div className="mt-3">
+            <label className="text-xs text-neutral-400 mb-1.5 block flex items-center justify-between">
+              <span>
+                الرمز (Symbol) — يُولّد تلقائياً من الاسم
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSymbolEditedManually(false)
+                  if (name.trim()) setSymbol(generateSymbol(name, takenSymbols))
+                }}
+                className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                title="إعادة توليد الرمز"
+              >
+                <RefreshCw className="w-3 h-3" />
+                إعادة التوليد
+              </button>
+            </label>
+            <input
+              type="text"
+              value={symbol}
+              onChange={(e) => {
+                const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3)
+                setSymbol(v)
+                setSymbolEditedManually(true)
+              }}
+              placeholder="MZR"
+              maxLength={3}
+              dir="ltr"
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-base text-white font-mono font-bold tracking-widest text-center outline-none focus:border-white/20"
+            />
+            <div className="text-[10px] text-neutral-500 mt-1">
+              ٣ حروف إنجليزية كبيرة فريدة. يتغيّر تلقائياً مع تغيّر الاسم — أو حرّره يدوياً.
+            </div>
+          </div>
+
           <div className="mt-3">
             <label className="text-xs text-neutral-400 mb-1.5 block">وصف قصير * (20-150 حرف)</label>
             <input
@@ -398,27 +540,165 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
             <div className="text-[10px] text-neutral-500 text-left mt-1 font-mono">{shortDesc.length} / 150</div>
           </div>
 
+          {/* الرؤية */}
           <div className="mt-3">
-            <label className="text-xs text-neutral-400 mb-1.5 block">وصف كامل</label>
+            <label className="text-xs text-neutral-400 mb-1.5 block">الرؤية</label>
+            <textarea
+              value={visionText}
+              onChange={(e) => setVisionText(e.target.value)}
+              rows={3}
+              placeholder={isProject ? "ما الرؤية طويلة الأمد لهذا المشروع؟" : "ما الرؤية طويلة الأمد لهذه الشركة؟"}
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 resize-none"
+            />
+          </div>
+
+          {/* الأهداف */}
+          <div className="mt-3">
+            <label className="text-xs text-neutral-400 mb-1.5 block">الأهداف</label>
+            <textarea
+              value={goalsText}
+              onChange={(e) => setGoalsText(e.target.value)}
+              rows={3}
+              placeholder="الأهداف المحدّدة للمرحلة الأولى — يمكنك استخدام نقاط (- ...)"
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 resize-none"
+            />
+          </div>
+
+          {/* الإدارة */}
+          <div className="mt-3">
+            <label className="text-xs text-neutral-400 mb-1.5 block">الإدارة</label>
+            <textarea
+              value={managementText}
+              onChange={(e) => setManagementText(e.target.value)}
+              rows={3}
+              placeholder="فريق الإدارة وخبراتهم — مثلاً: المدير التنفيذي، رئيس العمليات، ..."
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 resize-none"
+            />
+          </div>
+
+          <div className="mt-3">
+            <label className="text-xs text-neutral-400 mb-1.5 block">وصف كامل (اختياري)</label>
             <textarea
               value={longDesc} onChange={(e) => setLongDesc(e.target.value)} rows={4}
-              placeholder={isProject ? "تفاصيل المشروع، الخطّة، فريق الإدارة، ..." : "نشاط الشركة، تاريخها، إنجازاتها، ..."}
+              placeholder={isProject ? "تفاصيل إضافية ترغب في إظهارها للمستثمرين..." : "نشاط الشركة، تاريخها، إنجازاتها، ..."}
               className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 resize-none"
             />
           </div>
         </div>
 
-        {/* §2 Cover + gallery */}
+        {/* §2 Logo + Cover image */}
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5">
-          <div className="text-sm font-bold text-white mb-4">2️⃣ {isProject ? "الصور" : "الشعار + الصور"}</div>
-          <button className="w-full bg-white/[0.04] border-2 border-dashed border-white/[0.15] rounded-xl py-8 hover:border-white/[0.25] transition-colors flex flex-col items-center gap-2 mb-2">
-            <ImageIcon className="w-8 h-8 text-neutral-400" strokeWidth={1.5} />
-            <span className="text-xs text-neutral-300 font-bold">{isProject ? "صورة الغلاف" : "شعار الشركة"}</span>
-            <span className="text-[10px] text-neutral-500">اضغط للرفع (placeholder)</span>
-          </button>
-          <button className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl py-3 hover:bg-white/[0.06] text-xs text-neutral-300 transition-colors">
-            + إضافة معرض صور (placeholder)
-          </button>
+          <div className="text-sm font-bold text-white mb-4">2️⃣ الشعار + الصورة الرئيسية</div>
+
+          {/* Logo */}
+          <div className="mb-4">
+            <label className="text-xs text-neutral-400 mb-1.5 block">
+              الشعار (PNG/SVG/JPG — حد أقصى 2MB)
+            </label>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                if (file.size > 2 * 1024 * 1024) {
+                  showError("الحجم الأقصى 2MB")
+                  return
+                }
+                const reader = new FileReader()
+                reader.onload = (ev) => {
+                  const url = ev.target?.result
+                  if (typeof url === "string") setLogoUrl(url)
+                }
+                reader.readAsDataURL(file)
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => logoInputRef.current?.click()}
+              className="w-full bg-white/[0.04] border-2 border-dashed border-white/[0.15] rounded-xl p-4 hover:border-white/[0.25] transition-colors flex flex-col items-center gap-2 relative overflow-hidden"
+            >
+              {logoUrl ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={logoUrl} alt="logo preview" className="w-20 h-20 object-contain rounded-lg" />
+                  <span className="text-[11px] text-blue-400">اضغط لتغيير الشعار</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="w-7 h-7 text-neutral-400" strokeWidth={1.5} />
+                  <span className="text-xs text-neutral-300 font-bold">رفع الشعار</span>
+                  <span className="text-[10px] text-neutral-500">PNG / SVG / JPG</span>
+                </>
+              )}
+            </button>
+            {logoUrl && (
+              <button
+                type="button"
+                onClick={() => setLogoUrl("")}
+                className="mt-2 text-[11px] text-red-400 hover:text-red-300"
+              >
+                ✕ حذف الشعار
+              </button>
+            )}
+          </div>
+
+          {/* Cover */}
+          <div>
+            <label className="text-xs text-neutral-400 mb-1.5 block">
+              الصورة الرئيسية (الغلاف) — حد أقصى 5MB
+            </label>
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                if (file.size > 5 * 1024 * 1024) {
+                  showError("الحجم الأقصى 5MB")
+                  return
+                }
+                const reader = new FileReader()
+                reader.onload = (ev) => {
+                  const url = ev.target?.result
+                  if (typeof url === "string") setCoverUrl(url)
+                }
+                reader.readAsDataURL(file)
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => coverInputRef.current?.click()}
+              className="w-full bg-white/[0.04] border-2 border-dashed border-white/[0.15] rounded-xl py-6 hover:border-white/[0.25] transition-colors flex flex-col items-center gap-2 relative overflow-hidden"
+            >
+              {coverUrl ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={coverUrl} alt="cover preview" className="w-full h-28 object-cover rounded-lg" />
+                  <span className="text-[11px] text-blue-400">اضغط لتغيير الصورة</span>
+                </>
+              ) : (
+                <>
+                  <ImageIcon className="w-8 h-8 text-neutral-400" strokeWidth={1.5} />
+                  <span className="text-xs text-neutral-300 font-bold">رفع الصورة الرئيسية</span>
+                  <span className="text-[10px] text-neutral-500">PNG / JPG / WebP</span>
+                </>
+              )}
+            </button>
+            {coverUrl && (
+              <button
+                type="button"
+                onClick={() => setCoverUrl("")}
+                className="mt-2 text-[11px] text-red-400 hover:text-red-300"
+              >
+                ✕ حذف الصورة
+              </button>
+            )}
+          </div>
         </div>
 
         {/* §3 Location */}
@@ -453,12 +733,14 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
           </div>
         </div>
 
-        {/* §4 Price + shares */}
+        {/* §4 Price + shares — total_shares is now AUTO-COMPUTED from
+            project_value (in §9) divided by share_price. The admin
+            controls value + price, the system computes the count. */}
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5">
           <div className="text-sm font-bold text-white mb-4">4️⃣ السعر والحصص</div>
           <div className="space-y-3">
             <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">سعر الحصّة (د.ع) *</label>
+              <label className="text-xs text-neutral-400 mb-1.5 block">سعر الحصّة الابتدائي (د.ع) *</label>
               <input
                 type="number" value={sharePrice} onChange={(e) => setSharePrice(e.target.value)}
                 placeholder="100000"
@@ -466,26 +748,51 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
               />
             </div>
             <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">إجمالي الحصص *</label>
+              <label className="text-xs text-neutral-400 mb-1.5 block flex items-center gap-1.5">
+                إجمالي الحصص
+                <span className="text-[9px] text-blue-400 bg-blue-400/[0.1] border border-blue-400/[0.25] rounded px-1.5 py-0.5">
+                  محسوب تلقائياً
+                </span>
+              </label>
               <input
-                type="number" value={totalShares} onChange={(e) => setTotalShares(e.target.value)}
-                placeholder="10000"
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+                type="number"
+                value={totalShares}
+                readOnly
+                placeholder="—"
+                className="w-full bg-white/[0.02] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-blue-400 font-mono outline-none cursor-not-allowed"
               />
+              <div className="text-[10px] text-neutral-500 mt-1">
+                = قيمة المشروع الإجمالية ÷ سعر الحصة الابتدائي. أدخل القيمتين في القسم المالي.
+              </div>
             </div>
             <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-xl p-3 flex justify-between">
-              <span className="text-[11px] text-blue-400">القيمة الإجمالية</span>
+              <span className="text-[11px] text-blue-400">القيمة الإجمالية المحسوبة</span>
               <span className="text-base font-bold text-blue-400 font-mono">{fmtNum(totalValue)} د.ع</span>
             </div>
           </div>
         </div>
 
-        {/* §5 Wallet split */}
+        {/* §5 Wallet split — 4 components: owner + offering + ambassador + reserve = 100% */}
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5">
-          <div className="text-sm font-bold text-white mb-4">5️⃣ توزيع المحافظ</div>
+          <div className="text-sm font-bold text-white mb-4">5️⃣ توزيع المحافظ (المجموع 100%)</div>
           <div className="space-y-3">
             <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">طرح للجمهور (%)</label>
+              <label className="text-xs text-neutral-400 mb-1.5 block flex items-center gap-1.5">
+                <span>المالك / الشركة (%)</span>
+                <span className="text-[9px] text-purple-400">يحتفظ بها المالك</span>
+              </label>
+              <input
+                type="number"
+                value={ownerPercent}
+                onChange={(e) => setOwnerPercent(e.target.value)}
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block flex items-center gap-1.5">
+                <span>طرح للجمهور (%)</span>
+                <span className="text-[9px] text-green-400">للتداول في السوق</span>
+              </label>
               <input type="number" value={offeringPct} onChange={(e) => setOfferingPct(e.target.value)} className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20" />
             </div>
             <div>
@@ -505,6 +812,22 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
               <span>المجموع</span>
               <span className="font-mono font-bold">{totalPct}% / 100%</span>
             </div>
+            {totalSharesNum > 0 && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-purple-400/[0.05] border border-purple-400/[0.2] rounded-lg p-2.5 text-center">
+                  <div className="text-[10px] text-neutral-500 mb-0.5">حصص المالك</div>
+                  <div className="text-sm font-bold text-purple-400 font-mono">
+                    {fmtNum(ownerSharesCount)}
+                  </div>
+                </div>
+                <div className="bg-green-400/[0.05] border border-green-400/[0.2] rounded-lg p-2.5 text-center">
+                  <div className="text-[10px] text-neutral-500 mb-0.5">الحصص المطروحة</div>
+                  <div className="text-sm font-bold text-green-400 font-mono">
+                    {fmtNum(offeredSharesCount)}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -527,21 +850,11 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
           </div>
         </div>
 
-        {/* §8 Classification + Symbol (extended) */}
+        {/* §8 Classification (extended) — symbol moved to §1 */}
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 lg:col-span-2">
           <div className="text-sm font-bold text-white mb-4">8️⃣ التصنيف الموسَّع</div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">الرمز (Symbol)</label>
-              <input
-                type="text" value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                placeholder="مثلاً: RMD"
-                maxLength={6}
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
-                dir="ltr"
-              />
-            </div>
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block">نوع الكيان</label>
               <select
@@ -555,9 +868,6 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
                 <option value="partnership">🤝 شراكة</option>
               </select>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block">حالة الإنشاء</label>
               <select
