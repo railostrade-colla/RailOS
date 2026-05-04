@@ -21,7 +21,6 @@ import {
   FAQS,
   FAQ_CATEGORIES,
   searchFAQs,
-  USER_TICKETS,
   type FAQ,
   type SupportTicket,
 } from "@/lib/mock-data"
@@ -74,8 +73,8 @@ export default function SupportPage() {
   const [newTicketSubject, setNewTicketSubject] = useState("")
   const [newTicketMessage, setNewTicketMessage] = useState("")
   const [submitting, setSubmitting] = useState(false)
-  // Mock first-paint, real DB on mount.
-  const [tickets, setTickets] = useState<SupportTicket[]>(USER_TICKETS)
+  // Production mode — DB only.
+  const [tickets, setTickets] = useState<SupportTicket[]>([])
 
   useEffect(() => {
     let cancelled = false

@@ -5,8 +5,19 @@ import { useRouter } from "next/navigation"
 import { Gavel, Clock, AlertCircle } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
-import { mockAuctions } from "@/lib/mock-data"
 import { getActiveAuctions } from "@/lib/data/auctions-real"
+
+// Local auction list shape — independent from any mock module.
+interface AuctionListItem {
+  id: string
+  title: string
+  project: { name: string }
+  shares: number
+  opening_price: number
+  current_price: number
+  ends_at: string
+  bids_count: number
+}
 import { cn } from "@/lib/utils/cn"
 
 const fmtIQD = (n: number) => n.toLocaleString("en-US")
@@ -32,7 +43,7 @@ function useCountdown(endsAt: string) {
   return time
 }
 
-function AuctionCard({ auction, onClick }: { auction: typeof mockAuctions[0]; onClick: () => void }) {
+function AuctionCard({ auction, onClick }: { auction: AuctionListItem; onClick: () => void }) {
   const countdown = useCountdown(auction.ends_at)
   const isUrgent = new Date(auction.ends_at).getTime() - Date.now() < 3600000 // أقل من ساعة
   const minBidIncrease = Math.floor(auction.current_price * 0.03)
@@ -93,15 +104,13 @@ function AuctionCard({ auction, onClick }: { auction: typeof mockAuctions[0]; on
 
 export default function AuctionsPage() {
   const router = useRouter()
-  // Mock first-paint, real DB on mount.
-  const [auctions, setAuctions] = useState<typeof mockAuctions>(mockAuctions)
+  // Production mode — DB only, empty state when no rows.
+  const [auctions, setAuctions] = useState<AuctionListItem[]>([])
 
   useEffect(() => {
     let cancelled = false
     getActiveAuctions().then((rows) => {
-      if (cancelled || rows.length === 0) return
-      // Map DB AuctionDetails shape → the page's list shape.
-      // AuctionDetails doesn't expose `title` — derive it from the project name.
+      if (cancelled) return
       setAuctions(
         rows.map((a) => ({
           id: a.id,

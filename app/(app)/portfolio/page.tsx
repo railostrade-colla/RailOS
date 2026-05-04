@@ -15,10 +15,14 @@ import {
   computeContractLimit,
   type InvestorLevel,
 } from "@/lib/utils/contractLimits"
-// Phase 4.2: portfolio + fee data is real (from Supabase). Active
-// group-investment contracts (USER_ACTIVE_CONTRACTS) and the monthly
-// limits usage stay mock for now — different feature scope.
-import { USER_ACTIVE_CONTRACTS } from "@/lib/mock-data"
+// Production mode — contracts panel hidden until per-member level
+// data is exposed by the DB. The legacy mock array USER_ACTIVE_CONTRACTS
+// drove the "حدود إضافية من العقود" preview; we now empty-default it.
+const USER_ACTIVE_CONTRACTS: Array<{
+  id: string
+  name: string
+  members: Array<{ name: string; level: import("@/lib/utils/contractLimits").InvestorLevel }>
+}> = []
 import {
   getPortfolioData,
   submitFeeRequest as apiSubmitFeeRequest,

@@ -23,10 +23,7 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, StatCard, Badge, Modal } from "@/components/ui"
 import { signOut } from "@/lib/supabase/auth-helpers"
 import { showSuccess, showInfo } from "@/lib/utils/toast"
-// Profile + portfolio numbers both come from Supabase now (Phases 4.1 + I).
-// Mock fixtures stay imported only as a first-paint fallback while the
-// async fetch resolves.
-import { getPortfolioSummary } from "@/lib/mock-data"
+// Profile + portfolio numbers both come from Supabase (Phases 4.1 + I).
 import { fmtLimit } from "@/lib/utils/contractLimits"
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/data/profile"
 import { getPortfolioData, type PortfolioSummary } from "@/lib/data/portfolio"
@@ -77,8 +74,7 @@ export default function ProfilePage() {
     }
   }, [])
 
-  // Real portfolio when loaded; mock fallback otherwise.
-  const mockSummary = getPortfolioSummary("me")
+  // Real portfolio only — production mode (zeros until DB returns).
   const portfolio = dbPortfolio
     ? {
         totalValue: dbPortfolio.totalValue,
@@ -87,10 +83,10 @@ export default function ProfilePage() {
         holdingsCount: dbPortfolio.holdingsCount,
       }
     : {
-        totalValue: mockSummary.totalValue,
-        totalCost: mockSummary.totalCost,
-        totalProfit: mockSummary.totalProfit,
-        holdingsCount: mockSummary.holdingsCount,
+        totalValue: 0,
+        totalCost: 0,
+        totalProfit: 0,
+        holdingsCount: 0,
       }
 
   const handleLogout = async () => {

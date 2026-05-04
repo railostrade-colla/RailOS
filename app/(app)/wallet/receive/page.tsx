@@ -6,10 +6,10 @@ import { Copy, Download, Share2, Check, ShieldCheck, Clock, ArrowDownToLine, Lin
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
-// Phase 4.3: user info is real (from Supabase). Recent senders + receive
-// stats stay mock — they need a `share_transfers` table that doesn't
-// exist yet (Phase 4.X).
-import { RECENT_SENDERS } from "@/lib/mock-data"
+// Phase 4.3: user info is real (from Supabase). Recent senders is empty
+// until wired to a real share_transfers query — production mode.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const RECENT_SENDERS: any[] = []
 import { getCurrentWalletInfo, type WalletUserInfo } from "@/lib/data/wallet"
 import { cn } from "@/lib/utils/cn"
 

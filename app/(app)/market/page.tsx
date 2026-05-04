@@ -12,12 +12,10 @@ import {
   ALL_PROJECTS,
   SECTORS_LIST as SECTORS,
   RISK_LEVELS_AR as RISK_LEVELS,
-  getRecentNews,
-  mockAds,
   type PlatformNews,
   type NewsType,
 } from "@/lib/mock-data"
-import { getAllProjects, getAllCompanies } from "@/lib/data"
+import { getAllProjects, getAllCompanies, getLatestNews } from "@/lib/data"
 import { cn } from "@/lib/utils/cn"
 
 // ─── News type → label/color ───────────────────────────────
@@ -45,19 +43,21 @@ function MarketContent() {
   const [sortBy, setSortBy] = useState<"newest" | "price_asc" | "price_desc" | "trending">("newest")
   const [openNews, setOpenNews] = useState<PlatformNews | null>(null)
 
-  // ─── Live data (DB-backed with mock fallback) ─────────────
-  const [projects, setProjects] = useState(ALL_PROJECTS)
-  const [companies, setCompanies] = useState(ALL_COMPANIES)
+  // ─── Live data (DB-only — production mode) ────────────────
+  const [projects, setProjects] = useState<typeof ALL_PROJECTS>([])
+  const [companies, setCompanies] = useState<typeof ALL_COMPANIES>([])
+  const [news, setNews] = useState<PlatformNews[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([getAllProjects(), getAllCompanies()])
-      .then(([p, c]) => {
+    Promise.all([getAllProjects(), getAllCompanies(), getLatestNews(12)])
+      .then(([p, c, n]) => {
         if (cancelled) return
-        // Cast minimally — DB rows mostly fit the card data interface
-        if (p.length > 0) setProjects(p as unknown as typeof ALL_PROJECTS)
-        if (c.length > 0) setCompanies(c as unknown as typeof ALL_COMPANIES)
+        setProjects(p as unknown as typeof ALL_PROJECTS)
+        setCompanies(c as unknown as typeof ALL_COMPANIES)
+        // Map DB news to PlatformNews shape (loose — fields overlap)
+        setNews(n as unknown as PlatformNews[])
         setLoading(false)
       })
       .catch(() => {
@@ -66,9 +66,6 @@ function MarketContent() {
       })
     return () => { cancelled = true }
   }, [])
-
-  // ─── Tab content data ──────────────────────────────────────
-  const news = useMemo(() => getRecentNews(12), [])
 
   useEffect(() => {
     if (tabFromUrl) setTab(tabFromUrl)
@@ -265,14 +262,24 @@ function MarketContent() {
           {/* ═══ TAB CONTENT: ✨ Offers (System only — user offers moved to /exchange + /quick-sale) ═══ */}
           {tab === "offers" && (
             <div className="space-y-4">
-              {/* System offers */}
+              {/* System offers — empty array in production until ads
+                  are wired to the real `ads` table on this tab. */}
               <Card variant="gradient" color="purple">
                 <SectionHeader
                   title="✨ عروض النظام"
                   subtitle="عروض ترويجية رسمية من رايلوس"
                 />
                 <div className="space-y-2">
-                  {mockAds.map((ad) => (
+                  {([] as Array<{
+                    id: string
+                    icon: string
+                    title: string
+                    subtitle?: string
+                    link_type: "internal" | "external"
+                    link_url: string
+                    description?: string
+                    action_label?: string
+                  }>).map((ad) => (
                     <button
                       key={ad.id}
                       onClick={() => {

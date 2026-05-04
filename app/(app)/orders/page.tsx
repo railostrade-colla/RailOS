@@ -6,7 +6,15 @@ import { Star, AlertTriangle, X, ShoppingCart, Inbox } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
-import { mockTrades, mockDirectBuys } from "@/lib/mock-data"
+// Production mode — orders/trades come from /deals (real DB) now.
+// This legacy page renders empty until it migrates to lib/data/deals.
+// We type these `any[]` because the legacy page reads many fields
+// (buyer_id, payment_due_at, admin_note, etc.) that won't exist on
+// new DB rows; the arrays are always empty so render is a no-op.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockTrades: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockDirectBuys: any[] = []
 import { submitRating } from "@/lib/data/ratings"
 import { cn } from "@/lib/utils/cn"
 

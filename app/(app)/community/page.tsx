@@ -6,7 +6,14 @@ import { Search, MessageCircle, UserPlus, UserMinus, X, Check } from "lucide-rea
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
-import { mockUsers, mockChats } from "@/lib/mock-data"
+// Chats DB schema isn't built yet — empty list until then.
+const mockChats: Array<{
+  id: string
+  other: { name: string }
+  time: string
+  last_message: string
+  unread: number
+}> = []
 import { getCommunityUsers, type CommunityUserRow } from "@/lib/data/community"
 import {
   getFriendIdSet,
@@ -37,8 +44,8 @@ export default function CommunityPage() {
   })
   const [selectedUser, setSelectedUser] = useState<CommunityUserRow | null>(null)
 
-  // Real users from DB with mock fallback so the layout never blanks.
-  const [users, setUsers] = useState<CommunityUserRow[]>(mockUsers)
+  // Real users from DB only (production mode).
+  const [users, setUsers] = useState<CommunityUserRow[]>([])
 
   // Pull users + friend graph in parallel.
   useEffect(() => {
@@ -50,7 +57,7 @@ export default function CommunityPage() {
       getMyFriendRequests(),
     ]).then(([rows, fIds, outIds, reqs]) => {
       if (cancelled) return
-      if (rows.length > 0) setUsers(rows)
+      setUsers(rows)
       setFriendIds(fIds)
       setPendingOutgoing(outIds)
       setRequests(reqs)

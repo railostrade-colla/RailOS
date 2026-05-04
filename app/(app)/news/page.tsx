@@ -6,8 +6,6 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Badge, Tabs, EmptyState, Modal, SkeletonCard } from "@/components/ui"
 import {
-  PLATFORM_NEWS,
-  getFeaturedNews,
   type PlatformNews,
   type NewsType,
 } from "@/lib/mock-data"
@@ -73,8 +71,8 @@ export default function NewsPage() {
     }
   }, [openItem?.id])
 
-  // Live news (DB-backed with mock fallback)
-  const [allNews, setAllNews] = useState<PlatformNews[]>(PLATFORM_NEWS)
+  // Live news (DB only — production mode)
+  const [allNews, setAllNews] = useState<PlatformNews[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -82,7 +80,7 @@ export default function NewsPage() {
     getAllNews(50)
       .then((rows) => {
         if (cancelled) return
-        if (rows.length > 0) setAllNews(rows.map(dbToNews))
+        setAllNews(rows.map(dbToNews))
         setLoading(false)
       })
       .catch(() => {
@@ -92,7 +90,10 @@ export default function NewsPage() {
     return () => { cancelled = true }
   }, [])
 
-  const featured = useMemo(() => allNews[0] ?? getFeaturedNews(), [allNews])
+  const featured = useMemo<PlatformNews | null>(
+    () => allNews[0] ?? null,
+    [allNews],
+  )
 
   // Search helper that works on the live or mock list
   const searchInList = (q: string, list: PlatformNews[]) => {
@@ -103,12 +104,13 @@ export default function NewsPage() {
     )
   }
 
-  // Apply search → tab filter
+  // Apply search → tab filter (excluding the featured row when present)
   const filtered = useMemo(() => {
     let rows: PlatformNews[] = searchInList(search, allNews)
     if (tab !== "all") rows = rows.filter((n) => n.type === tab)
-    return rows.filter((n) => n.id !== featured.id)
-  }, [tab, search, featured.id, allNews])
+    if (featured) rows = rows.filter((n) => n.id !== featured.id)
+    return rows
+  }, [tab, search, featured, allNews])
 
   // Tab counts
   const tabCounts = useMemo(() => {
@@ -133,33 +135,35 @@ export default function NewsPage() {
             backHref="/dashboard"
           />
 
-          {/* ═══ Featured (hero) ═══ */}
-          <Card variant="gradient" color="purple" className="mb-7 cursor-pointer" onClick={() => setOpenItem(featured)}>
-            <div className="flex flex-col sm:flex-row items-start gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-purple-400/[0.15] border border-purple-400/30 flex items-center justify-center text-3xl flex-shrink-0">
-                {featured.icon}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  <Badge color={TYPE_META[featured.type].color} variant="soft">
-                    {TYPE_META[featured.type].label}
-                  </Badge>
-                  {featured.is_new && (
-                    <Badge color="green" variant="soft" size="xs">جديد</Badge>
-                  )}
-                  <span className="text-[10px] text-neutral-500 flex items-center gap-1 mr-auto">
-                    <Calendar className="w-2.5 h-2.5" />
-                    {featured.date}
-                  </span>
+          {/* ═══ Featured (hero) — only when at least one news exists ═══ */}
+          {featured && (
+            <Card variant="gradient" color="purple" className="mb-7 cursor-pointer" onClick={() => setOpenItem(featured)}>
+              <div className="flex flex-col sm:flex-row items-start gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-purple-400/[0.15] border border-purple-400/30 flex items-center justify-center text-3xl flex-shrink-0">
+                  {featured.icon}
                 </div>
-                <h2 className="text-lg font-bold text-white mb-2 leading-tight">{featured.title}</h2>
-                <p className="text-xs text-neutral-300 leading-relaxed">{featured.excerpt}</p>
-                <button className="text-xs text-purple-400 hover:text-purple-300 mt-3 transition-colors">
-                  اقرأ المزيد ←
-                </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <Badge color={TYPE_META[featured.type].color} variant="soft">
+                      {TYPE_META[featured.type].label}
+                    </Badge>
+                    {featured.is_new && (
+                      <Badge color="green" variant="soft" size="xs">جديد</Badge>
+                    )}
+                    <span className="text-[10px] text-neutral-500 flex items-center gap-1 mr-auto">
+                      <Calendar className="w-2.5 h-2.5" />
+                      {featured.date}
+                    </span>
+                  </div>
+                  <h2 className="text-lg font-bold text-white mb-2 leading-tight">{featured.title}</h2>
+                  <p className="text-xs text-neutral-300 leading-relaxed">{featured.excerpt}</p>
+                  <button className="text-xs text-purple-400 hover:text-purple-300 mt-3 transition-colors">
+                    اقرأ المزيد ←
+                  </button>
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          )}
 
           {/* ═══ Search ═══ */}
           <div className="relative mb-4">

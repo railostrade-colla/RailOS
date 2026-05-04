@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { Plus, FileText } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
-import { mockContracts, type ContractStatus } from "@/lib/mock-data"
+import type { ContractStatus } from "@/lib/mock-data"
 import type { ContractListItem } from "@/lib/mock-data/types"
 import { getMyContracts } from "@/lib/data/contracts"
 import { hasUnusedGift } from "@/lib/data/gifts"
@@ -26,8 +26,8 @@ const statusBadge = (s: ContractStatus) => {
 export default function ContractsPage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>("active")
-  // Mock first-paint, real DB on mount.
-  const [contracts, setContracts] = useState<ContractListItem[]>(mockContracts)
+  // Production mode — DB only.
+  const [contracts, setContracts] = useState<ContractListItem[]>([])
   // Phase 9.6 — gift availability for the "create" CTA badge.
   const [hasGift, setHasGift] = useState(false)
 

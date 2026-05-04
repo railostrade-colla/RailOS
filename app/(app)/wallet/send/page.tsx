@@ -9,9 +9,10 @@ import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
 import { createInvoice } from "@/lib/data/invoices"
 import { LEVEL_LIMITS, fmtLimit, type InvestorLevel } from "@/lib/utils/contractLimits"
 // Phase 4.3: user identity, holdings, fee balance and recipient verify
-// are real (Supabase). Recent recipients stays mock until a transfers
-// table exists (Phase 4.X).
-import { RECENT_RECIPIENTS } from "@/lib/mock-data"
+// are real (Supabase). Recent recipients is empty until a transfers
+// table exists (Phase 4.X) — production mode.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const RECENT_RECIPIENTS: any[] = []
 import {
   getCurrentWalletInfo,
   getMyHoldingsForSend,
