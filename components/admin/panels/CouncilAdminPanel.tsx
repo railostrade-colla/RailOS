@@ -160,8 +160,6 @@ export function CouncilAdminPanel() {
   useEffect(() => {
     refresh()
   }, [])
-  void submitting
-
   // Member actions
   const [selectedMember, setSelectedMember] = useState<CouncilMember | null>(null)
   const [memberAction, setMemberAction] = useState<MemberAction>(null)
@@ -750,13 +748,14 @@ export function CouncilAdminPanel() {
               </button>
               <button
                 onClick={handleMemberAction}
+                disabled={submitting}
                 className={cn(
-                  "flex-1 py-3 rounded-xl text-sm font-bold border",
+                  "flex-1 py-3 rounded-xl text-sm font-bold border disabled:opacity-50 disabled:cursor-not-allowed",
                   memberAction === "remove" && "bg-red-500/[0.15] border-red-500/[0.3] text-red-400 hover:bg-red-500/[0.2]",
                   memberAction === "edit_bio" && "bg-green-500/[0.15] border-green-500/[0.3] text-green-400 hover:bg-green-500/[0.2]"
                 )}
               >
-                تأكيد
+                {submitting ? "جارٍ..." : "تأكيد"}
               </button>
             </div>
           </div>
@@ -1039,9 +1038,10 @@ export function CouncilAdminPanel() {
               </button>
               <button
                 onClick={handleExecuteDecision}
-                className="flex-1 py-3 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-400 text-sm font-bold hover:bg-blue-500/[0.2]"
+                disabled={submitting}
+                className="flex-1 py-3 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-400 text-sm font-bold hover:bg-blue-500/[0.2] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                تنفيذ
+                {submitting ? "جارٍ..." : "تنفيذ"}
               </button>
             </div>
           </div>
@@ -1096,7 +1096,7 @@ export function CouncilAdminPanel() {
 
             <div className="flex gap-2">
               <button onClick={() => setShowAnnounceElection(false)} className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إلغاء</button>
-              <button onClick={handleAnnounceElection} className="flex-1 py-3 rounded-xl bg-purple-500/[0.15] border border-purple-500/[0.3] text-purple-400 text-sm font-bold hover:bg-purple-500/[0.2]">إنشاء + إعلان</button>
+              <button onClick={handleAnnounceElection} disabled={submitting} className="flex-1 py-3 rounded-xl bg-purple-500/[0.15] border border-purple-500/[0.3] text-purple-400 text-sm font-bold hover:bg-purple-500/[0.2] disabled:opacity-50 disabled:cursor-not-allowed">{submitting ? "جارٍ..." : "إنشاء + إعلان"}</button>
             </div>
           </div>
         </div>
@@ -1158,7 +1158,7 @@ export function CouncilAdminPanel() {
 
             <div className="flex gap-2">
               <button onClick={() => setShowPromoCandidate(false)} className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إلغاء</button>
-              <button onClick={handlePromoCandidate} className="flex-1 py-3 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-400 text-sm font-bold hover:bg-blue-500/[0.2]">تأكيد الترويج</button>
+              <button onClick={handlePromoCandidate} disabled={submitting} className="flex-1 py-3 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-400 text-sm font-bold hover:bg-blue-500/[0.2] disabled:opacity-50 disabled:cursor-not-allowed">{submitting ? "جارٍ..." : "تأكيد الترويج"}</button>
             </div>
           </div>
         </div>

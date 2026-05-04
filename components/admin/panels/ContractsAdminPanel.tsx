@@ -166,8 +166,6 @@ export function ContractsAdminPanel() {
         })),
       }
     : selected && selected.id === "1" ? calculateContractDistribution("ct1") : null
-  void submitting
-
   return (
     <div className="p-6 max-w-screen-2xl">
       <SectionHeader
@@ -473,14 +471,15 @@ export function ContractsAdminPanel() {
               </button>
               <button
                 onClick={handleAction}
+                disabled={submitting}
                 className={cn(
-                  "flex-1 py-3 rounded-xl text-sm font-bold border",
+                  "flex-1 py-3 rounded-xl text-sm font-bold border disabled:opacity-50 disabled:cursor-not-allowed",
                   actionMode === "force_end" && "bg-red-500/[0.15] border-red-500/[0.3] text-red-400 hover:bg-red-500/[0.2]",
                   actionMode === "freeze" && "bg-yellow-500/[0.15] border-yellow-500/[0.3] text-yellow-400 hover:bg-yellow-500/[0.2]",
                   actionMode === "resolve_internal" && "bg-purple-500/[0.15] border-purple-500/[0.3] text-purple-400 hover:bg-purple-500/[0.2]",
                 )}
               >
-                تأكيد
+                {submitting ? "جارٍ..." : "تأكيد"}
               </button>
             </div>
           </div>

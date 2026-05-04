@@ -151,8 +151,6 @@ export function HealthcareAdminPanel() {
     setSubmitting(false)
     refresh()
   }
-  void submitting
-
   const handleCaseAction = async () => {
     if (!selectedCase) return
     if (caseAction === "update_progress" && progressAmount <= 0) return showError("أدخل مبلغاً صحيحاً")
@@ -480,11 +478,11 @@ export function HealthcareAdminPanel() {
             )}
             <div className="flex gap-2">
               <button onClick={() => { setAppAction(null); setAppReason("") }} className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إلغاء</button>
-              <button onClick={handleAppAction} className={cn(
-                "flex-1 py-3 rounded-xl text-sm font-bold border",
+              <button onClick={handleAppAction} disabled={submitting} className={cn(
+                "flex-1 py-3 rounded-xl text-sm font-bold border disabled:opacity-50 disabled:cursor-not-allowed",
                 appAction === "approve" && "bg-green-500/[0.15] border-green-500/[0.3] text-green-400",
                 appAction === "reject" && "bg-red-500/[0.15] border-red-500/[0.3] text-red-400"
-              )}>تأكيد</button>
+              )}>{submitting ? "جارٍ..." : "تأكيد"}</button>
             </div>
           </div>
         </div>
@@ -527,7 +525,7 @@ export function HealthcareAdminPanel() {
             )}
             <div className="flex gap-2">
               <button onClick={() => setCaseAction(null)} className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إلغاء</button>
-              <button onClick={handleCaseAction} className="flex-1 py-3 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-400 text-sm font-bold">تأكيد</button>
+              <button onClick={handleCaseAction} disabled={submitting} className="flex-1 py-3 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-400 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed">{submitting ? "جارٍ..." : "تأكيد"}</button>
             </div>
           </div>
         </div>

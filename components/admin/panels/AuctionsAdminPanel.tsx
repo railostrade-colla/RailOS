@@ -179,8 +179,6 @@ export function AuctionsAdminPanel() {
     setSubmitting(false)
     refresh()
   }
-  void submitting
-
   return (
     <div className="p-6 max-w-screen-2xl">
       <div className="flex justify-between items-start mb-4 gap-3">
@@ -450,14 +448,15 @@ export function AuctionsAdminPanel() {
               </button>
               <button
                 onClick={handleAction}
+                disabled={submitting}
                 className={cn(
-                  "flex-1 py-3 rounded-xl text-sm font-bold border",
+                  "flex-1 py-3 rounded-xl text-sm font-bold border disabled:opacity-50 disabled:cursor-not-allowed",
                   actionMode === "end_early" && "bg-yellow-500/[0.15] border-yellow-500/[0.3] text-yellow-400 hover:bg-yellow-500/[0.2]",
                   actionMode === "refund" && "bg-blue-500/[0.15] border-blue-500/[0.3] text-blue-400 hover:bg-blue-500/[0.2]",
                   actionMode === "cancel" && "bg-red-500/[0.15] border-red-500/[0.3] text-red-400 hover:bg-red-500/[0.2]"
                 )}
               >
-                تأكيد
+                {submitting ? "جارٍ..." : "تأكيد"}
               </button>
             </div>
           </div>
@@ -543,9 +542,10 @@ export function AuctionsAdminPanel() {
               </button>
               <button
                 onClick={handleCreate}
-                className="flex-1 py-3 rounded-xl bg-purple-500/[0.15] border border-purple-500/[0.3] text-purple-400 text-sm font-bold hover:bg-purple-500/[0.2]"
+                disabled={submitting}
+                className="flex-1 py-3 rounded-xl bg-purple-500/[0.15] border border-purple-500/[0.3] text-purple-400 text-sm font-bold hover:bg-purple-500/[0.2] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                إنشاء
+                {submitting ? "جارٍ..." : "إنشاء"}
               </button>
             </div>
           </div>

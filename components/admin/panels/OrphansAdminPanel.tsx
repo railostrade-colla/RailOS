@@ -228,8 +228,6 @@ export function OrphansAdminPanel() {
     setSubmitting(false)
     refresh()
   }
-  void submitting
-
   return (
     <div className="p-6 max-w-screen-2xl">
       <SectionHeader

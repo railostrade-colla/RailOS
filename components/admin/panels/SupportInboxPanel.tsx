@@ -244,8 +244,6 @@ export function SupportInboxPanel() {
       showSuccess(`✏️ تحديث محلي فقط`)
     }
   }
-  void submitting
-
   const insertTemplate = (template: string) => {
     setReplyText(template)
     setShowTemplates(false)
@@ -615,10 +613,11 @@ export function SupportInboxPanel() {
                       </button>
                       <button
                         onClick={handleSendReply}
-                        className="flex-1 py-2.5 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-400 text-xs font-bold hover:bg-blue-500/[0.2] flex items-center justify-center gap-1.5"
+                        disabled={submitting}
+                        className="flex-1 py-2.5 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-400 text-xs font-bold hover:bg-blue-500/[0.2] flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Send className="w-3.5 h-3.5" />
-                        إرسال الرد
+                        {submitting ? "جارٍ..." : "إرسال الرد"}
                       </button>
                     </div>
                   </div>
@@ -666,9 +665,10 @@ export function SupportInboxPanel() {
               </button>
               <button
                 onClick={handleCloseTicket}
-                className="flex-1 py-3 rounded-xl bg-green-500/[0.15] border border-green-500/[0.3] text-green-400 text-sm font-bold hover:bg-green-500/[0.2]"
+                disabled={submitting}
+                className="flex-1 py-3 rounded-xl bg-green-500/[0.15] border border-green-500/[0.3] text-green-400 text-sm font-bold hover:bg-green-500/[0.2] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                تأكيد الإغلاق
+                {submitting ? "جارٍ..." : "تأكيد الإغلاق"}
               </button>
             </div>
           </div>

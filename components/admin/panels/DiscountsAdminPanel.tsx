@@ -199,8 +199,6 @@ export function DiscountsAdminPanel() {
     total_claimed: coupons.length,
     redemption_rate: Math.round((coupons.filter((c) => c.status === "used").length / Math.max(1, coupons.length)) * 100),
   }
-  void submitting
-
   return (
     <div className="p-6 max-w-screen-2xl">
       <SectionHeader
@@ -367,10 +365,11 @@ export function DiscountsAdminPanel() {
 
             <button
               onClick={handleCreate}
-              className="w-full bg-purple-500/[0.15] border border-purple-500/[0.3] text-purple-400 py-3 rounded-xl text-sm font-bold hover:bg-purple-500/[0.2] flex items-center justify-center gap-2 mt-3"
+              disabled={submitting}
+              className="w-full bg-purple-500/[0.15] border border-purple-500/[0.3] text-purple-400 py-3 rounded-xl text-sm font-bold hover:bg-purple-500/[0.2] flex items-center justify-center gap-2 mt-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Plus className="w-4 h-4" />
-              إنشاء الخصم
+              {submitting ? "جارٍ الإنشاء..." : "إنشاء الخصم"}
             </button>
           </div>
         </div>
