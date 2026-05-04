@@ -733,42 +733,92 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
           </div>
         </div>
 
-        {/* §4 Price + shares — total_shares is now AUTO-COMPUTED from
-            project_value (in §9) divided by share_price. The admin
-            controls value + price, the system computes the count. */}
-        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5">
-          <div className="text-sm font-bold text-white mb-4">4️⃣ السعر والحصص</div>
-          <div className="space-y-3">
+        {/* §4 Unified Financial — merges price/shares + project value
+            + capital + investment type. Removes duplicates that used
+            to live in old §9. */}
+        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 lg:col-span-2">
+          <div className="text-sm font-bold text-white mb-4">4️⃣ المعلومات المالية</div>
+
+          {/* Row 1: project value + share price */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
             <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">سعر الحصّة الابتدائي (د.ع) *</label>
+              <label className="text-xs text-neutral-400 mb-1.5 block">قيمة المشروع الكلّية (د.ع) *</label>
               <input
-                type="number" value={sharePrice} onChange={(e) => setSharePrice(e.target.value)}
-                placeholder="100000"
+                type="number" value={projectValue} onChange={(e) => setProjectValue(e.target.value)}
+                placeholder="500000000"
                 className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
               />
             </div>
             <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block flex items-center gap-1.5">
-                إجمالي الحصص
-                <span className="text-[9px] text-blue-400 bg-blue-400/[0.1] border border-blue-400/[0.25] rounded px-1.5 py-0.5">
+              <label className="text-xs text-neutral-400 mb-1.5 block">سعر الحصّة الابتدائي (د.ع) *</label>
+              <input
+                type="number" value={sharePrice} onChange={(e) => setSharePrice(e.target.value)}
+                placeholder="50000"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+              />
+            </div>
+          </div>
+
+          {/* Auto-calculated total shares */}
+          <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-xl p-3 mb-3 flex items-center justify-between">
+            <div>
+              <div className="text-[11px] text-blue-400 flex items-center gap-1.5">
+                ⚡ إجمالي الحصص
+                <span className="text-[9px] bg-blue-400/[0.15] border border-blue-400/[0.3] rounded px-1.5 py-0.5">
                   محسوب تلقائياً
                 </span>
-              </label>
+              </div>
+              <div className="text-[10px] text-neutral-500 mt-0.5">= قيمة المشروع ÷ سعر الحصة</div>
+            </div>
+            <span className="text-lg font-bold text-blue-400 font-mono">
+              {totalSharesNum > 0 ? fmtNum(totalSharesNum) : "—"}
+            </span>
+          </div>
+
+          {/* Row 2: capital needed + raised */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">رأس المال المطلوب (د.ع)</label>
               <input
-                type="number"
-                value={totalShares}
-                readOnly
-                placeholder="—"
-                className="w-full bg-white/[0.02] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-blue-400 font-mono outline-none cursor-not-allowed"
+                type="number" value={capitalNeeded} onChange={(e) => setCapitalNeeded(e.target.value)}
+                placeholder="200000000"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
               />
-              <div className="text-[10px] text-neutral-500 mt-1">
-                = قيمة المشروع الإجمالية ÷ سعر الحصة الابتدائي. أدخل القيمتين في القسم المالي.
+            </div>
+            <div>
+              <label className="text-xs text-neutral-400 mb-1.5 block">رأس المال المُحقَّق (د.ع)</label>
+              <input
+                type="number" value={capitalRaised} onChange={(e) => setCapitalRaised(e.target.value)}
+                placeholder="0"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+              />
+            </div>
+          </div>
+
+          {/* Capital progress preview */}
+          {Number(capitalNeeded) > 0 && (
+            <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3 mb-3">
+              <div className="flex justify-between text-[11px] mb-2">
+                <span className="text-neutral-400">تقدّم رأس المال</span>
+                <span className="text-yellow-400 font-mono font-bold">{capitalProgress.toFixed(1)}%</span>
+              </div>
+              <div className="h-2 bg-white/[0.05] rounded-full overflow-hidden">
+                <div className="h-full bg-yellow-400 transition-all" style={{ width: `${capitalProgress}%` }} />
               </div>
             </div>
-            <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-xl p-3 flex justify-between">
-              <span className="text-[11px] text-blue-400">القيمة الإجمالية المحسوبة</span>
-              <span className="text-base font-bold text-blue-400 font-mono">{fmtNum(totalValue)} د.ع</span>
-            </div>
+          )}
+
+          {/* Row 3: investment type */}
+          <div>
+            <label className="text-xs text-neutral-400 mb-1.5 block">نوع الاستثمار</label>
+            <select
+              value={investmentType}
+              onChange={(e) => setInvestmentType(e.target.value as ProjectInvestmentType)}
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
+            >
+              <option value="direct">مباشر</option>
+              <option value="auction">مزاد</option>
+            </select>
           </div>
         </div>
 
@@ -906,124 +956,9 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
           )}
         </div>
 
-        {/* §9 Extended financial — capital + percentages + auto-calculated previews */}
-        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 lg:col-span-2">
-          <div className="text-sm font-bold text-white mb-4">9️⃣ المعلومات المالية الموسَّعة</div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">قيمة المشروع الكلّية (د.ع)</label>
-              <input
-                type="number" value={projectValue} onChange={(e) => setProjectValue(e.target.value)}
-                placeholder="500000000"
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">سعر الحصّة الابتدائي (د.ع)</label>
-              <input
-                type="number" value={sharePrice} onChange={(e) => setSharePrice(e.target.value)}
-                placeholder="50000"
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
-              />
-            </div>
-          </div>
-
-          {/* Auto-calc preview: total shares */}
-          {autoTotalShares > 0 && (
-            <div className="bg-green-400/[0.05] border border-green-400/[0.2] rounded-xl p-3 mb-3 flex justify-between items-center">
-              <span className="text-[11px] text-green-400">⚡ الحصص الإجمالية المحسوبة تلقائياً</span>
-              <span className="text-base font-bold text-green-400 font-mono">{fmtNum(autoTotalShares)} حصة</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">نسبة الطرح (%)</label>
-              <input
-                type="number" value={listingPercent} onChange={(e) => setListingPercent(e.target.value)}
-                placeholder="40"
-                min="1" max="100"
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">نوع الاستثمار</label>
-              <select
-                value={investmentType}
-                onChange={(e) => setInvestmentType(e.target.value as ProjectInvestmentType)}
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
-              >
-                <option value="direct">مباشر</option>
-                <option value="auction">مزاد</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Auto-calc preview: offered shares */}
-          {autoOfferedShares > 0 && (
-            <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-xl p-3 mb-3 flex justify-between items-center">
-              <span className="text-[11px] text-blue-400">📊 الحصص المطروحة للمستثمرين</span>
-              <span className="text-base font-bold text-blue-400 font-mono">{fmtNum(autoOfferedShares)} حصة</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">رأس المال المطلوب (د.ع)</label>
-              <input
-                type="number" value={capitalNeeded} onChange={(e) => setCapitalNeeded(e.target.value)}
-                placeholder="200000000"
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">رأس المال المُحقَّق (د.ع)</label>
-              <input
-                type="number" value={capitalRaised} onChange={(e) => setCapitalRaised(e.target.value)}
-                placeholder="0"
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
-              />
-            </div>
-          </div>
-
-          {/* Capital progress preview */}
-          {Number(capitalNeeded) > 0 && (
-            <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3 mb-3">
-              <div className="flex justify-between text-[11px] mb-2">
-                <span className="text-neutral-400">تقدّم رأس المال</span>
-                <span className="text-yellow-400 font-mono font-bold">{capitalProgress.toFixed(1)}%</span>
-              </div>
-              <div className="h-2 bg-white/[0.05] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-yellow-400 transition-all"
-                  style={{ width: `${capitalProgress}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">نسبة المالك (%)</label>
-              <input
-                type="number" value={ownerPercent} onChange={(e) => setOwnerPercent(e.target.value)}
-                placeholder="60"
-                min="0" max="100"
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">نسبة المطروح (%)</label>
-              <input
-                type="number" value={offerPercent} onChange={(e) => setOfferPercent(e.target.value)}
-                placeholder="40"
-                min="0" max="100"
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
-              />
-            </div>
-          </div>
-        </div>
+        {/* §9 — حذف بالكامل: المحتوى المالي انتقل إلى §4، نسب
+            الملكية انتقلت إلى §5، وحقل listingPercent تم استبداله
+            بحقل ownerPercent في توزيع المحافظ. */}
 
         {/* §7 Returns + risk */}
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5">
