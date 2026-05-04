@@ -16,3 +16,5 @@ yarn-error.log*
 .idea/
 .claude/
 .vercel
+supabase/.temp/
+supabase/.branches/

@@ -433,6 +433,8 @@ export default function CreateAdPage() {
             invalid_type: "نوع الإعلان غير صحيح",
             no_holdings: "لا تملك حصصاً في هذا المشروع",
             insufficient_unfrozen: `متاح للبيع: ${res.available ?? "؟"} حصة فقط`,
+            insufficient_fee_units:
+              `وحدات الرسوم غير كافية للعمولة (${res.required ?? "؟"} مطلوبة، ${res.available ?? "؟"} متاحة)`,
             missing_table: "الميزة غير مفعّلة بعد على الخادم",
             rls: "ليس لديك صلاحية لنشر إعلان",
           }

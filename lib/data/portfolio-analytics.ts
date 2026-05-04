@@ -86,6 +86,54 @@ export interface CreateListingResult {
   error?: string
   listing_id?: string
   available?: number
+  required?: number
+  type?: "sell" | "buy"
+  frozen_fee_units?: number
+}
+
+export interface CancelListingResult {
+  success: boolean
+  reason?: string
+  error?: string
+  refunded_fee_units?: number
+  current_status?: string
+}
+
+/** Cancel an active listing the user owns. Refunds fee-units for buy-listings. */
+export async function cancelListingDB(
+  listingId: string,
+): Promise<CancelListingResult> {
+  if (!listingId) return { success: false, reason: "missing_listing" }
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("cancel_listing", {
+      p_listing_id: listingId,
+    })
+    if (error) {
+      const code = error.code ?? ""
+      const msg = error.message ?? ""
+      if (code === "42883" || code === "42P01") {
+        return { success: false, reason: "missing_table", error: msg }
+      }
+      if (code === "42501") return { success: false, reason: "rls", error: msg }
+      return { success: false, reason: "unknown", error: msg }
+    }
+    const result = (data ?? {}) as CancelListingResult
+    if (!result.success) {
+      return {
+        success: false,
+        reason: result.reason ?? result.error ?? "unknown",
+        current_status: result.current_status,
+      }
+    }
+    return result
+  } catch (err) {
+    return {
+      success: false,
+      reason: "unknown",
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
 }
 
 export async function createListingDB(
