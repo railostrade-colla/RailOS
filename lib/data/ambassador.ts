@@ -217,14 +217,17 @@ export async function submitAmbassadorApplication(
   input: SubmitApplicationInput,
 ): Promise<SubmitApplicationResult> {
   // Light client-side validation — server-side RLS + CHECKs are the real gate.
-  if (!input.reason || input.reason.trim().length < 50) {
-    return { success: false, error: "السبب قصير جداً" }
+  // Phase 10.26: the form switched from free-text to dropdowns, so the
+  // 50-char minimums no longer make sense (a chosen option is ~10-30 chars).
+  // We just require non-empty strings now.
+  if (!input.reason || input.reason.trim().length === 0) {
+    return { success: false, error: "اختر سبباً للانضمام" }
   }
-  if (!input.experience || input.experience.trim().length < 50) {
-    return { success: false, error: "الخبرة قصيرة جداً" }
+  if (!input.experience || input.experience.trim().length === 0) {
+    return { success: false, error: "اختر مستوى الخبرة" }
   }
   if (!input.social_links || input.social_links.length < 1) {
-    return { success: false, error: "أضف حساب تواصل اجتماعي واحد على الأقل" }
+    return { success: false, error: "اختر حساب تواصل اجتماعي واحد على الأقل" }
   }
 
   try {
