@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Search, X, Wallet as WalletIcon, ArrowDownLeft, ArrowUpRight } from "lucide-react"
+import { Search, X, Wallet as WalletIcon, ArrowDownLeft, ArrowUpRight, TrendingUp } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
   SectionHeader, KPI, InnerTabBar, AdminEmpty,
@@ -17,13 +17,16 @@ import {
 import {
   adminFreezeProjectWallet,
   adminUnfreezeProjectWallet,
+  adminReleaseSharesToMarket,
 } from "@/lib/data/admin-utilities"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
-type WalletAction = null | "freeze" | "unfreeze" | "transfer"
+// Note: "transfer" (cash) was removed — the platform doesn't move money,
+// only shares + fee-units. "release" moves shares from reserve → offering.
+type WalletAction = null | "freeze" | "unfreeze" | "release"
 
 export function ProjectWalletsPanel() {
   const [filter, setFilter] = useState<string>("all")
@@ -31,7 +34,7 @@ export function ProjectWalletsPanel() {
   const [selected, setSelected] = useState<ProjectWallet | null>(null)
   const [action, setAction] = useState<WalletAction>(null)
   const [reason, setReason] = useState("")
-  const [transferAmount, setTransferAmount] = useState("")
+  const [releaseAmount, setReleaseAmount] = useState("")
 
   const stats = getProjectWalletsStats()
 
@@ -42,15 +45,45 @@ export function ProjectWalletsPanel() {
   const handleAction = async () => {
     if (!selected || !action) return
     if (action === "freeze" && !reason.trim()) return showError("سبب التجميد مطلوب")
-    if (action === "transfer") {
-      const amt = Number(transferAmount)
-      if (!amt || amt < 1000) return showError("المبلغ غير صحيح (الحدّ الأدنى 1000)")
-      if (amt > selected.balance) return showError("المبلغ أكبر من الرصيد المتاح")
-      // NOTE: actual cash transfer requires a separate flow + RPC.
-      // For now keep optimistic toast — the freeze/unfreeze paths
-      // below are real DB operations.
-      showSuccess(`✅ تم تسجيل تحويل ${fmtNum(amt)} د.ع من محفظة ${selected.project_name}`)
+
+    if (action === "release") {
+      const amt = Math.floor(Number(releaseAmount))
+      if (!amt || amt <= 0) return showError("الكمية غير صحيحة")
+      // The panel currently displays mock wallet rows — `selected.id` is
+      // the wallet id, but the RPC works at the project level. The
+      // ProjectWallet type doesn't expose project_id, so we use the
+      // wallet id as a proxy ONLY when the row came from DB (UUID).
+      // Mock rows can't release in production.
+      const isUuid = /^[0-9a-f-]{36}$/i.test(selected.id)
+      if (!isUuid) {
+        return showError("المحفظة الحالية للعرض فقط — اختر محفظة من DB")
+      }
+      // Use selected.project_id when present; mock shape is missing it,
+      // but DB-shape rows expose it.
+      const projectId =
+        (selected as ProjectWallet & { project_id?: string }).project_id ?? selected.id
+      const result = await adminReleaseSharesToMarket(projectId, amt, reason.trim() || undefined)
+      if (!result.success) {
+        const map: Record<string, string> = {
+          unauthenticated: "يجب تسجيل الدخول أولاً",
+          not_admin: "صلاحياتك لا تسمح بهذا الإجراء",
+          invalid_amount: "الكمية غير صحيحة",
+          reserve_wallet_missing: "محفظة الاحتياطي غير موجودة",
+          offering_wallet_missing: "محفظة العرض غير موجودة",
+          reserve_wallet_frozen: "محفظة الاحتياطي مُجمَّدة",
+          offering_wallet_frozen: "محفظة العرض مُجمَّدة",
+          insufficient_reserve_shares: `متاح في الاحتياطي: ${result.available ?? "؟"} حصة`,
+          missing_table: "الجداول غير منشورة على الخادم بعد",
+          rls: "ليس لديك صلاحية لهذا الإجراء",
+        }
+        showError(map[result.reason ?? ""] ?? "فشل إطلاق الحصص")
+        return
+      }
+      showSuccess(
+        `📤 تم إطلاق ${fmtNum(amt)} حصة للسوق · باق في الاحتياطي: ${fmtNum(result.reserve_remaining ?? 0)}`,
+      )
     }
+
     if (action === "freeze") {
       const result = await adminFreezeProjectWallet(selected.id)
       if (!result.success) {
@@ -75,7 +108,7 @@ export function ProjectWalletsPanel() {
     setAction(null)
     setSelected(null)
     setReason("")
-    setTransferAmount("")
+    setReleaseAmount("")
   }
 
   return (
@@ -230,7 +263,12 @@ export function ProjectWalletsPanel() {
               ) : (
                 <ActionBtn label="✅ فكّ تجميد" color="green" onClick={() => setAction("unfreeze")} />
               )}
-              <ActionBtn label="↗️ تحويل أموال" color="blue" onClick={() => setAction("transfer")} disabled={selected.status !== "active"} />
+              <ActionBtn
+                label="📤 إطلاق حصص للسوق"
+                color="blue"
+                onClick={() => setAction("release")}
+                disabled={selected.status !== "active"}
+              />
               <button onClick={() => setSelected(null)} className="px-3 py-1.5 text-xs rounded-md bg-white/[0.05] border border-white/[0.1] text-neutral-300 hover:bg-white/[0.08]">إغلاق</button>
             </div>
           </div>
@@ -244,17 +282,22 @@ export function ProjectWalletsPanel() {
             <div className="text-base font-bold text-white mb-4">
               {action === "freeze" && "❄️ تجميد المحفظة"}
               {action === "unfreeze" && "✅ فكّ التجميد"}
-              {action === "transfer" && "↗️ تحويل أموال"}
+              {action === "release" && "📤 إطلاق حصص للسوق"}
             </div>
 
             <div className={cn(
               "rounded-xl p-3 mb-4 text-xs border",
               action === "freeze" && "bg-yellow-400/[0.05] border-yellow-400/[0.2] text-yellow-400",
               action === "unfreeze" && "bg-green-400/[0.05] border-green-400/[0.2] text-green-400",
-              action === "transfer" && "bg-blue-400/[0.05] border-blue-400/[0.2] text-blue-400"
+              action === "release" && "bg-blue-400/[0.05] border-blue-400/[0.2] text-blue-400"
             )}>
-              المحفظة: <span className="font-bold text-white">{selected.project_name}</span> ·
-              رصيد متاح: <span className="font-mono font-bold">{fmtNum(selected.balance)} د.ع</span>
+              المحفظة: <span className="font-bold text-white">{selected.project_name}</span>
+              {action === "release" && (
+                <>
+                  {" "}· الاحتياطي:{" "}
+                  <span className="font-mono font-bold">{fmtNum(selected.balance)} حصة</span>
+                </>
+              )}
             </div>
 
             {action === "freeze" && (
@@ -268,24 +311,40 @@ export function ProjectWalletsPanel() {
               </>
             )}
 
-            {action === "transfer" && (
+            {action === "release" && (
               <>
-                <label className="text-xs text-neutral-400 mb-2 block font-bold">المبلغ (د.ع)</label>
+                <label className="text-xs text-neutral-400 mb-2 block font-bold">عدد الحصص للإطلاق</label>
                 <input
-                  type="number" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)}
-                  placeholder="مثلاً: 5000000"
-                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20 mb-4"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={releaseAmount}
+                  onChange={(e) => setReleaseAmount(e.target.value)}
+                  placeholder="مثلاً: 1000"
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20 mb-3"
                 />
+                <label className="text-xs text-neutral-400 mb-2 block font-bold">السبب (اختياري)</label>
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  rows={2}
+                  placeholder="مثلاً: مرحلة عرض ثانية..."
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20 resize-none mb-3"
+                />
+                <div className="bg-blue-400/[0.04] border border-blue-400/[0.15] rounded-lg p-2.5 text-[11px] text-blue-300 mb-4 leading-relaxed">
+                  💡 الحصص ستُنقل من <b className="text-white">محفظة الاحتياطي</b> إلى{" "}
+                  <b className="text-white">محفظة العرض</b> (السوق)، فتصبح متاحة للتداول.
+                </div>
               </>
             )}
 
             <div className="flex gap-2">
-              <button onClick={() => { setAction(null); setReason(""); setTransferAmount("") }} className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إلغاء</button>
+              <button onClick={() => { setAction(null); setReason(""); setReleaseAmount("") }} className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إلغاء</button>
               <button onClick={handleAction} className={cn(
                 "flex-1 py-3 rounded-xl text-sm font-bold border",
                 action === "freeze" && "bg-yellow-500/[0.15] border-yellow-500/[0.3] text-yellow-400",
                 action === "unfreeze" && "bg-green-500/[0.15] border-green-500/[0.3] text-green-400",
-                action === "transfer" && "bg-blue-500/[0.15] border-blue-500/[0.3] text-blue-400"
+                action === "release" && "bg-blue-500/[0.15] border-blue-500/[0.3] text-blue-400"
               )}>تأكيد</button>
             </div>
           </div>

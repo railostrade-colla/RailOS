@@ -138,6 +138,65 @@ export async function adminUnfreezeProjectWallet(
   return callRpc("admin_unfreeze_project_wallet", { p_wallet_id: walletId })
 }
 
+// ─── Release shares to market (Phase 10.17) ────────────────────
+
+export interface ReleaseSharesResult {
+  success: boolean
+  reason?: string
+  error?: string
+  amount?: number
+  available?: number
+  reserve_remaining?: number
+  offering_total?: number
+}
+
+/** Move shares from a project's reserve wallet to its offering wallet. */
+export async function adminReleaseSharesToMarket(
+  projectId: string,
+  amount: number,
+  reason?: string,
+): Promise<ReleaseSharesResult> {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { success: false, reason: "invalid_amount" }
+  }
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("admin_release_shares_to_market", {
+      p_project_id: projectId,
+      p_amount: amount,
+      p_reason: reason ?? null,
+    })
+    if (error) {
+      const code = error.code ?? ""
+      const msg = error.message ?? ""
+      if (
+        code === "42883" ||
+        code === "42P01" ||
+        /function .* does not exist/i.test(msg)
+      ) {
+        return { success: false, reason: "missing_table", error: msg }
+      }
+      if (code === "42501") return { success: false, reason: "rls", error: msg }
+      return { success: false, reason: "unknown", error: msg }
+    }
+    const result = (data ?? {}) as ReleaseSharesResult
+    if (!result.success) {
+      return {
+        success: false,
+        reason: result.reason ?? result.error ?? "unknown",
+        available: result.available,
+      }
+    }
+    return result
+  } catch (err) {
+    return {
+      success: false,
+      reason: "unknown",
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
 // ─── Admin role checks (Phase 10.12) ────────────────────────────
 
 /** Calls the `is_admin()` SQL helper. Returns false on any failure. */
