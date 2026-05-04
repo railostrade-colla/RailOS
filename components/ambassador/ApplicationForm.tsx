@@ -18,14 +18,36 @@ import {
   type SubmitApplicationInput,
 } from "@/lib/data/ambassador"
 
-const MAX_TEXT = 300
-const MIN_TEXT = 50
-
+// Social platforms — just checkboxes now ("هل تملك حساب؟"). No URL required.
 const SOCIAL_PLATFORMS = [
-  { id: "instagram", icon: "📸", label: "Instagram", placeholder: "@username" },
-  { id: "twitter",   icon: "🐦", label: "X (Twitter)", placeholder: "@username" },
-  { id: "tiktok",    icon: "🎵", label: "TikTok",     placeholder: "@username" },
-  { id: "linkedin",  icon: "💼", label: "LinkedIn",   placeholder: "اسم الحساب أو الرابط" },
+  { id: "instagram", icon: "📸", label: "Instagram" },
+  { id: "twitter",   icon: "🐦", label: "X (Twitter)" },
+  { id: "tiktok",    icon: "🎵", label: "TikTok" },
+  { id: "facebook",  icon: "📘", label: "Facebook" },
+  { id: "youtube",   icon: "▶️", label: "YouTube" },
+  { id: "telegram",  icon: "✈️", label: "Telegram" },
+  { id: "linkedin",  icon: "💼", label: "LinkedIn" },
+  { id: "snapchat",  icon: "👻", label: "Snapchat" },
+] as const
+
+// Q1 — predefined reasons (dropdown options)
+const REASON_OPTIONS = [
+  "أحب نشر فرص الاستثمار في العراق",
+  "لدي شبكة معارف واسعة وأود الاستفادة منها",
+  "أبحث عن دخل إضافي من المكافآت",
+  "أريد المساهمة في نمو منصة عراقية",
+  "لخبرتي في الإقناع والتسويق",
+  "كل ما سبق",
+] as const
+
+// Q2 — predefined experience levels
+const EXPERIENCE_OPTIONS = [
+  "خبرة عملية في التسويق الرقمي",
+  "مستثمر شخصي بخبرة سنوات",
+  "عملت في المبيعات أو إقناع العملاء",
+  "صانع محتوى على وسائل التواصل",
+  "خبرة قليلة لكن لدي حماس عالٍ",
+  "بدون خبرة سابقة لكن مستعد للتعلم",
 ] as const
 
 const FOLLOWER_RANGES = [
@@ -50,9 +72,11 @@ const BENEFITS = [
 ]
 
 export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
+  // Q1/Q2 are dropdowns now — empty string until admin picks.
   const [reason, setReason] = useState("")
   const [experience, setExperience] = useState("")
-  const [socials, setSocials] = useState<Record<string, string>>({})
+  // Q3 — Set of platform IDs the user has an account on.
+  const [socialsChecked, setSocialsChecked] = useState<Set<string>>(new Set())
   const [followers, setFollowers] = useState<SubmitApplicationInput["follower_range"] | "">("")
   const [referrals, setReferrals] = useState<SubmitApplicationInput["expected_referrals"] | "">("")
   const [acceptTerms, setAcceptTerms] = useState(false)
@@ -61,23 +85,30 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
   const [showSubmitted, setShowSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  const filledSocials = SOCIAL_PLATFORMS.filter((p) => (socials[p.id] || "").trim().length > 0)
+  const checkedPlatforms = SOCIAL_PLATFORMS.filter((p) => socialsChecked.has(p.id))
 
   const isValid =
-    reason.trim().length >= MIN_TEXT &&
-    reason.length <= MAX_TEXT &&
-    experience.trim().length >= MIN_TEXT &&
-    experience.length <= MAX_TEXT &&
-    filledSocials.length >= 1 &&
+    !!reason &&
+    !!experience &&
+    checkedPlatforms.length >= 1 &&
     !!followers &&
     !!referrals &&
     acceptTerms &&
     acceptCommit
 
+  const toggleSocial = (id: string) => {
+    setSocialsChecked((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   const handleClickSubmit = () => {
-    if (reason.trim().length < MIN_TEXT) return showError(`الجواب الأول يحتاج ${MIN_TEXT} حرف على الأقل`)
-    if (experience.trim().length < MIN_TEXT) return showError(`الجواب الثاني يحتاج ${MIN_TEXT} حرف على الأقل`)
-    if (filledSocials.length < 1) return showError("املأ حساب تواصل اجتماعي واحد على الأقل")
+    if (!reason) return showError("اختر سبباً للانضمام")
+    if (!experience) return showError("اختر مستوى الخبرة")
+    if (checkedPlatforms.length < 1) return showError("اختر حساب تواصل اجتماعي واحد على الأقل")
     if (!followers) return showError("اختر شريحة المتابعين")
     if (!referrals) return showError("اختر عدد الإحالات المتوقّعة")
     if (!acceptTerms || !acceptCommit) return showError("الموافقة على الشروط والتعهّد إجبارية")
@@ -87,9 +118,10 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
   const handleConfirmSubmit = async () => {
     setSubmitting(true)
     const result = await submitAmbassadorApplication({
-      reason: reason.trim(),
-      experience: experience.trim(),
-      social_links: filledSocials.map((p) => ({ platform: p.id, url: socials[p.id].trim() })),
+      reason: reason,
+      experience: experience,
+      // Send platform IDs only — empty URL since user just confirmed they have an account.
+      social_links: checkedPlatforms.map((p) => ({ platform: p.id, url: "" })),
       follower_range: followers as SubmitApplicationInput["follower_range"],
       expected_referrals: referrals as SubmitApplicationInput["expected_referrals"],
     })
@@ -129,57 +161,78 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
         </div>
       </div>
 
-      {/* Q1 */}
+      {/* Q1 — dropdown */}
       <Question
         n={1}
         title="لماذا تريد أن تكون سفيراً؟"
-        helper={`اكتب أسبابك ودوافعك (${MIN_TEXT}-${MAX_TEXT} حرف)`}
+        helper="اختر السبب الأقرب لدافعك"
       >
-        <CountedTextarea
+        <select
           value={reason}
-          onChange={setReason}
-          placeholder="اكتب أسبابك ودوافعك..."
-          rows={4}
-        />
+          onChange={(e) => setReason(e.target.value)}
+          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
+        >
+          <option value="">— اختر سبباً —</option>
+          {REASON_OPTIONS.map((r) => (
+            <option key={r} value={r}>{r}</option>
+          ))}
+        </select>
       </Question>
 
-      {/* Q2 */}
+      {/* Q2 — dropdown */}
       <Question
         n={2}
         title="ما خبرتك في التسويق أو الاستثمار؟"
-        helper={`اكتب عن تجربتك السابقة (${MIN_TEXT}-${MAX_TEXT} حرف)`}
+        helper="اختر مستوى خبرتك الأقرب"
       >
-        <CountedTextarea
+        <select
           value={experience}
-          onChange={setExperience}
-          placeholder="اكتب عن تجربتك السابقة..."
-          rows={4}
-        />
+          onChange={(e) => setExperience(e.target.value)}
+          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
+        >
+          <option value="">— اختر مستوى الخبرة —</option>
+          {EXPERIENCE_OPTIONS.map((x) => (
+            <option key={x} value={x}>{x}</option>
+          ))}
+        </select>
       </Question>
 
-      {/* Q3 */}
+      {/* Q3 — checkboxes only (no URL needed) */}
       <Question
         n={3}
         title="حسابات التواصل الاجتماعي"
-        helper={`املأ حساباً واحداً على الأقل (المُكتمل: ${filledSocials.length})`}
+        helper={`أشّر على المنصّات التي تملك فيها حساباً (المُحدَّد: ${checkedPlatforms.length})`}
       >
-        <div className="space-y-2.5">
-          {SOCIAL_PLATFORMS.map((p) => (
-            <div key={p.id}>
-              <label className="text-[11px] text-neutral-400 mb-1 block flex items-center gap-1.5">
-                <span>{p.icon}</span>
-                <span>{p.label}</span>
-              </label>
-              <input
-                type="text"
-                value={socials[p.id] || ""}
-                onChange={(e) => setSocials({ ...socials, [p.id]: e.target.value })}
-                placeholder={p.placeholder}
-                dir="ltr"
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
-              />
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-2">
+          {SOCIAL_PLATFORMS.map((p) => {
+            const isChecked = socialsChecked.has(p.id)
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => toggleSocial(p.id)}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-right transition-colors",
+                  isChecked
+                    ? "bg-purple-400/[0.1] border-purple-400/[0.3] text-white"
+                    : "bg-white/[0.04] border-white/[0.08] text-neutral-300 hover:bg-white/[0.06]"
+                )}
+              >
+                <div
+                  className={cn(
+                    "w-4 h-4 rounded border flex items-center justify-center flex-shrink-0",
+                    isChecked
+                      ? "bg-purple-400 border-purple-400"
+                      : "border-neutral-600"
+                  )}
+                >
+                  {isChecked && <span className="text-black text-[10px] font-bold">✓</span>}
+                </div>
+                <span className="text-base">{p.icon}</span>
+                <span className="text-xs font-medium flex-1">{p.label}</span>
+              </button>
+            )
+          })}
         </div>
       </Question>
 
@@ -278,7 +331,7 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
               سيتم إرسال طلبك للمراجعة. ستصلك النتيجة خلال <span className="font-bold">3-5 أيام عمل</span>.
             </div>
             <div className="text-xs text-neutral-400 mb-4">
-              تم تعبئة <span className="text-white font-bold">{filledSocials.length}</span> حساب اجتماعي.
+              تم اختيار <span className="text-white font-bold">{checkedPlatforms.length}</span> حساب اجتماعي.
             </div>
             <div className="flex gap-2">
               <button
@@ -357,37 +410,5 @@ function Question({
   )
 }
 
-function CountedTextarea({
-  value,
-  onChange,
-  placeholder,
-  rows = 3,
-}: {
-  value: string
-  onChange: (v: string) => void
-  placeholder: string
-  rows?: number
-}) {
-  const len = value.length
-  const overLimit = len > MAX_TEXT
-  return (
-    <div>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={rows}
-        placeholder={placeholder}
-        maxLength={MAX_TEXT}
-        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 resize-none"
-      />
-      <div className="flex justify-end mt-1">
-        <span className={cn(
-          "text-[10px] font-mono",
-          overLimit ? "text-red-400" : len < MIN_TEXT ? "text-yellow-400" : "text-neutral-500"
-        )}>
-          {len.toLocaleString("en-US")} / {MAX_TEXT.toLocaleString("en-US")}
-        </span>
-      </div>
-    </div>
-  )
-}
+// CountedTextarea + MIN_TEXT/MAX_TEXT removed: Q1/Q2 are now dropdowns,
+// no free-text answers anymore.
