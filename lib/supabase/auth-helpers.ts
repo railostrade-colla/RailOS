@@ -78,6 +78,14 @@ export async function signInWithGoogle(
 }
 
 export async function signOut() {
+  // Drop the dedup cache so the next user session doesn't see cached
+  // rows from the previous account (lazy import — keeps SSR clean).
+  try {
+    const { clearAllCache } = await import("@/lib/data/cache")
+    clearAllCache()
+  } catch {
+    // best-effort
+  }
   const supabase = createClient()
   return await supabase.auth.signOut()
 }

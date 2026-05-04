@@ -5,6 +5,7 @@
 
 import { createClient } from "@/lib/supabase/client"
 import type { Project } from "@/lib/mock-data/types"
+import { dedupCache } from "./cache"
 
 type DBProject = {
   id: string
@@ -51,18 +52,20 @@ function dbToProject(row: DBProject): Project {
 }
 
 export async function getAllProjects(): Promise<Project[]> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from("projects")
-      .select("*")
-      .eq("status", "active")
-      .order("created_at", { ascending: false })
-    if (error || !data) return []
-    return data.map(dbToProject)
-  } catch {
-    return []
-  }
+  return dedupCache("projects:active:all", async () => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+      if (error || !data) return []
+      return data.map(dbToProject)
+    } catch {
+      return []
+    }
+  }, 30_000)
 }
 
 export async function getProjectById(id: string): Promise<Project | null> {
@@ -81,31 +84,35 @@ export async function getProjectById(id: string): Promise<Project | null> {
 }
 
 export async function getNewProjects(limit = 6): Promise<Project[]> {
-  try {
-    const supabase = createClient()
-    const { data } = await supabase
-      .from("projects")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(limit)
-    return (data ?? []).map(dbToProject)
-  } catch {
-    return []
-  }
+  return dedupCache(`projects:new:${limit}`, async () => {
+    try {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("projects")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(limit)
+      return (data ?? []).map(dbToProject)
+    } catch {
+      return []
+    }
+  }, 30_000)
 }
 
 export async function getTrendingProjects(limit = 6): Promise<Project[]> {
-  try {
-    const supabase = createClient()
-    const { data } = await supabase
-      .from("projects")
-      .select("*")
-      .order("share_price", { ascending: false })
-      .limit(limit)
-    return (data ?? []).map(dbToProject)
-  } catch {
-    return []
-  }
+  return dedupCache(`projects:trending:${limit}`, async () => {
+    try {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("projects")
+        .select("*")
+        .order("share_price", { ascending: false })
+        .limit(limit)
+      return (data ?? []).map(dbToProject)
+    } catch {
+      return []
+    }
+  }, 30_000)
 }
 
 // ──────────────────────────────────────────────────────────────────────

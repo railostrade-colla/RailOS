@@ -43,7 +43,7 @@ const EXPECTED_REFERRALS = [
 ] as const
 
 const BENEFITS = [
-  { icon: Sparkles,   label: "5% من رسوم المُحالين", color: "text-yellow-400", bg: "bg-yellow-400/[0.08]", border: "border-yellow-400/[0.25]" },
+  { icon: Sparkles,   label: "2% من رسوم المُحالين", color: "text-yellow-400", bg: "bg-yellow-400/[0.08]", border: "border-yellow-400/[0.25]" },
   { icon: Trophy,     label: "مكافآت milestones",     color: "text-orange-400", bg: "bg-orange-400/[0.08]", border: "border-orange-400/[0.25]" },
   { icon: BarChart3,  label: "لوحة تحكّم متقدّمة",   color: "text-blue-400",   bg: "bg-blue-400/[0.08]",   border: "border-blue-400/[0.25]" },
   { icon: Award,      label: "شارة سفير مميّزة",       color: "text-purple-400", bg: "bg-purple-400/[0.08]", border: "border-purple-400/[0.25]" },

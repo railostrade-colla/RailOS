@@ -2,7 +2,29 @@ import type { NextConfig } from "next"
 import { withSentryConfig } from "@sentry/nextjs"
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // ─── Performance ─────────────────────────────────────────
+  // Tree-shake heavy icon/chart libraries so each route only ships
+  // what it actually uses (Next 16 supports this directly).
+  experimental: {
+    optimizePackageImports: [
+      "lucide-react",
+      "recharts",
+      "@supabase/supabase-js",
+    ],
+  },
+  trailingSlash: false,
+  // Static asset caching — browser keeps fonts/images around for 30
+  // days, which is the biggest win for repeat-visitor performance.
+  async headers() {
+    return [
+      {
+        source: "/:all*(svg|jpg|jpeg|png|webp|avif|gif|ico|woff|woff2)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=2592000, immutable" },
+        ],
+      },
+    ]
+  },
 }
 
 /**

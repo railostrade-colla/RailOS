@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client"
 import type { Company } from "@/lib/mock-data/types"
+import { dedupCache } from "./cache"
 
 type DBCompany = {
   id: string
@@ -46,17 +47,19 @@ function dbToCompany(row: DBCompany): Company {
 }
 
 export async function getAllCompanies(): Promise<Company[]> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from("companies")
-      .select("*")
-      .order("created_at", { ascending: false })
-    if (error || !data) return []
-    return data.map(dbToCompany)
-  } catch {
-    return []
-  }
+  return dedupCache("companies:all", async () => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("companies")
+        .select("*")
+        .order("created_at", { ascending: false })
+      if (error || !data) return []
+      return data.map(dbToCompany)
+    } catch {
+      return []
+    }
+  }, 30_000)
 }
 
 export async function getCompanyById(id: string): Promise<Company | null> {

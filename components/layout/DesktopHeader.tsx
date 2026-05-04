@@ -52,6 +52,7 @@ export function DesktopHeader() {
                 <Link
                   key={item.id}
                   href={item.href}
+                  prefetch
                   className={cn(
                     "px-3.5 py-1.5 rounded-full text-sm transition-colors",
                     isActive

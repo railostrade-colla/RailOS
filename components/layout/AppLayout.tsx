@@ -30,14 +30,17 @@ interface AppLayoutProps {
  * ملاحظة: "/profile" يطابق "/profile" + "/profile/level" + "/profile-setup".
  */
 const FOOTER_VISIBLE_PATHS = [
-  "/",          // الصفحة الرئيسية (landing)
-  "/dashboard", // اللوحة الرئيسية (home بعد تسجيل الدخول)
-  "/market",    // السوق
-  "/portfolio", // الاستثمار / محفظتي
-  "/council",   // المجتمع / مجلس السوق
-  "/profile",   // حسابي
-  "/account",   // حسابي (alias)
-  "/support",   // الدعم
+  "/",           // الصفحة الرئيسية (landing)
+  "/dashboard",  // اللوحة الرئيسية (home بعد تسجيل الدخول)
+  "/market",     // السوق
+  "/investment", // الاستثمار / لوحة استثماراتي ← أضيف
+  "/community",  // المجتمع ← أضيف
+  "/about",      // عن رايلوس ← أضيف
+  "/council",    // مجلس السوق
+  "/profile",    // حسابي
+  "/account",    // حسابي (alias)
+  "/support",    // الدعم
+  // ملاحظة: /portfolio لا يعرض Footer (حُذف عمداً).
 ]
 
 function shouldShowFooter(pathname: string | null): boolean {
