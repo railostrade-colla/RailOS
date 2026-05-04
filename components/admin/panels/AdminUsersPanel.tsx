@@ -12,15 +12,13 @@ import {
   ADMIN_PERMISSION_LABELS,
   ADMIN_STATUS_LABELS,
   getAdminUsersStats,
-  isSuperAdmin,
   countActiveSuperAdmins,
-  MOCK_CURRENT_ADMIN,
   type AdminUserRecord,
   type AdminPermission,
   type AdminRoleId,
   type AdminUserStatus,
 } from "@/lib/mock-data/adminUsers"
-import { isSuperAdminDB } from "@/lib/data/admin-utilities"
+import { isSuperAdminDB, getMyUserId } from "@/lib/data/admin-utilities"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -30,11 +28,15 @@ type RowAction = null | "view" | "edit_perms" | "suspend" | "reactivate" | "dele
 
 export function AdminUsersPanel() {
   // ─── 🔒 Access guard: super_admin (founder) only ───
-  // Real DB check via `profiles.role` — falls back to the mock check
-  // until the auth user has a profile row (so dev/staging stays
-  // browseable without manual seed).
+  // Sole source of truth: `profiles.role === 'super_admin'` for the
+  // signed-in auth user. No mock fallback — that was a security hole
+  // (anyone whose profile.role wasn't super_admin would still pass
+  // because MOCK_CURRENT_ADMIN.role was hard-coded).
   const [accessChecked, setAccessChecked] = useState(false)
   const [accessAllowed, setAccessAllowed] = useState(false)
+
+  /** Current auth uid — used to block the user from suspending/deleting themselves. */
+  const [myUserId, setMyUserId] = useState<string | null>(null)
 
   // ─── All other state hooks declared BEFORE any early return so the
   //     hook order stays stable across renders (React Rules of Hooks).
@@ -54,10 +56,10 @@ export function AdminUsersPanel() {
 
   useEffect(() => {
     let cancelled = false
-    isSuperAdminDB().then((isSuper) => {
+    Promise.all([isSuperAdminDB(), getMyUserId()]).then(([isSuper, uid]) => {
       if (cancelled) return
-      // Real DB grant takes precedence; otherwise fall back to mock.
-      setAccessAllowed(isSuper || isSuperAdmin(MOCK_CURRENT_ADMIN))
+      setAccessAllowed(isSuper)
+      setMyUserId(uid)
       setAccessChecked(true)
     })
     return () => { cancelled = true }
@@ -111,8 +113,8 @@ export function AdminUsersPanel() {
   const handleAction = () => {
     if (!selected || !action) return
 
-    // 🛡️ منع المسؤول من حذف/إيقاف نفسه
-    if ((action === "suspend" || action === "delete") && selected.id === MOCK_CURRENT_ADMIN.id) {
+    // 🛡️ منع المسؤول من حذف/إيقاف نفسه — نقارن بـ auth uid الحقيقي.
+    if ((action === "suspend" || action === "delete") && myUserId && selected.id === myUserId) {
       return showError("لا يمكنك إيقاف أو حذف نفسك")
     }
 

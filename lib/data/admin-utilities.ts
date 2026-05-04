@@ -236,6 +236,17 @@ export async function isSuperAdminDB(): Promise<boolean> {
   return role === "super_admin"
 }
 
+/** Returns the caller's auth uid, or null if not signed in. */
+export async function getMyUserId(): Promise<string | null> {
+  try {
+    const supabase = createClient()
+    const { data } = await supabase.auth.getUser()
+    return data?.user?.id ?? null
+  } catch {
+    return null
+  }
+}
+
 // ─── User stats (Phase 10.32) ───────────────────────────────────
 
 /**

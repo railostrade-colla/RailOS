@@ -1,13 +1,12 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { Search, X, Download } from "lucide-react"
+import { Search, X, Download, Trash2 } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
-  SectionHeader, KPI, AdminEmpty,
+  KPI, AdminEmpty,
 } from "@/components/admin/ui"
 import {
-  MOCK_AUDIT_LOG,
   ACTION_LABELS,
   ENTITY_TYPE_LABELS,
   ROLE_LABELS,
@@ -17,7 +16,8 @@ import {
   type AuditEntityType,
 } from "@/lib/mock-data/auditLog"
 import { getAuditLog } from "@/lib/data/audit-log"
-import { showSuccess } from "@/lib/utils/toast"
+import { cleanupAuditLogOld } from "@/lib/data/admin-utilities"
+import { showSuccess, showError } from "@/lib/utils/toast"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
@@ -61,6 +61,11 @@ export function AuditLogPanel() {
   const [destructiveOnly, setDestructiveOnly] = useState(false)
   const [selected, setSelected] = useState<AuditLogEntry | null>(null)
   const [page, setPage] = useState(0)
+
+  // Cleanup state
+  const [showCleanup, setShowCleanup] = useState(false)
+  const [cleanupDays, setCleanupDays] = useState(90)
+  const [cleanupSubmitting, setCleanupSubmitting] = useState(false)
 
   // Production mode — DB only.
   const [log, setLog] = useState<AuditLogEntry[]>([])
@@ -116,6 +121,34 @@ export function AuditLogPanel() {
     setPage(0)
   }
 
+  const reloadLog = () => {
+    getAuditLog(500).then(setLog)
+  }
+
+  const handleCleanup = async () => {
+    if (cleanupDays < 7) {
+      showError("الحد الأدنى للاحتفاظ هو 7 أيام")
+      return
+    }
+    setCleanupSubmitting(true)
+    const result = await cleanupAuditLogOld(cleanupDays)
+    setCleanupSubmitting(false)
+    if (!result.success) {
+      const map: Record<string, string> = {
+        not_admin: "صلاحياتك لا تسمح",
+        min_7_days: "الحد الأدنى 7 أيام",
+        audit_log_missing: "جدول السجلات غير موجود",
+        rls: "ممنوع بسبب RLS",
+        missing_table: "الدالة غير منشورة — طبّق Migration 10.32",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل التنظيف")
+      return
+    }
+    showSuccess(`🧹 تم حذف ${fmtNum(result.deleted ?? 0)} سجل أقدم من ${cleanupDays} يوماً`)
+    setShowCleanup(false)
+    reloadLog()
+  }
+
   const exportCSV = () => {
     const headers = ["ID", "Date", "Admin", "Role", "Action", "Entity Type", "Entity Name", "IP", "Reason"]
     const rows = filtered.map((e) => [
@@ -151,13 +184,23 @@ export function AuditLogPanel() {
           <div className="text-lg font-bold text-white">📜 سجل التدقيق</div>
           <div className="text-xs text-neutral-500 mt-0.5">كل قرارات الإدارة — شفافية كاملة (للقراءة فقط)</div>
         </div>
-        <button
-          onClick={exportCSV}
-          className="flex items-center gap-1.5 bg-blue-400/[0.1] border border-blue-400/[0.25] text-blue-400 hover:bg-blue-400/[0.15] rounded-md px-3 py-1.5 text-xs font-bold transition-colors"
-        >
-          <Download className="w-3.5 h-3.5" />
-          Export CSV
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowCleanup(true)}
+            className="flex items-center gap-1.5 bg-red-400/[0.08] border border-red-400/[0.25] text-red-400 hover:bg-red-400/[0.12] rounded-md px-3 py-1.5 text-xs font-bold transition-colors"
+            title="حذف السجلات الأقدم من N يوماً"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            تنظيف قديم
+          </button>
+          <button
+            onClick={exportCSV}
+            className="flex items-center gap-1.5 bg-blue-400/[0.1] border border-blue-400/[0.25] text-blue-400 hover:bg-blue-400/[0.15] rounded-md px-3 py-1.5 text-xs font-bold transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export CSV
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -406,6 +449,61 @@ export function AuditLogPanel() {
             >
               إغلاق
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Cleanup modal */}
+      {showCleanup && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border border-red-400/[0.3] rounded-2xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-red-400" />
+                <div className="text-base font-bold text-white">🧹 تنظيف السجلات القديمة</div>
+              </div>
+              <button onClick={() => setShowCleanup(false)} className="text-neutral-500 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-yellow-400/[0.05] border border-yellow-400/[0.2] rounded-xl p-3 mb-4 text-xs text-yellow-300">
+              ⚠️ سيتم <span className="font-bold">حذفها نهائياً</span> ولا يمكن استرجاعها.
+              يُنصح بـ <span className="font-mono">Export CSV</span> أولاً.
+            </div>
+
+            <div className="mb-4">
+              <label className="text-xs text-neutral-400 mb-1.5 block">
+                احذف السجلات الأقدم من (بالأيام)
+              </label>
+              <input
+                type="number"
+                min={7}
+                max={3650}
+                value={cleanupDays}
+                onChange={(e) => setCleanupDays(Math.max(7, Number(e.target.value) || 90))}
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-white/20 font-mono"
+              />
+              <div className="text-[11px] text-neutral-500 mt-1">
+                الحد الأدنى 7 أيام (للحماية من الأخطاء). الافتراضي 90 يوم.
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowCleanup(false)}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleCleanup}
+                disabled={cleanupSubmitting || cleanupDays < 7}
+                className="flex-1 py-3 rounded-xl bg-red-500/[0.15] border border-red-500/[0.3] text-red-400 text-sm font-bold hover:bg-red-500/[0.2] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {cleanupSubmitting ? "جارٍ الحذف..." : "تأكيد الحذف"}
+              </button>
+            </div>
           </div>
         </div>
       )}

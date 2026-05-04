@@ -9,6 +9,7 @@ import { getAllProjects } from "@/lib/data/projects"
 import { getAllCompanies } from "@/lib/data/companies"
 import {
   loadDraftsList,
+  loadDraftsListAsync,
   deleteDraft,
   type SavedDraft,
 } from "@/lib/admin/entity-drafts"
@@ -131,8 +132,12 @@ export function ProjectsPanel() {
   const [draftKindResume, setDraftKindResume] = useState<"project" | "company">("project")
 
   const refreshDrafts = () => {
+    // Synchronous first paint from localStorage cache.
     setProjectDrafts(loadDraftsList("project"))
     setCompanyDrafts(loadDraftsList("company"))
+    // Then refresh from DB in the background so cross-device drafts appear.
+    loadDraftsListAsync("project").then(setProjectDrafts)
+    loadDraftsListAsync("company").then(setCompanyDrafts)
   }
 
   useEffect(() => {
@@ -295,8 +300,8 @@ export function ProjectsPanel() {
             setDraftKindResume(kind)
             setMainTab(kind === "project" ? "create_project" : "create_company")
           }}
-          onDelete={(id, kind) => {
-            deleteDraft(kind, id)
+          onDelete={async (id, kind) => {
+            await deleteDraft(kind, id)
             refreshDrafts()
             showSuccess("تم حذف المسودّة")
           }}
@@ -430,7 +435,7 @@ interface DraftsListProps {
   projectDrafts: SavedDraft[]
   companyDrafts: SavedDraft[]
   onResume: (draft: SavedDraft, kind: "project" | "company") => void
-  onDelete: (id: string, kind: "project" | "company") => void
+  onDelete: (id: string, kind: "project" | "company") => void | Promise<void>
 }
 
 function DraftsList({ projectDrafts, companyDrafts, onResume, onDelete }: DraftsListProps) {

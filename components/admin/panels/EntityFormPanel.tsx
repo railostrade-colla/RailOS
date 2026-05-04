@@ -400,7 +400,7 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
     // drafts list and clear the autosave so the form resets when
     // the admin returns to it.
     if (status === "draft" && !isEdit) {
-      const saved = saveDraftToList(draftKind, collectFormData())
+      const saved = await saveDraftToList(draftKind, collectFormData())
       clearCurrentDraft(draftKind)
       showSuccess(`💾 تم حفظ المسودّة "${saved.title}" — تجدها في تبويب المسودّات`)
       onDone?.()

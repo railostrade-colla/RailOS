@@ -79,31 +79,82 @@ export function clearCurrentDraft(kind: DraftKind): void {
 }
 
 // ─── Saved drafts list ───────────────────────────────────────────
+//
+// Two-tier strategy (Phase 10.35):
+//   • localStorage holds an instant-load cache + an offline fallback.
+//   • DB (entity_drafts table) is the source of truth so drafts move
+//     across devices.
+// The async helpers below merge both — they read/write localStorage
+// for snappy UX and dispatch to the DB layer when the network is up.
+// If the DB call fails (migration not applied, RLS denial, offline)
+// we silently fall back to localStorage so the panel never breaks.
 
+import {
+  listDraftsDB,
+  upsertDraftDB,
+  deleteDraftDB,
+  getDraftByIdDB,
+} from "@/lib/data/entity-drafts"
+
+/** Synchronous read of the local cache only — used for first paint. */
 export function loadDraftsList(kind: DraftKind): SavedDraft[] {
   return readJson<SavedDraft[]>(listKey(kind)) ?? []
 }
 
-/** Insert or update a draft by id. Returns the saved row. */
-export function saveDraft(kind: DraftKind, data: EntityFormData): SavedDraft {
-  const list = loadDraftsList(kind)
-  const id = data.id ?? `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const draft: SavedDraft = {
-    id,
-    title: data.name?.trim() || "بدون اسم",
-    saved_at: new Date().toISOString(),
-    data: { ...data, id },
+/**
+ * Async: pulls the canonical drafts list from the DB and refreshes the
+ * local cache. Falls back to the cache on failure.
+ */
+export async function loadDraftsListAsync(kind: DraftKind): Promise<SavedDraft[]> {
+  const remote = await listDraftsDB(kind)
+  if (remote.length > 0) {
+    writeJson(listKey(kind), remote)
+    return remote
   }
-  const next = [draft, ...list.filter((d) => d.id !== id)]
+  // Empty remote could mean (a) genuinely no drafts, (b) migration not
+  // applied. Fall back to cache so a fresh DB doesn't wipe the user's
+  // local-only drafts.
+  return loadDraftsList(kind)
+}
+
+/**
+ * Insert or update a draft. Writes both to the DB and to localStorage.
+ * The DB row wins if it returns successfully; otherwise we still keep
+ * a local copy so nothing is lost.
+ */
+export async function saveDraft(
+  kind: DraftKind,
+  data: EntityFormData,
+): Promise<SavedDraft> {
+  // Try DB first. The DB assigns/preserves the id and timestamps.
+  const remote = await upsertDraftDB(kind, data)
+  const draft: SavedDraft =
+    remote ?? {
+      id: data.id ?? `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title: data.name?.trim() || "بدون اسم",
+      saved_at: new Date().toISOString(),
+      data: { ...data },
+    }
+  if (!remote) draft.data = { ...data, id: draft.id }
+
+  // Always update local cache so the next first-paint is snappy.
+  const list = loadDraftsList(kind)
+  const next = [draft, ...list.filter((d) => d.id !== draft.id)]
   writeJson(listKey(kind), next)
   return draft
 }
 
-export function deleteDraft(kind: DraftKind, id: string): void {
+export async function deleteDraft(kind: DraftKind, id: string): Promise<void> {
+  await deleteDraftDB(id) // best-effort
   const next = loadDraftsList(kind).filter((d) => d.id !== id)
   writeJson(listKey(kind), next)
 }
 
-export function getDraftById(kind: DraftKind, id: string): SavedDraft | null {
+export async function getDraftById(
+  kind: DraftKind,
+  id: string,
+): Promise<SavedDraft | null> {
+  const remote = await getDraftByIdDB(id)
+  if (remote) return remote
   return loadDraftsList(kind).find((d) => d.id === id) ?? null
 }
