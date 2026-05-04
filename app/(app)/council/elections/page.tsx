@@ -16,12 +16,9 @@ import {
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, StatCard, Badge, Modal } from "@/components/ui"
-import {
-  getCurrentElection as getCurrentElectionMock,
-  getCandidates as getCandidatesMock,
-  checkEligibility as checkEligibilityMock,
-  type CouncilCandidate,
-  type CouncilElection,
+import type {
+  CouncilCandidate,
+  CouncilElection,
 } from "@/lib/mock-data"
 import {
   getCurrentElection as dbGetCurrentElection,
@@ -62,10 +59,25 @@ function useCountdown(endsAt: string) {
 export default function ElectionsPage() {
   const router = useRouter()
 
-  // Mock first-paint, real DB on mount.
-  const [election, setElection] = useState<CouncilElection>(() => getCurrentElectionMock())
-  const [candidates, setCandidates] = useState<CouncilCandidate[]>(() => getCandidatesMock())
-  const [eligibility, setEligibility] = useState(() => checkEligibilityMock("me"))
+  // Production mode — DB only. Empty election placeholder until DB has one.
+  const [election, setElection] = useState<CouncilElection>(() => ({
+    id: "",
+    title: "لا توجد انتخابات نشطة",
+    status: "registration",
+    registration_starts: new Date().toISOString(),
+    registration_ends: new Date().toISOString(),
+    voting_starts: new Date().toISOString(),
+    voting_ends: new Date().toISOString(),
+    seats_available: 0,
+    candidates_count: 0,
+    votes_cast: 0,
+    total_eligible_voters: 0,
+  }))
+  const [candidates, setCandidates] = useState<CouncilCandidate[]>([])
+  const [eligibility, setEligibility] = useState<{
+    eligible: boolean
+    checks: Array<{ label: string; passed: boolean }>
+  }>({ eligible: false, checks: [] })
   const [votedFor, setVotedFor] = useState<string | null>(null)
   const [voteTarget, setVoteTarget] = useState<CouncilCandidate | null>(null)
   const [showRegisterModal, setShowRegisterModal] = useState(false)

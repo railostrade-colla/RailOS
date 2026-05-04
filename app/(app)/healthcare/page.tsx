@@ -8,15 +8,28 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, StatCard, SectionHeader, Badge } from "@/components/ui"
 import {
-  getHealthcareStats as getHealthcareStatsMock,
-  getUrgentCases,
-  MOCK_SUCCESS_STORIES,
-  MOCK_AWARENESS_ARTICLES,
-  MOCK_HEALTHCARE_CASES,
   CASE_STATUS_LABELS,
   DISEASE_LABELS,
   type HealthcareCase,
 } from "@/lib/mock-data/healthcare"
+
+// Production mode — content arrays are empty until real CMS is wired.
+const MOCK_SUCCESS_STORIES: Array<{
+  id: string
+  patient_initial: string
+  disease: string
+  story: string
+  amount_raised: number
+  date: string
+}> = []
+const MOCK_AWARENESS_ARTICLES: Array<{
+  id: string
+  category: string
+  read_time_min: number
+  title: string
+  excerpt: string
+  published_at: string
+}> = []
 import {
   getHealthcareCases,
   getHealthcareStats,
@@ -35,31 +48,29 @@ const QUICK_LINKS = [
 
 export default function HealthcarePage() {
   const router = useRouter()
-  // The page reads the mock's stats shape (total_donated, cases_completed,
-  // insurance_subscribers, donors_count). Mock first-paint, then we
-  // override only the fields the DB exposes.
-  const [stats, setStats] = useState(() => getHealthcareStatsMock())
-  const [urgent, setUrgent] = useState<HealthcareCase[]>(getUrgentCases(5))
+  // Production mode — DB only, zero defaults.
+  const [stats, setStats] = useState({
+    total_donated: 0,
+    cases_completed: 0,
+    cases_active: 0,
+    donors_count: 0,
+    insurance_subscribers: 0,
+  })
+  const [urgent, setUrgent] = useState<HealthcareCase[]>([])
 
   useEffect(() => {
     let cancelled = false
     Promise.all([getHealthcareStats(), getHealthcareCases()]).then(
       ([dbStats, cases]) => {
         if (cancelled) return
-        if (dbStats.total_cases > 0) {
-          setStats((prev) => ({
-            ...prev,
-            total_donated: dbStats.total_collected,
-            cases_completed: dbStats.completed_cases,
-            cases_active: dbStats.active_cases,
-            donors_count: dbStats.total_donors,
-            // insurance_subscribers comes from mock — separate count(*)
-            // query is out of scope for Phase 6.1.
-          }))
-        }
-        if (cases.length > 0) {
-          setUrgent(cases.filter((c) => c.status === "urgent").slice(0, 5))
-        }
+        setStats((prev) => ({
+          ...prev,
+          total_donated: dbStats.total_collected,
+          cases_completed: dbStats.completed_cases,
+          cases_active: dbStats.active_cases,
+          donors_count: dbStats.total_donors,
+        }))
+        setUrgent(cases.filter((c) => c.status === "urgent").slice(0, 5))
       },
     )
     return () => {

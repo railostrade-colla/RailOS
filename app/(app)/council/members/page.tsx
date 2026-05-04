@@ -5,7 +5,7 @@ import { Calendar, Vote } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Badge, Tabs } from "@/components/ui"
-import { COUNCIL_MEMBERS, type CouncilRole, type CouncilMember } from "@/lib/mock-data"
+import type { CouncilRole, CouncilMember } from "@/lib/mock-data"
 import { getCouncilMembers as dbGetCouncilMembers } from "@/lib/data/council"
 import { cn } from "@/lib/utils/cn"
 
@@ -19,13 +19,13 @@ const ROLE_META: Record<CouncilRole, { label: string; color: "purple" | "blue" |
 
 export default function CouncilMembersPage() {
   const [tab, setTab] = useState<TabId>("all")
-  // Mock first-paint, real DB on mount.
-  const [members, setMembers] = useState<CouncilMember[]>(COUNCIL_MEMBERS)
+  // Production mode — DB only.
+  const [members, setMembers] = useState<CouncilMember[]>([])
 
   useEffect(() => {
     let cancelled = false
     dbGetCouncilMembers().then((rows) => {
-      if (cancelled || rows.length === 0) return
+      if (cancelled) return
       setMembers(
         rows.map((m): CouncilMember => ({
           id: m.id,

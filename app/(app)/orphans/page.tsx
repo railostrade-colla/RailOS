@@ -8,13 +8,18 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, StatCard, SectionHeader, Badge } from "@/components/ui"
 import {
-  getOrphansStats as getOrphansStatsMock,
-  MOCK_TESTIMONIALS,
-  MOCK_ORPHAN_CHILDREN,
   CHILD_STATUS_LABELS,
   EDUCATION_LABELS,
   type OrphanChild,
 } from "@/lib/mock-data/orphans"
+
+// Production mode — testimonials empty until real CMS is wired.
+const MOCK_TESTIMONIALS: Array<{
+  id: string
+  sponsor_name: string
+  text: string
+  duration_months: number
+}> = []
 import {
   getOrphanChildren,
   getOrphansStats,
@@ -40,20 +45,24 @@ const COLOR_CLASSES = {
 
 export default function OrphansPage() {
   const router = useRouter()
-  // First-paint mock fallback so the section renders instantly;
-  // real DB values swap in on mount.
-  const [stats, setStats] = useState<OrphansStats>(() => getOrphansStatsMock())
-  const [featured, setFeatured] = useState<OrphanChild[]>(
-    MOCK_ORPHAN_CHILDREN.slice(0, 3),
-  )
+  // Production mode — DB only, zero defaults.
+  const [stats, setStats] = useState<OrphansStats>({
+    total_children: 0,
+    sponsored: 0,
+    partial: 0,
+    needs_sponsor: 0,
+    sponsors_count: 0,
+    total_donated: 0,
+  })
+  const [featured, setFeatured] = useState<OrphanChild[]>([])
 
   useEffect(() => {
     let cancelled = false
     Promise.all([getOrphansStats(), getOrphanChildren()]).then(
       ([s, children]) => {
         if (cancelled) return
-        if (s.total_children > 0) setStats(s)
-        if (children.length > 0) setFeatured(children.slice(0, 3))
+        setStats(s)
+        setFeatured(children.slice(0, 3))
       },
     )
     return () => {

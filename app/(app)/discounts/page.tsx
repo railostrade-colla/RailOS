@@ -7,8 +7,6 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, StatCard, Badge, EmptyState } from "@/components/ui"
 import {
-  getActiveDiscounts as getActiveDiscountsMock,
-  getDiscountsStats as getDiscountsStatsMock,
   CATEGORY_LABELS,
   LEVEL_LABELS,
   type DiscountCategory,
@@ -27,18 +25,16 @@ type SortKey = "newest" | "most_used" | "highest_value"
 
 export default function DiscountsPage() {
   const router = useRouter()
-  const [stats, setStats] = useState<DiscountsStats>(() => {
-    const m = getDiscountsStatsMock()
-    return { total_brands: m.total_brands, active_discounts: m.active_discounts }
-  })
-  const [allDiscounts, setAllDiscounts] = useState<Discount[]>(getActiveDiscountsMock())
+  // Production mode — DB only.
+  const [stats, setStats] = useState<DiscountsStats>({ total_brands: 0, active_discounts: 0 })
+  const [allDiscounts, setAllDiscounts] = useState<Discount[]>([])
 
   useEffect(() => {
     let cancelled = false
     Promise.all([getActiveDiscounts(), getDiscountsStats()]).then(([rows, s]) => {
       if (cancelled) return
-      if (rows.length > 0) setAllDiscounts(rows)
-      if (s.total_brands > 0) setStats(s)
+      setAllDiscounts(rows)
+      setStats(s)
     })
     return () => {
       cancelled = true

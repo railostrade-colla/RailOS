@@ -7,9 +7,6 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, StatCard, Badge } from "@/components/ui"
 import {
-  COUNCIL_PROPOSALS,
-  getCouncilStats as getCouncilStatsMock,
-  getCurrentElection,
   type ProposalStatus,
   type CouncilProposal,
 } from "@/lib/mock-data"
@@ -36,13 +33,34 @@ const TYPE_LABELS: Record<string, string> = {
 
 export default function CouncilPage() {
   const router = useRouter()
-  const election = useMemo(() => getCurrentElection(), [])
+  // No active election (DB-only — production mode); status defaults
+  // make this section render as inactive until a real election starts.
+  const election = useMemo(() => ({
+    status: "registration" as "registration" | "voting" | "ended",
+    candidates: [] as Array<{ id: string; name: string }>,
+    votes_cast: 0,
+    total_eligible_voters: 0,
+    starts_at: "",
+    ends_at: "",
+  }), [])
 
-  // Live data (DB-backed with mock fallback)
-  const [stats, setStats] = useState(getCouncilStatsMock())
-  const [recentProposals, setRecentProposals] = useState<CouncilProposal[]>(
-    [...COUNCIL_PROPOSALS].sort((a, b) => (a.submitted_at < b.submitted_at ? 1 : -1)).slice(0, 3)
-  )
+  // Production mode — DB only. Shape matches DBCouncilStats.
+  const [stats, setStats] = useState<{
+    total_members: number
+    elected_members: number
+    proposals: number
+    approved: number
+    rejected: number
+    active: number
+  }>({
+    total_members: 0,
+    elected_members: 0,
+    proposals: 0,
+    approved: 0,
+    rejected: 0,
+    active: 0,
+  })
+  const [recentProposals, setRecentProposals] = useState<CouncilProposal[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -72,11 +90,13 @@ export default function CouncilPage() {
           setRecentProposals(mapped)
         }
       })
-      .catch(() => { /* silent → keep mock */ })
+      .catch(() => { /* silent → keep zero state */ })
     return () => { cancelled = true }
   }, [])
 
-  const participation = Math.round((election.votes_cast / election.total_eligible_voters) * 100)
+  const participation = election.total_eligible_voters > 0
+    ? Math.round((election.votes_cast / election.total_eligible_voters) * 100)
+    : 0
   const electionLabel = election.status === "voting" ? "نشطة" : election.status === "registration" ? "ترشّح" : "منتهية"
 
   return (

@@ -7,8 +7,6 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, StatCard, Tabs, Badge, EmptyState } from "@/components/ui"
 import {
-  COUNCIL_PROPOSALS,
-  getCouncilStats as getCouncilStatsMock,
   type ProposalStatus,
   type ProposalType,
   type CouncilProposal,
@@ -41,9 +39,12 @@ export default function ProposalsPage() {
   const [tab, setTab] = useState<TabId>("voting")
   const [typeFilter, setTypeFilter] = useState<ProposalType | "all">("all")
 
-  // Mock first-paint, real DB on mount.
-  const [proposals, setProposals] = useState<CouncilProposal[]>(COUNCIL_PROPOSALS)
-  const [stats, setStats] = useState(getCouncilStatsMock())
+  // Production mode — DB only.
+  const [proposals, setProposals] = useState<CouncilProposal[]>([])
+  const [stats, setStats] = useState({
+    total_members: 0, elected_members: 0, proposals: 0,
+    approved: 0, rejected: 0, active: 0,
+  })
 
   useEffect(() => {
     let cancelled = false
