@@ -28,6 +28,7 @@ import {
   CHANGE_TYPE_META,
 } from "@/lib/data/levels"
 import { getCommunityUsers, type CommunityUserRow } from "@/lib/data/community"
+import { getUserStats, type UserStatsRpc } from "@/lib/data/admin-utilities"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -65,6 +66,50 @@ function emptyStatsFromUser(u: CommunityUserRow): UserStats {
   }
 }
 
+/** Coerces a value from the RPC into the LevelId enum (with safe fallback). */
+function toLevelId(s: string): LevelId {
+  if (s === "advanced" || s === "pro" || s === "elite" || s === "basic") return s
+  return "basic"
+}
+
+/** Coerces RPC kyc_status into the union the UI expects. */
+function toKyc(s: string): "basic" | "advanced" | "pro" {
+  if (s === "advanced" || s === "pro") return s
+  return "basic"
+}
+
+/** Builds a real-data UserStats object from the get_user_stats RPC payload. */
+function statsFromRpc(rpc: UserStatsRpc): UserStats {
+  return {
+    ...MOCK_USER_STATS,
+    id: rpc.id,
+    display_name: rpc.display_name,
+    email: "",
+    level: toLevelId(rpc.level),
+    kyc_status: toKyc(rpc.kyc_status),
+    total_trade_volume: rpc.total_trade_volume,
+    total_trades: rpc.total_trades,
+    successful_trades: rpc.successful_trades,
+    failed_trades: rpc.failed_trades,
+    cancelled_trades: rpc.cancelled_trades,
+    success_rate: rpc.success_rate,
+    disputes_total: rpc.disputes_total,
+    disputes_won: rpc.disputes_won,
+    disputes_lost: rpc.disputes_lost,
+    dispute_rate: rpc.dispute_rate,
+    reports_received: rpc.reports_received,
+    reports_against_others: rpc.reports_against_others,
+    rating_average: rpc.rating_average,
+    rating_count: rpc.rating_count,
+    days_active: rpc.days_active,
+    account_age_days: rpc.account_age_days,
+    first_trade_at: rpc.first_trade_at ?? undefined,
+    last_trade_at: rpc.last_trade_at ?? undefined,
+    level_override: null,
+    level_locked: false,
+  }
+}
+
 export function UserStatsPanel() {
   // ─── User selector ──────────────────────────────────────
   const [users, setUsers] = useState<CommunityUserRow[]>([])
@@ -90,16 +135,24 @@ export function UserStatsPanel() {
     return () => { cancelled = true }
   }, [])
 
-  // When a user is picked, build empty stats keyed to them. Real stats
-  // RPC (`get_user_stats(user_id)`) will swap in the real numbers in
-  // a follow-up batch.
+  // When a user is picked, fetch real stats from the
+  // `get_user_stats(p_user_id)` RPC. If that fails (migration not
+  // applied, RLS denial, …) fall back to a zero-state derived from
+  // the community row so the UI always renders.
   useEffect(() => {
     if (!selectedUserId) {
       setStats(null)
       return
     }
+    let cancelled = false
     const u = users.find((x) => x.id === selectedUserId)
+    // Show the zero-state immediately so the panel paints while the RPC loads.
     if (u) setStats(emptyStatsFromUser(u))
+    getUserStats(selectedUserId).then((rpc) => {
+      if (cancelled) return
+      if (rpc) setStats(statsFromRpc(rpc))
+    })
+    return () => { cancelled = true }
   }, [selectedUserId, users])
 
   const filteredUsers = users.filter(

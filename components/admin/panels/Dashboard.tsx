@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { KPI, Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader } from "@/components/admin/ui"
-import { mockAdminStats, mockPendingTrades, mockKYCPending } from "@/lib/admin/mock-data"
+import { KPI, ActionBtn, SectionHeader } from "@/components/admin/ui"
+import { mockAdminStats } from "@/lib/admin/mock-data"
 import { getDashboardStats, type DashboardStats } from "@/lib/data/admin-utilities"
-import { showSuccess } from "@/lib/utils/toast"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
@@ -161,76 +160,11 @@ export function DashboardPanel() {
         </div>
       </div>
 
-      {/* صفقات معلقة - تنتظر الموافقة (preview list still mock until
-          wired to the real `deals` table — hidden when no pending) */}
-      {false && stats.pendingTrades > 0 && (
-        <div className="mb-5">
-          <SectionHeader
-            title={`⚡ صفقات تنتظر الموافقة (${stats.pendingTrades})`}
-            action={<ActionBtn label="الكل" color="yellow" sm onClick={() => goTo("trades")} />}
-          />
-          <Table>
-            <THead>
-              <TH>المشروع</TH>
-              <TH>الحصص</TH>
-              <TH>القيمة</TH>
-              <TH>التاريخ</TH>
-              <TH>الإجراء</TH>
-            </THead>
-            <TBody>
-              {mockPendingTrades.slice(0, 5).map((t) => (
-                <TR key={t.id}>
-                  <TD>{t.project_name}</TD>
-                  <TD><span className="text-green-400 font-bold">{t.shares}</span></TD>
-                  <TD><span className="text-yellow-400 font-mono">{fmtNum(t.total)} د.ع</span></TD>
-                  <TD><span className="text-neutral-500">{t.created_at}</span></TD>
-                  <TD>
-                    <div className="flex gap-1.5">
-                      <ActionBtn label="تأكيد ✓" color="green" sm onClick={() => showSuccess("تم التأكيد")} />
-                      <ActionBtn label="رفض" color="red" sm onClick={() => showSuccess("تم الرفض")} />
-                    </div>
-                  </TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
-        </div>
-      )}
-
-      {/* KYC المعلقة (preview list still mock until wired to the real
-          `kyc_submissions` table — hidden when no pending) */}
-      {false && stats.kycPending > 0 && (
-        <div className="mb-5">
-          <SectionHeader
-            title={`🪪 طلبات توثيق KYC (${stats.kycPending})`}
-            action={<ActionBtn label="الكل" color="yellow" sm onClick={() => goTo("users")} />}
-          />
-          <Table>
-            <THead>
-              <TH>الاسم</TH>
-              <TH>الهاتف</TH>
-              <TH>الانضمام</TH>
-              <TH>الإجراء</TH>
-            </THead>
-            <TBody>
-              {mockKYCPending.map((u) => (
-                <TR key={u.id}>
-                  <TD>{u.name}</TD>
-                  <TD><span dir="ltr">{u.phone}</span></TD>
-                  <TD><span className="text-neutral-500">{u.joined}</span></TD>
-                  <TD>
-                    <div className="flex gap-1.5">
-                      <ActionBtn label="قبول" color="green" sm onClick={() => showSuccess("تم التوثيق")} />
-                      <ActionBtn label="رفض" color="red" sm onClick={() => showSuccess("تم الرفض")} />
-                    </div>
-                  </TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
-        </div>
-      )}
-
+      {/* The "pending trades" + "pending KYC" preview tables that
+          used to live here were stripped — they were the last
+          consumers of mockPendingTrades / mockKYCPending. The real
+          counts are surfaced in the KPI grid above and clicking
+          "إدارة" jumps to the dedicated DB-backed panels. */}
     </div>
   )
 }
