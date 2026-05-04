@@ -159,11 +159,9 @@ export default function InvestmentPage() {
     }
   }, [])
 
-  // Override totals + historical chart + per-row performance with
-  // real DB values when the RPCs returned data. We map the DB
-  // `HoldingPerformance` shape into the mock `PerformanceRow` shape
-  // (which extends `Holding`) so the existing table/best/worst
-  // components don't change.
+  // Production mode: when the user has zero real holdings, ALL views
+  // collapse to empty/zero — no mock fallback. As soon as the user
+  // has at least one real holding, the page populates from DB analytics.
   const merged = useMemo(() => {
     const haveAnalytics = dbAnalytics && dbAnalytics.holdings_count > 0
     const haveHistory = dbHistory && dbHistory.length >= 2
@@ -176,10 +174,25 @@ export default function InvestmentPage() {
           month: p.month.slice(5),
           value: p.value,
         }))
-      : analytics.historicalData
+      : []
 
     if (!haveAnalytics) {
-      return { ...analytics, historicalData: realHistorical }
+      // Hard-zero everything for true blank state.
+      return {
+        ...analytics,
+        totalValue: 0,
+        totalProfit: 0,
+        totalProfitPercent: 0,
+        totalCost: 0,
+        totalShares: 0,
+        holdingsCount: 0,
+        sectorsCount: 0,
+        performance: [],
+        bestPerformers: [],
+        worstPerformers: [],
+        sectorDistribution: [],
+        historicalData: realHistorical,
+      }
     }
 
     // Map DB per-holding performance → mock PerformanceRow shape.

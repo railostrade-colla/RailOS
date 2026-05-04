@@ -6,14 +6,10 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { CompanyCard, ProjectCard } from "@/components/cards"
 import { SectionHeader, StatCard, Tabs, EmptyState } from "@/components/ui"
-import {
-  getFollowedProjects,
-  getFollowedCompanies,
-  getFollowingStats,
-  ALL_PROJECTS,
-  ALL_COMPANIES,
-} from "@/lib/mock-data"
+import { getAllProjects } from "@/lib/data/projects"
+import { getAllCompanies } from "@/lib/data/companies"
 import { getMyFollows, unfollowTarget } from "@/lib/data/follows"
+import type { ProjectCardData, CompanyCardData } from "@/components/cards"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -24,8 +20,10 @@ export default function FollowingPage() {
   const [unfollowed, setUnfollowed] = useState<Set<string>>(new Set())
   const [dbFollowedProjectIds, setDbFollowedProjectIds] = useState<string[] | null>(null)
   const [dbFollowedCompanyIds, setDbFollowedCompanyIds] = useState<string[] | null>(null)
+  const [projectsCatalog, setProjectsCatalog] = useState<ProjectCardData[]>([])
+  const [companiesCatalog, setCompaniesCatalog] = useState<CompanyCardData[]>([])
 
-  // Load real follows on mount; fall back to mock when DB is empty.
+  // Load real follows + project + company catalogs on mount.
   useEffect(() => {
     let cancelled = false
     getMyFollows().then((rows) => {
@@ -35,26 +33,28 @@ export default function FollowingPage() {
       setDbFollowedProjectIds(projects)
       setDbFollowedCompanyIds(companies)
     })
+    getAllProjects().then((rows) => {
+      if (cancelled) return
+      setProjectsCatalog(rows as unknown as ProjectCardData[])
+    })
+    getAllCompanies().then((rows) => {
+      if (cancelled) return
+      setCompaniesCatalog(rows as unknown as CompanyCardData[])
+    })
     return () => { cancelled = true }
   }, [])
 
-  // Resolve the followed projects/companies — DB-first, then mock fallback.
+  // Resolve the followed projects/companies — DB only (production mode).
+  // Empty state shows when the user has no follows OR catalog is empty.
   const allProjects = useMemo(() => {
-    if (dbFollowedProjectIds && dbFollowedProjectIds.length > 0) {
-      return ALL_PROJECTS.filter((p) => dbFollowedProjectIds.includes(p.id))
-    }
-    // Until the user has any DB follows, we keep showing the mock list so
-    // the page is meaningful in dev/demo. As soon as they create one DB
-    // follow it switches over.
-    return getFollowedProjects("me")
-  }, [dbFollowedProjectIds])
+    if (!dbFollowedProjectIds || dbFollowedProjectIds.length === 0) return []
+    return projectsCatalog.filter((p) => dbFollowedProjectIds.includes(p.id))
+  }, [dbFollowedProjectIds, projectsCatalog])
 
   const allCompanies = useMemo(() => {
-    if (dbFollowedCompanyIds && dbFollowedCompanyIds.length > 0) {
-      return ALL_COMPANIES.filter((c) => dbFollowedCompanyIds.includes(c.id))
-    }
-    return getFollowedCompanies("me")
-  }, [dbFollowedCompanyIds])
+    if (!dbFollowedCompanyIds || dbFollowedCompanyIds.length === 0) return []
+    return companiesCatalog.filter((c) => dbFollowedCompanyIds.includes(c.id))
+  }, [dbFollowedCompanyIds, companiesCatalog])
 
   // Filter out unfollowed (for instant UI feedback)
   const projects = allProjects.filter((p) => !unfollowed.has("p-" + p.id))

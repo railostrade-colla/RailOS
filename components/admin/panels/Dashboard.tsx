@@ -24,9 +24,37 @@ export function DashboardPanel() {
     return () => { cancelled = true }
   }, [])
 
+  // Production mode: real DB drives every counter. UI-only fields
+  // (marketHealth color, labels) come from the mock template, but
+  // every metric the RPC reports overrides — and the rest reset to 0
+  // until the corresponding feature is wired into get_dashboard_stats.
+  const ZERO_OVERRIDES = {
+    totalTrades: 0,
+    pendingTrades: 0,
+    cancelledTrades: 0,
+    activeListings: 0,
+    dailyVolume: 0,
+    activeProjects: 0,
+    pendingProjects: 0,
+    closedProjects: 0,
+    totalShares: 0,
+    tradedShares: 0,
+    frozenShares: 0,
+    openAuctions: 0,
+    closedAuctions: 0,
+    activeContracts: 0,
+    pendingContracts: 0,
+    openDisputes: 0,
+    publishedNews: 0,
+    pendingKYC: 0,
+    kycPending: 0,
+    pendingFeeRequests: 0,
+    totalUsers: 0,
+  }
   const stats = liveStats
     ? {
         ...mockAdminStats,
+        ...ZERO_OVERRIDES,
         totalTrades: liveStats.total_deals,
         pendingTrades: liveStats.pending_deals,
         activeProjects: liveStats.active_projects,
@@ -37,7 +65,7 @@ export function DashboardPanel() {
         pendingFeeRequests: liveStats.pending_fee_requests,
         totalUsers: liveStats.users,
       }
-    : mockAdminStats
+    : { ...mockAdminStats, ...ZERO_OVERRIDES }
 
   const healthColor =
     stats.marketHealth >= 75 ? "#4ADE80" :
@@ -133,8 +161,9 @@ export function DashboardPanel() {
         </div>
       </div>
 
-      {/* صفقات معلقة - تنتظر الموافقة */}
-      {stats.pendingTrades > 0 && (
+      {/* صفقات معلقة - تنتظر الموافقة (preview list still mock until
+          wired to the real `deals` table — hidden when no pending) */}
+      {false && stats.pendingTrades > 0 && (
         <div className="mb-5">
           <SectionHeader
             title={`⚡ صفقات تنتظر الموافقة (${stats.pendingTrades})`}
@@ -168,8 +197,9 @@ export function DashboardPanel() {
         </div>
       )}
 
-      {/* KYC المعلقة */}
-      {stats.kycPending > 0 && (
+      {/* KYC المعلقة (preview list still mock until wired to the real
+          `kyc_submissions` table — hidden when no pending) */}
+      {false && stats.kycPending > 0 && (
         <div className="mb-5">
           <SectionHeader
             title={`🪪 طلبات توثيق KYC (${stats.kycPending})`}

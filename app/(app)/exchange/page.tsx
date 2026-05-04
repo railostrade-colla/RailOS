@@ -372,16 +372,13 @@ function ExchangeContent() {
     }
   }, [listingsTick])
 
-  // Filter + Sort — hybrid pool:
-  //   - "buy" mode (مشترٍ يبحث عن إعلانات بيع): DB sell-listings;
-  //     fall back to mock if DB is empty (no blank screens).
-  //   - "sell" mode (بائع يبحث عن طلبات شراء): DB buy-listings;
-  //     fall back to mock if DB is empty.
+  // Filter + Sort — DB-only pool (production mode).
+  //   - "buy" mode  → DB sell-listings
+  //   - "sell" mode → DB buy-listings
+  // Empty states are shown when DB returns []. No mock fallback.
   const filtered = useMemo(() => {
     const wantType: "sell" | "buy" = mode === "buy" ? "sell" : "buy"
-    const mockPool = MOCK_LISTINGS.filter((l) => l.type === wantType)
-    const dbPool = wantType === "sell" ? dbSellListings : dbBuyListings
-    const pool: Listing[] = dbPool.length > 0 ? dbPool : mockPool
+    const pool: Listing[] = wantType === "sell" ? dbSellListings : dbBuyListings
 
     return pool
       .filter((l) => !selectedProject || l.project_id === selectedProject.id)
