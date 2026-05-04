@@ -3,8 +3,13 @@
 import { useRouter } from "next/navigation"
 import { AlertCircle, AlertTriangle, Info, ChevronLeft } from "lucide-react"
 import { SectionHeader, AdminEmpty } from "@/components/admin/ui"
-import { mockAlerts } from "@/lib/admin/mock-data"
 import { cn } from "@/lib/utils/cn"
+
+// Production mode — alerts come from /admin?tab=requests_hub.
+// `any[]` so the legacy JSX (which reads several fields) compiles
+// even though the array is always empty.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockAlerts: any[] = []
 
 export function AlertsPanel() {
   const router = useRouter()

@@ -67,8 +67,9 @@ function computeRewardStats(rewards: AmbassadorRewardAdmin[]) {
 export function AmbassadorsAdminPanel() {
   const [tab, setTab] = useState<SubTab>("list")
 
-  // Tab 1 state
-  const [filter, setFilter] = useState<string>("pending")
+  // Tab 1 state — default "all" so a fresh DB row is visible no matter
+  // what status mapping it has.
+  const [filter, setFilter] = useState<string>("all")
   const [search, setSearch] = useState("")
   const [levelFilter, setLevelFilter] = useState<string>("all")
   const [selected, setSelected] = useState<AmbassadorAdmin | null>(null)

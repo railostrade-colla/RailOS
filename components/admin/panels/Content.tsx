@@ -3,8 +3,17 @@
 import { useState } from "react"
 import { Plus, Pin, AlertTriangle, Edit2 } from "lucide-react"
 import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, KPI, InnerTabBar, AdminEmpty } from "@/components/admin/ui"
-import { mockNewsAdmin, mockAdsAdmin, mockSystemOffersAdmin } from "@/lib/admin/mock-data"
 import { showSuccess } from "@/lib/utils/toast"
+
+// Production mode — empty arrays. Use Phase 5 admin RPCs once a
+// CMS-style flow is added. `any[]` because the JSX reads many
+// fields and arrays are always empty (none of those reads run).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockNewsAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockAdsAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockSystemOffersAdmin: any[] = []
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 

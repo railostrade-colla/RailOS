@@ -7,9 +7,31 @@
 
 import { ArrowRight, Edit2, Wallet as WalletIcon, MapPin, Calendar, TrendingUp, Users, AlertTriangle } from "lucide-react"
 import { Badge, ActionBtn, KPI } from "@/components/admin/ui"
-import { mockProjectsAdmin } from "@/lib/admin/mock-data"
 import { getWalletByProject } from "@/lib/mock-data/projectWallets"
 import { cn } from "@/lib/utils/cn"
+
+// Loose entity-detail row shape — matches Projects.tsx EntityRow.
+// Kept here so this component doesn't import from a panel that
+// imports it (would create a cycle).
+interface EntityDetailRow {
+  id: string
+  name: string
+  sector: string
+  entity_type: "project" | "company"
+  status: "active" | "pending" | "paused"
+  quality: "low" | "medium" | "high"
+  share_price: number
+  total_shares: number
+  available_shares: number
+  project_value: number
+  /** Optional metadata — populated when row came from a richer DB query. */
+  description?: string
+  city?: string
+  created_at?: string
+  founded_year?: number | string
+  offering_start?: string
+  offering_end?: string
+}
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
@@ -23,7 +45,7 @@ const sectorIcon = (s: string) => {
 }
 
 export interface EntityDetailsViewProps {
-  entity: typeof mockProjectsAdmin[0]
+  entity: EntityDetailRow
   onEdit: () => void
   onBack: () => void
 }

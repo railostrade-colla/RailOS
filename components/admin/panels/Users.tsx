@@ -3,9 +3,21 @@
 import { useState } from "react"
 import { Search, Star, AlertTriangle, FileText } from "lucide-react"
 import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, KPI, InnerTabBar, AdminEmpty } from "@/components/admin/ui"
-import { mockUsersAdmin, mockDisputesAdmin, disputeReasonLabels, mockRatingsAdmin, mockSupportTickets } from "@/lib/admin/mock-data"
+import { disputeReasonLabels } from "@/lib/admin/mock-data"
 import { showSuccess } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
+
+// Production mode — each sub-tab here has a dedicated DB-backed
+// panel (KycPanel, DisputesPanel, SupportInboxPanel). The legacy
+// Users panel renders empty until the menu redirects to those.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockUsersAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockDisputesAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockRatingsAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockSupportTickets: any[] = []
 
 type UsersSubTab = "users" | "disputes" | "ratings" | "support"
 

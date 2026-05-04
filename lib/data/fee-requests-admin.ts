@@ -109,9 +109,15 @@ export async function getFeeRequestsAdmin(
       .limit(limit)
 
     if (error || !data) {
-      if (error)
+      if (error) {
         // eslint-disable-next-line no-console
-        console.warn("[fee-admin] getFeeRequestsAdmin:", error.message)
+        console.warn(
+          "[fee-admin] getFeeRequestsAdmin failed:",
+          error.message,
+          error.code,
+          "— check that 20260503_fee_units_admin.sql migration is applied on Supabase",
+        )
+      }
       return []
     }
 

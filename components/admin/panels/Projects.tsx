@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react"
 import { Plus, Edit2, Trash2, AlertTriangle, X, Eye, FileEdit, Clock } from "lucide-react"
 import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, AdminEmpty, KPI, InnerTabBar } from "@/components/admin/ui"
-import { mockProjectsAdmin } from "@/lib/admin/mock-data"
 import { EntityFormPanel, type EntityFormData } from "./EntityFormPanel"
 import { EntityDetailsView } from "./EntityDetailsView"
+import { getAllProjects } from "@/lib/data/projects"
+import { getAllCompanies } from "@/lib/data/companies"
 import {
   loadDraftsList,
   deleteDraft,
@@ -15,7 +16,21 @@ import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 type MainTab = "list" | "create_project" | "create_company" | "view" | "edit"
-type EntityRow = typeof mockProjectsAdmin[0]
+
+// Row shape used by the panel — superset of project/company DB rows.
+// Loaded async on mount; empty until then.
+interface EntityRow {
+  id: string
+  name: string
+  sector: string
+  entity_type: "project" | "company"
+  status: "active" | "pending" | "paused"
+  quality: "low" | "medium" | "high"
+  share_price: number
+  total_shares: number
+  available_shares: number
+  project_value: number
+}
 
 /** Pre-populate the edit form from an existing entity row. */
 function rowToInitialData(row: EntityRow): EntityFormData {
@@ -53,6 +68,59 @@ export function ProjectsPanel() {
   const [confirmText, setConfirmText] = useState("")
   const [selectedEntity, setSelectedEntity] = useState<EntityRow | null>(null)
 
+  // ─── Live entities from DB ────────────────────────────────
+  const [entities, setEntities] = useState<EntityRow[]>([])
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([getAllProjects(), getAllCompanies()]).then(([projects, companies]) => {
+      if (cancelled) return
+      const projectRows: EntityRow[] = (projects as Array<{
+        id: string
+        name: string
+        sector?: string
+        share_price?: number | string
+        total_shares?: number | string
+        available_shares?: number | string
+        status?: string
+      }>).map((p) => {
+        const total = Number(p.total_shares ?? 0)
+        const available = Number(p.available_shares ?? 0)
+        const price = Number(p.share_price ?? 0)
+        return {
+          id: p.id,
+          name: p.name,
+          sector: p.sector ?? "—",
+          entity_type: "project" as const,
+          status: (p.status === "active" ? "active" : p.status === "draft" ? "pending" : "paused") as EntityRow["status"],
+          quality: "medium" as const,
+          share_price: price,
+          total_shares: total,
+          available_shares: available,
+          project_value: price * total,
+        }
+      })
+      const companyRows: EntityRow[] = (companies as Array<{
+        id: string
+        name: string
+        sector?: string
+        share_price?: number | string
+      }>).map((c) => ({
+        id: c.id,
+        name: c.name,
+        sector: c.sector ?? "—",
+        entity_type: "company" as const,
+        status: "active" as const,
+        quality: "medium" as const,
+        share_price: Number(c.share_price ?? 0),
+        total_shares: 0,
+        available_shares: 0,
+        project_value: 0,
+      }))
+      setEntities([...projectRows, ...companyRows])
+    })
+    return () => { cancelled = true }
+  }, [])
+
   // ─── Drafts (NEW Phase 10.25) ─────────────────────────────
   // Loaded from localStorage on mount and refreshed whenever the
   // tab changes to "drafts" so newly-saved drafts appear without
@@ -78,7 +146,7 @@ export function ProjectsPanel() {
     refreshDrafts()
   }
 
-  const filtered = mockProjectsAdmin.filter((p) => {
+  const filtered = entities.filter((p) => {
     if (filter === "all") return true
     if (filter === "company") return p.entity_type === "company"
     if (filter === "project") return p.entity_type === "project"
@@ -89,10 +157,10 @@ export function ProjectsPanel() {
   const draftsTotal = projectDrafts.length + companyDrafts.length
 
   const tabs = [
-    { key: "all", label: "الكل", count: mockProjectsAdmin.length },
-    { key: "project", label: "مشاريع", count: mockProjectsAdmin.filter((p) => p.entity_type === "project").length },
-    { key: "company", label: "شركات", count: mockProjectsAdmin.filter((p) => p.entity_type === "company").length },
-    { key: "pending", label: "قيد المراجعة", count: mockProjectsAdmin.filter((p) => p.status === "pending").length },
+    { key: "all", label: "الكل", count: entities.length },
+    { key: "project", label: "مشاريع", count: entities.filter((p) => p.entity_type === "project").length },
+    { key: "company", label: "شركات", count: entities.filter((p) => p.entity_type === "company").length },
+    { key: "pending", label: "قيد المراجعة", count: entities.filter((p) => p.status === "pending").length },
     { key: "drafts", label: "📝 مسودّاتي", count: draftsTotal },
   ]
 
@@ -187,7 +255,7 @@ export function ProjectsPanel() {
         <div>
           <div className="text-lg font-bold text-white">▣ المشاريع والشركات</div>
           <div className="text-xs text-neutral-500 mt-0.5">
-            {mockProjectsAdmin.length} عنصر إجمالاً ({mockProjectsAdmin.filter((p) => p.entity_type === "project").length} مشروع · {mockProjectsAdmin.filter((p) => p.entity_type === "company").length} شركة)
+            {entities.length} عنصر إجمالاً ({entities.filter((p) => p.entity_type === "project").length} مشروع · {entities.filter((p) => p.entity_type === "company").length} شركة)
           </div>
         </div>
         <div className="flex gap-2">
@@ -209,10 +277,10 @@ export function ProjectsPanel() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <KPI label="مشاريع نشطة" val={mockProjectsAdmin.filter((p) => p.entity_type === "project" && p.status === "active").length} color="#60A5FA" />
-        <KPI label="معلقة - مراجعة" val={mockProjectsAdmin.filter((p) => p.status === "pending").length} color="#FBBF24" accent="rgba(251,191,36,0.05)" />
-        <KPI label="إجمالي القيمة" val={fmtNum(mockProjectsAdmin.reduce((s, p) => s + p.project_value, 0)) + " د.ع"} color="#FBBF24" />
-        <KPI label="حصص متاحة" val={fmtNum(mockProjectsAdmin.reduce((s, p) => s + p.available_shares, 0))} color="#4ADE80" />
+        <KPI label="مشاريع نشطة" val={entities.filter((p) => p.entity_type === "project" && p.status === "active").length} color="#60A5FA" />
+        <KPI label="معلقة - مراجعة" val={entities.filter((p) => p.status === "pending").length} color="#FBBF24" accent="rgba(251,191,36,0.05)" />
+        <KPI label="إجمالي القيمة" val={fmtNum(entities.reduce((s, p) => s + p.project_value, 0)) + " د.ع"} color="#FBBF24" />
+        <KPI label="حصص متاحة" val={fmtNum(entities.reduce((s, p) => s + p.available_shares, 0))} color="#4ADE80" />
       </div>
 
       <InnerTabBar tabs={tabs} active={filter} onSelect={setFilter} />

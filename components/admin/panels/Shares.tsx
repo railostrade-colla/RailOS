@@ -2,15 +2,22 @@
 
 import { useState } from "react"
 import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, KPI, InnerTabBar } from "@/components/admin/ui"
-import {
-  mockProjectsAdmin,
-  mockListingsAdmin,
-  mockTradesAdmin,
-  mockContractsAdmin,
-  mockHoldingsAdmin,
-  mockTransactionsAdmin,
-} from "@/lib/admin/mock-data"
 import { showSuccess } from "@/lib/utils/toast"
+
+// Production mode — empty arrays. `any[]` because the legacy JSX
+// reads many fields per row.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockProjectsAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockListingsAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockTradesAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockContractsAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockHoldingsAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockTransactionsAdmin: any[] = []
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
@@ -22,6 +29,7 @@ export function SharesPanel() {
   const totalShares = mockProjectsAdmin.reduce((s, p) => s + p.total_shares, 0)
   const availableShares = mockProjectsAdmin.reduce((s, p) => s + p.available_shares, 0)
   const tradedShares = totalShares - availableShares
+  const tradePercentage = totalShares > 0 ? Math.round((tradedShares / totalShares) * 100) : 0
 
   const tabs = [
     { key: "shares", label: "◎ إدارة الحصص" },
@@ -46,7 +54,7 @@ export function SharesPanel() {
             <KPI label="إجمالي الحصص" val={fmtNum(totalShares)} color="#fff" />
             <KPI label="متاحة" val={fmtNum(availableShares)} color="#4ADE80" />
             <KPI label="متداولة" val={fmtNum(tradedShares)} color="#60A5FA" />
-            <KPI label="نسبة التداول" val={Math.round((tradedShares / totalShares) * 100) + "%"} color="#FBBF24" />
+            <KPI label="نسبة التداول" val={tradePercentage + "%"} color="#FBBF24" />
           </div>
 
           <Table>

@@ -54,7 +54,10 @@ function computeStats(list: FeeUnitRequest[]) {
 }
 
 export function FeeUnitsRequestsPanel() {
-  const [filter, setFilter] = useState<string>("pending")
+  // Default to "الكل" so the admin sees every request regardless of
+  // how status mapping resolves (helps when a new request is in a
+  // status the panel doesn't have a tab for yet).
+  const [filter, setFilter] = useState<string>("all")
   const [search, setSearch] = useState("")
   const [methodFilter, setMethodFilter] = useState<string>("all")
   const [selected, setSelected] = useState<FeeUnitRequest | null>(null)

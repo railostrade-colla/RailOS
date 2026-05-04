@@ -164,9 +164,15 @@ export async function getAmbassadorsAdmin(
       .limit(limit)
 
     if (error || !data) {
-      if (error)
+      if (error) {
         // eslint-disable-next-line no-console
-        console.warn("[ambassadors-admin] getAmbassadorsAdmin:", error.message)
+        console.warn(
+          "[ambassadors-admin] getAmbassadorsAdmin failed:",
+          error.message,
+          error.code,
+          "— check that 20260503_ambassadors_admin_policies.sql migration is applied on Supabase",
+        )
+      }
       return []
     }
 

@@ -3,10 +3,15 @@
 import { useState } from "react"
 import { Plus, Shield } from "lucide-react"
 import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, KPI, InnerTabBar } from "@/components/admin/ui"
-import { mockAdminUsers } from "@/lib/admin/mock-data"
 import { AdminUsersPanel } from "./AdminUsersPanel"
 import { showSuccess } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
+
+// Production mode — admin users are managed via AdminUsersPanel
+// (which queries profiles.role from DB). This legacy stub keeps
+// the System tab renderable until that sub-tab is removed.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockAdminUsers: any[] = []
 
 type SystemSubTab = "market_settings" | "settings" | "site_pages" | "system_messages" | "admins"
 

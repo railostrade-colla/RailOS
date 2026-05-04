@@ -2,8 +2,15 @@
 
 import { useState } from "react"
 import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, KPI, InnerTabBar } from "@/components/admin/ui"
-import { mockFeeRequestsAdmin, mockDealFeesAdmin } from "@/lib/admin/mock-data"
 import { showSuccess } from "@/lib/utils/toast"
+
+// Production mode — legacy fees overview. Use /admin?tab=fee_units_requests
+// or /admin?tab=deal_fees_admin for live data. `any[]` because the
+// legacy JSX reads many fields and arrays are always empty.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockFeeRequestsAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockDealFeesAdmin: any[] = []
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 

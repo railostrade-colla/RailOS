@@ -3,7 +3,12 @@
 import { useState } from "react"
 import { Search, Filter } from "lucide-react"
 import { Badge, SectionHeader, AdminEmpty, InnerTabBar } from "@/components/admin/ui"
-import { mockDecisionLog, actionLabels } from "@/lib/admin/mock-data"
+import { actionLabels } from "@/lib/admin/mock-data"
+
+// Production mode — use /admin?tab=audit_log for the real audit
+// stream. Empty until the menu link redirects there.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockDecisionLog: any[] = []
 
 export function LogPanel() {
   const [search, setSearch] = useState("")

@@ -2,8 +2,22 @@
 
 import { useState } from "react"
 import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, AdminEmpty, KPI, InnerTabBar } from "@/components/admin/ui"
-import { mockListingsAdmin, mockAuctionsAdmin, mockBidsAdmin, mockDirectBuyAdmin } from "@/lib/admin/mock-data"
 import { showSuccess } from "@/lib/utils/toast"
+
+// Production mode — empty arrays. Each sub-tab here has a dedicated
+// DB-backed panel:
+//   • listings → /admin?tab=projects (ProjectsPanel)
+//   • auctions → /admin?tab=auctions_admin
+//   • direct_buy → /admin?tab=requests_hub
+//   • market_state → /admin?tab=market_state
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockListingsAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockAuctionsAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockBidsAdmin: any[] = []
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockDirectBuyAdmin: any[] = []
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
