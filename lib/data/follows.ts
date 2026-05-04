@@ -1,14 +1,10 @@
 import { createClient } from "@/lib/supabase/client"
+import type { Database } from "@/types/database"
 
-export type FollowTargetType = "project" | "company"
+export type FollowTargetType = Database["public"]["Enums"]["follow_target_type"]
 
-export interface FollowRow {
-  id: string
-  user_id: string
-  target_type: FollowTargetType
-  target_id: string
-  created_at: string
-}
+/** FollowRow mirrors the generated Row shape. */
+export type FollowRow = Database["public"]["Tables"]["follows"]["Row"]
 
 export interface FollowResult {
   success: boolean

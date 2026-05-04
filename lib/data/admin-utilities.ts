@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Admin utilities data layer (Phase 10.1).
+ * Admin utilities data layer (Phase 10.1+).
  *
  * Wraps the cleanup + dashboard + role-management RPCs added in
  * 20260504_phase10_hardening.sql:
@@ -136,4 +136,43 @@ export async function adminUnfreezeProjectWallet(
   walletId: string,
 ): Promise<UtilityRpcResult> {
   return callRpc("admin_unfreeze_project_wallet", { p_wallet_id: walletId })
+}
+
+// ─── Admin role checks (Phase 10.12) ────────────────────────────
+
+/** Calls the `is_admin()` SQL helper. Returns false on any failure. */
+export async function isAdminDB(): Promise<boolean> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("is_admin")
+    if (error || data == null) return false
+    return Boolean(data)
+  } catch {
+    return false
+  }
+}
+
+export type ProfileRole = "user" | "admin" | "super_admin" | string
+
+/** Reads the caller's profile.role. Returns null if not authenticated. */
+export async function getMyRole(): Promise<ProfileRole | null> {
+  try {
+    const supabase = createClient()
+    const { data: auth } = await supabase.auth.getUser()
+    if (!auth?.user?.id) return null
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", auth.user.id)
+      .maybeSingle()
+    if (error || !data) return null
+    return (data as { role: ProfileRole }).role
+  } catch {
+    return null
+  }
+}
+
+export async function isSuperAdminDB(): Promise<boolean> {
+  const role = await getMyRole()
+  return role === "super_admin"
 }

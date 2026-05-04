@@ -13,25 +13,19 @@
  */
 
 import { createClient } from "@/lib/supabase/client"
+import type { Database } from "@/types/database"
 
 // ════════════════════════════════════════════════════════════════════
 // Legacy tier
 // ════════════════════════════════════════════════════════════════════
 
-export interface DBDeal {
-  id: string
-  buyer_id: string
-  seller_id: string
-  project_id: string
-  listing_id?: string
-  deal_type: string
-  shares: number
-  price_per_share: number
-  total_amount?: number
-  status: string
-  created_at?: string
-  completed_at?: string
-}
+/**
+ * DBDeal is now a type alias on the Supabase-generated Row shape.
+ * Includes every column the deals table actually has — buyer_commission,
+ * seller_commission, accepted_at, payment_submitted_at, completed_at,
+ * cancellation_*, etc.
+ */
+export type DBDeal = Database["public"]["Tables"]["deals"]["Row"]
 
 export async function getMyDeals(userId: string, role: "buyer" | "seller" | "any" = "any"): Promise<DBDeal[]> {
   try {
@@ -84,16 +78,10 @@ export async function getRecentDealsByProject(projectId: string, limit = 10): Pr
 // Phase 4.4 tier — enriched query for the /deals list page
 // ════════════════════════════════════════════════════════════════════
 
-/** All possible values of the DB `deal_status` enum. */
-export type DBDealStatus =
-  | "pending_seller_approval"
-  | "rejected"
-  | "accepted"
-  | "payment_submitted"
-  | "completed"
-  | "cancelled"
-  | "disputed"
-  | "expired"
+/** All possible values of the DB `deal_status` enum.
+ *  Sourced from the generated Database types — kept as an alias so
+ *  existing callers don't change. */
+export type DBDealStatus = Database["public"]["Enums"]["deal_status"]
 
 /** Status meta for the /deals list (label + Badge color). */
 export const STATUS_META_DB: Record<

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Search, X, Plus, Lock } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
@@ -20,6 +20,7 @@ import {
   type AdminRoleId,
   type AdminUserStatus,
 } from "@/lib/mock-data/adminUsers"
+import { isSuperAdminDB } from "@/lib/data/admin-utilities"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -29,7 +30,23 @@ type RowAction = null | "view" | "edit_perms" | "suspend" | "reactivate" | "dele
 
 export function AdminUsersPanel() {
   // ─── 🔒 Access guard: super_admin (founder) only ───
-  if (!isSuperAdmin(MOCK_CURRENT_ADMIN)) {
+  // Real DB check via `profiles.role` — falls back to the mock check
+  // until the auth user has a profile row (so dev/staging stays
+  // browseable without manual seed).
+  const [accessChecked, setAccessChecked] = useState(false)
+  const [accessAllowed, setAccessAllowed] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    isSuperAdminDB().then((isSuper) => {
+      if (cancelled) return
+      // Real DB grant takes precedence; otherwise fall back to mock.
+      setAccessAllowed(isSuper || isSuperAdmin(MOCK_CURRENT_ADMIN))
+      setAccessChecked(true)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  if (accessChecked && !accessAllowed) {
     return (
       <div className="p-6 max-w-2xl mx-auto">
         <div className="bg-red-400/[0.05] border border-red-400/[0.25] rounded-2xl p-8 text-center">
@@ -42,9 +59,16 @@ export function AdminUsersPanel() {
             إدارة الأدمنز الآخرين، إنشاءهم، تعديل صلاحياتهم، أو حذفهم.
           </div>
           <div className="mt-4 inline-block bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-1.5 text-[11px] text-neutral-500">
-            دورك الحالي: <span className="text-white font-bold">{ADMIN_ROLE_LABELS[MOCK_CURRENT_ADMIN.role].label}</span>
+            تحقّقنا من <span className="text-white font-bold">profiles.role</span> ولم تجد صلاحية super_admin.
           </div>
         </div>
+      </div>
+    )
+  }
+  if (!accessChecked) {
+    return (
+      <div className="p-6 text-center text-xs text-neutral-500">
+        جاري التحقق من الصلاحيات...
       </div>
     )
   }

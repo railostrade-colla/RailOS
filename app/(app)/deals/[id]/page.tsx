@@ -19,22 +19,36 @@ import { Card, Badge, Modal } from "@/components/ui"
 import { InvoiceCard } from "@/components/invoices/InvoiceCard"
 import {
   getDealById,
-  buyerConfirmPayment,
-  sellerReleaseShares,
-  sellerRequestCancellation,
-  buyerAcceptCancellation,
-  buyerRejectCancellation,
-  openDispute,
+  buyerConfirmPayment as mockBuyerConfirmPayment,
+  sellerReleaseShares as mockSellerReleaseShares,
+  sellerRequestCancellation as mockSellerRequestCancellation,
+  buyerAcceptCancellation as mockBuyerAcceptCancellation,
+  buyerRejectCancellation as mockBuyerRejectCancellation,
+  openDispute as mockOpenDispute,
   STATUS_META,
 } from "@/lib/escrow"
 import type { EscrowDeal } from "@/lib/escrow"
+import {
+  getDealDetailDB,
+  getCurrentAuthUserId,
+  isDbDealId,
+} from "@/lib/data/deal-detail"
+import {
+  buyerConfirmPayment as dbBuyerConfirmPayment,
+  sellerReleaseShares as dbSellerReleaseShares,
+  requestDealCancellation as dbRequestDealCancellation,
+  respondDealCancellation as dbRespondDealCancellation,
+  openDealDispute as dbOpenDealDispute,
+  dealActionErrorAr,
+} from "@/lib/data/deal-actions"
+import { useRealtimeDeal } from "@/lib/realtime/useRealtimeDeal"
 import { createInvoice, getInvoicesBySourceId, type Invoice } from "@/lib/data/invoices"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
-// "me" = current user — يُستبدل بالمصادقة الفعلية لاحقاً
+// "me" = mock current user — for DB deals we resolve auth.uid().
 const CURRENT_USER_ID = "me"
 
 function formatTimeLeft(ms: number): string {
@@ -65,11 +79,19 @@ type ModalMode =
 export default function DealDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const { id } = use(params)
-  const [deal, setDeal] = useState<EscrowDeal | undefined>(() => getDealById(id))
+  const isDbDeal = isDbDealId(id)
+
+  const [deal, setDeal] = useState<EscrowDeal | undefined>(() =>
+    isDbDeal ? undefined : getDealById(id),
+  )
+  const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [modal, setModal] = useState<ModalMode>(null)
   const [agreed, setAgreed] = useState(false)
   const [reason, setReason] = useState("")
   const [submitting, setSubmitting] = useState(false)
+
+  // Live updates for DB deals (no-op for mock)
+  const { updateCount } = useRealtimeDeal(isDbDeal ? id : null)
 
   // tick — refresh timer كل ثانية
   const [, setTick] = useState(0)
@@ -78,12 +100,31 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
     return () => clearInterval(t)
   }, [])
 
+  // Hybrid loader: DB for UUIDs (re-fetches on realtime tick), mock for legacy
+  useEffect(() => {
+    if (!isDbDeal) return
+    let cancelled = false
+    ;(async () => {
+      const [d, uid] = await Promise.all([
+        getDealDetailDB(id),
+        getCurrentAuthUserId(),
+      ])
+      if (cancelled) return
+      if (d) setDeal(d)
+      setAuthUserId(uid)
+    })()
+    return () => { cancelled = true }
+  }, [isDbDeal, id, updateCount])
+
   const role = useMemo<"buyer" | "seller" | "viewer">(() => {
     if (!deal) return "viewer"
-    if (deal.buyer_id === CURRENT_USER_ID) return "buyer"
-    if (deal.seller_id === CURRENT_USER_ID) return "seller"
+    // DB deals compare against auth.uid; mock deals against "me".
+    const me = isDbDeal ? authUserId : CURRENT_USER_ID
+    if (!me) return "viewer"
+    if (deal.buyer_id === me) return "buyer"
+    if (deal.seller_id === me) return "seller"
     return "viewer"
-  }, [deal])
+  }, [deal, isDbDeal, authUserId])
 
   if (!deal) {
     return (
@@ -114,31 +155,50 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
     setReason("")
   }
 
-  const refresh = () => setDeal(getDealById(id))
+  const refresh = async () => {
+    if (isDbDeal) {
+      const fresh = await getDealDetailDB(id)
+      if (fresh) setDeal(fresh)
+    } else {
+      setDeal(getDealById(id))
+    }
+  }
 
   // ────── Action handlers ──────
 
-  const handleConfirmPayment = () => {
+  const handleConfirmPayment = async () => {
     if (!agreed) return showError("يجب الإقرار بإتمام الدفع")
     setSubmitting(true)
-    const r = buyerConfirmPayment(deal.id, CURRENT_USER_ID)
-    setSubmitting(false)
-    if (!r.success) return showError(r.reason ?? "فشل الإجراء")
+    if (isDbDeal) {
+      const r = await dbBuyerConfirmPayment(deal.id)
+      setSubmitting(false)
+      if (!r.success) return showError(dealActionErrorAr(r.reason))
+    } else {
+      const r = mockBuyerConfirmPayment(deal.id, CURRENT_USER_ID)
+      setSubmitting(false)
+      if (!r.success) return showError(r.reason ?? "فشل الإجراء")
+    }
     showSuccess("✅ تم تأكيد الدفع — بانتظار البائع")
     refresh()
     closeModal()
   }
 
-  const handleReleaseShares = () => {
+  const handleReleaseShares = async () => {
     if (!agreed) return showError("يجب الإقرار باستلام المبلغ")
     setSubmitting(true)
-    const r = sellerReleaseShares(deal.id, CURRENT_USER_ID)
-    setSubmitting(false)
-    if (!r.success) return showError(r.reason ?? "فشل الإجراء")
+    if (isDbDeal) {
+      const r = await dbSellerReleaseShares(deal.id)
+      setSubmitting(false)
+      if (!r.success) return showError(dealActionErrorAr(r.reason))
+    } else {
+      const r = mockSellerReleaseShares(deal.id, CURRENT_USER_ID)
+      setSubmitting(false)
+      if (!r.success) return showError(r.reason ?? "فشل الإجراء")
+    }
 
     // ─── 📄 إنشاء الفاتورة الرسمية تلقائياً ───
     createInvoice({
-      type: "exchange_buy",  // من منظور المشتري (يستلم الحصص)
+      type: "exchange_buy",
       from: { id: deal.seller_id, name: deal.seller_name },
       to:   { id: deal.buyer_id,  name: deal.buyer_name },
       project_id: deal.project_id,
@@ -155,48 +215,72 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
     closeModal()
   }
 
-  const handleRequestCancel = () => {
+  const handleRequestCancel = async () => {
     if (!reason.trim() || reason.trim().length < 5) {
       return showError("اكتب سبب الإلغاء (5 أحرف على الأقل)")
     }
     setSubmitting(true)
-    const r = sellerRequestCancellation(deal.id, CURRENT_USER_ID, reason.trim())
-    setSubmitting(false)
-    if (!r.success) return showError(r.reason ?? "فشل الإجراء")
-    showSuccess("📝 تم إرسال طلب الإلغاء — بانتظار المشتري")
+    if (isDbDeal) {
+      const r = await dbRequestDealCancellation(deal.id, reason.trim())
+      setSubmitting(false)
+      if (!r.success) return showError(dealActionErrorAr(r.reason))
+    } else {
+      const r = mockSellerRequestCancellation(deal.id, CURRENT_USER_ID, reason.trim())
+      setSubmitting(false)
+      if (!r.success) return showError(r.reason ?? "فشل الإجراء")
+    }
+    showSuccess("📝 تم إرسال طلب الإلغاء — بانتظار الطرف الآخر")
     refresh()
     closeModal()
   }
 
-  const handleAcceptCancel = () => {
+  const handleAcceptCancel = async () => {
     setSubmitting(true)
-    const r = buyerAcceptCancellation(deal.id, CURRENT_USER_ID)
-    setSubmitting(false)
-    if (!r.success) return showError(r.reason ?? "فشل الإجراء")
+    if (isDbDeal) {
+      const r = await dbRespondDealCancellation(deal.id, true)
+      setSubmitting(false)
+      if (!r.success) return showError(dealActionErrorAr(r.reason))
+    } else {
+      const r = mockBuyerAcceptCancellation(deal.id, CURRENT_USER_ID)
+      setSubmitting(false)
+      if (!r.success) return showError(r.reason ?? "فشل الإجراء")
+    }
     showSuccess("✅ تم إلغاء الصفقة بالتراضي")
     refresh()
     closeModal()
   }
 
-  const handleRejectCancel = () => {
+  const handleRejectCancel = async () => {
     if (!agreed) return showError("يجب الإقرار بإتمام الدفع لرفض الإلغاء")
     setSubmitting(true)
-    const r = buyerRejectCancellation(deal.id, CURRENT_USER_ID)
-    setSubmitting(false)
-    if (!r.success) return showError(r.reason ?? "فشل الإجراء")
-    showSuccess("⚖️ تم فتح نزاع — بانتظار قرار الإدارة")
+    if (isDbDeal) {
+      const r = await dbRespondDealCancellation(deal.id, false)
+      setSubmitting(false)
+      if (!r.success) return showError(dealActionErrorAr(r.reason))
+    } else {
+      const r = mockBuyerRejectCancellation(deal.id, CURRENT_USER_ID)
+      setSubmitting(false)
+      if (!r.success) return showError(r.reason ?? "فشل الإجراء")
+    }
+    showSuccess("⚖️ تم رفض طلب الإلغاء")
     refresh()
     closeModal()
   }
 
-  const handleOpenDispute = () => {
+  const handleOpenDispute = async () => {
     if (!reason.trim() || reason.trim().length < 10) {
       return showError("اكتب وصف النزاع (10 أحرف على الأقل)")
     }
     setSubmitting(true)
-    const r = openDispute(deal.id, CURRENT_USER_ID, reason.trim())
-    setSubmitting(false)
-    if (!r.success) return showError(r.reason ?? "فشل الإجراء")
+    if (isDbDeal) {
+      const r = await dbOpenDealDispute(deal.id, reason.trim())
+      setSubmitting(false)
+      if (!r.success) return showError(dealActionErrorAr(r.reason))
+    } else {
+      const r = mockOpenDispute(deal.id, CURRENT_USER_ID, reason.trim())
+      setSubmitting(false)
+      if (!r.success) return showError(r.reason ?? "فشل الإجراء")
+    }
     showSuccess("⚖️ تم فتح نزاع — بانتظار قرار الإدارة")
     refresh()
     closeModal()

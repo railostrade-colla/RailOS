@@ -1,18 +1,13 @@
 import { createClient } from "@/lib/supabase/client"
+import type { Database } from "@/types/database"
 
-export interface DBListing {
-  id: string
-  seller_id: string
-  project_id: string
-  shares_offered: number
-  shares_sold?: number
-  price_per_share: number
-  notes?: string
-  is_quick_sell: boolean
-  status: string
-  created_at?: string
-  expires_at?: string
-}
+/**
+ * DBListing is now a type alias on the Supabase-generated Row shape.
+ * The shape is identical to what the table returns, so callers don't
+ * need to change. New columns (type, frozen_fee_units, etc.) are
+ * automatically picked up next time we re-run `npm run types:db`.
+ */
+export type DBListing = Database["public"]["Tables"]["listings"]["Row"]
 
 export async function getActiveListings(): Promise<DBListing[]> {
   try {
