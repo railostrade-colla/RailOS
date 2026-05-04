@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
   TrendingUp,
@@ -36,6 +36,10 @@ import {
   getTotalDistributions,
   type PerformanceRow,
 } from "@/lib/mock-data"
+import {
+  getMyPortfolioAnalytics,
+  type PortfolioAnalytics,
+} from "@/lib/data/portfolio-analytics"
 import { fmtLimit } from "@/lib/utils/contractLimits"
 import { cn } from "@/lib/utils/cn"
 
@@ -93,6 +97,16 @@ type PeriodId = (typeof CALC_PERIODS)[number]["id"]
 export default function InvestmentPage() {
   const router = useRouter()
 
+  // ─── Phase 10: real DB analytics with mock fallback ─────
+  const [dbAnalytics, setDbAnalytics] = useState<PortfolioAnalytics | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    getMyPortfolioAnalytics().then((a) => {
+      if (!cancelled) setDbAnalytics(a)
+    })
+    return () => { cancelled = true }
+  }, [])
+
   const analytics = useMemo(() => {
     const base = getInvestmentAnalytics("me")
     // Override per-row current_value with live market price
@@ -137,6 +151,22 @@ export default function InvestmentPage() {
       historicalData,
     }
   }, [])
+
+  // Override totals with real DB values when the RPC returned data.
+  // We keep mock historicalData / per-row performance because those
+  // require price_history which isn't yet aggregated server-side.
+  const merged = useMemo(() => {
+    if (!dbAnalytics || dbAnalytics.holdings_count === 0) return analytics
+    return {
+      ...analytics,
+      totalValue: dbAnalytics.total_value,
+      totalProfit: dbAnalytics.total_profit,
+      totalProfitPercent: dbAnalytics.total_profit_percent,
+      totalCost: dbAnalytics.total_cost,
+      totalShares: dbAnalytics.total_shares,
+    }
+  }, [analytics, dbAnalytics])
+
   const distributions = useMemo(() => getDistributionsByUser("me"), [])
   const totalDistributions = useMemo(() => getTotalDistributions("me"), [])
 
@@ -147,7 +177,7 @@ export default function InvestmentPage() {
   const [calcPeriod, setCalcPeriod] = useState<PeriodId>("1y")
 
   // ─── Derived ────────────────────────────────────────────────────
-  const profitUp = analytics.totalProfit >= 0
+  const profitUp = merged.totalProfit >= 0
   const dailyChangePercent = useMemo(() => Math.sin(Date.now() / 86_400_000) * 2 + 0.5, [])
   const dailyUp = dailyChangePercent >= 0
 
@@ -199,9 +229,9 @@ export default function InvestmentPage() {
 
   // Calculator
   const calcMonths = CALC_PERIODS.find((p) => p.id === calcPeriod)?.months ?? 12
-  const expectedReturn = Math.round(analytics.totalValue * (analytics.avgReturnPerYear / 100) * (calcMonths / 12))
-  const expectedFutureValue = analytics.totalValue + expectedReturn
-  const totalGrowth = analytics.totalValue > 0 ? (expectedReturn / analytics.totalValue) * 100 : 0
+  const expectedReturn = Math.round(merged.totalValue * (analytics.avgReturnPerYear / 100) * (calcMonths / 12))
+  const expectedFutureValue = merged.totalValue + expectedReturn
+  const totalGrowth = merged.totalValue > 0 ? (expectedReturn / merged.totalValue) * 100 : 0
 
   return (
     <AppLayout>
@@ -233,7 +263,7 @@ export default function InvestmentPage() {
 
             <div className="flex items-baseline gap-2 mb-5">
               <span className="text-4xl lg:text-5xl font-bold text-white tracking-tight font-mono">
-                {fmtIQD(analytics.totalValue)}
+                {fmtIQD(merged.totalValue)}
               </span>
               <span className="text-sm text-neutral-500">IQD</span>
             </div>
@@ -250,17 +280,17 @@ export default function InvestmentPage() {
               >
                 <div className="text-[10px] text-neutral-500 mb-1">إجمالي الربح/الخسارة</div>
                 <div className={cn("text-base font-bold font-mono", profitUp ? "text-green-400" : "text-red-400")}>
-                  {profitUp ? "+" : ""}{fmtIQD(analytics.totalProfit)}
+                  {profitUp ? "+" : ""}{fmtIQD(merged.totalProfit)}
                 </div>
                 <div className={cn("text-[10px] font-bold mt-0.5", profitUp ? "text-green-400/80" : "text-red-400/80")}>
-                  {profitUp ? "+" : ""}{analytics.totalProfitPercent}%
+                  {profitUp ? "+" : ""}{merged.totalProfitPercent}%
                 </div>
               </div>
 
               {/* Card 2 — Investments count */}
               <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3">
                 <div className="text-[10px] text-neutral-500 mb-1">عدد الاستثمارات</div>
-                <div className="text-base font-bold text-white font-mono">{analytics.holdingsCount}</div>
+                <div className="text-base font-bold text-white font-mono">{dbAnalytics?.holdings_count ?? analytics.holdingsCount}</div>
                 <span className="text-[9px] text-green-400 bg-green-400/[0.1] border border-green-400/25 rounded px-1.5 py-0.5 mt-0.5 inline-block">
                   ● نشط
                 </span>

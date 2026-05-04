@@ -26,6 +26,9 @@ import {
   CURRENT_FEE_BALANCE as MOCK_FEE_BALANCE,
   PAYMENT_METHODS_FULL as PAYMENT_METHODS,
 } from "@/lib/mock-data"
+// Phase 10 — real DB listing creation (sell mode only; buy listings
+// will get their own schema in a follow-up).
+import { createListingDB } from "@/lib/data/portfolio-analytics"
 
 // إعدادات الرسوم
 const REPEAT_LISTING_FEE_PERCENT = 0.25 // 0.25% للإعلان المكرر
@@ -402,15 +405,53 @@ export default function CreateAdPage() {
 
     setSubmitting(true)
     try {
-      // Mock API
-      await new Promise((resolve) => setTimeout(resolve, 1200))
+      // Sell-mode: insert into the real `listings` table via the
+      // create_listing RPC. Buy-mode keeps the legacy mock path
+      // until buy-listings get their own schema.
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedProjectId)
+      if (adType === "sell" && isUuid) {
+        const res = await createListingDB(
+          selectedProjectId,
+          sharesNum,
+          priceNum,
+          // Notes blob: pack duration + payment methods so the page
+          // displaying the listing later can show what the seller chose.
+          JSON.stringify({
+            duration_hours: duration,
+            payment_methods: paymentMethods,
+          }),
+          false,
+        )
+        if (!res.success) {
+          const reasonMap: Record<string, string> = {
+            unauthenticated: "يجب تسجيل الدخول أولاً",
+            invalid_shares: "عدد الحصص غير صحيح",
+            invalid_price: "السعر غير صحيح",
+            no_holdings: "لا تملك حصصاً في هذا المشروع",
+            insufficient_unfrozen: `متاح للبيع: ${res.available ?? "؟"} حصة فقط`,
+            missing_table: "الميزة غير مفعّلة بعد على الخادم",
+            rls: "ليس لديك صلاحية لنشر إعلان",
+          }
+          showError(reasonMap[res.reason ?? ""] ?? "تعذّر نشر الإعلان")
+          setSubmitting(false)
+          return
+        }
+        if (listingFee > 0) {
+          showSuccess("تم نشر الإعلان! خُصم " + listingFee + " وحدة رسوم")
+        } else {
+          showSuccess("تم نشر الإعلان مجاناً! 🎉")
+        }
+        setTimeout(() => router.replace("/exchange"), 800)
+        return
+      }
 
+      // Legacy mock path (buy mode + non-UUID mock projects)
+      await new Promise((resolve) => setTimeout(resolve, 1200))
       if (listingFee > 0) {
         showSuccess("تم نشر الإعلان! خُصم " + listingFee + " وحدة رسوم")
       } else {
         showSuccess("تم نشر الإعلان مجاناً! 🎉")
       }
-
       setTimeout(() => router.replace("/exchange"), 800)
     } catch (e) {
       showError("فشل النشر — حاول مرة أخرى")
