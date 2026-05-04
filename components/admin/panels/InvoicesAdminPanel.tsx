@@ -8,9 +8,8 @@ import {
   KPI, AdminEmpty,
 } from "@/components/admin/ui"
 import {
-  getAllInvoices,
+  getAllInvoicesAsync,
   searchInvoices,
-  seedMockInvoices,
   INVOICE_TYPE_META,
   type Invoice,
   type InvoiceType,
@@ -35,8 +34,12 @@ export function InvoicesAdminPanel() {
   const [typeFilter, setTypeFilter] = useState<"all" | InvoiceType>("all")
 
   useEffect(() => {
-    seedMockInvoices()
-    setInvoices(getAllInvoices())
+    let cancelled = false
+    getAllInvoicesAsync(500).then((rows) => {
+      if (cancelled) return
+      setInvoices(rows)
+    })
+    return () => { cancelled = true }
   }, [])
 
   const filtered = useMemo(() => {

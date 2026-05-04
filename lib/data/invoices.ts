@@ -129,13 +129,27 @@ export function generateDigitalSignature(invoice: Omit<Invoice, "digital_signatu
 // Storage (in-memory + localStorage persist)
 // ──────────────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = "railos_invoices"
+// v2 key — bumped from "railos_invoices" because the v1 key was
+// pre-seeded with 5 mock invoices ("مزرعة الواحة", "برج بغداد", etc.)
+// that would persist in users' browsers across refreshes. Bumping the
+// key orphans the old cache so admins land on a clean slate.
+const STORAGE_KEY = "railos_invoices_v2"
+const LEGACY_STORAGE_KEY = "railos_invoices"
 
 const _store: Invoice[] = []
 let _hydrated = false
 
+/** One-time cleanup of the v1 cache so the seeded mock invoices vanish. */
+function purgeLegacyCache() {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.removeItem(LEGACY_STORAGE_KEY)
+  } catch { /* silent */ }
+}
+
 function hydrate() {
   if (_hydrated || typeof window === "undefined") return
+  purgeLegacyCache()
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
@@ -219,6 +233,35 @@ export function getAllInvoices(): Invoice[] {
   return [..._store]
 }
 
+/**
+ * Async DB-backed list. Tries the real `invoices` table first; if the
+ * table doesn't exist or RLS blocks the read, falls back to whatever
+ * is in the local store (which is now empty in production until real
+ * invoices are created).
+ *
+ * The admin panel uses this so it surfaces real DB rows when the
+ * table is provisioned, and a clean empty state otherwise — no more
+ * fake "مزرعة الواحة / برج بغداد" mocks.
+ */
+export async function getAllInvoicesAsync(limit = 500): Promise<Invoice[]> {
+  hydrate()
+  try {
+    const { createClient } = await import("@/lib/supabase/client")
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("invoices")
+      .select("*")
+      .order("completed_at", { ascending: false })
+      .limit(limit)
+    if (!error && Array.isArray(data) && data.length > 0) {
+      return data as Invoice[]
+    }
+  } catch {
+    // Fall through to local store.
+  }
+  return [..._store]
+}
+
 export function getInvoicesByUser(userId: string): Invoice[] {
   hydrate()
   return _store.filter((i) => i.from.id === userId || i.to.id === userId)
@@ -246,57 +289,21 @@ export function searchInvoices(query: string): Invoice[] {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Seed mock invoices (5 examples)
+// Seed mock invoices — DISABLED in production mode.
 // ──────────────────────────────────────────────────────────────────────────
 
+/**
+ * Production mode: seeding mock invoices is disabled. The function is
+ * still exported so existing callers compile, but it's now a no-op.
+ *
+ * The first call (from any page) also triggers the v1→v2 cache purge
+ * via hydrate(), which clears the legacy "railos_invoices" key that
+ * may still hold the 5 seeded mocks (مزرعة الواحة، برج بغداد، …) in
+ * the user's browser.
+ */
 export function seedMockInvoices() {
   hydrate()
-  if (_store.length > 0) return  // already seeded
-
-  const types: InvoiceType[] = [
-    "exchange_buy",
-    "auction_win",
-    "transfer_receive",
-    "direct_buy",
-    "quick_sell_sell",
-  ]
-  const samples = [
-    { proj: "مزرعة الواحة", sym: "WAH", shares: 50, price: 100_000 },
-    { proj: "برج بغداد",     sym: "BGD", shares: 4,  price: 250_000 },
-    { proj: "نخيل العراق",   sym: "PLM", shares: 10, price: 90_000 },
-    { proj: "مجمع الكرخ",    sym: "KRX", shares: 20, price: 175_000 },
-    { proj: "صفا الذهبي",    sym: "SAF", shares: 15, price: 120_000 },
-  ]
-
-  for (let i = 0; i < types.length; i++) {
-    const s = samples[i]
-    const t = types[i]
-    const ago = (i + 1) * 86_400_000  // i days ago
-    const issuedAt = new Date(Date.now() - ago).toISOString()
-    const inv: Invoice = (() => {
-      const base: Omit<Invoice, "digital_signature"> = {
-        id: generateInvoiceNumber(),
-        number: "",
-        type: t,
-        status: "issued",
-        from: { id: "u_seed_" + i, name: i % 2 === 0 ? "علي حسن" : "إدارة المنصّة", email: "from@example.com" },
-        to: { id: "abc123def456", name: "أحمد محمد", email: "ahmed.m@example.com" },
-        project_id: String(i + 1),
-        project_name: s.proj,
-        project_symbol: s.sym,
-        shares_amount: s.shares,
-        price_per_share: s.price,
-        subtotal: s.shares * s.price,
-        platform_fee_units: Math.floor((s.shares * s.price) * 0.025),
-        total_amount: s.shares * s.price,
-        source_id: `src_${i}`,
-        issued_at: issuedAt,
-        completed_at: issuedAt,
-      }
-      base.number = base.id.replace("INV-", "").replace(/-/g, "")
-      return { ...base, digital_signature: generateDigitalSignature(base) }
-    })()
-    _store.push(inv)
-  }
-  persist()
+  // Intentionally no-op. Real invoices land in the store via
+  // createInvoice() (called from /wallet/send + /deals/[id]) or from
+  // the future server-side invoice generator.
 }
