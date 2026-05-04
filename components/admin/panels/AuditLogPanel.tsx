@@ -62,16 +62,13 @@ export function AuditLogPanel() {
   const [selected, setSelected] = useState<AuditLogEntry | null>(null)
   const [page, setPage] = useState(0)
 
-  // Real audit log from DB; mock as first-paint fallback so the table
-  // renders with sample data while the fetch is in flight (and stays
-  // mock if the user isn't an admin / the migration isn't applied —
-  // RLS returns an empty array for non-admins).
-  const [log, setLog] = useState<AuditLogEntry[]>(MOCK_AUDIT_LOG)
+  // Production mode — DB only.
+  const [log, setLog] = useState<AuditLogEntry[]>([])
   useEffect(() => {
     let cancelled = false
     getAuditLog(500).then((rows) => {
       if (cancelled) return
-      if (rows.length > 0) setLog(rows)
+      setLog(rows)
     })
     return () => {
       cancelled = true

@@ -80,18 +80,17 @@ export function AmbassadorsAdminPanel() {
   const [rewardType, setRewardType] = useState<string>("all")
   const [rewardStatus, setRewardStatus] = useState<string>("all")
 
-  // Real data from DB; mock as first-paint fallback so the panel
-  // doesn't blank during the session-bootstrap fetch.
-  const [ambassadors, setAmbassadors] = useState<AmbassadorAdmin[]>(MOCK_AMBASSADORS_ADMIN)
-  const [rewards, setRewards] = useState<AmbassadorRewardAdmin[]>(MOCK_AMBASSADOR_REWARDS_ADMIN)
+  // Production mode — DB only.
+  const [ambassadors, setAmbassadors] = useState<AmbassadorAdmin[]>([])
+  const [rewards, setRewards] = useState<AmbassadorRewardAdmin[]>([])
 
   const refresh = useCallback(async () => {
     const [amb, rw] = await Promise.all([
       getAmbassadorsAdmin(500),
       getAmbassadorRewardsAdmin(500),
     ])
-    if (amb.length > 0) setAmbassadors(amb)
-    if (rw.length > 0) setRewards(rw)
+    setAmbassadors(amb)
+    setRewards(rw)
   }, [])
 
   useEffect(() => {
@@ -101,8 +100,8 @@ export function AmbassadorsAdminPanel() {
       getAmbassadorRewardsAdmin(500),
     ]).then(([amb, rw]) => {
       if (cancelled) return
-      if (amb.length > 0) setAmbassadors(amb)
-      if (rw.length > 0) setRewards(rw)
+      setAmbassadors(amb)
+      setRewards(rw)
     })
     return () => {
       cancelled = true

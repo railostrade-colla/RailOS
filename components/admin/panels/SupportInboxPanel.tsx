@@ -86,18 +86,16 @@ export function SupportInboxPanel() {
   const [localAssignee, setLocalAssignee] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // Mock first-paint, real DB on mount.
-  const [tickets, setTickets] = useState<AdminSupportTicket[]>(ADMIN_SUPPORT_TICKETS)
-  const [adminList, setAdminList] = useState(MOCK_ADMIN_LIST as ReadonlyArray<{ id: string; name: string }>)
+  // Production mode — DB only.
+  const [tickets, setTickets] = useState<AdminSupportTicket[]>([])
+  const [adminList, setAdminList] = useState<ReadonlyArray<{ id: string; name: string }>>([])
   const [dbRows, setDbRows] = useState<AdminTicketRow[]>([])
 
   const refresh = () => {
     Promise.all([getAllTickets(), getAdminList()]).then(([rows, admins]) => {
-      if (rows.length > 0) {
-        setDbRows(rows)
-        setTickets(rows.map((r) => rowToTicket(r)))
-      }
-      if (admins.length > 0) setAdminList(admins)
+      setDbRows(rows)
+      setTickets(rows.map((r) => rowToTicket(r)))
+      setAdminList(admins)
     })
   }
   useEffect(() => {

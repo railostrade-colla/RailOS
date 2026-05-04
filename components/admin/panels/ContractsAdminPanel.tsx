@@ -45,15 +45,13 @@ export function ContractsAdminPanel() {
   // For internal resolution — edit percentages
   const [editPercents, setEditPercents] = useState<Record<string, number>>({})
 
-  // Mock first-paint, real DB on mount.
-  const [contracts, setContracts] = useState<ContractListItem[]>(mockContracts)
+  // Production mode — DB only.
+  const [contracts, setContracts] = useState<ContractListItem[]>([])
   const [members, setMembers] = useState<AdminContractMember[]>([])
   const [submitting, setSubmitting] = useState(false)
 
   const refresh = () => {
-    getAllContracts().then((c) => {
-      if (c.length > 0) setContracts(c)
-    })
+    getAllContracts().then((c) => setContracts(c))
   }
   useEffect(() => {
     refresh()

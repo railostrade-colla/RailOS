@@ -64,19 +64,19 @@ export function FeeUnitsRequestsPanel() {
   const [modifiedAmount, setModifiedAmount] = useState<number>(0)
   const [submitting, setSubmitting] = useState(false)
 
-  // Real fee-unit requests from DB; mock as first-paint fallback.
-  const [requests, setRequests] = useState<FeeUnitRequest[]>(MOCK_FEE_REQUESTS)
+  // Production mode — DB only.
+  const [requests, setRequests] = useState<FeeUnitRequest[]>([])
 
   const refresh = useCallback(async () => {
     const rows = await getFeeRequestsAdmin(500)
-    if (rows.length > 0) setRequests(rows)
+    setRequests(rows)
   }, [])
 
   useEffect(() => {
     let cancelled = false
     getFeeRequestsAdmin(500).then((rows) => {
       if (cancelled) return
-      if (rows.length > 0) setRequests(rows)
+      setRequests(rows)
     })
     return () => {
       cancelled = true

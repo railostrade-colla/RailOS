@@ -74,14 +74,14 @@ export function DiscountsAdminPanel() {
     }
   }, [actionMode, selectedDiscount])
 
-  // Mock first-paint, real DB on mount.
-  const [discounts, setDiscounts] = useState<Discount[]>(MOCK_DISCOUNTS)
-  const [coupons, setCoupons] = useState<UserCoupon[]>(MOCK_USER_COUPONS)
+  // Production mode — DB only.
+  const [discounts, setDiscounts] = useState<Discount[]>([])
+  const [coupons, setCoupons] = useState<UserCoupon[]>([])
 
   const refresh = () => {
     Promise.all([getAllDiscounts(), getAllUserCoupons()]).then(([d, c]) => {
-      if (d.length > 0) setDiscounts(d)
-      if (c.length > 0) setCoupons(c)
+      setDiscounts(d)
+      setCoupons(c)
     })
   }
 

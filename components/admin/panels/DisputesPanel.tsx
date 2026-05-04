@@ -50,20 +50,19 @@ export function DisputesPanel() {
   const [adminNotes, setAdminNotes] = useState("")
   const [submitting, setSubmitting] = useState(false)
 
-  // Real disputes from DB; mock as first-paint fallback so the panel
-  // doesn't blank during the admin's session-bootstrap fetch.
-  const [disputes, setDisputes] = useState<Dispute[]>(MOCK_DISPUTES)
+  // Production mode — DB only.
+  const [disputes, setDisputes] = useState<Dispute[]>([])
 
   const refresh = useCallback(async () => {
     const rows = await getDisputesAdmin(500)
-    if (rows.length > 0) setDisputes(rows)
+    setDisputes(rows)
   }, [])
 
   useEffect(() => {
     let cancelled = false
     getDisputesAdmin(500).then((rows) => {
       if (cancelled) return
-      if (rows.length > 0) setDisputes(rows)
+      setDisputes(rows)
     })
     return () => {
       cancelled = true

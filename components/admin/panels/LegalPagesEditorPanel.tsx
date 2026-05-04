@@ -27,19 +27,18 @@ const SLUG_MAP: Record<LegalPageId, string> = {
 
 export function LegalPagesEditorPanel() {
   const [page, setPage] = useState<LegalPageId>("terms")
-  const [content, setContent] = useState(MOCK_LEGAL_PAGES.terms.content)
-  const [originalContent, setOriginalContent] = useState(MOCK_LEGAL_PAGES.terms.content)
+  const [content, setContent] = useState("")
+  const [originalContent, setOriginalContent] = useState("")
   const [showPreview, setShowPreview] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   // Live row from DB; null until loaded.
   const [dbRow, setDbRow] = useState<LegalPageRow | null>(null)
 
   const loadPage = useCallback(async (id: LegalPageId) => {
-    // First-paint with mock so the UI never blanks.
-    const mockContent = MOCK_LEGAL_PAGES[id].content
-    setContent(mockContent)
-    setOriginalContent(mockContent)
-    // Then fetch real DB content.
+    // Production mode — DB only. Empty editor when the page hasn't
+    // been authored on the platform yet.
+    setContent("")
+    setOriginalContent("")
     const row = await getLegalPageBySlug(SLUG_MAP[id])
     if (row) {
       setDbRow(row)

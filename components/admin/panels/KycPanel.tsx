@@ -57,15 +57,12 @@ export function KycPanel() {
   const [resubmitField, setResubmitField] = useState<"front" | "back" | "selfie">("selfie")
   const [submitting, setSubmitting] = useState(false)
 
-  // Real submissions from DB, mock as first-paint fallback so the
-  // panel renders while the admin's session boots. Non-admins (RLS)
-  // get an empty list — they shouldn't be on /admin in the first
-  // place, but we don't pop their session.
-  const [submissions, setSubmissions] = useState<KycSubmission[]>(MOCK_KYC_SUBMISSIONS)
+  // Production mode — DB only.
+  const [submissions, setSubmissions] = useState<KycSubmission[]>([])
 
   const refresh = useCallback(async () => {
     const rows = await getKycSubmissions(500)
-    if (rows.length > 0) setSubmissions(rows)
+    setSubmissions(rows)
   }, [])
 
   useEffect(() => {

@@ -86,22 +86,9 @@ export function OrphansAdminPanel() {
     }
   }, [childAction, selectedChild])
 
-  // Mock first-paint, real DB on mount.
-  const [allChildren, setAllChildren] = useState<OrphanChild[]>(MOCK_ORPHAN_CHILDREN)
-  const [sponsorships, setSponsorships] = useState<AdminSponsorshipRow[]>(
-    // Initial mock projection — keys differ slightly between mock + DB shape.
-    MOCK_SPONSORSHIPS.map((s) => ({
-      id: s.id,
-      sponsor_id: s.sponsor_id,
-      sponsor_name: s.is_anonymous ? "مجهول" : s.sponsor_name,
-      child_id: s.child_id,
-      child_name: s.child_first_name,
-      amount: s.amount,
-      type: s.type,
-      status: s.status,
-      started_at: s.started_at,
-    })),
-  )
+  // Production mode — DB only.
+  const [allChildren, setAllChildren] = useState<OrphanChild[]>([])
+  const [sponsorships, setSponsorships] = useState<AdminSponsorshipRow[]>([])
   const [reports, setReports] = useState<AdminOrphanReportRow[]>(
     MOCK_ORPHAN_REPORTS.map((r) => ({
       id: r.id,

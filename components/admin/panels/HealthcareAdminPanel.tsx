@@ -65,14 +65,14 @@ export function HealthcareAdminPanel() {
   const [newAnonymous, setNewAnonymous] = useState(false)
   const [newUrgent, setNewUrgent] = useState(false)
 
-  // Mock first-paint, real DB on mount.
-  const [applications, setApplications] = useState<HealthcareApplication[]>(MOCK_HEALTHCARE_APPLICATIONS)
-  const [allCases, setAllCases] = useState<HealthcareCase[]>(MOCK_HEALTHCARE_CASES)
+  // Production mode — DB only.
+  const [applications, setApplications] = useState<HealthcareApplication[]>([])
+  const [allCases, setAllCases] = useState<HealthcareCase[]>([])
 
   const refresh = () => {
     Promise.all([getAllApplications(), getAllCases()]).then(([a, c]) => {
-      if (a.length > 0) setApplications(a)
-      if (c.length > 0) setAllCases(c)
+      setApplications(a)
+      setAllCases(c)
     })
   }
   useEffect(() => {

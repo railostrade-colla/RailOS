@@ -49,17 +49,14 @@ export function PaymentProofsPanel() {
   const [actionMode, setActionMode] = useState<ActionMode>(null)
   const [reason, setReason] = useState("")
 
-  // Real proofs from DB (read-only); mock as first-paint fallback.
-  // Confirm/reject actions are still surface-only — the deal-status
-  // workflow is owned by the buyer/seller flow, and admin overrides
-  // happen via /admin?tab=disputes (separate phase).
-  const [proofs, setProofs] = useState<PaymentProof[]>(MOCK_PAYMENT_PROOFS)
+  // Production mode — DB only.
+  const [proofs, setProofs] = useState<PaymentProof[]>([])
 
   useEffect(() => {
     let cancelled = false
     getPaymentProofsAdmin(500).then((rows) => {
       if (cancelled) return
-      if (rows.length > 0) setProofs(rows)
+      setProofs(rows)
     })
     return () => {
       cancelled = true
