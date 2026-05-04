@@ -4,6 +4,8 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Lock, Mail, Shield } from "lucide-react"
 import { showSuccess, showError } from "@/lib/utils/toast"
+import { signInWithEmail } from "@/lib/supabase/auth-helpers"
+import { createClient } from "@/lib/supabase/client"
 
 export default function AdminLoginPage() {
   const router = useRouter()
@@ -18,10 +20,48 @@ export default function AdminLoginPage() {
       return
     }
     setLoading(true)
-    setTimeout(() => {
+    try {
+      // 1. Real Supabase sign-in.
+      const { data, error } = await signInWithEmail(email.trim(), password)
+      if (error || !data?.user) {
+        showError(error?.message ?? "بيانات الدخول غير صحيحة")
+        setLoading(false)
+        return
+      }
+
+      // 2. Verify the signed-in profile has admin role.
+      const supabase = createClient()
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .maybeSingle()
+
+      if (profileError || !profile) {
+        await supabase.auth.signOut()
+        showError("تعذّر التحقق من الصلاحيات")
+        setLoading(false)
+        return
+      }
+
+      const role = (profile as { role?: string }).role
+      if (role !== "admin" && role !== "super_admin") {
+        // Sign out and bounce — non-admins shouldn't keep a session
+        // that landed on /admin-login.
+        await supabase.auth.signOut()
+        showError("هذا الحساب ليس لديه صلاحيات إدارية")
+        setLoading(false)
+        return
+      }
+
       showSuccess("مرحباً بك أيها المسؤول")
-      router.push("/admin?tab=dashboard")
-    }, 800)
+      // Hard navigation so the proxy/middleware sees the fresh cookie
+      // before evaluating the /admin route guard.
+      window.location.href = "/admin?tab=dashboard"
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "حدث خطأ غير متوقّع")
+      setLoading(false)
+    }
   }
 
   return (
@@ -50,8 +90,9 @@ export default function AdminLoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="railostrade@gmail.com"
+                placeholder="admin@example.com"
                 dir="ltr"
+                autoComplete="email"
                 className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl pr-10 pl-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
               />
             </div>
@@ -67,6 +108,7 @@ export default function AdminLoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
+                autoComplete="current-password"
                 className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl pr-10 pl-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
               />
             </div>
