@@ -405,28 +405,32 @@ export default function CreateAdPage() {
 
     setSubmitting(true)
     try {
-      // Sell-mode: insert into the real `listings` table via the
-      // create_listing RPC. Buy-mode keeps the legacy mock path
-      // until buy-listings get their own schema.
+      // Insert into the real `listings` table via the create_listing
+      // RPC. Both sell and buy types are supported as of phase 10.5;
+      // when the project_id isn't a UUID (mock projects in dev) we
+      // fall back to the legacy mock path so /exchange/create still
+      // works in stand-alone demos.
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedProjectId)
-      if (adType === "sell" && isUuid) {
+      if (isUuid) {
         const res = await createListingDB(
           selectedProjectId,
           sharesNum,
           priceNum,
           // Notes blob: pack duration + payment methods so the page
-          // displaying the listing later can show what the seller chose.
+          // displaying the listing later can show what the creator chose.
           JSON.stringify({
             duration_hours: duration,
             payment_methods: paymentMethods,
           }),
           false,
+          adType,
         )
         if (!res.success) {
           const reasonMap: Record<string, string> = {
             unauthenticated: "يجب تسجيل الدخول أولاً",
             invalid_shares: "عدد الحصص غير صحيح",
             invalid_price: "السعر غير صحيح",
+            invalid_type: "نوع الإعلان غير صحيح",
             no_holdings: "لا تملك حصصاً في هذا المشروع",
             insufficient_unfrozen: `متاح للبيع: ${res.available ?? "؟"} حصة فقط`,
             missing_table: "الميزة غير مفعّلة بعد على الخادم",
@@ -445,7 +449,7 @@ export default function CreateAdPage() {
         return
       }
 
-      // Legacy mock path (buy mode + non-UUID mock projects)
+      // Legacy mock path (non-UUID mock projects in dev)
       await new Promise((resolve) => setTimeout(resolve, 1200))
       if (listingFee > 0) {
         showSuccess("تم نشر الإعلان! خُصم " + listingFee + " وحدة رسوم")

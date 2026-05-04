@@ -76,6 +76,8 @@ export interface ExchangeListingRow {
   notes: string | null
   is_quick_sell: boolean
   status: string
+  /** sell = holder offering shares; buy = wanter signaling demand. */
+  type: "sell" | "buy"
   created_at: string
   expires_at: string | null
 }
@@ -110,7 +112,7 @@ export async function getExchangeListings(): Promise<ExchangeListingRow[]> {
       .from("listings")
       .select(
         `id, seller_id, project_id, shares_offered, shares_sold,
-         price_per_share, notes, is_quick_sell, status, created_at,
+         price_per_share, notes, is_quick_sell, status, type, created_at,
          expires_at,
          seller:profiles!seller_id ( full_name, username ),
          project:projects!project_id ( name, sector, share_price )`,
@@ -130,6 +132,7 @@ export async function getExchangeListings(): Promise<ExchangeListingRow[]> {
       notes: string | null
       is_quick_sell: boolean
       status: string
+      type: string | null
       created_at: string
       expires_at: string | null
       seller?: ProfileRef | ProfileRef[] | null
@@ -159,12 +162,63 @@ export async function getExchangeListings(): Promise<ExchangeListingRow[]> {
         notes: r.notes,
         is_quick_sell: r.is_quick_sell,
         status: r.status,
+        type: r.type === "buy" ? "buy" : "sell",
         created_at: r.created_at,
         expires_at: r.expires_at,
       }
     })
   } catch {
     return []
+  }
+}
+
+/** Accept a buy-listing. Symmetric to placeDealFromListing for sell-side. */
+export async function acceptBuyListing(
+  listingId: string,
+  quantity: number,
+  durationHours: 24 | 48 | 72 = 24,
+): Promise<PlaceDealResult> {
+  if (!listingId) return { success: false, reason: "listing_not_found" }
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return { success: false, reason: "invalid_quantity" }
+  }
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("accept_buy_listing", {
+      p_listing_id: listingId,
+      p_quantity: quantity,
+      p_duration_hours: durationHours,
+    })
+    if (error) {
+      const code = error.code ?? ""
+      const msg = error.message ?? ""
+      if (
+        code === "42883" ||
+        code === "42P01" ||
+        /function .* does not exist/i.test(msg)
+      ) {
+        return { success: false, reason: "missing_table", error: msg }
+      }
+      if (code === "42501") return { success: false, reason: "rls", error: msg }
+      return { success: false, reason: "unknown", error: msg }
+    }
+    const result = (data ?? {}) as PlaceDealResult & { error?: string }
+    if (!result.success) {
+      return {
+        success: false,
+        reason: result.reason ?? result.error ?? "unknown",
+        available: result.available,
+        unfrozen: result.unfrozen,
+        current_status: result.current_status,
+      }
+    }
+    return result
+  } catch (err) {
+    return {
+      success: false,
+      reason: "unknown",
+      error: err instanceof Error ? err.message : String(err),
+    }
   }
 }
 

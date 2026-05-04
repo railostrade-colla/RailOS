@@ -19,6 +19,7 @@ import { HOLDINGS } from "@/lib/mock-data/holdings"
 import {
   getExchangeListings,
   placeDealFromListing,
+  acceptBuyListing,
   type ExchangeListingRow,
 } from "@/lib/data/listings"
 import { createClient } from "@/lib/supabase/client"
@@ -38,7 +39,7 @@ import { cn } from "@/lib/utils/cn"
 function dbToMockListing(row: ExchangeListingRow): Listing {
   return {
     id: row.id,
-    type: "sell",
+    type: row.type,
     project_id: row.project_id,
     project_name: row.project_name,
     user_id: row.seller_id,
@@ -320,6 +321,7 @@ function ExchangeContent() {
 
   // ─── Phase 10: real DB listings + current user ─────────────
   const [dbSellListings, setDbSellListings] = useState<Listing[]>([])
+  const [dbBuyListings, setDbBuyListings] = useState<Listing[]>([])
   const [currentUserId, setCurrentUserId] = useState<string>(CURRENT_USER_ID)
   const [loadingListings, setLoadingListings] = useState(true)
 
@@ -342,11 +344,19 @@ function ExchangeContent() {
       if (data?.user?.id) setCurrentUserId(data.user.id)
     })
 
-    // active sell-listings from DB
+    // active listings from DB (both sell and buy in one round-trip)
     getExchangeListings()
       .then((rows) => {
         if (cancelled) return
-        setDbSellListings(rows.map(dbToMockListing))
+        const sells: Listing[] = []
+        const buys: Listing[] = []
+        rows.forEach((r) => {
+          const l = dbToMockListing(r)
+          if (l.type === "sell") sells.push(l)
+          else buys.push(l)
+        })
+        setDbSellListings(sells)
+        setDbBuyListings(buys)
       })
       .finally(() => {
         if (!cancelled) setLoadingListings(false)
@@ -358,20 +368,15 @@ function ExchangeContent() {
   }, [])
 
   // Filter + Sort — hybrid pool:
-  //   - "buy" mode (مشترٍ يبحث عن إعلانات بيع): real DB rows first;
-  //     fall back to mock sell-listings only if DB is empty (so the
-  //     page never blanks during demo / staging).
-  //   - "sell" mode (بائع يبحث عن طلبات شراء): pure mock until we
-  //     migrate buy-listings to DB.
+  //   - "buy" mode (مشترٍ يبحث عن إعلانات بيع): DB sell-listings;
+  //     fall back to mock if DB is empty (no blank screens).
+  //   - "sell" mode (بائع يبحث عن طلبات شراء): DB buy-listings;
+  //     fall back to mock if DB is empty.
   const filtered = useMemo(() => {
     const wantType: "sell" | "buy" = mode === "buy" ? "sell" : "buy"
     const mockPool = MOCK_LISTINGS.filter((l) => l.type === wantType)
-    const pool: Listing[] =
-      wantType === "sell"
-        ? dbSellListings.length > 0
-          ? dbSellListings
-          : mockPool
-        : mockPool
+    const dbPool = wantType === "sell" ? dbSellListings : dbBuyListings
+    const pool: Listing[] = dbPool.length > 0 ? dbPool : mockPool
 
     return pool
       .filter((l) => !selectedProject || l.project_id === selectedProject.id)
@@ -385,7 +390,7 @@ function ExchangeContent() {
         if (sort === "speed") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         return 0
       })
-  }, [mode, sort, selectedProject, paymentFilter, dbSellListings])
+  }, [mode, sort, selectedProject, paymentFilter, dbSellListings, dbBuyListings])
 
   /** Triggered when user clicks "شراء/بيع" on a listing card. */
   const onClickListing = (listing: Listing) => {
@@ -435,15 +440,15 @@ function ExchangeContent() {
     if (!selectedListing) return
 
     // ─── Phase 10: real DB path ─────────────────────────────
-    // DB rows have UUID ids; route them through the atomic
-    // place_deal_from_listing RPC which: locks the listing, verifies
-    // capacity, freezes seller's shares, and creates the deal row.
+    // DB rows have UUID ids. Route based on listing type:
+    //   - sell listing → place_deal_from_listing (caller is buyer)
+    //   - buy listing  → accept_buy_listing      (caller is seller)
     if (isDbListingId(selectedListing.id)) {
-      const res = await placeDealFromListing(
-        selectedListing.id,
-        quantity,
-        durationHours,
-      )
+      const isBuyListing = selectedListing.type === "buy"
+      const res = isBuyListing
+        ? await acceptBuyListing(selectedListing.id, quantity, durationHours)
+        : await placeDealFromListing(selectedListing.id, quantity, durationHours)
+
       if (!res.success) {
         const reasonMap: Record<string, string> = {
           unauthenticated: "يجب تسجيل الدخول أولاً",
@@ -451,19 +456,37 @@ function ExchangeContent() {
           listing_not_found: "الإعلان غير موجود",
           listing_inactive: "الإعلان لم يعد نشطاً",
           cannot_buy_own_listing: "لا يمكنك شراء إعلانك",
+          cannot_accept_own_listing: "لا يمكنك قبول طلبك الخاص",
+          not_a_buy_listing: "هذا الإعلان ليس طلب شراء",
           insufficient_listing_capacity: `الكمية المتاحة: ${res.available ?? "؟"}`,
           seller_holdings_missing: "البائع لا يملك حصصاً في هذا المشروع",
           seller_insufficient_unfrozen: `البائع يملك ${res.unfrozen ?? "؟"} حصة فقط غير مجمدة`,
+          no_holdings: "لا تملك حصصاً في هذا المشروع",
+          insufficient_unfrozen: `لديك ${res.unfrozen ?? "؟"} حصة فقط غير مجمدة`,
           missing_table: "الميزة غير مفعّلة بعد على الخادم",
           rls: "ليس لديك صلاحية لإجراء هذه الصفقة",
         }
         const msg = reasonMap[res.reason ?? ""] ?? "تعذّر فتح الصفقة"
         throw new Error(msg)
       }
-      showSuccess(`🔒 تم تعليق ${quantity} حصة وفتح الصفقة`)
+      showSuccess(
+        isBuyListing
+          ? `✅ تم قبول طلب الشراء — تم تعليق ${quantity} حصة`
+          : `🔒 تم تعليق ${quantity} حصة وفتح الصفقة`,
+      )
       setSelectedListing(null)
       // Refresh DB listings so capacity reflects immediately
-      getExchangeListings().then((rows) => setDbSellListings(rows.map(dbToMockListing)))
+      getExchangeListings().then((rows) => {
+        const sells: Listing[] = []
+        const buys: Listing[] = []
+        rows.forEach((r) => {
+          const l = dbToMockListing(r)
+          if (l.type === "sell") sells.push(l)
+          else buys.push(l)
+        })
+        setDbSellListings(sells)
+        setDbBuyListings(buys)
+      })
       if (res.deal_id) router.push("/deals/" + res.deal_id)
       else router.push("/deals")
       return

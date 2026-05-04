@@ -65,6 +65,7 @@ export async function createListingDB(
   pricePerShare: number,
   notes?: string,
   isQuickSell = false,
+  type: "sell" | "buy" = "sell",
 ): Promise<CreateListingResult> {
   if (!projectId) return { success: false, reason: "missing_project" }
   if (!Number.isFinite(sharesOffered) || sharesOffered <= 0) {
@@ -81,6 +82,7 @@ export async function createListingDB(
       p_price_per_share: pricePerShare,
       p_notes: notes ?? null,
       p_is_quick_sell: isQuickSell,
+      p_type: type,
     })
     if (error) {
       const code = error.code ?? ""
