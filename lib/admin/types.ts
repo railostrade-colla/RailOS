@@ -59,64 +59,50 @@ export interface AdminNavItem {
 }
 
 export const ADMIN_NAV: AdminNavItem[] = [
+  // رئيسي — overview/dashboard surfaces
   { key: "dashboard",    label: "لوحة التحكم",   icon: "◈",  section: "رئيسي" },
   { key: "requests_hub", label: "مركز الطلبات",  icon: "🎯", section: "رئيسي" },
   { key: "monitor",      label: "مراقبة السوق",   icon: "📡", section: "رئيسي" },
-  { key: "market_health",label: "صحّة السوق",    icon: "📊", section: "رئيسي" },
   { key: "alerts",       label: "التنبيهات",      icon: "🚨", section: "رئيسي" },
   { key: "log",          label: "سجل القرارات",   icon: "📋", section: "رئيسي" },
 
-  // العمليات (operations) — Phase Admin-A P0 + Phase Admin-B
-  { key: "kyc",                 label: "التحقق (KYC)",      icon: "🛡️", section: "العمليات" },
-  { key: "disputes",            label: "النزاعات",          icon: "⚖️", section: "العمليات" },
-  { key: "fee_units_requests",  label: "طلبات الرسوم",      icon: "💎", section: "العمليات" },
-  { key: "payment_proofs",      label: "إثباتات الدفع",     icon: "🧾", section: "العمليات" },
-  { key: "contracts_admin",     label: "العقود",            icon: "🤝", section: "العمليات" },
-  { key: "share_modification",  label: "تعديل الحصص",      icon: "🔐", section: "العمليات" },
-  { key: "gifts_admin",         label: "الهدايا",           icon: "🎁", section: "العمليات" },
+  // العمليات — only the entry-points that DON'T live as a tab inside another hub
+  { key: "contracts_admin",  label: "العقود",     icon: "🤝", section: "العمليات" },
+  { key: "gifts_admin",      label: "الهدايا",    icon: "🎁", section: "العمليات" },
 
-  { key: "projects",     label: "المشاريع",       icon: "▣",  section: "المشاريع" },
+  // المشاريع — projects has its own dedicated page (also embedded in Market hub)
+  { key: "projects",         label: "المشاريع",   icon: "▣", section: "المشاريع" },
 
-  // السوق
-  { key: "market",         label: "السوق والمزادات", icon: "◉",  section: "السوق" },
-  { key: "auctions_admin", label: "إدارة المزادات",  icon: "🔨", section: "السوق" },
-
-  { key: "shares",       label: "الحصص والتداول",  icon: "◎",  section: "الحصص" },
-  { key: "fees",         label: "الرسوم",          icon: "💰", section: "الرسوم" },
+  // الهَبات — single-entry hubs
+  { key: "market",           label: "السوق والمزادات", icon: "◉",  section: "السوق" },
+  { key: "shares",           label: "الحصص والتداول",  icon: "◎",  section: "الحصص" },
+  { key: "fees",             label: "الرسوم",          icon: "💰", section: "الرسوم" },
   { key: "users",            label: "المستخدمون",       icon: "⊙",  section: "المستخدمون" },
-  { key: "user_stats",       label: "سجلّ مستخدم",     icon: "📋", section: "المستخدمون" },
-  { key: "level_settings",   label: "إعدادات المستويات", icon: "⚙️", section: "المستخدمون" },
 
-  // الحوكمة (governance) — Phase Admin-A + Phase Admin-B
-  { key: "council_admin",      label: "المجلس",         icon: "🏛️", section: "الحوكمة" },
-  { key: "ambassadors_admin",  label: "السفراء",        icon: "🌟", section: "الحوكمة" },
-  { key: "audit_log",          label: "سجل التدقيق",    icon: "📜", section: "الحوكمة" },
+  // الحوكمة — items that don't live inside another hub
+  { key: "council_admin",     label: "المجلس",   icon: "🏛️", section: "الحوكمة" },
+  { key: "ambassadors_admin", label: "السفراء",  icon: "🌟", section: "الحوكمة" },
 
-  // التواصل (communications) — Phase Admin-B
-  { key: "broadcaster",     label: "إذاعة الإشعارات", icon: "📢", section: "التواصل" },
-  { key: "support_inbox",   label: "صندوق الدعم",     icon: "💬", section: "التواصل" },
-
-  // الفواتير — Phase Invoices
-  { key: "invoices_admin",  label: "الفواتير الرسمية", icon: "📄", section: "الفواتير" },
-
-  // البرامج الاجتماعية (social_programs) — Phase Social
+  // البرامج الاجتماعية
   { key: "healthcare_admin", label: "الرعاية الصحية",  icon: "🏥", section: "البرامج الاجتماعية" },
   { key: "orphans_admin",    label: "رعاية الأيتام",   icon: "👶", section: "البرامج الاجتماعية" },
-  { key: "discounts_admin",  label: "الخصومات",         icon: "🎁", section: "البرامج الاجتماعية" },
 
-  // محافظ المشاريع — Phase Admin-Plus (operations)
-  { key: "project_wallets",  label: "محافظ المشاريع",   icon: "🏦", section: "العمليات" },
+  // المحتوى — single entry, all sub-tabs are inside
+  { key: "content_mgmt",     label: "المحتوى",   icon: "📝", section: "المحتوى" },
 
-  // المحرّر القانوني — Phase Admin-Plus (content)
-  { key: "legal_editor",     label: "محرّر قانوني",     icon: "📜", section: "المحتوى" },
+  // النظام — single entry, all sub-tabs are inside
+  { key: "system",           label: "النظام",    icon: "⚙",  section: "النظام" },
 
-  // ملاحظة:
-  //  - create_project + create_company → دُمجا داخل صفحة "المشاريع" (Projects panel)
-  //  - admin_users → دُمج داخل صفحة "النظام > الأدمنز" (System panel)
-  //  لا يزالان متاحَين عبر URL مباشر (?tab=create_project / ?tab=admin_users)
-
-  { key: "content_mgmt", label: "المحتوى",         icon: "📝", section: "المحتوى" },
-  { key: "system",       label: "النظام",          icon: "⚙",  section: "النظام" },
+  // ملاحظة بعد إعادة الترتيب (Phase 10.36):
+  //  جميع البنود التالية باتت تبويبات داخل لوحات الـ hub، فأُزيلت من السلايدبار
+  //  (لكنها لا تزال متاحة عبر الـ URL المباشر `?tab=…` للـ deep-links):
+  //   • kyc / disputes / fee_units_requests / payment_proofs
+  //   • share_modification / project_wallets
+  //   • user_stats / admin_users / level_settings / support_inbox
+  //   • audit_log / broadcaster / market_health / market_state
+  //   • market_settings_advanced / fee_config_advanced / fee_units_admin
+  //   • deal_fees_admin / invoices_admin / legal_editor / discounts_admin
+  //   • auctions_admin / create_project / create_company
 ]
 
 export const ADMIN_SECTIONS = Array.from(new Set(ADMIN_NAV.map((n) => n.section)))

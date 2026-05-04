@@ -2,17 +2,9 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Bell, MessageCircle, Coins, Shield, ChevronDown, User, Sun, Moon, LogOut } from "lucide-react"
+import { Bell, MessageCircle, Coins, Shield, ChevronDown, User, Sun, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils/cn"
-import { MOCK_KYC_SUBMISSIONS } from "@/lib/mock-data/kyc"
-import { MOCK_DISPUTES } from "@/lib/mock-data/disputes"
-import { MOCK_FEE_REQUESTS, FEE_REQUEST_PAYMENT_LABELS } from "@/lib/mock-data/feeUnits"
-import { ADMIN_SUPPORT_TICKETS } from "@/lib/mock-data/support"
-import { MOCK_AMBASSADORS_ADMIN } from "@/lib/mock-data/ambassadors"
-import { MOCK_HEALTHCARE_APPLICATIONS } from "@/lib/mock-data/healthcare"
 import { showSuccess } from "@/lib/utils/toast"
-
-const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 interface AdminNotification {
   id: string
@@ -24,40 +16,28 @@ interface AdminNotification {
   href: string
 }
 
-function getAdminNotifications(limit: number = 10): AdminNotification[] {
-  const list: AdminNotification[] = []
-
-  MOCK_KYC_SUBMISSIONS.filter((k) => k.status === "pending").slice(0, 3).forEach((k) =>
-    list.push({ id: `n-${k.id}`, type: "kyc", icon: "🛡️", title: `طلب KYC من ${k.user_name}`, body: k.city || "", time: k.submitted_at, href: "/admin?tab=kyc" })
-  )
-  MOCK_DISPUTES.filter((d) => d.status === "open").slice(0, 2).forEach((d) =>
-    list.push({ id: `n-${d.id}`, type: "dispute", icon: "⚖️", title: `نزاع جديد ${d.id}`, body: `${d.buyer_name} ↔ ${d.seller_name}`, time: d.opened_at, href: "/admin?tab=disputes" })
-  )
-  MOCK_FEE_REQUESTS.filter((r) => r.status === "pending").slice(0, 2).forEach((r) =>
-    list.push({ id: `n-${r.id}`, type: "fee", icon: "💎", title: `طلب شحن من ${r.user_name}`, body: `${fmtNum(r.requested_units)} وحدة`, time: r.submitted_at, href: "/admin?tab=fee_units_requests" })
-  )
-  ADMIN_SUPPORT_TICKETS.filter((t) => t.status === "new").slice(0, 2).forEach((t) =>
-    list.push({ id: `n-${t.id}`, type: "support", icon: "💬", title: `تذكرة دعم ${t.id}`, body: t.subject, time: t.created_at, href: "/admin?tab=support_inbox" })
-  )
-  MOCK_AMBASSADORS_ADMIN.filter((a) => a.application_status === "pending").slice(0, 2).forEach((a) =>
-    list.push({ id: `n-${a.id}`, type: "ambassador", icon: "🌟", title: `طلب سفير من ${a.user_name}`, body: a.user_email, time: a.applied_at, href: "/admin?tab=ambassadors_admin" })
-  )
-  MOCK_HEALTHCARE_APPLICATIONS.filter((a) => a.status === "pending").slice(0, 2).forEach((a) =>
-    list.push({ id: `n-${a.id}`, type: "healthcare", icon: "🏥", title: `طلب رعاية من ${a.user_name}`, body: a.diagnosis.slice(0, 40) + "...", time: a.submitted_at, href: "/admin?tab=healthcare_admin" })
-  )
-
-  return list.sort((a, b) => (a.time < b.time ? 1 : -1)).slice(0, limit)
+/**
+ * Production mode — every notification surface returns an empty list.
+ * The previous implementation read from MOCK_KYC_SUBMISSIONS / MOCK_DISPUTES
+ * etc. and surfaced fake "9+ pending" badges on a fresh deployment.
+ *
+ * TODO (Phase 10.37): wire each surface to its real DB count via a single
+ * `get_admin_notifications()` RPC. Until then we surface zeros so admins
+ * aren't lied to.
+ */
+function getAdminNotifications(_limit: number = 10): AdminNotification[] {
+  return []
 }
 
 function getUnreadCounts() {
   return {
-    kyc:        MOCK_KYC_SUBMISSIONS.filter((k) => k.status === "pending").length,
-    disputes:   MOCK_DISPUTES.filter((d) => d.status === "open").length,
-    fees:       MOCK_FEE_REQUESTS.filter((r) => r.status === "pending").length,
-    support:    ADMIN_SUPPORT_TICKETS.filter((t) => t.status === "new").length,
-    ambassadors: MOCK_AMBASSADORS_ADMIN.filter((a) => a.application_status === "pending").length,
-    healthcare: MOCK_HEALTHCARE_APPLICATIONS.filter((a) => a.status === "pending").length,
-    all: 0, // computed below
+    kyc: 0,
+    disputes: 0,
+    fees: 0,
+    support: 0,
+    ambassadors: 0,
+    healthcare: 0,
+    all: 0,
   }
 }
 
@@ -81,9 +61,10 @@ export function AdminTopBar() {
   }, [])
 
   const allNotifs = open === "notifications" ? getAdminNotifications(10) : []
-  const recentSupport = open === "messages" ? ADMIN_SUPPORT_TICKETS.filter((t) => t.status === "new").slice(0, 5) : []
-  const recentFees = open === "fees" ? MOCK_FEE_REQUESTS.filter((r) => r.status === "pending").slice(0, 5) : []
-  const recentKyc = open === "kyc" ? MOCK_KYC_SUBMISSIONS.filter((k) => k.status === "pending").slice(0, 5) : []
+  // Production mode — empty until the real DB-backed notifications RPC ships.
+  const recentSupport: { id: string; user_name: string; subject: string; created_at: string }[] = []
+  const recentFees: { id: string; user_name: string; requested_units: number; payment_method: string }[] = []
+  const recentKyc: { id: string; user_name: string; city?: string; submitted_at: string }[] = []
 
   const handleNavigate = (href: string) => {
     setOpen(null)
@@ -197,35 +178,8 @@ export function AdminTopBar() {
 
       {/* ═══ Fees dropdown ═══ */}
       {open === "fees" && (
-        <Dropdown title={`💎 طلبات الرسوم (${counts.fees})`} onSeeAll={() => handleNavigate("/admin?tab=fee_units_requests")} side="right" rightOffset="ml-20 lg:ml-32">
-          {recentFees.length === 0 ? (
-            <div className="text-xs text-neutral-500 text-center py-6">لا طلبات معلّقة</div>
-          ) : (
-            <div>
-              {recentFees.map((r) => {
-                const pm = FEE_REQUEST_PAYMENT_LABELS[r.payment_method]
-                return (
-                  <div key={r.id} className="p-3 border-b border-white/[0.04] last:border-0">
-                    <div className="flex items-start gap-2">
-                      <span className="text-base flex-shrink-0">{pm.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs text-white font-bold truncate">{r.user_name}</div>
-                        <div className="text-[10px] text-neutral-500 mt-0.5">
-                          <span className="font-mono">{fmtNum(r.requested_units)}</span> وحدة · {pm.label}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => { showSuccess("✅ Quick approve"); }}
-                        className="text-[10px] bg-green-500/[0.15] border border-green-500/[0.3] text-green-400 px-2 py-1 rounded hover:bg-green-500/[0.2]"
-                      >
-                        ✓
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+        <Dropdown title={`💎 طلبات الرسوم (${counts.fees})`} onSeeAll={() => handleNavigate("/admin?tab=fees")} side="right" rightOffset="ml-20 lg:ml-32">
+          <div className="text-xs text-neutral-500 text-center py-6">لا طلبات معلّقة</div>
         </Dropdown>
       )}
 

@@ -1,26 +1,29 @@
 "use client"
 
 /**
- * Legacy "Alerts" panel — there's no dedicated alerts feed yet, so we
- * forward to the surfaces that actually surface admin-relevant events
- * (RequestsHub for things needing action, AuditLog for past events,
- * MarketHealth for live market warnings).
+ * Alerts hub — embeds every alerts-related sub-panel as a top tab.
  */
 
-import { LegacyForwarder } from "./LegacyForwarder"
+import { EmbeddedTabsHub } from "./EmbeddedTabsHub"
+import { AdminRequestsHubPanel } from "./AdminRequestsHubPanel"
+import { DisputesPanel } from "./DisputesPanel"
+import { MarketHealthPanel } from "./MarketHealthPanel"
+import { AuditLogPanel } from "./AuditLogPanel"
+import { MonitorPanel } from "./Monitor"
+import { NotificationsBroadcasterPanel } from "./NotificationsBroadcasterPanel"
 
 export function AlertsPanel() {
   return (
-    <LegacyForwarder
+    <EmbeddedTabsHub
       title="🚨 التنبيهات"
-      body="لا يوجد بَثّ تنبيهات موحَّد بعد. الأحداث المهمّة تُعرض في اللوحات التالية:"
-      targets={[
-        { tab: "requests_hub", icon: "🎯", label: "مركز الطلبات", hint: "كل ما يحتاج إجراء (KYC، نزاعات، إثباتات…)" },
-        { tab: "disputes", icon: "⚖️", label: "النزاعات المفتوحة", hint: "صفقات في حالة نزاع" },
-        { tab: "market_health", icon: "📊", label: "صحّة السوق", hint: "تحذيرات احتكار + ضغط بيع" },
-        { tab: "audit_log", icon: "📜", label: "سجلّ التدقيق", hint: "كل الأحداث الإدارية الأخيرة" },
-        { tab: "monitor", icon: "📡", label: "مراقبة السوق", hint: "حركة التداول الحيّة" },
-        { tab: "broadcaster", icon: "📢", label: "إذاعة الإشعارات", hint: "إرسال إشعار للمستخدمين" },
+      subtitle="كل الأحداث الإدارية المهمّة — موزّعة على لوحات متخصصة"
+      tabs={[
+        { key: "requests", label: "🎯 مركز الطلبات", hint: "كل ما يحتاج إجراء", Panel: AdminRequestsHubPanel },
+        { key: "disputes", label: "⚖️ النزاعات", hint: "صفقات في حالة نزاع", Panel: DisputesPanel },
+        { key: "health", label: "📊 صحّة السوق", hint: "تحذيرات احتكار + ضغط بيع", Panel: MarketHealthPanel },
+        { key: "audit", label: "📜 سجلّ التدقيق", hint: "الأحداث الإدارية الأخيرة", Panel: AuditLogPanel },
+        { key: "monitor", label: "📡 مراقبة السوق", hint: "حركة التداول الحيّة", Panel: MonitorPanel },
+        { key: "broadcast", label: "📢 إذاعة الإشعارات", hint: "إرسال إشعار للمستخدمين", Panel: NotificationsBroadcasterPanel },
       ]}
     />
   )

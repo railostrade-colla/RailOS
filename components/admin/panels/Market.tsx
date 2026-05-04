@@ -1,25 +1,29 @@
 "use client"
 
 /**
- * Legacy "Market" panel — superseded by dedicated DB-backed panels.
- * Forwards to AuctionsAdminPanel / RequestsHubPanel / ProjectsPanel /
- * MarketStatePanel / MarketHealthPanel.
+ * Market hub — embeds every market-related sub-panel as a top tab.
  */
 
-import { LegacyForwarder } from "./LegacyForwarder"
+import { EmbeddedTabsHub } from "./EmbeddedTabsHub"
+import { ProjectsPanel } from "./Projects"
+import { AuctionsAdminPanel } from "./AuctionsAdminPanel"
+import { AdminRequestsHubPanel } from "./AdminRequestsHubPanel"
+import { MarketStatePanel } from "./MarketState"
+import { MarketHealthPanel } from "./MarketHealthPanel"
+import { MarketSettingsAdvancedPanel } from "./MarketSettings"
 
 export function MarketPanel() {
   return (
-    <LegacyForwarder
+    <EmbeddedTabsHub
       title="◉ السوق والمزادات"
-      body="إدارة السوق توزّعت على لوحات مخصصة. اختر الوظيفة المطلوبة:"
-      targets={[
-        { tab: "projects", icon: "▣", label: "المشاريع + العروض", hint: "كل المشاريع وعروضها النشطة" },
-        { tab: "auctions_admin", icon: "🔨", label: "إدارة المزادات", hint: "إنشاء + متابعة + إنهاء مبكر" },
-        { tab: "requests_hub", icon: "🎯", label: "مركز الطلبات", hint: "الشراء المباشر + طلبات أخرى" },
-        { tab: "market_state", icon: "📈", label: "حالة السوق", hint: "إيقاف / تشغيل التداول" },
-        { tab: "market_health", icon: "📊", label: "صحّة السوق", hint: "ضغط الشراء + الاحتكار" },
-        { tab: "market_settings_advanced", icon: "⚙️", label: "إعدادات السوق المتقدمة", hint: "حدود الأسعار + القواعد" },
+      subtitle="كل ما يخصّ السوق — المشاريع، المزادات، الطلبات، الحالة، الصحّة"
+      tabs={[
+        { key: "projects", label: "▣ المشاريع", hint: "كل المشاريع وعروضها النشطة", Panel: ProjectsPanel },
+        { key: "auctions", label: "🔨 المزادات", hint: "إنشاء + متابعة + إنهاء مبكر", Panel: AuctionsAdminPanel },
+        { key: "requests", label: "🎯 مركز الطلبات", hint: "الشراء المباشر + طلبات أخرى", Panel: AdminRequestsHubPanel },
+        { key: "state", label: "🚦 حالة السوق", hint: "إيقاف / تشغيل التداول", Panel: MarketStatePanel },
+        { key: "health", label: "📊 صحّة السوق", hint: "ضغط الشراء + الاحتكار", Panel: MarketHealthPanel },
+        { key: "settings", label: "⚙️ إعدادات السوق", hint: "حدود الأسعار + القواعد", Panel: MarketSettingsAdvancedPanel },
       ]}
     />
   )

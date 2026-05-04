@@ -1,24 +1,29 @@
 "use client"
 
 /**
- * Legacy "System" panel — superseded by AdminUsersPanel +
- * MarketSettingsAdvancedPanel + FeeConfigAdvancedPanel + AuditLogPanel.
+ * System hub — embeds every system-settings sub-panel as a top tab.
  */
 
-import { LegacyForwarder } from "./LegacyForwarder"
+import { EmbeddedTabsHub } from "./EmbeddedTabsHub"
+import { AdminUsersPanel } from "./AdminUsersPanel"
+import { MarketSettingsAdvancedPanel } from "./MarketSettings"
+import { MarketStatePanel } from "./MarketState"
+import { FeeConfigAdvancedPanel } from "./FeeConfig"
+import { LevelSettingsPanel } from "./LevelSettingsPanel"
+import { AuditLogPanel } from "./AuditLogPanel"
 
 export function SystemPanel() {
   return (
-    <LegacyForwarder
+    <EmbeddedTabsHub
       title="⚙ النظام"
-      body="إعدادات النظام موزّعة على لوحات مخصصة، لكل واحدة صلاحياتها:"
-      targets={[
-        { tab: "admin_users", icon: "👑", label: "إدارة الإداريين", hint: "إنشاء + صلاحيات (super-admin only)" },
-        { tab: "market_settings_advanced", icon: "📈", label: "إعدادات السوق المتقدمة", hint: "حدود + قواعد التداول" },
-        { tab: "market_state", icon: "🚦", label: "حالة السوق", hint: "إيقاف / تشغيل / صيانة" },
-        { tab: "fee_config_advanced", icon: "💰", label: "إعدادات الرسوم", hint: "نسب + حدود الرسوم" },
-        { tab: "level_settings", icon: "⚙️", label: "إعدادات المستويات", hint: "متطلبات الترقية" },
-        { tab: "audit_log", icon: "📜", label: "سجلّ التدقيق", hint: "كل إجراءات الإداريين" },
+      subtitle="إعدادات النظام والإداريين والسجلات"
+      tabs={[
+        { key: "admins", label: "👑 الإداريون", hint: "إنشاء + صلاحيات (super-admin only)", Panel: AdminUsersPanel },
+        { key: "market_settings", label: "📈 إعدادات السوق", hint: "حدود + قواعد التداول", Panel: MarketSettingsAdvancedPanel },
+        { key: "market_state", label: "🚦 حالة السوق", hint: "إيقاف / تشغيل / صيانة", Panel: MarketStatePanel },
+        { key: "fee_config", label: "💰 إعدادات الرسوم", hint: "نسب + حدود الرسوم", Panel: FeeConfigAdvancedPanel },
+        { key: "levels", label: "⚙️ المستويات", hint: "متطلبات الترقية", Panel: LevelSettingsPanel },
+        { key: "audit", label: "📜 سجلّ التدقيق", hint: "كل إجراءات الإداريين", Panel: AuditLogPanel },
       ]}
     />
   )

@@ -1,22 +1,25 @@
 "use client"
 
 /**
- * Legacy "Shares" panel — superseded by ShareModificationPanel and the
- * project-wallet pages. Forwards to those.
+ * Shares hub — embeds every share-management sub-panel as a top tab.
  */
 
-import { LegacyForwarder } from "./LegacyForwarder"
+import { EmbeddedTabsHub } from "./EmbeddedTabsHub"
+import { ShareModificationPanel } from "./ShareModificationPanel"
+import { ProjectWalletsPanel } from "./ProjectWalletsPanel"
+import { ProjectsPanel } from "./Projects"
+import { AuctionsAdminPanel } from "./AuctionsAdminPanel"
 
 export function SharesPanel() {
   return (
-    <LegacyForwarder
+    <EmbeddedTabsHub
       title="◎ الحصص والتداول"
-      body="إدارة الحصص الآن مقسومة على لوحات مخصصة بصلاحيات مختلفة:"
-      targets={[
-        { tab: "share_modification", icon: "🔐", label: "تعديل الحصص (مزدوج التحقّق)", hint: "إصدار + إلغاء بـ super-admin code" },
-        { tab: "project_wallets", icon: "🏦", label: "محافظ المشاريع", hint: "العرض + الاحتياطي + إطلاق للسوق" },
-        { tab: "projects", icon: "▣", label: "المشاريع", hint: "تفاصيل المشروع + إجمالي الحصص" },
-        { tab: "auctions_admin", icon: "🔨", label: "المزادات", hint: "إدارة مزادات الحصص" },
+      subtitle="كل ما يخصّ إدارة الحصص — تعديل، محافظ، مشاريع، مزادات"
+      tabs={[
+        { key: "modification", label: "🔐 تعديل الحصص", hint: "إصدار + إلغاء بمصادقة مزدوجة", Panel: ShareModificationPanel },
+        { key: "wallets", label: "🏦 محافظ المشاريع", hint: "العرض + الاحتياطي + إطلاق للسوق", Panel: ProjectWalletsPanel },
+        { key: "projects", label: "▣ المشاريع", hint: "تفاصيل المشروع + إجمالي الحصص", Panel: ProjectsPanel },
+        { key: "auctions", label: "🔨 المزادات", hint: "إدارة مزادات الحصص", Panel: AuctionsAdminPanel },
       ]}
     />
   )

@@ -1,23 +1,26 @@
 "use client"
 
 /**
- * Legacy "Decisions Log" panel — superseded by AuditLogPanel which
- * reads the real `audit_log` table. This forwarder also points at
- * the related history surfaces.
+ * Decisions Log hub — embeds the audit-log + related history surfaces
+ * as top tabs.
  */
 
-import { LegacyForwarder } from "./LegacyForwarder"
+import { EmbeddedTabsHub } from "./EmbeddedTabsHub"
+import { AuditLogPanel } from "./AuditLogPanel"
+import { UserStatsPanel } from "./UserStatsPanel"
+import { CouncilAdminPanel } from "./CouncilAdminPanel"
+import { DisputesPanel } from "./DisputesPanel"
 
 export function LogPanel() {
   return (
-    <LegacyForwarder
+    <EmbeddedTabsHub
       title="📋 سجلّ القرارات"
-      body="سجلّ القرارات الموحَّد انتقل إلى لوحة سجلّ التدقيق المُغذَّاة من قاعدة البيانات."
-      targets={[
-        { tab: "audit_log", icon: "📜", label: "سجلّ التدقيق", hint: "كل إجراءات الإداريين (موافقات، رفض، تجميد…)" },
-        { tab: "user_stats", icon: "📋", label: "سجلّ المستخدم", hint: "تاريخ المستويات + الصفقات لكل مستخدم" },
-        { tab: "council_admin", icon: "🏛️", label: "قرارات المجلس", hint: "تصويتات + قرارات أعضاء المجلس" },
-        { tab: "disputes", icon: "⚖️", label: "أحكام النزاعات", hint: "نتائج النزاعات السابقة" },
+      subtitle="كل الأحداث الإدارية والقرارات في مكان واحد"
+      tabs={[
+        { key: "audit", label: "📜 سجلّ التدقيق", hint: "موافقات، رفض، تجميد…", Panel: AuditLogPanel },
+        { key: "user", label: "📋 سجلّ المستخدم", hint: "تاريخ المستويات + الصفقات", Panel: UserStatsPanel },
+        { key: "council", label: "🏛️ قرارات المجلس", hint: "تصويتات + قرارات الأعضاء", Panel: CouncilAdminPanel },
+        { key: "disputes", label: "⚖️ أحكام النزاعات", hint: "نتائج النزاعات", Panel: DisputesPanel },
       ]}
     />
   )
