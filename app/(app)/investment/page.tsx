@@ -159,10 +159,11 @@ export default function InvestmentPage() {
     }
   }, [])
 
-  // Override totals + historical chart with real DB values when the
-  // RPCs returned data. Per-row performance stays on mock until we
-  // expose a per-holding endpoint that includes the project metadata
-  // already shaped for the table.
+  // Override totals + historical chart + per-row performance with
+  // real DB values when the RPCs returned data. We map the DB
+  // `HoldingPerformance` shape into the mock `PerformanceRow` shape
+  // (which extends `Holding`) so the existing table/best/worst
+  // components don't change.
   const merged = useMemo(() => {
     const haveAnalytics = dbAnalytics && dbAnalytics.holdings_count > 0
     const haveHistory = dbHistory && dbHistory.length >= 2
@@ -180,6 +181,43 @@ export default function InvestmentPage() {
     if (!haveAnalytics) {
       return { ...analytics, historicalData: realHistorical }
     }
+
+    // Map DB per-holding performance → mock PerformanceRow shape.
+    const dbPerformance: PerformanceRow[] = dbAnalytics!.performance.map((p) => ({
+      id: p.holding_id,
+      project_id: p.project_id,
+      project: {
+        id: p.project_id,
+        name: p.project_name,
+        sector: p.project_sector,
+        share_price: p.live_price,
+      },
+      shares_owned: p.shares,
+      user_id: "me",
+      buy_price: p.buy_price,
+      current_value: p.current_value,
+      cost: p.cost,
+      profit: p.profit,
+      profitPercent: p.profit_percent,
+    }))
+
+    const dbBest = [...dbPerformance]
+      .sort((a, b) => b.profitPercent - a.profitPercent)
+      .slice(0, 3)
+    const dbWorst = [...dbPerformance]
+      .sort((a, b) => a.profitPercent - b.profitPercent)
+      .slice(0, 3)
+
+    // Sector distribution from DB breakdown (already pre-aggregated)
+    const dbSectors =
+      dbAnalytics!.sector_breakdown.length > 0
+        ? dbAnalytics!.sector_breakdown.map((s) => ({
+            name: s.sector,
+            value: s.value,
+            percent: s.percent,
+          }))
+        : analytics.sectorDistribution
+
     return {
       ...analytics,
       totalValue: dbAnalytics!.total_value,
@@ -187,6 +225,12 @@ export default function InvestmentPage() {
       totalProfitPercent: dbAnalytics!.total_profit_percent,
       totalCost: dbAnalytics!.total_cost,
       totalShares: dbAnalytics!.total_shares,
+      holdingsCount: dbAnalytics!.holdings_count,
+      sectorsCount: dbAnalytics!.sector_breakdown.length || analytics.sectorsCount,
+      performance: dbPerformance.length > 0 ? dbPerformance : analytics.performance,
+      bestPerformers: dbBest.length > 0 ? dbBest : analytics.bestPerformers,
+      worstPerformers: dbWorst.length > 0 ? dbWorst : analytics.worstPerformers,
+      sectorDistribution: dbSectors,
       historicalData: realHistorical,
     }
   }, [analytics, dbAnalytics, dbHistory])
@@ -217,9 +261,10 @@ export default function InvestmentPage() {
     ? ((chartData[chartData.length - 1].value - chartData[0].value) / chartData[0].value) * 100
     : 0
 
-  // Filtered + sorted performance table
+  // Filtered + sorted performance table — sourced from `merged` so it
+  // reflects DB rows when available, mock rows otherwise.
   const filteredPerformance = useMemo(() => {
-    let rows = analytics.performance.slice()
+    let rows = merged.performance.slice()
     if (search.trim()) {
       const q = search.toLowerCase()
       rows = rows.filter((r) => r.project.name.toLowerCase().includes(q) || r.project.sector.toLowerCase().includes(q))
@@ -239,16 +284,16 @@ export default function InvestmentPage() {
         break
     }
     return rows
-  }, [analytics.performance, search, sortBy])
+  }, [merged.performance, search, sortBy])
 
   // Best/worst by absolute profit (single number)
   const highestProfit = useMemo(
-    () => analytics.performance.reduce((max, r) => (r.profit > max ? r.profit : max), 0),
-    [analytics.performance],
+    () => merged.performance.reduce((max, r) => (r.profit > max ? r.profit : max), 0),
+    [merged.performance],
   )
   const lowestProfit = useMemo(
-    () => analytics.performance.reduce((min, r) => (r.profit < min ? r.profit : min), highestProfit),
-    [analytics.performance, highestProfit],
+    () => merged.performance.reduce((min, r) => (r.profit < min ? r.profit : min), highestProfit),
+    [merged.performance, highestProfit],
   )
 
   // Calculator
@@ -323,7 +368,7 @@ export default function InvestmentPage() {
               {/* Card 3 — Sectors */}
               <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3">
                 <div className="text-[10px] text-neutral-500 mb-1">القطاعات</div>
-                <div className="text-base font-bold text-white font-mono">{analytics.sectorsCount}</div>
+                <div className="text-base font-bold text-white font-mono">{merged.sectorsCount}</div>
                 <div className="text-[10px] text-neutral-500 mt-0.5">متنوّعة</div>
               </div>
 
@@ -436,7 +481,7 @@ export default function InvestmentPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={analytics.sectorDistribution}
+                      data={merged.sectorDistribution}
                       cx="50%"
                       cy="50%"
                       innerRadius={50}
@@ -444,7 +489,7 @@ export default function InvestmentPage() {
                       paddingAngle={2}
                       dataKey="value"
                     >
-                      {analytics.sectorDistribution.map((s) => (
+                      {merged.sectorDistribution.map((s) => (
                         <Cell
                           key={s.name}
                           fill={SECTOR_COLORS[s.name] ?? SECTOR_COLORS["أخرى"]}
@@ -468,7 +513,7 @@ export default function InvestmentPage() {
 
               {/* Legend */}
               <div className="space-y-1.5 mt-3">
-                {analytics.sectorDistribution.map((s) => (
+                {merged.sectorDistribution.map((s) => (
                   <div key={s.name} className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
                       <span
@@ -576,7 +621,7 @@ export default function InvestmentPage() {
             <div className="bg-green-400/[0.04] border border-green-400/20 rounded-2xl p-5 backdrop-blur">
               <SectionHeader title="🏆 أفضل أداء" subtitle="أكثر استثماراتك ربحاً" />
               <div className="space-y-2">
-                {analytics.bestPerformers.map((r) => (
+                {merged.bestPerformers.map((r) => (
                   <PerformerCard
                     key={"best-" + r.id}
                     row={r}
@@ -591,7 +636,7 @@ export default function InvestmentPage() {
             <div className="bg-orange-400/[0.04] border border-orange-400/20 rounded-2xl p-5 backdrop-blur">
               <SectionHeader title="📉 يحتاج اهتمامك" subtitle="استثمارات أقل ربحاً" />
               <div className="space-y-2">
-                {analytics.worstPerformers.map((r) => (
+                {merged.worstPerformers.map((r) => (
                   <PerformerCard
                     key={"worst-" + r.id}
                     row={r}
