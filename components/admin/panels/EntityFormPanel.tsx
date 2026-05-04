@@ -21,6 +21,13 @@ import { getAllCompanies } from "@/lib/data/companies"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { calculateTotalShares, calculateOfferedShares } from "@/lib/utils/finance"
 import { generateSymbol } from "@/lib/utils/symbol-generator"
+import {
+  loadCurrentDraft,
+  saveCurrentDraft,
+  clearCurrentDraft,
+  saveDraft as saveDraftToList,
+  type DraftKind,
+} from "@/lib/admin/entity-drafts"
 import type {
   ProjectEntityType,
   ProjectBuildStatus,
@@ -117,9 +124,21 @@ export interface EntityFormPanelProps {
   onDone?: () => void
 }
 
-export function EntityFormPanel({ mode, entityType, initialData, onDone }: EntityFormPanelProps) {
+export function EntityFormPanel({ mode, entityType, initialData: initialDataProp, onDone }: EntityFormPanelProps) {
   const isProject = entityType === "project"
   const isEdit = mode === "edit"
+  const draftKind: DraftKind = isProject ? "project" : "company"
+
+  // ─── Restore in-progress autosave on mount (create-mode only) ───
+  // If admin had typed something and navigated away, repopulate.
+  // Edit-mode never reads from autosave (uses passed-in initialData).
+  const initialData = useMemo<EntityFormData | undefined>(() => {
+    if (isEdit) return initialDataProp
+    if (initialDataProp) return initialDataProp
+    if (typeof window === "undefined") return undefined
+    return loadCurrentDraft(draftKind) ?? undefined
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // §1
   const [name, setName] = useState(initialData?.name ?? "")
@@ -256,6 +275,51 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
     setSymbol(next)
   }, [name, takenSymbols, symbolEditedManually])
 
+  // ─── Auto-save the in-progress form to localStorage ───
+  // Debounced 400ms so we don't write on every keystroke. Cleared
+  // explicitly on publish + on cancel (see Footer actions below).
+  // Edit-mode skips autosave because the source-of-truth is DB.
+  useEffect(() => {
+    if (isEdit) return
+    const t = setTimeout(() => {
+      saveCurrentDraft(draftKind, {
+        name, symbol, parent_company_id: companyId, sector,
+        short_desc: shortDesc, long_desc: longDesc,
+        vision: visionText, goals: goalsText, management: managementText,
+        logo_url: logoUrl, cover_url: coverUrl,
+        city, address, coords,
+        share_price: sharePrice, total_shares: totalShares,
+        offering_pct: offeringPct, ambassador_pct: ambassadorPct, reserve_pct: reservePct,
+        offering_start: offeringStart, offering_end: offeringEnd,
+        return_min: returnMin, return_max: returnMax,
+        duration_months: durationMonths, risk_level: riskLevel,
+        entity_type: entityTypeField, build_status: buildStatus,
+        quality, revenue, project_value: projectValue,
+        listing_percent: listingPercent, capital_needed: capitalNeeded,
+        capital_raised: capitalRaised, owner_percent: ownerPercent,
+        offer_percent: offerPercent, investment_type: investmentType,
+        distribution_type: distributionType, profit_source: profitSource,
+        owner_name: ownerName, owner_phone: ownerPhone, owner_email: ownerEmail,
+        detailed_address: detailedAddress, documents,
+      })
+    }, 400)
+    return () => clearTimeout(t)
+    // We intentionally watch every field — the effect rebuilds the
+    // payload from current state, which is cheap.
+  }, [
+    isEdit, draftKind,
+    name, symbol, companyId, sector, shortDesc, longDesc,
+    visionText, goalsText, managementText, logoUrl, coverUrl,
+    city, address, coords, sharePrice, totalShares,
+    offeringPct, ambassadorPct, reservePct,
+    offeringStart, offeringEnd, returnMin, returnMax,
+    durationMonths, riskLevel, entityTypeField, buildStatus,
+    quality, revenue, projectValue, listingPercent, capitalNeeded,
+    capitalRaised, ownerPercent, offerPercent, investmentType,
+    distributionType, profitSource, ownerName, ownerPhone, ownerEmail,
+    detailedAddress, documents,
+  ])
+
   // ─── Auto-calculations for preview cards ───
   const projectValueNum = Number(projectValue) || 0
   const listingPercentNum = Number(listingPercent) || 0
@@ -309,16 +373,56 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
     ? "استمارة شاملة لمشروع — يُنشأ wallet تلقائياً عند النشر"
     : "استمارة شاملة للشركة — حصص قابلة للتداول + wallet تلقائي"
 
+  /** Snapshot every form field into one EntityFormData blob. */
+  const collectFormData = (): EntityFormData => ({
+    name, symbol, parent_company_id: companyId, sector,
+    short_desc: shortDesc, long_desc: longDesc,
+    vision: visionText, goals: goalsText, management: managementText,
+    logo_url: logoUrl, cover_url: coverUrl,
+    city, address, coords,
+    share_price: sharePrice, total_shares: totalShares,
+    offering_pct: offeringPct, ambassador_pct: ambassadorPct, reserve_pct: reservePct,
+    offering_start: offeringStart, offering_end: offeringEnd,
+    return_min: returnMin, return_max: returnMax,
+    duration_months: durationMonths, risk_level: riskLevel,
+    entity_type: entityTypeField, build_status: buildStatus,
+    quality, revenue, project_value: projectValue,
+    listing_percent: listingPercent, capital_needed: capitalNeeded,
+    capital_raised: capitalRaised, owner_percent: ownerPercent,
+    offer_percent: offerPercent, investment_type: investmentType,
+    distribution_type: distributionType, profit_source: profitSource,
+    owner_name: ownerName, owner_phone: ownerPhone, owner_email: ownerEmail,
+    detailed_address: detailedAddress, documents,
+  })
+
   const handleSave = async (status: EntityStatus) => {
-    if (status === "active" && !isValid) {
-      showError("بعض الحقول الإجبارية فارغة أو النسب لا تساوي 100%")
+    // Drafts always succeed — promote the autosave into the saved-
+    // drafts list and clear the autosave so the form resets when
+    // the admin returns to it.
+    if (status === "draft" && !isEdit) {
+      const saved = saveDraftToList(draftKind, collectFormData())
+      clearCurrentDraft(draftKind)
+      showSuccess(`💾 تم حفظ المسودّة "${saved.title}" — تجدها في تبويب المسودّات`)
+      onDone?.()
       return
+    }
+
+    // Active publish: validate. If incomplete, ask the admin to
+    // confirm rather than blocking entirely (some fields may be
+    // legitimately empty for early-stage projects).
+    if (status === "active" && !isValid) {
+      const proceed = window.confirm(
+        "بعض الحقول الإجبارية فارغة أو النسب لا تساوي 100%.\n\n" +
+        "هل تريد المتابعة بالنشر مع البيانات الحالية؟"
+      )
+      if (!proceed) return
     }
     if (isEdit) {
       showSuccess(status === "active"
         ? `✅ تم حفظ التعديلات + نشر${isProject ? " المشروع" : " الشركة"}`
         : "💾 تم حفظ التعديلات كمسودّة"
       )
+      // Edit mode never had an autosave entry to clear.
       onDone?.()
       return
     }
@@ -348,6 +452,7 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
         return
       }
       showSuccess(`✅ تم نشر شركة "${name}" في قاعدة البيانات`)
+      clearCurrentDraft(draftKind)
       onDone?.()
       return
     }
@@ -402,6 +507,7 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
         return
       }
       showSuccess(`✅ تم نشر "${name}" + إنشاء 3 محافظ (عرض/سفير/احتياطي)`)
+      clearCurrentDraft(draftKind)
       onDone?.()
       return
     }
@@ -1130,7 +1236,19 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
       </div>
 
       {/* Footer actions */}
-      <div className="flex gap-2 mt-5">
+      <div className="flex gap-2 mt-5 flex-wrap">
+        <ActionBtn
+          label="✕ إلغاء"
+          color="red"
+          onClick={() => {
+            const ok = window.confirm(
+              "إلغاء الإنشاء سيمسح البيانات المُدخلة. متابعة؟",
+            )
+            if (!ok) return
+            clearCurrentDraft(draftKind)
+            onDone?.()
+          }}
+        />
         <ActionBtn label="💾 حفظ كمسودّة" color="gray" onClick={() => handleSave("draft")} />
         <ActionBtn
           label={
@@ -1138,13 +1256,17 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
               ? "✅ حفظ التعديلات + النشر"
               : isValid
                 ? `📤 نشر${isProject ? " المشروع" : " الشركة"} + إنشاء المحفظة`
-                : `📤 نشر (املأ كل الحقول)`
+                : `📤 نشر${isValid ? "" : " (مع تحذير)"}`
           }
           color="green"
           onClick={() => handleSave("active")}
-          disabled={!isValid}
         />
       </div>
+      {!isValid && !isEdit && (
+        <div className="mt-2 text-[10px] text-yellow-400 leading-relaxed">
+          ⚠️ بعض الحقول غير مكتملة. يمكنك المتابعة بالنشر — سيُطلب تأكيدك أولاً.
+        </div>
+      )}
     </div>
   )
 }

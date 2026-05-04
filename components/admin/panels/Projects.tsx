@@ -1,11 +1,16 @@
 "use client"
 
-import { useState } from "react"
-import { Plus, Edit2, Trash2, AlertTriangle, X, Eye } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Plus, Edit2, Trash2, AlertTriangle, X, Eye, FileEdit, Clock } from "lucide-react"
 import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, AdminEmpty, KPI, InnerTabBar } from "@/components/admin/ui"
 import { mockProjectsAdmin } from "@/lib/admin/mock-data"
 import { EntityFormPanel, type EntityFormData } from "./EntityFormPanel"
 import { EntityDetailsView } from "./EntityDetailsView"
+import {
+  loadDraftsList,
+  deleteDraft,
+  type SavedDraft,
+} from "@/lib/admin/entity-drafts"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -48,9 +53,29 @@ export function ProjectsPanel() {
   const [confirmText, setConfirmText] = useState("")
   const [selectedEntity, setSelectedEntity] = useState<EntityRow | null>(null)
 
+  // ─── Drafts (NEW Phase 10.25) ─────────────────────────────
+  // Loaded from localStorage on mount and refreshed whenever the
+  // tab changes to "drafts" so newly-saved drafts appear without
+  // a full page reload.
+  const [projectDrafts, setProjectDrafts] = useState<SavedDraft[]>([])
+  const [companyDrafts, setCompanyDrafts] = useState<SavedDraft[]>([])
+  const [draftToResume, setDraftToResume] = useState<SavedDraft | null>(null)
+  const [draftKindResume, setDraftKindResume] = useState<"project" | "company">("project")
+
+  const refreshDrafts = () => {
+    setProjectDrafts(loadDraftsList("project"))
+    setCompanyDrafts(loadDraftsList("company"))
+  }
+
+  useEffect(() => {
+    refreshDrafts()
+  }, [mainTab, filter])
+
   const backToList = () => {
     setMainTab("list")
     setSelectedEntity(null)
+    setDraftToResume(null)
+    refreshDrafts()
   }
 
   const filtered = mockProjectsAdmin.filter((p) => {
@@ -61,11 +86,14 @@ export function ProjectsPanel() {
     return true
   })
 
+  const draftsTotal = projectDrafts.length + companyDrafts.length
+
   const tabs = [
     { key: "all", label: "الكل", count: mockProjectsAdmin.length },
     { key: "project", label: "مشاريع", count: mockProjectsAdmin.filter((p) => p.entity_type === "project").length },
     { key: "company", label: "شركات", count: mockProjectsAdmin.filter((p) => p.entity_type === "company").length },
     { key: "pending", label: "قيد المراجعة", count: mockProjectsAdmin.filter((p) => p.status === "pending").length },
+    { key: "drafts", label: "📝 مسودّاتي", count: draftsTotal },
   ]
 
   const handleDelete = () => {
@@ -88,7 +116,16 @@ export function ProjectsPanel() {
             ← العودة لقائمة المشاريع
           </button>
         </div>
-        <EntityFormPanel mode="create" entityType="project" onDone={backToList} />
+        <EntityFormPanel
+          mode="create"
+          entityType="project"
+          initialData={
+            draftToResume && draftKindResume === "project"
+              ? draftToResume.data
+              : undefined
+          }
+          onDone={backToList}
+        />
       </div>
     )
   }
@@ -100,7 +137,16 @@ export function ProjectsPanel() {
             ← العودة لقائمة المشاريع
           </button>
         </div>
-        <EntityFormPanel mode="create" entityType="company" onDone={backToList} />
+        <EntityFormPanel
+          mode="create"
+          entityType="company"
+          initialData={
+            draftToResume && draftKindResume === "company"
+              ? draftToResume.data
+              : undefined
+          }
+          onDone={backToList}
+        />
       </div>
     )
   }
@@ -171,7 +217,23 @@ export function ProjectsPanel() {
 
       <InnerTabBar tabs={tabs} active={filter} onSelect={setFilter} />
 
-      {filtered.length === 0 ? (
+      {/* ─── Drafts tab — list saved drafts with resume/delete ─── */}
+      {filter === "drafts" ? (
+        <DraftsList
+          projectDrafts={projectDrafts}
+          companyDrafts={companyDrafts}
+          onResume={(draft, kind) => {
+            setDraftToResume(draft)
+            setDraftKindResume(kind)
+            setMainTab(kind === "project" ? "create_project" : "create_company")
+          }}
+          onDelete={(id, kind) => {
+            deleteDraft(kind, id)
+            refreshDrafts()
+            showSuccess("تم حذف المسودّة")
+          }}
+        />
+      ) : filtered.length === 0 ? (
         <AdminEmpty title="لا توجد نتائج" body="جرب تغيير الفلترة" />
       ) : (
         <Table>
@@ -290,6 +352,97 @@ export function ProjectsPanel() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── DraftsList sub-component ──────────────────────────────────
+
+interface DraftsListProps {
+  projectDrafts: SavedDraft[]
+  companyDrafts: SavedDraft[]
+  onResume: (draft: SavedDraft, kind: "project" | "company") => void
+  onDelete: (id: string, kind: "project" | "company") => void
+}
+
+function DraftsList({ projectDrafts, companyDrafts, onResume, onDelete }: DraftsListProps) {
+  const total = projectDrafts.length + companyDrafts.length
+  if (total === 0) {
+    return (
+      <AdminEmpty
+        title="لا توجد مسودّات محفوظة"
+        body="ابدأ بإنشاء مشروع أو شركة، واضغط '💾 حفظ كمسودّة' لتظهر هنا."
+      />
+    )
+  }
+
+  const fmtDate = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleString("ar-IQ", {
+        day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      })
+    } catch {
+      return iso
+    }
+  }
+
+  const renderSection = (
+    title: string,
+    icon: string,
+    drafts: SavedDraft[],
+    kind: "project" | "company",
+  ) => {
+    if (drafts.length === 0) return null
+    return (
+      <div className="mb-5">
+        <div className="text-xs font-bold text-neutral-300 mb-2 flex items-center gap-2">
+          <span>{icon}</span>
+          <span>{title}</span>
+          <span className="text-neutral-500">({drafts.length})</span>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+          {drafts.map((d) => (
+            <div
+              key={d.id}
+              className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3 hover:bg-white/[0.06] transition-colors"
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-white truncate">{d.title}</div>
+                  <div className="text-[10px] text-neutral-500 mt-0.5 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    آخر حفظ: {fmtDate(d.saved_at)}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => onResume(d, kind)}
+                  className="flex-1 bg-blue-400/[0.1] border border-blue-400/[0.25] text-blue-400 text-[11px] font-bold rounded-lg py-1.5 hover:bg-blue-400/[0.15] flex items-center justify-center gap-1.5"
+                >
+                  <FileEdit className="w-3 h-3" />
+                  استئناف
+                </button>
+                <button
+                  onClick={() => onDelete(d.id, kind)}
+                  className="bg-red-400/[0.1] border border-red-400/[0.25] text-red-400 text-[11px] font-bold rounded-lg px-3 py-1.5 hover:bg-red-400/[0.15]"
+                  title="حذف"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      {renderSection("مسودّات المشاريع", "🏗️", projectDrafts, "project")}
+      {renderSection("مسودّات الشركات", "🏢", companyDrafts, "company")}
     </div>
   )
 }
