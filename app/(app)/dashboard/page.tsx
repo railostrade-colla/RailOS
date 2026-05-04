@@ -132,20 +132,21 @@ function Sparkline({ basePrice, height = 50 }: { basePrice: number; height?: num
   )
 }
 
-// ─── 12-month volume mock data ──────────────────────────────────
-const VOLUME_HISTORY = [
-  { month: "يناير", volume: 1.8 },
-  { month: "فبراير", volume: 2.0 },
-  { month: "مارس", volume: 1.7 },
-  { month: "أبريل", volume: 2.3 },
-  { month: "مايو", volume: 2.1 },
-  { month: "يونيو", volume: 2.6 },
-  { month: "يوليو", volume: 2.4 },
-  { month: "أغسطس", volume: 2.8 },
-  { month: "سبتمبر", volume: 2.5 },
-  { month: "أكتوبر", volume: 3.0 },
-  { month: "نوفمبر", volume: 2.7 },
-  { month: "ديسمبر", volume: 2.4 },
+// 12-month volume — populated from DB analytics when wired (currently
+// renders a flat zero baseline so the chart doesn't show fake demand).
+const VOLUME_HISTORY: Array<{ month: string; volume: number }> = [
+  { month: "يناير", volume: 0 },
+  { month: "فبراير", volume: 0 },
+  { month: "مارس", volume: 0 },
+  { month: "أبريل", volume: 0 },
+  { month: "مايو", volume: 0 },
+  { month: "يونيو", volume: 0 },
+  { month: "يوليو", volume: 0 },
+  { month: "أغسطس", volume: 0 },
+  { month: "سبتمبر", volume: 0 },
+  { month: "أكتوبر", volume: 0 },
+  { month: "نوفمبر", volume: 0 },
+  { month: "ديسمبر", volume: 0 },
 ]
 
 // ─── Quick action items (4 only — no send/receive) ──────────────
@@ -172,7 +173,7 @@ const QUICK_ACTIONS = [
     label: "مزاد",
     path: "/auctions",
     icon: Gavel,
-    badge: 2,
+    badge: 0,
     iconColor: "text-orange-400",
     iconBg: "bg-orange-400/10",
     iconBorder: "border-orange-400/30",
@@ -189,28 +190,25 @@ const QUICK_ACTIONS = [
 ] as const
 
 // ════════════════════════════════════════════════════════════════
-// Main page
+// Main page — production mode (no mock data)
 // ════════════════════════════════════════════════════════════════
 export default function DashboardPage() {
   const router = useRouter()
-  const [selectedProject, setSelectedProject] = useState<Project>(mockProjects[0])
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [showDropdown, setShowDropdown] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [discoverTab, setDiscoverTab] = useState<"trending" | "closing" | "new">("trending")
 
-  // ─── Mock-derived defaults (used as fallbacks during load) ────
-  const mockPortfolio = useMemo(() => getPortfolioSummary("me"), [])
-  const alerts = useMemo(() => getActiveAlerts("me"), [])
-  const closing = useMemo(() => getClosingSoonProjects(15).slice(0, 3), [])
-  const mockSectorsCount = useMemo(
-    () => new Set(HOLDINGS.filter((h) => (h.user_id ?? "me") === "me").map((h) => h.project.sector)).size,
-    [],
-  )
+  // ─── Production defaults (zero state — no mock fallbacks) ─────
+  const alerts: Array<{ id: string; type: string; title: string; href: string }> = []
+  const closing: ProjectCardData[] = []
 
-  // Live data (DB-backed with mock fallback)
-  const [trending, setTrending] = useState<ProjectCardData[]>(getTrendingProjectsMock().slice(0, 3))
-  const [newProjects, setNewProjects] = useState<ProjectCardData[]>(getNewProjectsMock().slice(0, 3))
-  const [news, setNews] = useState(getRecentNews(4))
+  // Live data — populated from DB only
+  const [trending, setTrending] = useState<ProjectCardData[]>([])
+  const [newProjects, setNewProjects] = useState<ProjectCardData[]>([])
+  const [news, setNews] = useState<Array<{
+    id: string; icon: string; title: string; date: string; is_new: boolean
+  }>>([])
   const [loading, setLoading] = useState(true)
 
   // Phase B — DB-backed user/portfolio/projects (mock fallback per-field)
@@ -234,38 +232,25 @@ export default function DashboardPage() {
       .then(([t, n, ns, prof, port, allProj, ads]) => {
         if (cancelled) return
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (t.length > 0) setTrending(t as any as ProjectCardData[])
+        setTrending(t as any as ProjectCardData[])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (n.length > 0) setNewProjects(n as any as ProjectCardData[])
-        if (ns.length > 0) {
-          setNews(ns.map((row) => ({
-            id: row.id,
-            icon: row.news_type === "feature" ? "🎉" : row.news_type === "promo" ? "🎁" : row.news_type === "alert" ? "⚠️" : "📢",
-            title: row.title,
-            date: row.published_at?.split("T")[0] ?? "—",
-            is_new: row.published_at ? (Date.now() - new Date(row.published_at).getTime()) < 7 * 86_400_000 : false,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          })) as any)
-        }
+        setNewProjects(n as any as ProjectCardData[])
+        setNews(ns.map((row) => ({
+          id: row.id,
+          icon: row.news_type === "feature" ? "🎉" : row.news_type === "promo" ? "🎁" : row.news_type === "alert" ? "⚠️" : "📢",
+          title: row.title,
+          date: row.published_at?.split("T")[0] ?? "—",
+          is_new: row.published_at ? (Date.now() - new Date(row.published_at).getTime()) < 7 * 86_400_000 : false,
+        })))
 
         if (prof) setUserProfile(prof)
         if (port) setDbPortfolio(port.summary)
+        setDbProjects(allProj)
+        // Auto-select first DB project if none chosen yet.
         if (allProj.length > 0) {
-          setDbProjects(allProj)
-          // Promote the first real project to the selector if we still
-          // have the placeholder mock selection.
-          setSelectedProject((cur) =>
-            cur && cur.id === mockProjects[0]?.id ? allProj[0] : cur,
-          )
+          setSelectedProject((cur) => cur ?? allProj[0])
         }
-        // Map DB ads into the legacy mock Ad shape the slider expects.
-        // The `ads` table doesn't have `icon`/`action_label`/`subtitle`
-        // columns, so we apply sensible defaults for each. `link_type`
-        // is derived from the URL (anything starting with http(s) is
-        // treated as external).
-        if (ads.length > 0) {
-          setDbAds(ads.map(dbAdToMockShape))
-        }
+        setDbAds(ads.map(dbAdToMockShape))
         setLoading(false)
       })
       .catch(() => {
@@ -275,32 +260,30 @@ export default function DashboardPage() {
     return () => { cancelled = true }
   }, [])
 
-  // ─── Resolved values (real → fallback to mock) ────────────────
+  // ─── Resolved values (production — DB only, zero defaults) ────
   const userName =
     userProfile?.full_name?.trim() ||
     userProfile?.username?.trim() ||
-    CURRENT_USER.name
+    "—"
   const userLevel = (
     userProfile?.level && (userProfile.level in LEVEL_LABELS)
       ? userProfile.level
-      : CURRENT_USER.level
+      : "starter"
   ) as keyof typeof LEVEL_LABELS
 
   const portfolio = dbPortfolio
     ? {
         totalValue: dbPortfolio.totalValue,
-        // We don't have per-day P&L wired up yet — show 0 / 0% rather
-        // than fake mock numbers when the user has real holdings.
         dailyChange: 0,
         dailyChangePercent: 0,
         holdingsCount: dbPortfolio.holdingsCount,
       }
-    : mockPortfolio
+    : { totalValue: 0, dailyChange: 0, dailyChangePercent: 0, holdingsCount: 0 }
 
-  const sectorsCount = dbPortfolio ? dbPortfolio.sectorsCount : mockSectorsCount
+  const sectorsCount = dbPortfolio ? dbPortfolio.sectorsCount : 0
 
-  // Use real projects for the selector dropdown when available.
-  const allProjects = dbProjects.length > 0 ? dbProjects : mockProjects
+  // DB projects only — no mock fallback.
+  const allProjects = dbProjects
 
   const filteredProjects = allProjects.filter(
     (p) => !searchQuery.trim() || p.name.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -316,7 +299,8 @@ export default function DashboardPage() {
   return (
     <AppLayout>
       <div className="relative">
-{/* Sticky Project Selector (kept — global context) */}
+{/* Sticky Project Selector — hidden when no projects exist */}
+        {selectedProject && (
         <div className="sticky top-[60px] lg:top-[68px] z-30 bg-black/85 backdrop-blur-xl border-b border-white/[0.1] px-4 lg:px-8 py-3">
           <div className="relative max-w-2xl">
             <button
@@ -379,6 +363,7 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+        )}
 
         <div className="px-4 lg:px-8 py-6 max-w-screen-2xl mx-auto">
 
@@ -506,6 +491,7 @@ export default function DashboardPage() {
           )}
 
           {/* ═════════════ § 4: Active Project ═════════════ */}
+          {selectedProject ? (
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-7 backdrop-blur">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-1.5">
@@ -540,7 +526,7 @@ export default function DashboardPage() {
               {[
                 { label: "حجم تداول الحصة", value: fmtCompact((getProjectCurrentPrice(selectedProject.id) || selectedProject.share_price) * (selectedProject.total_shares - selectedProject.available_shares)), unit: "IQD" },
                 { label: "حصص الشركة", value: selectedProject.available_shares.toLocaleString("en-US"), unit: "SHR" },
-                { label: "الحصص المتداولة", value: "320", unit: "SHR", highlight: true },
+                { label: "الحصص المتداولة", value: "0", unit: "SHR", highlight: true },
                 { label: "القيمة السوقية", value: fmtCompact(selectedProject.project_value ?? 0), unit: "IQD" },
               ].map((item, i) => (
                 <div
@@ -574,6 +560,15 @@ export default function DashboardPage() {
               <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
             </button>
           </div>
+          ) : (
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-8 mb-7 text-center">
+              <div className="text-4xl mb-3 opacity-50">🏗️</div>
+              <div className="text-sm text-white font-bold mb-1">لا توجد مشاريع بعد</div>
+              <div className="text-[11px] text-neutral-500">
+                ستظهر تفاصيل سعر الحصص والتداول هنا فور إطلاق أول مشروع.
+              </div>
+            </div>
+          )}
 
           {/* ═════════════ § 5: Volume Chart (moved from bottom) ═════════════ */}
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-7 backdrop-blur">
@@ -583,21 +578,21 @@ export default function DashboardPage() {
               action={{ label: "تفاصيل أكثر", href: "/market" }}
             />
 
-            {/* Mini stats */}
+            {/* Mini stats — derived from real data when available, else 0 */}
             <div className="grid grid-cols-3 gap-2 mb-4">
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
                 <div className="text-[10px] text-neutral-500 mb-1">القيمة الإجمالية</div>
                 <div className="text-base font-bold text-white font-mono">
-                  {fmtCompact(mockStats.volume)} <span className="text-[10px] text-neutral-500 font-sans">IQD</span>
+                  {fmtCompact(0)} <span className="text-[10px] text-neutral-500 font-sans">IQD</span>
                 </div>
               </div>
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
                 <div className="text-[10px] text-neutral-500 mb-1">مشاريع نشطة</div>
-                <div className="text-base font-bold text-white font-mono">{mockStats.projects}</div>
+                <div className="text-base font-bold text-white font-mono">{dbProjects.length}</div>
               </div>
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
                 <div className="text-[10px] text-neutral-500 mb-1">حصص متداولة</div>
-                <div className="text-base font-bold text-white font-mono">{mockStats.shares.toLocaleString("en-US")}</div>
+                <div className="text-base font-bold text-white font-mono">0</div>
               </div>
             </div>
 
@@ -643,17 +638,19 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ═════════════ § 6: Ads banner — standalone container ═════════════ */}
-          <div className="bg-gradient-to-br from-purple-400/[0.06] via-blue-400/[0.04] to-transparent border border-purple-400/20 rounded-2xl p-5 mb-7 backdrop-blur">
-            <AdsSlider
-              ads={dbAds.length > 0 ? dbAds : mockAds}
-              autoPlayInterval={5000}
-              onAdClick={(ad) => {
-                if (ad.link_type === "internal" && ad.link_url) router.push(ad.link_url)
-                else if (ad.link_type === "external" && ad.link_url) window.open(ad.link_url, "_blank")
-              }}
-            />
-          </div>
+          {/* ═════════════ § 6: Ads banner — only when real ads exist ═════════════ */}
+          {dbAds.length > 0 && (
+            <div className="bg-gradient-to-br from-purple-400/[0.06] via-blue-400/[0.04] to-transparent border border-purple-400/20 rounded-2xl p-5 mb-7 backdrop-blur">
+              <AdsSlider
+                ads={dbAds}
+                autoPlayInterval={5000}
+                onAdClick={(ad) => {
+                  if (ad.link_type === "internal" && ad.link_url) router.push(ad.link_url)
+                  else if (ad.link_type === "external" && ad.link_url) window.open(ad.link_url, "_blank")
+                }}
+              />
+            </div>
+          )}
 
           {/* ═════════════ § 7: Discover (col-span-2) + News (col-span-1) ═════════════ */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-7">
