@@ -16,6 +16,7 @@ import { ActionBtn } from "@/components/admin/ui"
 import { ALL_COMPANIES } from "@/lib/mock-data/companies"
 import { createProjectWallet } from "@/lib/mock-data/projectWallets"
 import { adminCreateCompany } from "@/lib/data/companies"
+import { adminCreateProject } from "@/lib/data/projects"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { calculateTotalShares, calculateOfferedShares } from "@/lib/utils/finance"
 import type {
@@ -112,7 +113,10 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
 
   // §1
   const [name, setName] = useState(initialData?.name ?? "")
-  const [companyId, setCompanyId] = useState<string>(initialData?.parent_company_id ?? (isProject ? (ALL_COMPANIES[0]?.id || "") : ""))
+  // Default to "بلا" (empty string) for new projects so the admin
+  // explicitly opts into a parent company instead of inheriting the
+  // first one in the list by mistake.
+  const [companyId, setCompanyId] = useState<string>(initialData?.parent_company_id ?? "")
   const [sector, setSector] = useState<EntitySector>(initialData?.sector ?? "real_estate")
   const [shortDesc, setShortDesc] = useState(initialData?.short_desc ?? "")
   const [longDesc, setLongDesc] = useState(initialData?.long_desc ?? "")
@@ -198,7 +202,8 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
 
   const isValid =
     name.trim().length >= 3 &&
-    (!isProject || !!companyId) &&  // companyId only required for projects
+    // companyId is now OPTIONAL for projects — empty string means
+    // "بلا (مشروع مباشر)" and is allowed.
     shortDesc.trim().length >= 20 &&
     sharePriceNum > 0 &&
     totalSharesNum > 0 &&
@@ -229,8 +234,7 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
       return
     }
 
-    // ── Phase 8.3: companies create now writes to DB. Projects still
-    //    use the legacy mock flow (out of scope for this phase). ──
+    // ── Companies → DB ──
     if (!isProject && status === "active") {
       const result = await adminCreateCompany({
         name: name.trim(),
@@ -259,15 +263,55 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
       return
     }
 
-    // Legacy fallback: projects + draft companies stay on mock flow
-    // until a future migration rewires them.
-    if (status === "active") {
-      const newId = `${isProject ? "p" : "c"}-${Date.now()}`
-      const wallet = createProjectWallet(newId, name)
-      showSuccess(`✅ تم نشر "${name}" + إنشاء محفظة (${wallet.id})`)
-    } else {
-      showSuccess("💾 تم حفظ المسودّة")
+    // ── Projects → DB (Phase 10.20) ──
+    if (isProject && status === "active") {
+      const result = await adminCreateProject({
+        name: name.trim(),
+        short_description: shortDesc.trim(),
+        description: longDesc.trim() || shortDesc.trim(),
+        project_type: sector,
+        share_price: Number(sharePrice) || 0,
+        total_shares: Number(totalShares) || 0,
+        offering_percentage: 90,
+        ambassador_percentage: 2,
+        reserve_percentage: 8,
+        location_city: city.trim() || undefined,
+        offering_start_date: offeringStart || undefined,
+        offering_end_date: offeringEnd || undefined,
+        // companyId === "" means "بلا (مشروع مباشر)" → null in DB
+        company_id: companyId.trim() ? companyId : null,
+        status: "active",
+      })
+      if (!result.success) {
+        const map: Record<string, string> = {
+          unauthenticated: "سجّل دخولك أولاً",
+          not_admin: "صلاحياتك لا تسمح",
+          invalid_name: "اسم المشروع مطلوب",
+          invalid_share_price: "سعر الحصة غير صحيح",
+          invalid_total_shares: "عدد الحصص غير صحيح",
+          company_not_found: "الشركة الأمّ غير موجودة",
+          missing_table: "الجداول غير منشورة بعد — شغّل migrations المرحلة 10",
+          rls: "صلاحياتك لا تسمح",
+        }
+        showError(map[result.reason ?? ""] ?? `فشل إنشاء المشروع${result.error ? ": " + result.error : ""}`)
+        return
+      }
+      showSuccess(`✅ تم نشر "${name}" + إنشاء 3 محافظ (عرض/سفير/احتياطي)`)
+      onDone?.()
+      return
     }
+
+    // Drafts stay on the legacy mock flow until we add a draft RPC.
+    if (status === "draft") {
+      showSuccess("💾 تم حفظ المسودّة")
+      onDone?.()
+      return
+    }
+
+    // Fallback (shouldn't reach here)
+    const newId = `${isProject ? "p" : "c"}-${Date.now()}`
+    const wallet = createProjectWallet(newId, name)
+    showSuccess(`✅ تم نشر "${name}" + إنشاء محفظة (${wallet.id})`)
     onDone?.()
   }
 
@@ -294,13 +338,18 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
             </div>
             {isProject ? (
               <div>
-                <label className="text-xs text-neutral-400 mb-1.5 block">الشركة الأمّ *</label>
+                <label className="text-xs text-neutral-400 mb-1.5 block">الشركة الأمّ</label>
                 <select
                   value={companyId} onChange={(e) => setCompanyId(e.target.value)}
                   className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
                 >
+                  {/* خيار "بلا" — مشروع مباشر بدون شركة أم. القيمة "" تُحفظ كـ NULL في DB. */}
+                  <option value="">— بلا (مشروع مباشر) —</option>
                   {ALL_COMPANIES.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
+                <div className="text-[10px] text-neutral-500 mt-1.5">
+                  اختر "بلا" إذا كان المشروع غير تابع لأي شركة موجودة على المنصة.
+                </div>
               </div>
             ) : (
               <div>

@@ -68,6 +68,97 @@ export async function getAllProjects(): Promise<Project[]> {
   }, 30_000)
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Admin: create a new project (Phase 10.20)
+// ──────────────────────────────────────────────────────────────────────
+
+export interface AdminCreateProjectInput {
+  name: string
+  short_description: string
+  description: string
+  project_type: string
+  share_price: number
+  total_shares: number
+  offering_percentage?: number
+  ambassador_percentage?: number
+  reserve_percentage?: number
+  location_city?: string
+  offering_start_date?: string
+  offering_end_date?: string
+  /** null = "بلا (مشروع مباشر)" — the project has no parent company. */
+  company_id?: string | null
+  status?: "draft" | "active"
+}
+
+export interface AdminCreateProjectResult {
+  success: boolean
+  reason?: string
+  error?: string
+  project_id?: string
+  slug?: string
+  offering_shares?: number
+  ambassador_shares?: number
+  reserve_shares?: number
+}
+
+export async function adminCreateProject(
+  input: AdminCreateProjectInput,
+): Promise<AdminCreateProjectResult> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("admin_create_project", {
+      p_name: input.name,
+      p_short_description: input.short_description,
+      p_description: input.description,
+      p_project_type: input.project_type,
+      p_share_price: input.share_price,
+      p_total_shares: input.total_shares,
+      p_offering_percentage: input.offering_percentage ?? 90,
+      p_ambassador_percentage: input.ambassador_percentage ?? 2,
+      p_reserve_percentage: input.reserve_percentage ?? 8,
+      p_location_city: input.location_city ?? null,
+      p_offering_start_date: input.offering_start_date ?? null,
+      p_offering_end_date: input.offering_end_date ?? null,
+      p_company_id: input.company_id ?? null,
+      p_status: input.status ?? "draft",
+    })
+    if (error) {
+      const code = error.code ?? ""
+      const msg = error.message ?? ""
+      if (code === "42883" || code === "42P01") {
+        return { success: false, reason: "missing_table", error: msg }
+      }
+      if (code === "42501") return { success: false, reason: "rls", error: msg }
+      return { success: false, reason: "unknown", error: msg }
+    }
+    const result = (data ?? {}) as AdminCreateProjectResult
+    if (!result.success) {
+      return { success: false, reason: result.reason ?? result.error ?? "unknown" }
+    }
+    // Invalidate cached project lists so the new row shows immediately
+    invalidateProjectCaches()
+    return result
+  } catch (err) {
+    return {
+      success: false,
+      reason: "unknown",
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
+/** Drop cached project lists — call after any admin mutation. */
+function invalidateProjectCaches(): void {
+  // Lazy import to keep the module tree-shake friendly.
+  import("./cache").then(({ invalidateCache }) => {
+    invalidateCache("projects:active:all")
+    for (let i = 1; i <= 12; i++) {
+      invalidateCache(`projects:new:${i}`)
+      invalidateCache(`projects:trending:${i}`)
+    }
+  })
+}
+
 export async function getProjectById(id: string): Promise<Project | null> {
   try {
     const supabase = createClient()
