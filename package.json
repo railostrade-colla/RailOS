@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "types:db": "supabase gen types typescript --linked --schema public > types/database.ts",
+    "types:db:remote": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID --schema public > types/database.ts"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.51.0",

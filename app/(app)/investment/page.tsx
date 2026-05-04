@@ -38,7 +38,9 @@ import {
 } from "@/lib/mock-data"
 import {
   getMyPortfolioAnalytics,
+  getMyPortfolioHistory,
   type PortfolioAnalytics,
+  type PortfolioHistoryPoint,
 } from "@/lib/data/portfolio-analytics"
 import { fmtLimit } from "@/lib/utils/contractLimits"
 import { cn } from "@/lib/utils/cn"
@@ -99,10 +101,15 @@ export default function InvestmentPage() {
 
   // ─── Phase 10: real DB analytics with mock fallback ─────
   const [dbAnalytics, setDbAnalytics] = useState<PortfolioAnalytics | null>(null)
+  const [dbHistory, setDbHistory] = useState<PortfolioHistoryPoint[] | null>(null)
   useEffect(() => {
     let cancelled = false
     getMyPortfolioAnalytics().then((a) => {
       if (!cancelled) setDbAnalytics(a)
+    })
+    // Fetch up to 12 months for the chart; the range selector slices.
+    getMyPortfolioHistory(12).then((h) => {
+      if (!cancelled) setDbHistory(h)
     })
     return () => { cancelled = true }
   }, [])
@@ -152,20 +159,37 @@ export default function InvestmentPage() {
     }
   }, [])
 
-  // Override totals with real DB values when the RPC returned data.
-  // We keep mock historicalData / per-row performance because those
-  // require price_history which isn't yet aggregated server-side.
+  // Override totals + historical chart with real DB values when the
+  // RPCs returned data. Per-row performance stays on mock until we
+  // expose a per-holding endpoint that includes the project metadata
+  // already shaped for the table.
   const merged = useMemo(() => {
-    if (!dbAnalytics || dbAnalytics.holdings_count === 0) return analytics
+    const haveAnalytics = dbAnalytics && dbAnalytics.holdings_count > 0
+    const haveHistory = dbHistory && dbHistory.length >= 2
+
+    // Map the DB history shape ({ month: 'YYYY-MM', value }) to the
+    // mock shape ({ month: 'MM', value }) so the chart renderers
+    // don't change.
+    const realHistorical = haveHistory
+      ? dbHistory!.map((p) => ({
+          month: p.month.slice(5),
+          value: p.value,
+        }))
+      : analytics.historicalData
+
+    if (!haveAnalytics) {
+      return { ...analytics, historicalData: realHistorical }
+    }
     return {
       ...analytics,
-      totalValue: dbAnalytics.total_value,
-      totalProfit: dbAnalytics.total_profit,
-      totalProfitPercent: dbAnalytics.total_profit_percent,
-      totalCost: dbAnalytics.total_cost,
-      totalShares: dbAnalytics.total_shares,
+      totalValue: dbAnalytics!.total_value,
+      totalProfit: dbAnalytics!.total_profit,
+      totalProfitPercent: dbAnalytics!.total_profit_percent,
+      totalCost: dbAnalytics!.total_cost,
+      totalShares: dbAnalytics!.total_shares,
+      historicalData: realHistorical,
     }
-  }, [analytics, dbAnalytics])
+  }, [analytics, dbAnalytics, dbHistory])
 
   const distributions = useMemo(() => getDistributionsByUser("me"), [])
   const totalDistributions = useMemo(() => getTotalDistributions("me"), [])
@@ -184,8 +208,8 @@ export default function InvestmentPage() {
   // Sliced historical data based on range
   const chartData = useMemo(() => {
     const months = RANGES.find((r) => r.id === range)?.months ?? 12
-    return analytics.historicalData.slice(-months)
-  }, [analytics.historicalData, range])
+    return merged.historicalData.slice(-months)
+  }, [merged.historicalData, range])
 
   const chartHigh = chartData.length ? Math.max(...chartData.map((d) => d.value)) : 0
   const chartLow = chartData.length ? Math.min(...chartData.map((d) => d.value)) : 0

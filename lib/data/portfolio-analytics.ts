@@ -51,6 +51,35 @@ export async function getMyPortfolioAnalytics(): Promise<PortfolioAnalytics | nu
   }
 }
 
+export interface PortfolioHistoryPoint {
+  month: string
+  value: number
+}
+
+export interface PortfolioHistory {
+  success: boolean
+  months: number
+  history: PortfolioHistoryPoint[]
+}
+
+/** Monthly portfolio value buckets for the past N months (1-36). */
+export async function getMyPortfolioHistory(
+  months = 12,
+): Promise<PortfolioHistoryPoint[] | null> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("get_my_portfolio_history", {
+      p_months: months,
+    })
+    if (error || !data) return null
+    const result = data as PortfolioHistory
+    if (!result.success) return null
+    return result.history ?? []
+  } catch {
+    return null
+  }
+}
+
 export interface CreateListingResult {
   success: boolean
   reason?: string
