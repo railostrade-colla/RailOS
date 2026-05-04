@@ -139,13 +139,94 @@ function dateOnly(s: string | null): string {
 // ─── Reads ───────────────────────────────────────────────────
 
 /**
+ * Shape returned by the `get_ambassadors_admin` RPC (Phase 10.38).
+ * Profile fields surfaced flat — no PostgREST FK join needed.
+ */
+interface AmbassadorRpcRow extends Omit<AmbassadorRow, "profile"> {
+  user_name: string | null
+  user_handle: string | null
+  user_level: string | null
+}
+
+/**
  * Fetch all ambassador application rows. Admins see everything (RLS
- * via Phase-AA migration); non-admins get an empty array — same
- * surface as missing tables.
+ * via Phase-AA migration); non-admins get an empty array.
+ *
+ * Strategy: try the Phase 10.38 RPC first (does the SQL join + bypasses
+ * PostgREST FK inference), fall back to the direct PostgREST query for
+ * deployments where the migration isn't applied yet.
  */
 export async function getAmbassadorsAdmin(
   limit: number = 200,
 ): Promise<AmbassadorAdmin[]> {
+  // ─── Path 1: RPC (preferred — robust against missing FK constraints) ───
+  try {
+    const supabase = createClient()
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      "get_ambassadors_admin",
+      { p_limit: limit },
+    )
+    if (!rpcError && Array.isArray(rpcData)) {
+      const out: AmbassadorAdmin[] = []
+      for (const row of rpcData as AmbassadorRpcRow[]) {
+        const userName = row.user_name?.trim() || "—"
+        const handle = row.user_handle?.trim() || ""
+        const status = mapStatus(row.application_status)
+        const links = extractLinks(row.social_media_links)
+        const social = links.map((l) => ({
+          platform: l.platform as
+            | "twitter" | "instagram" | "facebook" | "telegram"
+            | "tiktok" | "linkedin" | "other",
+          url: l.url,
+        }))
+        out.push({
+          id: row.id,
+          user_id: row.user_id ?? "",
+          user_name: userName,
+          user_email: handle ? `@${handle}` : "—",
+          user_level: mapLevel(row.user_level),
+          application_status: status,
+          is_active: row.is_active === true,
+          application_reason: row.application_reason ?? "",
+          experience: row.application_experience ?? "",
+          social_media_links: social,
+          total_referrals: num(row.total_referrals),
+          total_signups: num(row.total_referrals),
+          total_first_trades: num(row.successful_referrals),
+          total_rewards_earned: num(row.total_rewards_earned),
+          applied_at: dateOnly(row.applied_at),
+          approved_at: row.approved_at ? dateOnly(row.approved_at) : undefined,
+          approved_by: row.approved_by ?? undefined,
+          suspended_at:
+            status === "suspended" && row.revoked_at
+              ? dateOnly(row.revoked_at)
+              : undefined,
+          suspension_reason:
+            status === "suspended"
+              ? row.revoke_reason ?? row.admin_notes ?? undefined
+              : undefined,
+          rejection_reason:
+            status === "rejected"
+              ? row.admin_notes ?? row.revoke_reason ?? undefined
+              : undefined,
+        })
+      }
+      return out
+    }
+    // RPC missing or errored — fall through to legacy path.
+    if (rpcError) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[ambassadors-admin] RPC get_ambassadors_admin not available, falling back:",
+        rpcError.message,
+      )
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("[ambassadors-admin] RPC threw, falling back:", err)
+  }
+
+  // ─── Path 2: legacy PostgREST query (kept for back-compat) ───
   try {
     const supabase = createClient()
     const { data, error } = await supabase
@@ -167,10 +248,10 @@ export async function getAmbassadorsAdmin(
       if (error) {
         // eslint-disable-next-line no-console
         console.warn(
-          "[ambassadors-admin] getAmbassadorsAdmin failed:",
+          "[ambassadors-admin] getAmbassadorsAdmin (legacy path) failed:",
           error.message,
           error.code,
-          "— check that 20260503_ambassadors_admin_policies.sql migration is applied on Supabase",
+          "— apply Migration 10.38 (get_ambassadors_admin RPC) for the robust path",
         )
       }
       return []

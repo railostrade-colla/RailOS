@@ -86,12 +86,72 @@ function dateOnly(s: string | null): string {
 // ─── Reads ───────────────────────────────────────────────────
 
 /**
- * Fetch the fee-request review queue, newest-first. RLS gates
- * SELECT to admins via Phase BB; non-admins get an empty array.
+ * Shape returned by the Phase 10.38 RPC. Profile + balance fields
+ * surfaced flat — no PostgREST FK join needed.
+ */
+interface FeeRequestRpcRow extends Omit<RequestRow, "profile" | "balance"> {
+  user_name: string | null
+  user_handle: string | null
+  user_level: string | null
+  current_balance: number | string | null
+}
+
+/**
+ * Fetch the fee-request review queue, newest-first.
+ *
+ * Strategy: try the Phase 10.38 RPC first (does the SQL join + bypasses
+ * PostgREST FK inference), fall back to the legacy PostgREST query.
+ * The legacy path returns empty when FK constraints are missing
+ * between fee_unit_requests.user_id and profiles.id — which is the
+ * production bug we're working around.
  */
 export async function getFeeRequestsAdmin(
   limit: number = 200,
 ): Promise<FeeUnitRequest[]> {
+  // ─── Path 1: RPC (preferred) ───
+  try {
+    const supabase = createClient()
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      "get_fee_requests_admin",
+      { p_limit: limit },
+    )
+    if (!rpcError && Array.isArray(rpcData)) {
+      return (rpcData as FeeRequestRpcRow[]).map((r) => {
+        const requested = num(r.amount_requested)
+        const approved = num(r.amount_approved)
+        return {
+          id: r.id,
+          user_id: r.user_id,
+          user_name: r.user_name?.trim() || "—",
+          user_email: r.user_handle?.trim() ? `@${r.user_handle.trim()}` : "—",
+          user_level: mapLevel(r.user_level),
+          current_balance: num(r.current_balance),
+          requested_units: requested,
+          amount_paid: requested,
+          payment_method: mapPaymentMethod(r.payment_method),
+          reference_number: r.transaction_reference ?? "—",
+          proof_image_url: r.proof_image_url ?? "",
+          status: mapStatus(r.status),
+          approved_units: approved > 0 ? approved : undefined,
+          rejection_reason: r.rejection_reason ?? undefined,
+          admin_notes: r.admin_notes ?? undefined,
+          submitted_at: dateOnly(r.submitted_at),
+        }
+      })
+    }
+    if (rpcError) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[fee-admin] RPC get_fee_requests_admin not available, falling back:",
+        rpcError.message,
+      )
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("[fee-admin] RPC threw, falling back:", err)
+  }
+
+  // ─── Path 2: legacy PostgREST query ───
   try {
     const supabase = createClient()
     const { data, error } = await supabase
@@ -112,10 +172,10 @@ export async function getFeeRequestsAdmin(
       if (error) {
         // eslint-disable-next-line no-console
         console.warn(
-          "[fee-admin] getFeeRequestsAdmin failed:",
+          "[fee-admin] getFeeRequestsAdmin (legacy path) failed:",
           error.message,
           error.code,
-          "— check that 20260503_fee_units_admin.sql migration is applied on Supabase",
+          "— apply Migration 10.38 (get_fee_requests_admin RPC) for the robust path",
         )
       }
       return []
