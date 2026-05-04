@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Heart, ChevronLeft, Trash2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -10,8 +10,11 @@ import {
   getFollowedProjects,
   getFollowedCompanies,
   getFollowingStats,
-} from "@/lib/mock-data/following"
-import { showSuccess } from "@/lib/utils/toast"
+  ALL_PROJECTS,
+  ALL_COMPANIES,
+} from "@/lib/mock-data"
+import { getMyFollows, unfollowTarget } from "@/lib/data/follows"
+import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 type TabId = "all" | "projects" | "companies"
@@ -19,9 +22,39 @@ type TabId = "all" | "projects" | "companies"
 export default function FollowingPage() {
   const [tab, setTab] = useState<TabId>("all")
   const [unfollowed, setUnfollowed] = useState<Set<string>>(new Set())
+  const [dbFollowedProjectIds, setDbFollowedProjectIds] = useState<string[] | null>(null)
+  const [dbFollowedCompanyIds, setDbFollowedCompanyIds] = useState<string[] | null>(null)
 
-  const allProjects = useMemo(() => getFollowedProjects("me"), [])
-  const allCompanies = useMemo(() => getFollowedCompanies("me"), [])
+  // Load real follows on mount; fall back to mock when DB is empty.
+  useEffect(() => {
+    let cancelled = false
+    getMyFollows().then((rows) => {
+      if (cancelled) return
+      const projects = rows.filter((r) => r.target_type === "project").map((r) => r.target_id)
+      const companies = rows.filter((r) => r.target_type === "company").map((r) => r.target_id)
+      setDbFollowedProjectIds(projects)
+      setDbFollowedCompanyIds(companies)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  // Resolve the followed projects/companies — DB-first, then mock fallback.
+  const allProjects = useMemo(() => {
+    if (dbFollowedProjectIds && dbFollowedProjectIds.length > 0) {
+      return ALL_PROJECTS.filter((p) => dbFollowedProjectIds.includes(p.id))
+    }
+    // Until the user has any DB follows, we keep showing the mock list so
+    // the page is meaningful in dev/demo. As soon as they create one DB
+    // follow it switches over.
+    return getFollowedProjects("me")
+  }, [dbFollowedProjectIds])
+
+  const allCompanies = useMemo(() => {
+    if (dbFollowedCompanyIds && dbFollowedCompanyIds.length > 0) {
+      return ALL_COMPANIES.filter((c) => dbFollowedCompanyIds.includes(c.id))
+    }
+    return getFollowedCompanies("me")
+  }, [dbFollowedCompanyIds])
 
   // Filter out unfollowed (for instant UI feedback)
   const projects = allProjects.filter((p) => !unfollowed.has("p-" + p.id))
@@ -39,8 +72,34 @@ export default function FollowingPage() {
   const showProjects = tab === "all" || tab === "projects"
   const showCompanies = tab === "all" || tab === "companies"
 
-  const handleUnfollow = (key: string, name: string) => {
+  const handleUnfollow = async (key: string, name: string, targetId: string, targetType: "project" | "company") => {
+    // Optimistic UI
     setUnfollowed((prev) => new Set(prev).add(key))
+
+    // Best-effort DB unfollow (only matters if it was a DB-sourced row).
+    const isDbRow =
+      targetType === "project"
+        ? (dbFollowedProjectIds?.includes(targetId) ?? false)
+        : (dbFollowedCompanyIds?.includes(targetId) ?? false)
+    if (isDbRow) {
+      const res = await unfollowTarget(targetType, targetId)
+      if (!res.success && res.reason !== "missing_table") {
+        // Revert on real failure (keep optimistic on missing_table for demo)
+        setUnfollowed((prev) => {
+          const next = new Set(prev)
+          next.delete(key)
+          return next
+        })
+        showError("تعذّر إلغاء المتابعة")
+        return
+      }
+      // Also drop from local DB lists so re-toggle won't bring it back
+      if (targetType === "project") {
+        setDbFollowedProjectIds((prev) => prev?.filter((id) => id !== targetId) ?? null)
+      } else {
+        setDbFollowedCompanyIds((prev) => prev?.filter((id) => id !== targetId) ?? null)
+      }
+    }
     showSuccess(`تم إلغاء متابعة ${name}`)
   }
 
@@ -101,7 +160,7 @@ export default function FollowingPage() {
                       <FollowedItemWrapper
                         key={"p-" + p.id}
                         name={p.name}
-                        onUnfollow={() => handleUnfollow("p-" + p.id, p.name)}
+                        onUnfollow={() => handleUnfollow("p-" + p.id, p.name, p.id, "project")}
                       >
                         <ProjectCard project={p} variant="compact" />
                       </FollowedItemWrapper>
@@ -123,7 +182,7 @@ export default function FollowingPage() {
                       <FollowedItemWrapper
                         key={"c-" + c.id}
                         name={c.name}
-                        onUnfollow={() => handleUnfollow("c-" + c.id, c.name)}
+                        onUnfollow={() => handleUnfollow("c-" + c.id, c.name, c.id, "company")}
                       >
                         <CompanyCard company={c} variant="compact" />
                       </FollowedItemWrapper>
