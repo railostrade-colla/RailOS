@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   TrendingUp,
   AlertTriangle,
@@ -8,8 +8,9 @@ import {
   Star,
   Shield,
   X,
+  Search,
 } from "lucide-react"
-import { Badge, ActionBtn, KPI } from "@/components/admin/ui"
+import { Badge, ActionBtn, KPI, AdminEmpty } from "@/components/admin/ui"
 import {
   MOCK_USER_STATS,
   LEVEL_SETTINGS_STORE,
@@ -17,6 +18,7 @@ import {
   getNextLevel,
   getRequirementChecklist,
   type LevelId,
+  type UserStats,
 } from "@/lib/mock-data/levels"
 import {
   setLevelOverride,
@@ -25,23 +27,129 @@ import {
   getUserLevelHistory,
   CHANGE_TYPE_META,
 } from "@/lib/data/levels"
+import { getCommunityUsers, type CommunityUserRow } from "@/lib/data/community"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
-// In a real app, this would come from URL param + Supabase fetch.
-// For mock, we use MOCK_USER_STATS.
 const ADMIN_ID = "founder-1"
 
+/** Builds a zero-state UserStats object scaffolded from a community row. */
+function emptyStatsFromUser(u: CommunityUserRow): UserStats {
+  return {
+    ...MOCK_USER_STATS,
+    id: u.id,
+    display_name: u.name,
+    email: "",
+    level: u.level as LevelId,
+    total_trade_volume: 0,
+    total_trades: u.total_trades,
+    successful_trades: 0,
+    failed_trades: 0,
+    cancelled_trades: 0,
+    success_rate: u.success_rate,
+    disputes_total: 0,
+    disputes_won: 0,
+    disputes_lost: 0,
+    dispute_rate: 0,
+    reports_received: 0,
+    reports_against_others: 0,
+    rating_average: 0,
+    rating_count: 0,
+    days_active: 0,
+    account_age_days: 0,
+    kyc_status: u.level,
+    level_override: null,
+    level_locked: false,
+  }
+}
+
 export function UserStatsPanel() {
-  const [stats, setStats] = useState(MOCK_USER_STATS)
+  // ─── User selector ──────────────────────────────────────
+  const [users, setUsers] = useState<CommunityUserRow[]>([])
+  const [search, setSearch] = useState("")
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [stats, setStats] = useState<UserStats | null>(null)
+
+  // Override modal state — kept above the early return so hook order is stable.
   const [showOverride, setShowOverride] = useState(false)
   const [overrideLevel, setOverrideLevel] = useState<LevelId>("pro")
   const [overrideReason, setOverrideReason] = useState("")
   const [overrideLock, setOverrideLock] = useState(false)
   const [, force] = useState({})
   const refresh = () => force({})
+
+  // Load user list once on mount
+  useEffect(() => {
+    let cancelled = false
+    getCommunityUsers(500).then((rows) => {
+      if (cancelled) return
+      setUsers(rows)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  // When a user is picked, build empty stats keyed to them. Real stats
+  // RPC (`get_user_stats(user_id)`) will swap in the real numbers in
+  // a follow-up batch.
+  useEffect(() => {
+    if (!selectedUserId) {
+      setStats(null)
+      return
+    }
+    const u = users.find((x) => x.id === selectedUserId)
+    if (u) setStats(emptyStatsFromUser(u))
+  }, [selectedUserId, users])
+
+  const filteredUsers = users.filter(
+    (u) => !search.trim() || u.name.includes(search.trim()),
+  )
+
+  // No user selected yet — show picker only.
+  if (!stats) {
+    return (
+      <div className="p-6 max-w-screen-2xl">
+        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-5">
+          <div className="text-sm font-bold text-white mb-3">⊙ اختر مستخدماً لعرض إحصائياته</div>
+          <div className="relative mb-3">
+            <Search className="w-4 h-4 text-neutral-500 absolute right-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="ابحث بالاسم..."
+              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl pr-10 pl-4 py-2.5 text-sm text-white placeholder:text-neutral-500 outline-none focus:border-white/20"
+            />
+          </div>
+          {filteredUsers.length === 0 ? (
+            <AdminEmpty title="لا يوجد مستخدمون" body="بمجرد تسجيل أول مستخدم سيظهر هنا." />
+          ) : (
+            <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl divide-y divide-white/[0.05] max-h-96 overflow-y-auto">
+              {filteredUsers.map((u) => (
+                <button
+                  key={u.id}
+                  onClick={() => setSelectedUserId(u.id)}
+                  className="w-full p-3 flex items-center gap-3 hover:bg-white/[0.04] transition-colors text-right"
+                >
+                  <div className="w-9 h-9 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-xs font-bold text-white">
+                    {u.name.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold text-white truncate">{u.name}</div>
+                    <div className="text-[11px] text-neutral-500 mt-0.5">
+                      {u.level} · {u.total_trades} صفقة · ثقة {u.trust_score}%
+                    </div>
+                  </div>
+                  {u.is_verified && <Badge color="green" label="✓" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   const levelSetting = getLevelSetting(stats.level)
   const nextLevel = getNextLevel(stats.level)
