@@ -42,7 +42,13 @@ export type ProjectEntityType = "company" | "project" | "individual" | "partners
 export type ProjectBuildStatus = "planning" | "active" | "completed"
 export type ProjectQuality = "low" | "medium" | "high"
 export type ProjectAdminStatus = "pending" | "active" | "paused" | "rejected" | "closed"
-export type ProjectInvestmentType = "direct" | "auction"
+/**
+ * Investment type — how investors can acquire shares of this project:
+ *   - direct          → fixed-price primary-market purchase only
+ *   - auction         → English/Dutch auction only
+ *   - direct_auction  → both run in parallel (direct buy + auction)
+ */
+export type ProjectInvestmentType = "direct" | "auction" | "direct_auction"
 export type ProjectDistributionType = "monthly" | "quarterly" | "semi_annual" | "annual"
 
 export interface ProjectDocument {

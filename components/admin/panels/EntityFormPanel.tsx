@@ -816,9 +816,15 @@ export function EntityFormPanel({ mode, entityType, initialData, onDone }: Entit
               onChange={(e) => setInvestmentType(e.target.value as ProjectInvestmentType)}
               className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
             >
-              <option value="direct">مباشر</option>
-              <option value="auction">مزاد</option>
+              <option value="direct">🛒 مباشر — شراء بسعر ثابت</option>
+              <option value="auction">🔨 مزاد — أعلى سعر يفوز</option>
+              <option value="direct_auction">🛒+🔨 مباشر + مزاد — الطريقتان متاحتان</option>
             </select>
+            <div className="text-[10px] text-neutral-500 mt-1.5 leading-relaxed">
+              <strong className="text-neutral-300">مباشر:</strong> المستثمر يشتري الحصص فوراً بالسعر المحدّد ·{" "}
+              <strong className="text-neutral-300">مزاد:</strong> الحصص تُطرح عبر مزاد ويفوز أعلى عرض ·{" "}
+              <strong className="text-neutral-300">مباشر + مزاد:</strong> جزء يُباع مباشرة + جزء عبر مزاد بالتوازي
+            </div>
           </div>
         </div>
 
