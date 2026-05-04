@@ -17,6 +17,7 @@ import {
   type MyDealEnriched,
   type DBDealStatus,
 } from "@/lib/data/deals"
+import { useRealtimeMyDeals } from "@/lib/realtime/useRealtimeMyDeals"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -68,6 +69,9 @@ export default function DealsPage() {
     return () => clearInterval(t)
   }, [])
 
+  // Realtime tick — increments whenever any of the user's deals change
+  const { tick: realtimeTick } = useRealtimeMyDeals(currentUserId || null)
+
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -86,7 +90,8 @@ export default function DealsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+    // realtimeTick triggers a re-fetch whenever a deal row changes.
+  }, [realtimeTick])
 
   const counts = useMemo(() => {
     const c = { active: 0, cancellation: 0, disputed: 0, completed: 0, cancelled: 0 }

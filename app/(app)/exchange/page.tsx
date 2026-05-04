@@ -22,6 +22,7 @@ import {
   acceptBuyListing,
   type ExchangeListingRow,
 } from "@/lib/data/listings"
+import { useRealtimeListings } from "@/lib/realtime/useRealtimeListings"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils/cn"
 
@@ -333,12 +334,16 @@ function ExchangeContent() {
     }
   }, [projectFilter])
 
-  // Load real listings + current user on mount
+  // Realtime tick — increments whenever any listing row changes
+  const { tick: listingsTick } = useRealtimeListings()
+
+  // Load real listings + current user on mount, and re-fetch listings
+  // whenever realtime fires.
   useEffect(() => {
     let cancelled = false
     const supabase = createClient()
 
-    // current user (best-effort)
+    // current user (only on first run)
     supabase.auth.getUser().then(({ data }) => {
       if (cancelled) return
       if (data?.user?.id) setCurrentUserId(data.user.id)
@@ -365,7 +370,7 @@ function ExchangeContent() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [listingsTick])
 
   // Filter + Sort — hybrid pool:
   //   - "buy" mode (مشترٍ يبحث عن إعلانات بيع): DB sell-listings;
