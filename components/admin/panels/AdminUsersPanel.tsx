@@ -35,6 +35,23 @@ export function AdminUsersPanel() {
   // browseable without manual seed).
   const [accessChecked, setAccessChecked] = useState(false)
   const [accessAllowed, setAccessAllowed] = useState(false)
+
+  // ─── All other state hooks declared BEFORE any early return so the
+  //     hook order stays stable across renders (React Rules of Hooks).
+  const [filter, setFilter] = useState<AdminUserStatus>("active")
+  const [search, setSearch] = useState("")
+  const [selected, setSelected] = useState<AdminUserRecord | null>(null)
+  const [action, setAction] = useState<RowAction>(null)
+
+  const [showCreate, setShowCreate] = useState(false)
+  const [newName, setNewName] = useState("")
+  const [newEmail, setNewEmail] = useState("")
+  const [newPhone, setNewPhone] = useState("")
+  const [newRole, setNewRole] = useState<AdminRoleId>("moderator")
+  const [newPerms, setNewPerms] = useState<AdminPermission[]>([])
+  const [newNotes, setNewNotes] = useState("")
+  const [editPerms, setEditPerms] = useState<AdminPermission[]>([])
+
   useEffect(() => {
     let cancelled = false
     isSuperAdminDB().then((isSuper) => {
@@ -72,20 +89,6 @@ export function AdminUsersPanel() {
       </div>
     )
   }
-
-  const [filter, setFilter] = useState<AdminUserStatus>("active")
-  const [search, setSearch] = useState("")
-  const [selected, setSelected] = useState<AdminUserRecord | null>(null)
-  const [action, setAction] = useState<RowAction>(null)
-
-  const [showCreate, setShowCreate] = useState(false)
-  const [newName, setNewName] = useState("")
-  const [newEmail, setNewEmail] = useState("")
-  const [newPhone, setNewPhone] = useState("")
-  const [newRole, setNewRole] = useState<AdminRoleId>("moderator")
-  const [newPerms, setNewPerms] = useState<AdminPermission[]>([])
-  const [newNotes, setNewNotes] = useState("")
-  const [editPerms, setEditPerms] = useState<AdminPermission[]>([])
 
   const stats = getAdminUsersStats()
 
