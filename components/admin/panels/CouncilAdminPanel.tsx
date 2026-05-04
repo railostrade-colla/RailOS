@@ -69,12 +69,15 @@ export function CouncilAdminPanel() {
   const [tab, setTab] = useState<SubTab>("members")
   const [submitting, setSubmitting] = useState(false)
 
-  // Mock first-paint, real DB on mount.
-  const [members, setMembers] = useState<CouncilMember[]>(COUNCIL_MEMBERS)
-  const [proposals, setProposals] = useState<CouncilProposal[]>(COUNCIL_PROPOSALS)
+  // Production mode — DB only. Empty until queries return rows.
+  const [members, setMembers] = useState<CouncilMember[]>([])
+  const [proposals, setProposals] = useState<CouncilProposal[]>([])
   const [election, setElection] = useState<CouncilElection>(CURRENT_ELECTION)
-  const [candidates, setCandidates] = useState<CouncilCandidate[]>(COUNCIL_CANDIDATES)
-  const [stats, setStats] = useState(getCouncilStatsMock())
+  const [candidates, setCandidates] = useState<CouncilCandidate[]>([])
+  const [stats, setStats] = useState(() => ({
+    total_members: 0, elected_members: 0, proposals: 0,
+    approved: 0, rejected: 0, active: 0,
+  }))
 
   const refresh = () => {
     Promise.all([
@@ -83,7 +86,7 @@ export function CouncilAdminPanel() {
       dbGetCurrentElection(),
       dbGetCouncilStats(),
     ]).then(async ([m, p, e, s]) => {
-      if (m.length > 0) {
+      {
         setMembers(m.map((row): CouncilMember => ({
           id: row.id,
           user_id: row.user_id,

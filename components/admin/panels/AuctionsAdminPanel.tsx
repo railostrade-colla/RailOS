@@ -7,13 +7,11 @@ import {
   SectionHeader, KPI, InnerTabBar, AdminEmpty,
 } from "@/components/admin/ui"
 import {
-  AUCTION_DETAILS,
   AUCTION_BIDS,
   getAuctionBids,
   type AuctionDetails,
   type AuctionStatus,
 } from "@/lib/mock-data/auctions"
-import { ALL_PROJECTS } from "@/lib/mock-data/projects"
 import {
   getAllAuctions,
   getAllProjectsForSelect,
@@ -64,7 +62,7 @@ export function AuctionsAdminPanel() {
 
   // Create auction form
   const [showCreate, setShowCreate] = useState(false)
-  const [newProjectId, setNewProjectId] = useState<string>(ALL_PROJECTS[0]?.id || "")
+  const [newProjectId, setNewProjectId] = useState<string>("")
   const [newStarting, setNewStarting] = useState<number>(50_000)
   const [newShares, setNewShares] = useState<number>(50)
   const [newIncrement, setNewIncrement] = useState<number>(1_000)
@@ -72,16 +70,15 @@ export function AuctionsAdminPanel() {
   const [newEndsAt, setNewEndsAt] = useState<string>("")
 
   // Mock first-paint, real DB on mount.
-  const [auctions, setAuctions] = useState<AuctionDetails[]>(AUCTION_DETAILS)
-  const [projectOptions, setProjectOptions] = useState<AdminProjectOption[]>(
-    ALL_PROJECTS.map((p) => ({ id: p.id, name: p.name })),
-  )
+  // Production mode — DB only. No mock fallback.
+  const [auctions, setAuctions] = useState<AuctionDetails[]>([])
+  const [projectOptions, setProjectOptions] = useState<AdminProjectOption[]>([])
   const [submitting, setSubmitting] = useState(false)
 
   const refresh = () => {
     Promise.all([getAllAuctions(), getAllProjectsForSelect()]).then(([a, p]) => {
-      if (a.length > 0) setAuctions(a)
-      if (p.length > 0) setProjectOptions(p)
+      setAuctions(a)
+      setProjectOptions(p)
     })
   }
   useEffect(() => {
@@ -556,7 +553,7 @@ export function AuctionsAdminPanel() {
       )}
 
       <div className="mt-6 text-[10px] text-neutral-600 font-mono">
-        {fmtNum(filtered.length)} من {fmtNum(AUCTION_DETAILS.length)} مزاد
+        {fmtNum(filtered.length)} من {fmtNum(auctions.length)} مزاد
       </div>
     </div>
   )

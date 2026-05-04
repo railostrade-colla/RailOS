@@ -3,15 +3,22 @@
 import { useState } from "react"
 import { Search, X, ExternalLink } from "lucide-react"
 import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, KPI, InnerTabBar, AdminEmpty } from "@/components/admin/ui"
-import { mockFeeUnitsRequestsAdmin, paymentLabels } from "@/lib/admin/mock-data"
+import { paymentLabels } from "@/lib/admin/mock-data"
 import { showSuccess, showError } from "@/lib/utils/toast"
+
+// Production mode — this legacy panel is superseded by
+// /admin?tab=fee_units_requests (FeeUnitsRequestsPanel) which is
+// fully DB-wired. Empty until the duplicate tab is removed.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockFeeUnitsRequestsAdmin: any[] = []
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 export function FeeUnitsAdminPanel() {
   const [filter, setFilter] = useState<string>("all")
   const [search, setSearch] = useState("")
-  const [selectedRequest, setSelectedRequest] = useState<typeof mockFeeUnitsRequestsAdmin[0] | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [selectedRequest, setSelectedRequest] = useState<any | null>(null)
   const [adminNote, setAdminNote] = useState("")
 
   const tabs = [

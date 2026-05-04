@@ -165,20 +165,28 @@ export function analyzeMarketHealth(project: Project): MarketHealth {
   }
 }
 
-/** يحلّل كل المشاريع دفعة واحدة. */
+/**
+ * Analyzes every active project on the platform.
+ *
+ * Production mode — returns an empty array because PROJECTS is the
+ * mock list. The MarketHealthPanel that consumes this should be
+ * rewired to query the real `projects` table; until then we surface
+ * an empty state instead of fake analyses on a zeroed DB.
+ */
 export function analyzeAllProjects(): MarketHealth[] {
-  return PROJECTS.map(analyzeMarketHealth)
+  void PROJECTS // suppress unused warning
+  return []
 }
 
 /** الإحصائيات الكلّية للوحة الأدمن. */
 export function getMarketHealthStats() {
-  const all = analyzeAllProjects()
+  // Mirrors analyzeAllProjects — zero everything in production mode.
   return {
-    total: all.length,
-    needRelease: all.filter((m) => m.recommendation === "release_shares").length,
-    monopolyRisk: all.filter((m) => m.recommendation === "monopoly_risk").length,
-    healthy: all.filter((m) => m.recommendation === "healthy").length,
-    lowDemand: all.filter((m) => m.recommendation === "low_demand").length,
+    total: 0,
+    needRelease: 0,
+    monopolyRisk: 0,
+    healthy: 0,
+    lowDemand: 0,
   }
 }
 

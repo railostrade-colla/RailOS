@@ -3,8 +3,13 @@
 import { useState } from "react"
 import { Search } from "lucide-react"
 import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, KPI, InnerTabBar, AdminEmpty } from "@/components/admin/ui"
-import { mockDealFeesAdvanced } from "@/lib/admin/mock-data"
 import { showSuccess } from "@/lib/utils/toast"
+
+// Production mode — empty until deal-fees aggregation RPC is added.
+// Each completed deal already records `fee_amount` in `deals` table;
+// this view is just an admin-side rollup that can be added later.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockDealFeesAdvanced: any[] = []
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 

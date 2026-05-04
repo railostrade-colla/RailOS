@@ -70,16 +70,11 @@ const APP_PAGES: { value: AppPage; label: string }[] = [
   { value: "/ambassador", label: "🌟 السفراء" },
 ]
 
-const MOCK_BROADCAST_HISTORY: BroadcastHistoryEntry[] = [
-  { id: "bc-1", title: "إطلاق ميزة العقود الجماعية", type: "feature",      audience: "kyc_verified",  recipients: 685, sent_at: "2026-04-25 12:00", sent_by: "Admin@Main", channels: ["in_app", "push"],         status: "sent" },
-  { id: "bc-2", title: "صيانة مجدولة الجمعة 3 ص",     type: "maintenance",  audience: "all",           recipients: 1247,sent_at: "2026-04-24 18:00", sent_by: "Admin@1",    channels: ["in_app", "push", "email"], status: "sent" },
-  { id: "bc-3", title: "عرض حصري لمستوى Pro",          type: "promo",        audience: "pro_only",      recipients: 87,  sent_at: "2026-04-23 10:00", sent_by: "Admin@Main", channels: ["in_app", "email"],        status: "sent" },
-  { id: "bc-4", title: "رفع رسوم المزادات إلى 2%",     type: "alert",        audience: "all",           recipients: 1247,sent_at: "2026-04-22 14:00", sent_by: "Admin@Main", channels: ["in_app", "push"],         status: "sent" },
-  { id: "bc-5", title: "افتتاح مشروع الواحة",           type: "announcement", audience: "kyc_verified",  recipients: 685, sent_at: "2026-04-21 09:00", sent_by: "Admin@1",    channels: ["in_app", "push", "email"], status: "sent" },
-  { id: "bc-6", title: "ترقية الخوادم — قد يحدث بطء",   type: "maintenance",  audience: "all",           recipients: 1247,sent_at: "2026-04-20 22:00", sent_by: "Admin@2",    channels: ["in_app"],                  status: "sent" },
-  { id: "bc-7", title: "إطلاق برنامج السفراء",          type: "feature",      audience: "advanced_plus", recipients: 234, sent_at: "2026-04-18 11:00", sent_by: "Admin@Main", channels: ["in_app", "push", "email"], status: "sent" },
-  { id: "bc-8", title: "اختبار إرسال (محذوف)",         type: "announcement", audience: "specific_user", recipients: 1,   sent_at: "2026-04-15 16:00", sent_by: "Admin@1",    channels: ["in_app"],                  status: "failed" },
-]
+// Production mode — broadcast history is empty until the server-
+// side log of sent broadcasts is wired (see admin_broadcast.ts +
+// the planned `admin_broadcasts` table). Until then the panel only
+// shows the compose form and an empty history list.
+const MOCK_BROADCAST_HISTORY: BroadcastHistoryEntry[] = []
 
 export function NotificationsBroadcasterPanel() {
   const [type, setType] = useState<NotifType>("announcement")
