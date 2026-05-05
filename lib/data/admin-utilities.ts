@@ -138,6 +138,67 @@ export async function adminUnfreezeProjectWallet(
   return callRpc("admin_unfreeze_project_wallet", { p_wallet_id: walletId })
 }
 
+// ─── Project-level actions (Phase 10.54) ──────────────────────
+
+/** Hard-deletes a project (soft-cancels if it has active holdings). */
+export async function adminDeleteProject(projectId: string): Promise<UtilityRpcResult & { mode?: string }> {
+  return callRpc("admin_delete_project", { p_project_id: projectId }) as Promise<UtilityRpcResult & { mode?: string }>
+}
+
+/** Freezes ALL of a project's wallets in one call. */
+export async function adminFreezeProject(
+  projectId: string,
+  reason?: string,
+): Promise<UtilityRpcResult & { wallets_frozen?: number }> {
+  return callRpc("admin_freeze_project", {
+    p_project_id: projectId,
+    p_reason: reason ?? null,
+  }) as Promise<UtilityRpcResult & { wallets_frozen?: number }>
+}
+
+/** Unfreezes ALL of a project's wallets in one call. */
+export async function adminUnfreezeProject(
+  projectId: string,
+): Promise<UtilityRpcResult & { wallets_unfrozen?: number }> {
+  return callRpc("admin_unfreeze_project", {
+    p_project_id: projectId,
+  }) as Promise<UtilityRpcResult & { wallets_unfrozen?: number }>
+}
+
+// ─── User picker for gifts (Phase 10.54) ──────────────────────
+
+export type UserPickerFilter = "all" | "new" | "active" | "inactive"
+
+export interface UserPickerRow {
+  id: string
+  name: string
+  username: string | null
+  level: string
+  created_at: string
+  last_seen_at: string | null
+  days_old: number
+  days_since_seen: number | null
+}
+
+export async function getUsersForAdminPicker(
+  filter: UserPickerFilter = "all",
+  search = "",
+  limit = 50,
+): Promise<UserPickerRow[]> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("get_users_for_admin_picker", {
+      p_filter: filter,
+      p_search: search || null,
+      p_limit: limit,
+    })
+    if (error || !Array.isArray(data)) return []
+    return data as UserPickerRow[]
+  } catch {
+    return []
+  }
+}
+
 // ─── List all project wallets (Phase 10.51) ────────────────────
 
 export interface ProjectWalletAdminRow {

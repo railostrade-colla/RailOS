@@ -7,7 +7,7 @@ import { EntityFormPanel, type EntityFormData } from "./EntityFormPanel"
 import { EntityDetailsView } from "./EntityDetailsView"
 import { getAllProjects, getProjectByIdAdmin } from "@/lib/data/projects"
 import { getAllCompanies } from "@/lib/data/companies"
-import { getAllProjectWalletsAdmin } from "@/lib/data/admin-utilities"
+import { getAllProjectWalletsAdmin, adminDeleteProject } from "@/lib/data/admin-utilities"
 import {
   loadDraftsList,
   loadDraftsListAsync,
@@ -267,15 +267,49 @@ export function ProjectsPanel() {
     { key: "drafts", label: "📝 مسودّاتي", count: draftsTotal },
   ]
 
-  const handleDelete = () => {
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDelete = async () => {
     if (!deleteTarget) return
     if (confirmText !== deleteTarget.name) {
       showError("الاسم غير مطابق")
       return
     }
-    showSuccess("تم الحذف بنجاح")
+    if (deleteTarget.entity_type !== "project") {
+      // Companies aren't yet wired to a delete RPC.
+      showError("حذف الشركات غير مفعّل بعد")
+      return
+    }
+    setDeleting(true)
+    const result = await adminDeleteProject(deleteTarget.id)
+    setDeleting(false)
+
+    if (!result.success) {
+      const reasonMap: Record<string, string> = {
+        unauthenticated: "سجّل دخولك أولاً",
+        not_admin: "صلاحياتك لا تسمح",
+        not_found: "المشروع غير موجود",
+        missing_table: "الـ migration غير منشورة — طبّق Migration 10.54",
+        rls: "ممنوع بسبب RLS",
+      }
+      showError(reasonMap[result.reason ?? ""] ?? "فشل الحذف")
+      return
+    }
+
+    if (result.mode === "soft_cancel") {
+      showSuccess(`⚠️ تم إلغاء "${deleteTarget.name}" (لديه حصص نشطة فلم يُحذف نهائياً)`)
+    } else {
+      showSuccess(`🗑️ تم حذف "${deleteTarget.name}" نهائياً`)
+    }
+
+    // Remove from local list immediately + close modal
+    setEntities((prev) => prev.filter((e) => e.id !== deleteTarget.id))
     setDeleteTarget(null)
     setConfirmText("")
+    if (selectedEntity?.id === deleteTarget.id) {
+      setSelectedEntity(null)
+      setMainTab("list")
+    }
   }
 
   // ─── Sub-views: create / view / edit (mode-based) ───
@@ -512,15 +546,15 @@ export function ProjectsPanel() {
               </button>
               <button
                 onClick={handleDelete}
-                disabled={confirmText !== deleteTarget.name}
+                disabled={confirmText !== deleteTarget.name || deleting}
                 className={cn(
                   "flex-1 py-3 rounded-xl text-sm font-bold transition-colors",
-                  confirmText === deleteTarget.name
+                  confirmText === deleteTarget.name && !deleting
                     ? "bg-red-500 text-white hover:bg-red-600"
                     : "bg-white/[0.05] text-neutral-600 cursor-not-allowed"
                 )}
               >
-                حذف نهائي
+                {deleting ? "جاري الحذف..." : "حذف نهائي"}
               </button>
             </div>
           </div>

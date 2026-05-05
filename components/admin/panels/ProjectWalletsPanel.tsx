@@ -13,8 +13,8 @@ import {
   type ProjectWallet,
 } from "@/lib/mock-data/projectWallets"
 import {
-  adminFreezeProjectWallet,
-  adminUnfreezeProjectWallet,
+  adminFreezeProject,
+  adminUnfreezeProject,
   adminReleaseSharesToMarket,
   getAllProjectWalletsAdmin,
 } from "@/lib/data/admin-utilities"
@@ -106,25 +106,33 @@ export function ProjectWalletsPanel() {
     }
 
     if (action === "freeze") {
-      const result = await adminFreezeProjectWallet(selected.id)
+      // Phase 10.54 — operate on the project as a unit (freezes ALL
+      // 3 wallets at once). The user sees one row per project; the
+      // 3-wallet split is internal.
+      const projectId =
+        (selected as ProjectWallet & { project_id?: string }).project_id ?? selected.id
+      const result = await adminFreezeProject(projectId, reason.trim() || undefined)
       if (!result.success) {
         const map: Record<string, string> = {
+          unauthenticated: "سجّل دخولك أولاً",
           not_admin: "صلاحياتك لا تسمح",
-          not_found: "المحفظة غير موجودة",
+          wallets_table_missing: "جدول المحافظ غير منشور",
           missing_table: "الجداول غير منشورة بعد",
         }
         showError(map[result.reason ?? ""] ?? "فشل التجميد")
         return
       }
-      showSuccess(`❄️ تم تجميد محفظة ${selected.project_name} (${fmtNum(result.frozen ?? 0)} حصة)`)
+      showSuccess(`❄️ تم تجميد محافظ ${selected.project_name} (${fmtNum(result.wallets_frozen ?? 0)} محفظة)`)
     }
     if (action === "unfreeze") {
-      const result = await adminUnfreezeProjectWallet(selected.id)
+      const projectId =
+        (selected as ProjectWallet & { project_id?: string }).project_id ?? selected.id
+      const result = await adminUnfreezeProject(projectId)
       if (!result.success) {
         showError("فشل فكّ التجميد")
         return
       }
-      showSuccess(`✅ تم فكّ تجميد محفظة ${selected.project_name} (${fmtNum(result.unfrozen ?? 0)} حصة)`)
+      showSuccess(`✅ تم فكّ تجميد محافظ ${selected.project_name} (${fmtNum(result.wallets_unfrozen ?? 0)} محفظة)`)
     }
     setAction(null)
     setSelected(null)
