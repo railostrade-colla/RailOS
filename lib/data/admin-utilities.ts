@@ -205,7 +205,25 @@ export interface ProjectWalletAdminRow {
   id: string
   project_id: string
   project_name: string
-  /** Used as "balance" in the UI — the project's total IQD value of available offering shares. */
+  /** Project-level metadata (Phase 10.57) */
+  market_price: number
+  total_shares: number
+  /** Per-wallet share counts */
+  offering_total: number
+  offering_available: number
+  ambassador_total: number
+  ambassador_available: number
+  reserve_total: number
+  reserve_available: number
+  /** Derived: offering_total - offering_available */
+  sold_shares: number
+  /** Distinct users holding > 0 shares of this project */
+  investors_count: number
+  /** Market value calculations */
+  total_market_value: number
+  sold_value: number
+  unsold_offering_value: number
+  /** Backwards-compatible aggregates used by older UI code */
   balance: number
   total_inflow: number
   total_outflow: number
@@ -255,6 +273,19 @@ export async function getAllProjectWalletsAdmin(
         project_id: string
         id: string
         project_name: string
+        market_price: number | string
+        total_shares: number | string
+        offering_total: number | string
+        offering_available: number | string
+        ambassador_total: number | string
+        ambassador_available: number | string
+        reserve_total: number | string
+        reserve_available: number | string
+        sold_shares: number | string
+        investors_count: number | string
+        total_market_value: number | string
+        sold_value: number | string
+        unsold_offering_value: number | string
         balance: number | string
         total_inflow: number | string
         total_outflow: number | string
@@ -267,6 +298,19 @@ export async function getAllProjectWalletsAdmin(
         id: r.id,
         project_id: r.project_id,
         project_name: r.project_name,
+        market_price: Number(r.market_price),
+        total_shares: Number(r.total_shares),
+        offering_total: Number(r.offering_total),
+        offering_available: Number(r.offering_available),
+        ambassador_total: Number(r.ambassador_total),
+        ambassador_available: Number(r.ambassador_available),
+        reserve_total: Number(r.reserve_total),
+        reserve_available: Number(r.reserve_available),
+        sold_shares: Number(r.sold_shares),
+        investors_count: Number(r.investors_count),
+        total_market_value: Number(r.total_market_value),
+        sold_value: Number(r.sold_value),
+        unsold_offering_value: Number(r.unsold_offering_value),
         balance: Number(r.balance),
         total_inflow: Number(r.total_inflow),
         total_outflow: Number(r.total_outflow),
@@ -399,6 +443,21 @@ export async function getAllProjectWalletsAdmin(
         id: b.project_id,
         project_id: b.project_id,
         project_name: b.project_name,
+        // Phase 10.57 fields — fallback path doesn't have them, default to 0.
+        market_price: b.share_price,
+        total_shares: b.total_shares,
+        offering_total: b.offering_available,
+        offering_available: b.offering_available,
+        ambassador_total: b.ambassador_available,
+        ambassador_available: b.ambassador_available,
+        reserve_total: b.reserve_available,
+        reserve_available: b.reserve_available,
+        sold_shares: 0,
+        investors_count: 0,
+        total_market_value: totalValue,
+        sold_value: 0,
+        unsold_offering_value: b.offering_available * b.share_price,
+        // Backwards-compatible
         balance,
         total_inflow: inflow,
         total_outflow: outflow,

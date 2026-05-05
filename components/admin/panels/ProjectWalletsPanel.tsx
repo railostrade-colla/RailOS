@@ -59,11 +59,35 @@ export function ProjectWalletsPanel() {
     reload()
   }, [])
 
+  // Cast to admin-shape so we can read the new Phase 10.57 fields.
+  // The cast is safe because every entry in `wallets` came from
+  // getAllProjectWalletsAdmin which produces ProjectWalletAdminRow.
+  const adminRows = wallets as unknown as Array<{
+    project_id: string
+    project_name: string
+    market_price: number
+    total_shares: number
+    offering_total: number
+    offering_available: number
+    sold_shares: number
+    investors_count: number
+    total_market_value: number
+    sold_value: number
+    unsold_offering_value: number
+    status: "active" | "frozen" | "closed"
+    balance: number
+    total_inflow: number
+    total_outflow: number
+  }>
+
   const stats = {
     total: wallets.length,
     active: wallets.filter((w) => w.status === "active").length,
     frozen: wallets.filter((w) => w.status === "frozen").length,
-    total_balance: wallets.reduce((s, w) => s + w.balance, 0),
+    // Phase 10.57: total shares = SUM(total_shares) across projects
+    total_shares: adminRows.reduce((s, r) => s + (r.total_shares ?? 0), 0),
+    // Phase 10.57: total balance = SUM(total_shares × market_price)
+    total_balance: adminRows.reduce((s, r) => s + (r.total_market_value ?? 0), 0),
     total_inflow: wallets.reduce((s, w) => s + w.total_inflow, 0),
     total_outflow: wallets.reduce((s, w) => s + w.total_outflow, 0),
   }
@@ -157,10 +181,11 @@ export function ProjectWalletsPanel() {
         subtitle="إدارة المحافظ التلقائية لكل مشروع — رصيد + إيرادات + مصروفات"
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
         <KPI label="إجمالي المحافظ" val={stats.total}                                  color="#fff" />
         <KPI label="نشطة"            val={stats.active}                                 color="#4ADE80" />
         <KPI label="مُجمَّدة"        val={stats.frozen}                                 color="#FBBF24" />
+        <KPI label="إجمالي الحصص"    val={fmtNum(stats.total_shares)}                  color="#C084FC" />
         <KPI label="إجمالي الأرصدة"  val={fmtNum(stats.total_balance) + " د.ع"}        color="#60A5FA" />
       </div>
 
@@ -278,21 +303,64 @@ export function ProjectWalletsPanel() {
               </button>
             </div>
 
-            {/* Balance summary */}
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-lg p-3 text-center">
-                <div className="text-[10px] text-neutral-500 mb-1">الرصيد</div>
-                <div className="text-base font-bold text-blue-400 font-mono">{fmtNum(selected.balance)}</div>
-              </div>
-              <div className="bg-green-400/[0.05] border border-green-400/[0.2] rounded-lg p-3 text-center">
-                <div className="text-[10px] text-neutral-500 mb-1">إيرادات</div>
-                <div className="text-base font-bold text-green-400 font-mono">+{fmtNum(selected.total_inflow)}</div>
-              </div>
-              <div className="bg-red-400/[0.05] border border-red-400/[0.2] rounded-lg p-3 text-center">
-                <div className="text-[10px] text-neutral-500 mb-1">مصروفات</div>
-                <div className="text-base font-bold text-red-400 font-mono">-{fmtNum(selected.total_outflow)}</div>
-              </div>
-            </div>
+            {/* Phase 10.57: shares-level KPIs (5 boxes) */}
+            {(() => {
+              const adminRow = adminRows.find((r) => r.project_id === selected.id)
+              if (!adminRow) {
+                return (
+                  <div className="grid grid-cols-3 gap-2 mb-4">
+                    <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-lg p-3 text-center">
+                      <div className="text-[10px] text-neutral-500 mb-1">الرصيد</div>
+                      <div className="text-base font-bold text-blue-400 font-mono">{fmtNum(selected.balance)}</div>
+                    </div>
+                    <div className="bg-green-400/[0.05] border border-green-400/[0.2] rounded-lg p-3 text-center">
+                      <div className="text-[10px] text-neutral-500 mb-1">إيرادات</div>
+                      <div className="text-base font-bold text-green-400 font-mono">+{fmtNum(selected.total_inflow)}</div>
+                    </div>
+                    <div className="bg-red-400/[0.05] border border-red-400/[0.2] rounded-lg p-3 text-center">
+                      <div className="text-[10px] text-neutral-500 mb-1">مصروفات</div>
+                      <div className="text-base font-bold text-red-400 font-mono">-{fmtNum(selected.total_outflow)}</div>
+                    </div>
+                  </div>
+                )
+              }
+              return (
+                <>
+                  {/* Row 1: shares counts */}
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div className="bg-purple-400/[0.05] border border-purple-400/[0.2] rounded-lg p-3 text-center">
+                      <div className="text-[10px] text-neutral-500 mb-1">الحصص المعروضة</div>
+                      <div className="text-base font-bold text-purple-400 font-mono">{fmtNum(adminRow.offering_total)}</div>
+                    </div>
+                    <div className="bg-green-400/[0.05] border border-green-400/[0.2] rounded-lg p-3 text-center">
+                      <div className="text-[10px] text-neutral-500 mb-1">حصص مباعة</div>
+                      <div className="text-base font-bold text-green-400 font-mono">{fmtNum(adminRow.sold_shares)}</div>
+                    </div>
+                    <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-lg p-3 text-center">
+                      <div className="text-[10px] text-neutral-500 mb-1">عدد المستثمرين</div>
+                      <div className="text-base font-bold text-blue-400 font-mono">{fmtNum(adminRow.investors_count)}</div>
+                    </div>
+                  </div>
+                  {/* Row 2: market values */}
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <div className="bg-emerald-400/[0.05] border border-emerald-400/[0.2] rounded-lg p-3 text-center">
+                      <div className="text-[10px] text-neutral-500 mb-1">إيرادات المباعة (سعر السوق)</div>
+                      <div className="text-base font-bold text-emerald-400 font-mono">{fmtNum(adminRow.sold_value)} د.ع</div>
+                    </div>
+                    <div className="bg-yellow-400/[0.05] border border-yellow-400/[0.2] rounded-lg p-3 text-center">
+                      <div className="text-[10px] text-neutral-500 mb-1">قيمة الحصص غير المباعة</div>
+                      <div className="text-base font-bold text-yellow-400 font-mono">{fmtNum(adminRow.unsold_offering_value)} د.ع</div>
+                    </div>
+                  </div>
+                  {/* Helper line: market price */}
+                  <div className="text-[11px] text-neutral-500 mb-4 text-center">
+                    سعر السوق الحالي: <span className="font-mono text-white">{fmtNum(adminRow.market_price)} د.ع</span>
+                    {" · "}
+                    إجمالي الحصص: <span className="font-mono text-white">{fmtNum(adminRow.total_shares)}</span>
+                  </div>
+                </>
+              )
+            })()}
 
             {selected.status === "frozen" && selected.frozen_reason && (
               <div className="bg-yellow-400/[0.05] border border-yellow-400/[0.2] rounded-xl p-3 mb-4">
