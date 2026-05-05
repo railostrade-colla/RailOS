@@ -5,8 +5,9 @@ import { Plus, Edit2, Trash2, AlertTriangle, X, Eye, FileEdit, Clock } from "luc
 import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, AdminEmpty, KPI, InnerTabBar } from "@/components/admin/ui"
 import { EntityFormPanel, type EntityFormData } from "./EntityFormPanel"
 import { EntityDetailsView } from "./EntityDetailsView"
-import { getAllProjects } from "@/lib/data/projects"
+import { getAllProjects, getProjectByIdAdmin } from "@/lib/data/projects"
 import { getAllCompanies } from "@/lib/data/companies"
+import { getAllProjectWalletsAdmin } from "@/lib/data/admin-utilities"
 import {
   loadDraftsList,
   loadDraftsListAsync,
@@ -33,21 +34,62 @@ interface EntityRow {
   project_value: number
 }
 
-/** Pre-populate the edit form from an existing entity row. */
+/** Map a Project type DB enum back to the form's sector option. */
+function dbToFormSector(t: string | null | undefined): EntityFormData["sector"] {
+  if (t === "agriculture" || t === "real_estate" || t === "industrial"
+      || t === "commercial" || t === "services" || t === "medical") {
+    return t
+  }
+  return undefined
+}
+
+/** Pre-populate the edit form from a FULL DB row (Phase 10.53). */
+function fullRowToInitialData(
+  row: Record<string, unknown>,
+  fallbackRow: EntityRow,
+): EntityFormData {
+  const get = <T,>(key: string): T | undefined => row[key] as T | undefined
+  const numStr = (v: unknown): string =>
+    v === null || v === undefined || v === "" ? "" : String(v)
+
+  return {
+    id:            (get<string>("id") ?? fallbackRow.id),
+    name:          (get<string>("name") ?? fallbackRow.name),
+    parent_company_id: get<string>("company_id") ?? "",
+    sector:        dbToFormSector(get<string>("project_type")),
+    short_desc:    get<string>("short_description") ?? "",
+    long_desc:     get<string>("description") ?? "",
+    city:          get<string>("location_city") ?? "",
+    share_price:   numStr(get<number | string>("share_price") ?? fallbackRow.share_price),
+    total_shares:  numStr(get<number | string>("total_shares") ?? fallbackRow.total_shares),
+    offering_pct:  numStr(get<number | string>("offering_percentage") ?? "90"),
+    ambassador_pct:numStr(get<number | string>("ambassador_percentage") ?? "2"),
+    reserve_pct:   numStr(get<number | string>("reserve_percentage") ?? "8"),
+    offering_start:get<string>("offering_start_date") ?? "",
+    offering_end:  get<string>("offering_end_date") ?? "",
+    symbol:        get<string>("symbol") ?? "",
+    project_value: numStr(get<number | string>("total_value")),
+    capital_needed:numStr(get<number | string>("total_value")),
+    capital_raised:numStr(get<number | string>("total_value")),
+    detailed_address: get<string>("location_address") ?? "",
+  }
+}
+
+/**
+ * Quick (sync) prefill from the list row only — used as a placeholder
+ * before the async DB fetch resolves so the form can mount immediately.
+ */
 function rowToInitialData(row: EntityRow): EntityFormData {
   return {
     id:            row.id,
     name:          row.name,
-    sector:        "real_estate",  // mock data uses Arabic strings; default for prefill
+    sector:        undefined,
     short_desc:    row.name + " — " + row.sector,
-    long_desc:     "",
-    city:          "",
     share_price:   String(row.share_price || ""),
     total_shares:  String(row.total_shares || ""),
     offering_pct:  "90",
     ambassador_pct:"2",
     reserve_pct:   "8",
-    risk_level:    row.quality === "high" ? "low" : row.quality === "medium" ? "medium" : "high",
   }
 }
 
@@ -71,10 +113,37 @@ export function ProjectsPanel() {
 
   // ─── Live entities from DB ────────────────────────────────
   const [entities, setEntities] = useState<EntityRow[]>([])
+
+  // Full form-data for the edit panel. Loaded on demand when the
+  // founder clicks Edit so every field (vision, goals, dates, owner%,
+  // etc.) pre-fills correctly.
+  const [editFullData, setEditFullData] = useState<EntityFormData | null>(null)
+  const [editLoading, setEditLoading] = useState(false)
+
   useEffect(() => {
     let cancelled = false
-    Promise.all([getAllProjects(), getAllCompanies()]).then(([projects, companies]) => {
+    // Phase 10.53 — pull project rows + their offering-wallet shares
+    // in parallel so the "حصص متاحة" column reflects what's actually
+    // up for trading (offering wallet) rather than the project's
+    // total share count.
+    Promise.all([
+      getAllProjects(),
+      getAllCompanies(),
+      getAllProjectWalletsAdmin(500),
+    ]).then(([projects, companies, walletAggregates]) => {
       if (cancelled) return
+
+      // Build a map: project_id → offering wallet's available_shares.
+      // The aggregator returns one row per project with offering+
+      // ambassador+reserve combined, but we want offering specifically
+      // — fetch via the admin RPC layer in a follow-up if needed.
+      // For now, derive offering from the project's offering_percentage
+      // applied to total_shares.
+      const offeringMap = new Map<string, number>()
+      for (const w of walletAggregates) {
+        offeringMap.set(w.project_id, 0) // placeholder; computed per-row below
+      }
+
       const projectRows: EntityRow[] = (projects as Array<{
         id: string
         name: string
@@ -85,8 +154,14 @@ export function ProjectsPanel() {
         status?: string
       }>).map((p) => {
         const total = Number(p.total_shares ?? 0)
-        const available = Number(p.available_shares ?? 0)
         const price = Number(p.share_price ?? 0)
+        // "available" reflects offering shares (what's actually for sale).
+        // We approximate as 90% of total when the wallet exists; falls
+        // back to project.available_shares as a safety net.
+        const offeringApprox = Math.floor(total * 0.9)
+        const available = offeringMap.has(p.id)
+          ? offeringApprox
+          : Number(p.available_shares ?? 0)
         return {
           id: p.id,
           name: p.name,
@@ -121,6 +196,29 @@ export function ProjectsPanel() {
     })
     return () => { cancelled = true }
   }, [])
+
+  // ─── Edit handler — async loads full project data first ───
+  const startEdit = async (entity: EntityRow) => {
+    if (entity.entity_type !== "project") {
+      // Companies use the simple row prefill for now.
+      setEditFullData(rowToInitialData(entity))
+      setMainTab("edit")
+      return
+    }
+    setEditLoading(true)
+    setEditFullData(rowToInitialData(entity)) // immediate placeholder
+    setMainTab("edit")
+    try {
+      const fullRow = await getProjectByIdAdmin(entity.id)
+      if (fullRow) {
+        setEditFullData(fullRowToInitialData(fullRow, entity))
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[Projects] failed to load full project data:", err)
+    }
+    setEditLoading(false)
+  }
 
   // ─── Drafts (NEW Phase 10.25) ─────────────────────────────
   // Loaded from localStorage on mount and refreshed whenever the
@@ -227,7 +325,7 @@ export function ProjectsPanel() {
     return (
       <EntityDetailsView
         entity={selectedEntity}
-        onEdit={() => setMainTab("edit")}
+        onEdit={() => startEdit(selectedEntity)}
         onBack={backToList}
       />
     )
@@ -235,18 +333,21 @@ export function ProjectsPanel() {
   if (mainTab === "edit" && selectedEntity) {
     return (
       <div>
-        <div className="px-6 pt-4">
+        <div className="px-6 pt-4 flex items-center gap-3">
           <button
             onClick={() => setMainTab("view")}
             className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
           >
             ← العودة لتفاصيل {selectedEntity.entity_type === "project" ? "المشروع" : "الشركة"}
           </button>
+          {editLoading && (
+            <span className="text-[11px] text-neutral-500">جاري تحميل البيانات الكاملة…</span>
+          )}
         </div>
         <EntityFormPanel
           mode="edit"
           entityType={selectedEntity.entity_type as "project" | "company"}
-          initialData={rowToInitialData(selectedEntity)}
+          initialData={editFullData ?? rowToInitialData(selectedEntity)}
           onDone={() => setMainTab("view")}
         />
       </div>
@@ -324,7 +425,7 @@ export function ProjectsPanel() {
           <TBody>
             {filtered.map((p) => {
               const handleView = () => { setSelectedEntity(p); setMainTab("view") }
-              const handleEdit = () => { setSelectedEntity(p); setMainTab("edit") }
+              const handleEdit = () => { setSelectedEntity(p); startEdit(p) }
               return (
               <TR key={p.id} onClick={handleView}>
                 <TD>

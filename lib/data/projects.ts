@@ -69,6 +69,57 @@ export async function getAllProjects(): Promise<Project[]> {
 }
 
 // ──────────────────────────────────────────────────────────────────────
+// Admin: fetch a single project with EVERY column, for the edit form
+// ──────────────────────────────────────────────────────────────────────
+
+export interface ProjectFullRow {
+  id: string
+  name: string
+  slug?: string | null
+  description?: string | null
+  short_description?: string | null
+  project_type?: string | null
+  cover_image_url?: string | null
+  total_shares?: number | string | null
+  share_price?: number | string | null
+  total_value?: number | string | null
+  current_market_price?: number | string | null
+  offering_percentage?: number | string | null
+  ambassador_percentage?: number | string | null
+  reserve_percentage?: number | string | null
+  location_city?: string | null
+  offering_start_date?: string | null
+  offering_end_date?: string | null
+  company_id?: string | null
+  status?: string | null
+  created_at?: string | null
+  symbol?: string | null
+  /** Catch-all for any other columns we surface to the form. */
+  [extraColumn: string]: unknown
+}
+
+/**
+ * Fetches every column for a single project. Used by the Edit panel
+ * so the form can pre-fill every field the founder originally entered.
+ * Returns null if not found / RLS denied.
+ */
+export async function getProjectByIdAdmin(id: string): Promise<ProjectFullRow | null> {
+  if (!id) return null
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle()
+    if (error || !data) return null
+    return data as ProjectFullRow
+  } catch {
+    return null
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
 // Admin: create a new project (Phase 10.20)
 // ──────────────────────────────────────────────────────────────────────
 
