@@ -236,7 +236,21 @@ export async function getAllProjectWalletsAdmin(
       "get_project_wallets_admin",
       { p_limit: limit },
     )
-    if (!rpcError && Array.isArray(rpcData)) {
+    // Verbose logging — surface the exact reason in the browser
+    // console (F12) so the founder can see what's failing.
+    if (rpcError) {
+      // eslint-disable-next-line no-console
+      console.warn("[wallets] RPC error:", {
+        code: rpcError.code,
+        message: rpcError.message,
+        details: rpcError.details,
+        hint: rpcError.hint,
+      })
+    } else {
+      // eslint-disable-next-line no-console
+      console.log("[wallets] RPC returned", Array.isArray(rpcData) ? rpcData.length : "non-array", "rows")
+    }
+    if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
       interface RpcRow {
         project_id: string
         id: string

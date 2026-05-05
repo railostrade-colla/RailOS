@@ -38,12 +38,21 @@ export function ProjectWalletsPanel() {
   // Production mode — real DB. Loaded async on mount; refresh after
   // each freeze/unfreeze/release.
   const [wallets, setWallets] = useState<ProjectWallet[]>([])
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "error">("idle")
+  const [loadError, setLoadError] = useState<string>("")
 
   const reload = () => {
-    getAllProjectWalletsAdmin(500).then((rows) => {
-      // Cast to ProjectWallet — the admin row shape is a superset.
-      setWallets(rows as unknown as ProjectWallet[])
-    })
+    setLoadState("loading")
+    setLoadError("")
+    getAllProjectWalletsAdmin(500)
+      .then((rows) => {
+        setWallets(rows as unknown as ProjectWallet[])
+        setLoadState("loaded")
+      })
+      .catch((err) => {
+        setLoadState("error")
+        setLoadError(err instanceof Error ? err.message : String(err))
+      })
   }
 
   useEffect(() => {
@@ -177,7 +186,47 @@ export function ProjectWalletsPanel() {
       />
 
       {filtered.length === 0 ? (
-        <AdminEmpty title="لا توجد محافظ" />
+        loadState === "loading" ? (
+          <AdminEmpty title="جاري التحميل..." body="نقرأ المحافظ من قاعدة البيانات" />
+        ) : loadState === "error" ? (
+          <AdminEmpty title="خطأ أثناء التحميل" body={loadError || "غير معروف"} />
+        ) : (
+          <div className="bg-yellow-400/[0.05] border border-yellow-400/[0.25] rounded-2xl p-5 mb-4">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">⚠️</div>
+              <div className="flex-1">
+                <div className="text-sm font-bold text-yellow-400 mb-2">
+                  لا توجد محافظ ظاهرة (الواجهة لم تستلم بيانات)
+                </div>
+                <div className="text-xs text-neutral-300 leading-relaxed mb-3">
+                  تأكّد من الخطوات الثلاث:
+                </div>
+                <ol className="text-xs text-neutral-300 leading-relaxed space-y-2 list-decimal pr-5">
+                  <li>
+                    <span className="font-bold text-white">طبّق Migration 10.55</span>
+                    {" "}في Supabase SQL Editor (يُضيف RLS + RPC).
+                  </li>
+                  <li>
+                    تحقّق من أنّ صلاحيتك في DB =
+                    <code className="font-mono bg-black/30 px-1.5 mx-1 rounded">super_admin</code>
+                    عبر شريط التشخيص في أعلى الصفحة.
+                  </li>
+                  <li>
+                    افتح <span className="font-mono bg-black/30 px-1 rounded">F12</span> → Console،
+                    وستجد رسالة <code className="font-mono bg-black/30 px-1 rounded">[wallets] RPC ...</code>
+                    تكشف السبب الدقيق.
+                  </li>
+                </ol>
+                <button
+                  onClick={reload}
+                  className="mt-3 px-3 py-1.5 rounded-lg bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-400 text-xs font-bold hover:bg-blue-500/[0.2]"
+                >
+                  🔄 إعادة المحاولة
+                </button>
+              </div>
+            </div>
+          </div>
+        )
       ) : (
         <Table>
           <THead>
