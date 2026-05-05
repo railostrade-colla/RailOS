@@ -1,80 +1,212 @@
 "use client"
 
 /**
- * ShareRequestsPanel — admin queue for share-modification requests.
- * Reads from public.share_modification_requests via the share-modifications
- * data layer. Both pending_super_admin AND any other pending statuses
- * are surfaced here so nothing falls through the cracks.
+ * ShareRequestsPanel — Phase 10.66 redesign.
+ *
+ * Shows USER share-purchase requests (deals + payment proofs), not
+ * admin-side share-count modifications (those live at /admin?tab=
+ * share_modification).
+ *
+ * Each row displays everything the admin needs to process a request:
+ *   • Buyer + seller (with email + username)
+ *   • Project + shares_amount + total_amount
+ *   • Payment method + transaction reference + proof image (zoomable)
+ *   • Deal status badge + dispute flag
+ *
+ * Actions per row:
+ *   • فاتورة     → /deals/[id] (full invoice + timeline)
+ *   • ✅ تأكيد   → admin_confirm_deal_payment (force completion)
+ *   • ❌ إلغاء   → admin_cancel_deal (with reason)
  */
 
-import { useEffect, useState, useCallback } from "react"
-import { Search, Check, X } from "lucide-react"
+import { useEffect, useMemo, useState, useCallback } from "react"
+import { Search, X, ZoomIn, FileText, Image as ImageIcon, Eye, AlertTriangle } from "lucide-react"
+import { useRouter } from "next/navigation"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
   KPI, AdminEmpty, InnerTabBar,
 } from "@/components/admin/ui"
-import { getPendingShareRequests, type PendingShareRequest } from "@/lib/data/admin-requests"
+import {
+  getSharePurchaseRequestsAdmin,
+  adminConfirmDealPayment,
+  adminCancelDeal,
+  type SharePurchaseRequestRow,
+  type RequestStatusFilter,
+} from "@/lib/data/share-purchase-requests"
 import { showSuccess, showError } from "@/lib/utils/toast"
+import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
+const fmtMoney = (n: number) => fmtNum(n) + " د.ع"
+const fmtDate = (iso: string | null | undefined) =>
+  iso ? iso.replace("T", " ").slice(0, 16) : "—"
 
-type Tab = "pending" | "all"
+const STATUS_META: Record<
+  string,
+  { label: string; color: "gray" | "yellow" | "blue" | "green" | "red" | "purple" }
+> = {
+  pending:            { label: "بانتظار الدفع",   color: "gray"   },
+  pending_payment:    { label: "بانتظار الدفع",   color: "gray"   },
+  awaiting_payment:   { label: "بانتظار الدفع",   color: "gray"   },
+  payment_submitted:  { label: "تم رفع الإثبات",  color: "yellow" },
+  paid:               { label: "مدفوعة",          color: "blue"   },
+  pending_release:    { label: "بانتظار التسليم", color: "yellow" },
+  completed:          { label: "مكتملة",          color: "green"  },
+  in_dispute:         { label: "نزاع",             color: "red"    },
+  disputed:           { label: "نزاع",             color: "red"    },
+  cancelled:          { label: "ملغاة",            color: "gray"   },
+  cancelled_mutual:   { label: "ملغاة",            color: "gray"   },
+  cancelled_expired:  { label: "ملغاة (انتهى الوقت)", color: "gray" },
+}
+
+const PAYMENT_METHOD_LABELS: Record<string, { label: string; icon: string }> = {
+  zain_cash:     { label: "زين كاش",        icon: "💰" },
+  master_card:   { label: "ماستركارد",      icon: "💳" },
+  bank_transfer: { label: "تحويل بنكي",     icon: "🏦" },
+  asia_hawala:   { label: "حوالة آسيا",      icon: "🏧" },
+  ki_card:       { label: "Ki Card",         icon: "💳" },
+  other:         { label: "أخرى",            icon: "💵" },
+}
+
+type ActionMode = null | "confirm" | "cancel"
 
 export function ShareRequestsPanel() {
-  const [requests, setRequests] = useState<PendingShareRequest[]>([])
+  const router = useRouter()
+  const [rows, setRows] = useState<SharePurchaseRequestRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<Tab>("pending")
+  const [filter, setFilter] = useState<RequestStatusFilter>("submitted")
   const [search, setSearch] = useState("")
+
+  // Detail modal
+  const [selected, setSelected] = useState<SharePurchaseRequestRow | null>(null)
+  const [zoomImage, setZoomImage] = useState<string | null>(null)
+  const [actionMode, setActionMode] = useState<ActionMode>(null)
+  const [reason, setReason] = useState("")
+  const [submitting, setSubmitting] = useState(false)
 
   const refresh = useCallback(async () => {
     setLoading(true)
-    const rows = await getPendingShareRequests()
-    setRequests(rows)
+    const data = await getSharePurchaseRequestsAdmin("all", 500)
+    setRows(data)
     setLoading(false)
   }, [])
 
-  useEffect(() => {
+  useEffect(() => { refresh() }, [refresh])
+
+  const stats = useMemo(() => {
+    const isPending = (s: string) => ["pending", "pending_payment", "awaiting_payment"].includes(s)
+    const isSubmitted = (s: string) => ["payment_submitted", "paid", "pending_release"].includes(s)
+    const isDisputed = (s: string) => ["in_dispute", "disputed"].includes(s)
+    const isCompleted = (s: string) => s === "completed"
+    return {
+      total:     rows.length,
+      pending:   rows.filter((r) => isPending(r.status)).length,
+      submitted: rows.filter((r) => isSubmitted(r.status)).length,
+      disputed:  rows.filter((r) => isDisputed(r.status) || r.has_dispute).length,
+      completed: rows.filter((r) => isCompleted(r.status)).length,
+      total_volume: rows
+        .filter((r) => isCompleted(r.status))
+        .reduce((s, r) => s + r.total_amount, 0),
+    }
+  }, [rows])
+
+  const filtered = useMemo(() => {
+    const isPending = (s: string) => ["pending", "pending_payment", "awaiting_payment"].includes(s)
+    const isSubmitted = (s: string) => ["payment_submitted", "paid", "pending_release"].includes(s)
+    const isDisputed = (s: string) => ["in_dispute", "disputed"].includes(s)
+    const isCompleted = (s: string) => s === "completed"
+    const isCancelled = (s: string) => ["cancelled", "cancelled_mutual", "cancelled_expired"].includes(s)
+
+    return rows.filter((r) => {
+      if (filter === "pending" && !isPending(r.status)) return false
+      if (filter === "submitted" && !isSubmitted(r.status)) return false
+      if (filter === "disputed" && !isDisputed(r.status) && !r.has_dispute) return false
+      if (filter === "completed" && !isCompleted(r.status)) return false
+      if (filter === "cancelled" && !isCancelled(r.status)) return false
+
+      if (search) {
+        const q = search.toLowerCase()
+        const hay = [
+          r.id, r.buyer_name, r.buyer_email ?? "", r.buyer_username ?? "",
+          r.seller_name, r.project_name ?? "",
+          r.payment_proof?.transaction_reference ?? "",
+        ].join(" ").toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+  }, [rows, filter, search])
+
+  const closeDetail = () => {
+    setSelected(null)
+    setActionMode(null)
+    setReason("")
+  }
+
+  const handleAction = async () => {
+    if (!selected || !actionMode) return
+    setSubmitting(true)
+    let result
+    if (actionMode === "confirm") {
+      result = await adminConfirmDealPayment(selected.id)
+    } else {
+      if (!reason.trim()) {
+        setSubmitting(false)
+        return showError("اكتب سبب الإلغاء")
+      }
+      result = await adminCancelDeal(selected.id, reason.trim())
+    }
+    setSubmitting(false)
+
+    if (!result.success) {
+      const map: Record<string, string> = {
+        unauthenticated:   "سجّل دخولك أولاً",
+        not_admin:         "صلاحياتك لا تسمح",
+        not_found:         "الطلب غير موجود",
+        invalid_status:    "حالة الصفقة لا تسمح",
+        already_completed: "الصفقة مكتملة بالفعل",
+      }
+      return showError(map[result.reason ?? ""] ?? "فشل الإجراء")
+    }
+
+    showSuccess(
+      actionMode === "confirm"
+        ? "✅ تم تأكيد الدفعة + تحويل الحصص"
+        : "❌ تم إلغاء الطلب + إخطار الطرفين",
+    )
+    closeDetail()
     refresh()
-  }, [refresh])
-
-  const filtered = requests
-    .filter((r) =>
-      tab === "all" ||
-      r.status === "pending_super_admin" ||
-      r.status === "pending"
-    )
-    .filter((r) =>
-      !search ||
-      r.project_name.includes(search) ||
-      r.requested_by_name.includes(search),
-    )
-
-  const stats = {
-    total: requests.length,
-    pending: requests.filter((r) =>
-      r.status === "pending_super_admin" || r.status === "pending"
-    ).length,
-    increase: requests.filter((r) => r.modification_type === "increase").length,
-    decrease: requests.filter((r) => r.modification_type === "decrease").length,
   }
 
   return (
     <div className="p-6 max-w-screen-2xl">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex justify-between items-start mb-4 gap-3">
         <div>
-          <div className="text-lg font-bold text-white">📥 طلبات تعديل الحصص</div>
+          <div className="text-lg font-bold text-white">📥 طلبات شراء الحصص</div>
           <div className="text-xs text-neutral-500 mt-0.5">
-            استقبال ومعالجة طلبات زيادة/تخفيض الحصص (Super Admin فقط)
+            استقبال طلبات المستخدمين + مراجعة إثباتات الدفع + تأكيد/إلغاء
           </div>
         </div>
         <ActionBtn label="🔄 تحديث" color="gray" sm onClick={refresh} />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <KPI label="إجمالي" val={fmtNum(stats.total)} color="#fff" />
-        <KPI label="قيد المراجعة" val={fmtNum(stats.pending)} color="#FBBF24" />
-        <KPI label="طلبات زيادة" val={fmtNum(stats.increase)} color="#4ADE80" />
-        <KPI label="طلبات تخفيض" val={fmtNum(stats.decrease)} color="#F87171" />
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-5">
+        <KPI label="الإجمالي" val={fmtNum(stats.total)} color="#fff" />
+        <KPI label="بانتظار الدفع" val={fmtNum(stats.pending)} color="#a3a3a3" />
+        <KPI
+          label="إثباتات معلّقة"
+          val={fmtNum(stats.submitted)}
+          color="#FBBF24"
+          accent={stats.submitted > 0 ? "rgba(251,191,36,0.05)" : undefined}
+        />
+        <KPI
+          label="نزاعات"
+          val={fmtNum(stats.disputed)}
+          color="#F87171"
+          accent={stats.disputed > 0 ? "rgba(248,113,113,0.05)" : undefined}
+        />
+        <KPI label="مكتملة" val={fmtNum(stats.completed)} color="#4ADE80" />
+        <KPI label="حجم التداول" val={fmtMoney(stats.total_volume)} color="#FBBF24" />
       </div>
 
       <div className="relative mb-3">
@@ -83,18 +215,22 @@ export function ShareRequestsPanel() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="ابحث (مشروع / مقدّم الطلب)..."
+          placeholder="بحث (مشتري / بائع / مشروع / مرجع المعاملة)..."
           className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl pr-10 pl-4 py-2.5 text-sm text-white placeholder:text-neutral-500 outline-none focus:border-white/20"
         />
       </div>
 
       <InnerTabBar
         tabs={[
-          { key: "pending", label: "قيد المراجعة", count: stats.pending },
+          { key: "submitted", label: "📥 إثباتات معلّقة", count: stats.submitted },
+          { key: "pending", label: "⏳ بانتظار الدفع", count: stats.pending },
+          { key: "disputed", label: "⚖ نزاعات", count: stats.disputed },
+          { key: "completed", label: "✅ مكتملة", count: stats.completed },
+          { key: "cancelled", label: "❌ ملغاة" },
           { key: "all", label: "الكل", count: stats.total },
         ]}
-        active={tab}
-        onSelect={(k) => setTab(k as Tab)}
+        active={filter}
+        onSelect={(k) => setFilter(k as RequestStatusFilter)}
       />
 
       {loading ? (
@@ -102,76 +238,112 @@ export function ShareRequestsPanel() {
       ) : filtered.length === 0 ? (
         <AdminEmpty
           title="لا توجد طلبات"
-          body="عند تقديم طلب تعديل حصص من قسم تعديل الحصص (Super Admin) سيظهر هنا."
+          body={
+            rows.length === 0
+              ? "لم يتقدّم أي مستخدم بطلب شراء حصص بعد. عند تنفيذ أوّل صفقة سيظهر الطلب هنا."
+              : "لا تطابق نتائج للفلتر/البحث الحالي."
+          }
         />
       ) : (
         <Table>
           <THead>
-            <TH>المشروع</TH>
-            <TH>مقدّم الطلب</TH>
-            <TH>النوع</TH>
-            <TH>الكمية</TH>
-            <TH>السبب</TH>
-            <TH>الحالة</TH>
             <TH>التاريخ</TH>
-            <TH>الإجراء</TH>
+            <TH>المشتري</TH>
+            <TH>البائع</TH>
+            <TH>المشروع</TH>
+            <TH>الحصص</TH>
+            <TH>المبلغ</TH>
+            <TH>طريقة الدفع</TH>
+            <TH>الإثبات</TH>
+            <TH>الحالة</TH>
+            <TH>إجراءات</TH>
           </THead>
           <TBody>
             {filtered.map((r) => {
-              const isPending =
-                r.status === "pending_super_admin" || r.status === "pending"
+              const meta = STATUS_META[r.status] ?? { label: r.status, color: "gray" as const }
+              const pm = r.payment_proof
+                ? PAYMENT_METHOD_LABELS[r.payment_proof.payment_method] ?? PAYMENT_METHOD_LABELS.other
+                : null
               return (
                 <TR key={r.id}>
-                  <TD>{r.project_name}</TD>
-                  <TD>{r.requested_by_name}</TD>
-                  <TD>
-                    <Badge
-                      label={r.modification_type === "increase" ? "زيادة ↑" : "تخفيض ↓"}
-                      color={r.modification_type === "increase" ? "green" : "red"}
-                    />
-                  </TD>
-                  <TD>
-                    <span className="font-mono text-xs">{fmtNum(r.shares_amount)}</span>
-                  </TD>
-                  <TD>
-                    <span className="text-[11px] text-neutral-400 truncate max-w-xs inline-block">
-                      {r.reason || "—"}
-                    </span>
-                  </TD>
-                  <TD>
-                    <Badge
-                      label={
-                        r.status === "pending_super_admin" || r.status === "pending"
-                          ? "معلّق"
-                          : r.status === "approved"
-                          ? "مُعتمَد"
-                          : "مرفوض"
-                      }
-                      color={
-                        isPending ? "yellow" : r.status === "approved" ? "green" : "red"
-                      }
-                    />
-                  </TD>
                   <TD>
                     <span className="text-[11px] text-neutral-500" dir="ltr">
-                      {r.created_at.slice(0, 10)}
+                      {fmtDate(r.created_at)}
                     </span>
                   </TD>
                   <TD>
-                    {isPending ? (
-                      <div className="flex gap-1.5">
-                        <ActionBtn
-                          label="افتح"
-                          color="blue"
-                          sm
-                          onClick={() => {
-                            window.location.href = `/admin?tab=share_modification`
-                          }}
-                        />
+                    <div className="min-w-0">
+                      <div className="text-xs text-white font-bold truncate">{r.buyer_name}</div>
+                      <div className="text-[10px] text-neutral-500 truncate" dir="ltr">
+                        {r.buyer_email ?? r.buyer_username ?? "—"}
                       </div>
+                    </div>
+                  </TD>
+                  <TD>
+                    <span className="text-xs text-neutral-300">{r.seller_name}</span>
+                  </TD>
+                  <TD>
+                    <span className="text-xs text-blue-400">{r.project_name ?? "—"}</span>
+                  </TD>
+                  <TD>
+                    <span className="font-mono text-xs text-purple-400">
+                      {fmtNum(r.shares_amount)}
+                    </span>
+                  </TD>
+                  <TD>
+                    <span className="font-mono text-xs text-yellow-400">
+                      {fmtMoney(r.total_amount)}
+                    </span>
+                  </TD>
+                  <TD>
+                    {pm ? (
+                      <span className="text-[11px] flex items-center gap-1 text-neutral-300">
+                        <span>{pm.icon}</span>
+                        <span>{pm.label}</span>
+                      </span>
                     ) : (
                       <span className="text-[10px] text-neutral-600">—</span>
                     )}
+                  </TD>
+                  <TD>
+                    {r.payment_proof?.proof_image_url ? (
+                      <button
+                        onClick={() => setZoomImage(r.payment_proof!.proof_image_url)}
+                        className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                      >
+                        <ImageIcon className="w-3 h-3" />
+                        عرض
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-neutral-600">—</span>
+                    )}
+                  </TD>
+                  <TD>
+                    <div className="flex flex-col gap-0.5">
+                      <Badge label={meta.label} color={meta.color} />
+                      {r.has_dispute && (
+                        <span className="text-[9px] text-red-400 flex items-center gap-0.5 mt-0.5">
+                          <AlertTriangle className="w-2.5 h-2.5" />
+                          نزاع مفتوح
+                        </span>
+                      )}
+                    </div>
+                  </TD>
+                  <TD>
+                    <div className="flex gap-1.5 flex-wrap">
+                      <ActionBtn
+                        label="عرض"
+                        color="blue"
+                        sm
+                        onClick={() => setSelected(r)}
+                      />
+                      <ActionBtn
+                        label="فاتورة"
+                        color="gray"
+                        sm
+                        onClick={() => router.push(`/deals/${r.id}`)}
+                      />
+                    </div>
                   </TD>
                 </TR>
               )
@@ -180,13 +352,228 @@ export function ShareRequestsPanel() {
         </Table>
       )}
 
-      <div className="mt-4 bg-blue-500/[0.05] border border-blue-500/[0.2] rounded-xl p-3 text-[11px] text-blue-300 leading-relaxed">
-        💡 المعالجة الكاملة (موافقة/رفض مع كود التحقّق المزدوج) تتمّ من{" "}
-        <a href="/admin?tab=share_modification" className="font-bold underline">
-          صفحة تعديل الحصص
-        </a>
-        {" "}— Super Admin فقط.
-      </div>
+      {/* ═══ Detail Modal ═══ */}
+      {selected && !actionMode && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center p-4"
+          onClick={closeDetail}
+        >
+          <div
+            className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between sticky top-0 bg-[#0a0a0a]/95 backdrop-blur z-10">
+              <div>
+                <div className="text-sm font-bold text-white">📥 تفاصيل طلب شراء الحصص</div>
+                <div className="text-[10px] text-neutral-500 mt-0.5 font-mono" dir="ltr">
+                  Deal #{selected.id.slice(0, 8)}
+                </div>
+              </div>
+              <button onClick={closeDetail} className="text-neutral-500 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Proof image */}
+              {selected.payment_proof?.proof_image_url && (
+                <button
+                  onClick={() => setZoomImage(selected.payment_proof!.proof_image_url)}
+                  className="block w-full bg-black border border-white/[0.06] rounded-xl overflow-hidden relative group"
+                >
+                  <img
+                    src={selected.payment_proof.proof_image_url}
+                    alt="proof"
+                    className="w-full h-auto max-h-80 object-contain mx-auto"
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100">
+                    <ZoomIn className="w-6 h-6 text-white" />
+                  </div>
+                </button>
+              )}
+
+              {/* Details */}
+              <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 space-y-1.5 text-xs">
+                <Field label="المشتري" value={selected.buyer_name} />
+                <Field label="بريد المشتري" value={selected.buyer_email ?? "—"} dir="ltr" />
+                <Field label="البائع" value={selected.seller_name} />
+                <Field label="المشروع" value={selected.project_name ?? "—"} />
+                <Field label="عدد الحصص" value={fmtNum(selected.shares_amount)} />
+                <Field label="إجمالي المبلغ"
+                  value={<span className="text-yellow-400 font-mono font-bold">{fmtMoney(selected.total_amount)}</span>} />
+                <Field label="تاريخ الإنشاء" value={fmtDate(selected.created_at)} dir="ltr" />
+                <Field label="الحالة"
+                  value={<Badge
+                    label={STATUS_META[selected.status]?.label ?? selected.status}
+                    color={STATUS_META[selected.status]?.color ?? "gray"} />} />
+              </div>
+
+              {/* Payment proof details */}
+              {selected.payment_proof && (
+                <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 space-y-1.5 text-xs">
+                  <div className="text-[11px] font-bold text-neutral-400 mb-2">🧾 بيانات الدفع</div>
+                  <Field
+                    label="طريقة الدفع"
+                    value={
+                      (PAYMENT_METHOD_LABELS[selected.payment_proof.payment_method] ?? PAYMENT_METHOD_LABELS.other).icon +
+                      " " +
+                      (PAYMENT_METHOD_LABELS[selected.payment_proof.payment_method] ?? PAYMENT_METHOD_LABELS.other).label
+                    }
+                  />
+                  <Field
+                    label="المبلغ المُرفق"
+                    value={
+                      <span className={cn(
+                        "font-mono font-bold",
+                        selected.payment_proof.amount_paid === selected.total_amount
+                          ? "text-green-400"
+                          : selected.payment_proof.amount_paid < selected.total_amount
+                          ? "text-red-400"
+                          : "text-yellow-400",
+                      )}>
+                        {fmtMoney(selected.payment_proof.amount_paid)}
+                      </span>
+                    }
+                  />
+                  {selected.payment_proof.transaction_reference && (
+                    <Field
+                      label="رقم المرجع"
+                      value={selected.payment_proof.transaction_reference}
+                      dir="ltr"
+                    />
+                  )}
+                  <Field
+                    label="تاريخ رفع الإثبات"
+                    value={fmtDate(selected.payment_proof.submitted_at)}
+                    dir="ltr"
+                  />
+                  {selected.payment_proof.notes && (
+                    <Field label="ملاحظات" value={selected.payment_proof.notes} />
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="px-5 py-3 border-t border-white/[0.06] sticky bottom-0 bg-[#0a0a0a]/95 backdrop-blur grid grid-cols-3 gap-2">
+              <ActionBtn
+                label="📄 الفاتورة الكاملة"
+                color="blue"
+                onClick={() => router.push(`/deals/${selected.id}`)}
+              />
+              {selected.status !== "completed" && (
+                <>
+                  <ActionBtn label="✅ تأكيد الدفع" color="green" onClick={() => setActionMode("confirm")} />
+                  <ActionBtn label="❌ إلغاء" color="red" onClick={() => setActionMode("cancel")} />
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Confirm/Cancel modal ═══ */}
+      {selected && actionMode && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => !submitting && closeDetail()}
+        >
+          <div
+            className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-5 w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-start mb-4">
+              <div className="text-base font-bold text-white">
+                {actionMode === "confirm" ? "✅ تأكيد الدفع" : "❌ إلغاء الطلب"}
+              </div>
+              <button onClick={closeDetail} className="text-neutral-500 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {actionMode === "confirm" ? (
+              <div className="bg-green-400/[0.05] border border-green-400/[0.2] rounded-xl p-3 mb-4 text-xs text-green-400 leading-relaxed">
+                سيتم تأكيد الدفعة + تحويل <span className="font-bold">{fmtNum(selected.shares_amount)}</span> حصة
+                إلى محفظة المشتري + إخطار الطرفين.
+              </div>
+            ) : (
+              <>
+                <div className="bg-red-400/[0.05] border border-red-400/[0.2] rounded-xl p-3 mb-3 text-xs text-red-400 leading-relaxed">
+                  سيتم إلغاء الطلب + إعادة الحصص للبائع + إخطار الطرفين بالسبب.
+                </div>
+                <label className="text-xs text-neutral-400 mb-2 block font-bold">
+                  سبب الإلغاء (إجباري — يُرسَل للطرفين)
+                </label>
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  rows={3}
+                  placeholder="مثلاً: إثبات الدفع غير صحيح / لم يتم استلام المبلغ..."
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white placeholder:text-neutral-600 outline-none resize-none mb-4"
+                />
+              </>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={closeDetail}
+                disabled={submitting}
+                className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleAction}
+                disabled={submitting}
+                className={cn(
+                  "flex-1 py-2.5 rounded-xl text-sm font-bold border transition-colors",
+                  actionMode === "confirm"
+                    ? "bg-green-500/[0.15] border-green-500/[0.3] text-green-300 hover:bg-green-500/[0.2]"
+                    : "bg-red-500/[0.15] border-red-500/[0.3] text-red-300 hover:bg-red-500/[0.2]",
+                  "disabled:opacity-50",
+                )}
+              >
+                {submitting ? "جاري..." : "تأكيد"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Zoom modal */}
+      {zoomImage && (
+        <div
+          className="fixed inset-0 bg-black/95 z-[60] flex items-center justify-center p-4 cursor-zoom-out"
+          onClick={() => setZoomImage(null)}
+        >
+          <button
+            onClick={() => setZoomImage(null)}
+            className="absolute top-4 left-4 text-white/80 hover:text-white"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img src={zoomImage} alt="zoom" className="max-w-full max-h-full object-contain rounded-lg" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Sub-components ───────────────────────────────────────────────
+
+function Field({
+  label, value, dir,
+}: {
+  label: string
+  value: React.ReactNode
+  dir?: "ltr"
+}) {
+  return (
+    <div className="flex justify-between items-center gap-2">
+      <span className="text-neutral-500 text-[11px]">{label}</span>
+      <span className="text-white text-[11px] truncate max-w-[60%] text-left" dir={dir}>
+        {value}
+      </span>
     </div>
   )
 }
