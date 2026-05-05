@@ -1,8 +1,10 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { X, ShoppingCart, AlertTriangle, Loader2 } from "lucide-react"
 import { useRealtime } from "@/lib/realtime/RealtimeProvider"
+import { submitDirectBuyRequest } from "@/lib/data/direct-buy"
 import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -24,6 +26,7 @@ interface Props {
 }
 
 export function CreateDealModal({ open, onClose, project, seller }: Props) {
+  const router = useRouter()
   const { createDeal } = useRealtime()
   const [shares, setShares] = useState("1")
   const [agreed, setAgreed] = useState(false)
@@ -46,21 +49,51 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
 
     setSubmitting(true)
     try {
-      await createDeal({
-        buyer_id: "me",
-        seller_id: seller.id,
-        buyer_name: "أنا",
-        seller_name: seller.name,
-        project_id: project.id,
-        project_name: project.name,
-        shares: sharesNum,
-        price_per_share: project.share_price,
-        total,
-      })
+      // Phase 10.67 — write the request to the real `deals` table via
+      // the SECURITY DEFINER RPC so the admin panel sees it. The
+      // legacy mock createDeal() is kept as a no-op fallback for
+      // environments where the RPC isn't deployed yet.
+      const dbResult = await submitDirectBuyRequest(project.id, sharesNum)
+
+      if (!dbResult.success) {
+        setSubmitting(false)
+        const map: Record<string, string> = {
+          unauthenticated: "سجّل دخولك أولاً",
+          invalid_amount: "أدخل عدد حصص صحيح",
+          project_not_found: "المشروع غير موجود",
+          project_not_active: "المشروع ليس نشطاً للشراء حالياً",
+          insufficient_offering_shares: "الحصص المتاحة في عَرض المشروع غير كافية",
+          cannot_buy_own_project: "لا يمكنك شراء مشروعك الخاص",
+        }
+        return showError(map[dbResult.error ?? ""] ?? `تعذّر إرسال الطلب — ${dbResult.error}`)
+      }
+
+      // Mirror to legacy realtime mock for the chat/notif simulation
+      try {
+        await createDeal({
+          buyer_id: "me",
+          seller_id: seller.id,
+          buyer_name: "أنا",
+          seller_name: seller.name,
+          project_id: project.id,
+          project_name: project.name,
+          shares: sharesNum,
+          price_per_share: project.share_price,
+          total,
+        })
+      } catch { /* non-fatal — DB row is the source of truth */ }
 
       setSubmitting(false)
       setWaiting(true)
-      showSuccess("تم إرسال الطلب! بانتظار رد البائع...")
+      showSuccess("✅ تم إرسال الطلب — الإدارة ستراجعه")
+
+      // Navigate the buyer to the deal page so they can upload the
+      // payment proof.
+      if (dbResult.deal_id) {
+        setTimeout(() => {
+          router.push(`/deals/${dbResult.deal_id}`)
+        }, 1200)
+      }
     } catch (error) {
       setSubmitting(false)
       showError("فشل إرسال الطلب، حاول مرة أخرى")
