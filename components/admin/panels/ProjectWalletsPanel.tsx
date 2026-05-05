@@ -1,23 +1,22 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Search, X, Wallet as WalletIcon, ArrowDownLeft, ArrowUpRight, TrendingUp } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
   SectionHeader, KPI, InnerTabBar, AdminEmpty,
 } from "@/components/admin/ui"
 import {
-  MOCK_PROJECT_WALLETS,
   WALLET_STATUS_LABELS,
   WALLET_TX_REASON_LABELS,
   getWalletTransactions,
-  getProjectWalletsStats,
   type ProjectWallet,
 } from "@/lib/mock-data/projectWallets"
 import {
   adminFreezeProjectWallet,
   adminUnfreezeProjectWallet,
   adminReleaseSharesToMarket,
+  getAllProjectWalletsAdmin,
 } from "@/lib/data/admin-utilities"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
@@ -36,9 +35,31 @@ export function ProjectWalletsPanel() {
   const [reason, setReason] = useState("")
   const [releaseAmount, setReleaseAmount] = useState("")
 
-  const stats = getProjectWalletsStats()
+  // Production mode — real DB. Loaded async on mount; refresh after
+  // each freeze/unfreeze/release.
+  const [wallets, setWallets] = useState<ProjectWallet[]>([])
 
-  const filtered = MOCK_PROJECT_WALLETS
+  const reload = () => {
+    getAllProjectWalletsAdmin(500).then((rows) => {
+      // Cast to ProjectWallet — the admin row shape is a superset.
+      setWallets(rows as unknown as ProjectWallet[])
+    })
+  }
+
+  useEffect(() => {
+    reload()
+  }, [])
+
+  const stats = {
+    total: wallets.length,
+    active: wallets.filter((w) => w.status === "active").length,
+    frozen: wallets.filter((w) => w.status === "frozen").length,
+    total_balance: wallets.reduce((s, w) => s + w.balance, 0),
+    total_inflow: wallets.reduce((s, w) => s + w.total_inflow, 0),
+    total_outflow: wallets.reduce((s, w) => s + w.total_outflow, 0),
+  }
+
+  const filtered = wallets
     .filter((w) => filter === "all" || w.status === filter)
     .filter((w) => !search || w.project_name.includes(search))
 
@@ -109,6 +130,7 @@ export function ProjectWalletsPanel() {
     setSelected(null)
     setReason("")
     setReleaseAmount("")
+    reload()  // refresh DB-backed table after every successful action
   }
 
   return (

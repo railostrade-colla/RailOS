@@ -138,6 +138,164 @@ export async function adminUnfreezeProjectWallet(
   return callRpc("admin_unfreeze_project_wallet", { p_wallet_id: walletId })
 }
 
+// ─── List all project wallets (Phase 10.51) ────────────────────
+
+export interface ProjectWalletAdminRow {
+  id: string
+  project_id: string
+  project_name: string
+  /** Used as "balance" in the UI — the project's total IQD value of available offering shares. */
+  balance: number
+  total_inflow: number
+  total_outflow: number
+  status: "active" | "frozen" | "closed"
+  created_at: string
+  frozen_at?: string
+  frozen_reason?: string
+}
+
+/**
+ * Fetches all project wallets across the platform, aggregated per
+ * project. The DB stores 3 wallets per project (offering / ambassador
+ * / reserve) but the admin UI shows ONE row per project. We aggregate
+ * client-side: balance = total IQD value of available shares across
+ * all 3 wallets.
+ *
+ * Two-step manual join — no FK assumption.
+ */
+export async function getAllProjectWalletsAdmin(
+  limit = 200,
+): Promise<ProjectWalletAdminRow[]> {
+  try {
+    const supabase = createClient()
+
+    // Step 1: All wallet rows (no FK joins).
+    const { data: walletsRaw, error: walletsError } = await supabase
+      .from("project_wallets")
+      .select("id, project_id, wallet_type, total_shares, available_shares, status, created_at, frozen_at, frozen_reason")
+      .limit(limit * 5) // 5 wallet types per project max
+
+    if (walletsError || !walletsRaw) {
+      // eslint-disable-next-line no-console
+      console.warn("[admin-utilities] getAllProjectWalletsAdmin failed:", walletsError?.message)
+      return []
+    }
+
+    // Step 2: Get project names + share_price separately.
+    const projectIds = Array.from(
+      new Set(
+        walletsRaw
+          .map((w) => (w as { project_id: string | null }).project_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    )
+
+    interface ProjectMin {
+      id: string
+      name: string | null
+      share_price: number | string | null
+      created_at: string | null
+    }
+    const projectMap = new Map<string, ProjectMin>()
+    if (projectIds.length > 0) {
+      try {
+        const { data: projs } = await supabase
+          .from("projects")
+          .select("id, name, share_price, created_at")
+          .in("id", projectIds)
+        for (const p of (projs ?? []) as ProjectMin[]) projectMap.set(p.id, p)
+      } catch { /* leave empty */ }
+    }
+
+    // Step 3: Aggregate per project.
+    interface Bucket {
+      project_id: string
+      project_name: string
+      created_at: string
+      share_price: number
+      offering_available: number
+      ambassador_available: number
+      reserve_available: number
+      total_shares: number
+      any_frozen: boolean
+      frozen_at?: string
+      frozen_reason?: string
+    }
+    const buckets = new Map<string, Bucket>()
+
+    for (const w of walletsRaw as Array<{
+      id: string
+      project_id: string
+      wallet_type: string
+      total_shares: number | string | null
+      available_shares: number | string | null
+      status: string | null
+      created_at: string | null
+      frozen_at: string | null
+      frozen_reason: string | null
+    }>) {
+      if (!w.project_id) continue
+      const proj = projectMap.get(w.project_id)
+      let bucket = buckets.get(w.project_id)
+      if (!bucket) {
+        bucket = {
+          project_id: w.project_id,
+          project_name: proj?.name ?? "—",
+          created_at: (proj?.created_at ?? w.created_at ?? "").slice(0, 10),
+          share_price: Number(proj?.share_price ?? 0),
+          offering_available: 0,
+          ambassador_available: 0,
+          reserve_available: 0,
+          total_shares: 0,
+          any_frozen: false,
+        }
+        buckets.set(w.project_id, bucket)
+      }
+      const avail = Number(w.available_shares ?? 0)
+      const total = Number(w.total_shares ?? 0)
+      bucket.total_shares += total
+      if (w.wallet_type === "offering") bucket.offering_available += avail
+      else if (w.wallet_type === "ambassador") bucket.ambassador_available += avail
+      else if (w.wallet_type === "reserve") bucket.reserve_available += avail
+      if (w.status === "frozen") {
+        bucket.any_frozen = true
+        bucket.frozen_at = w.frozen_at ?? bucket.frozen_at
+        bucket.frozen_reason = w.frozen_reason ?? bucket.frozen_reason
+      }
+    }
+
+    // Step 4: Build admin rows.
+    const out: ProjectWalletAdminRow[] = []
+    for (const b of buckets.values()) {
+      const totalAvailable = b.offering_available + b.ambassador_available + b.reserve_available
+      const balance = totalAvailable * b.share_price
+      const totalValue = b.total_shares * b.share_price
+      const inflow = totalValue
+      const outflow = totalValue - balance
+      out.push({
+        id: b.project_id,
+        project_id: b.project_id,
+        project_name: b.project_name,
+        balance,
+        total_inflow: inflow,
+        total_outflow: outflow,
+        status: b.any_frozen ? "frozen" : "active",
+        created_at: b.created_at || "—",
+        frozen_at: b.frozen_at?.slice(0, 10) ?? undefined,
+        frozen_reason: b.frozen_reason ?? undefined,
+      })
+    }
+
+    // Newest first
+    out.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    return out.slice(0, limit)
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[admin-utilities] getAllProjectWalletsAdmin threw:", err)
+    return []
+  }
+}
+
 // ─── Release shares to market (Phase 10.17) ────────────────────
 
 export interface ReleaseSharesResult {
