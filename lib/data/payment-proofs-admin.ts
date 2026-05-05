@@ -106,33 +106,78 @@ export async function getPaymentProofsAdmin(
 ): Promise<PaymentProof[]> {
   try {
     const supabase = createClient()
-    const { data, error } = await supabase
+
+    // Step 1: payment_proofs alone.
+    const { data: proofs, error } = await supabase
       .from("payment_proofs")
       .select(
-        `
-        id, deal_id, payment_method, amount_paid, transaction_reference,
-        proof_image_url, notes, submitted_at,
-        deal:deals!deal_id (
-          id, status, total_amount, buyer_id,
-          buyer:profiles!buyer_id ( full_name, username ),
-          project:projects!project_id ( name )
-        )
-        `,
+        `id, deal_id, payment_method, amount_paid, transaction_reference,
+         proof_image_url, notes, submitted_at`,
       )
       .order("submitted_at", { ascending: false })
       .limit(limit)
 
-    if (error || !data) {
+    if (error || !proofs) {
       if (error)
         // eslint-disable-next-line no-console
         console.warn("[payment-proofs-admin] select:", error.message)
       return []
     }
 
-    return (data as ProofRow[]).map((p) => {
-      const deal = unwrap(p.deal)
-      const buyer = unwrap(deal?.buyer ?? null)
-      const project = unwrap(deal?.project ?? null)
+    // Step 2: deals.
+    const dealIds = Array.from(
+      new Set(
+        proofs
+          .map((p) => (p as { deal_id: string | null }).deal_id)
+          .filter((x): x is string => Boolean(x)),
+      ),
+    )
+    interface DealMin {
+      id: string
+      status: string | null
+      total_amount: number | string | null
+      buyer_id: string | null
+      project_id: string | null
+    }
+    const dealMap = new Map<string, DealMin>()
+    if (dealIds.length > 0) {
+      try {
+        const { data: deals } = await supabase
+          .from("deals")
+          .select("id, status, total_amount, buyer_id, project_id")
+          .in("id", dealIds)
+        for (const d of (deals ?? []) as DealMin[]) dealMap.set(d.id, d)
+      } catch { /* leave empty */ }
+    }
+
+    // Step 3: profiles + projects.
+    const userIds: string[] = []
+    const projectIds: string[] = []
+    for (const d of dealMap.values()) {
+      if (d.buyer_id) userIds.push(d.buyer_id)
+      if (d.project_id) projectIds.push(d.project_id)
+    }
+
+    const { fetchProfilesByIds } = await import("./admin-join-helper")
+    const profileMap = await fetchProfilesByIds(userIds, supabase)
+
+    const projectMap = new Map<string, string>()
+    if (projectIds.length > 0) {
+      try {
+        const { data: projects } = await supabase
+          .from("projects")
+          .select("id, name")
+          .in("id", Array.from(new Set(projectIds)))
+        for (const pr of (projects ?? []) as Array<{ id: string; name: string | null }>) {
+          projectMap.set(pr.id, pr.name ?? "—")
+        }
+      } catch { /* leave empty */ }
+    }
+
+    return (proofs as ProofRow[]).map((p) => {
+      const deal = p.deal_id ? dealMap.get(p.deal_id) ?? null : null
+      const buyer = deal?.buyer_id ? profileMap.get(deal.buyer_id) ?? null : null
+      const projectName = deal?.project_id ? projectMap.get(deal.project_id) ?? "—" : "—"
       const amountPaid = num(p.amount_paid)
       const amountRequired = num(deal?.total_amount)
       return {
@@ -143,7 +188,7 @@ export async function getPaymentProofsAdmin(
           buyer?.full_name?.trim() ||
           buyer?.username?.trim() ||
           "—",
-        project_name: project?.name?.trim() || "—",
+        project_name: projectName.trim() || "—",
         amount_required: amountRequired,
         amount_paid: amountPaid,
         match_status: computeMatch(amountPaid, amountRequired),

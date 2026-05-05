@@ -134,36 +134,85 @@ export async function getDisputesAdmin(
 ): Promise<Dispute[]> {
   try {
     const supabase = createClient()
-    const { data, error } = await supabase
+
+    // Step 1: Plain disputes rows — no PostgREST FK joins.
+    const { data: disputes, error } = await supabase
       .from("disputes")
       .select(
-        `
-        id, deal_id, opened_by, reason, evidence_urls,
-        status, admin_notes, resolution_notes, resolved_by,
-        opened_at, resolved_at,
-        deal:deals!deal_id (
-          buyer_id, seller_id, shares_amount, total_amount,
-          buyer:profiles!buyer_id ( full_name, username ),
-          seller:profiles!seller_id ( full_name, username ),
-          project:projects!project_id ( name )
-        )
-        `,
+        `id, deal_id, opened_by, reason, evidence_urls,
+         status, admin_notes, resolution_notes, resolved_by,
+         opened_at, resolved_at`,
       )
       .order("opened_at", { ascending: false })
       .limit(limit)
 
-    if (error || !data) {
+    if (error || !disputes) {
       if (error)
         // eslint-disable-next-line no-console
         console.warn("[disputes-admin] select:", error.message)
       return []
     }
 
-    return (data as DisputeRow[]).map((d) => {
-      const deal = unwrap(d.deal)
-      const buyer = unwrap(deal?.buyer ?? null)
-      const seller = unwrap(deal?.seller ?? null)
-      const project = unwrap(deal?.project ?? null)
+    // Step 2: Pull related deals separately. A missing FK constraint
+    // on disputes.deal_id can't break this — we filter by .in() on
+    // collected ids.
+    const dealIds = Array.from(
+      new Set(
+        disputes
+          .map((d) => (d as { deal_id: string | null }).deal_id)
+          .filter((x): x is string => Boolean(x)),
+      ),
+    )
+
+    interface DealMin {
+      id: string
+      buyer_id: string | null
+      seller_id: string | null
+      project_id: string | null
+      shares_amount: number | string | null
+      total_amount: number | string | null
+    }
+    const dealMap = new Map<string, DealMin>()
+    if (dealIds.length > 0) {
+      try {
+        const { data: deals } = await supabase
+          .from("deals")
+          .select("id, buyer_id, seller_id, project_id, shares_amount, total_amount")
+          .in("id", dealIds)
+        for (const d of (deals ?? []) as DealMin[]) dealMap.set(d.id, d)
+      } catch { /* leave empty */ }
+    }
+
+    // Step 3: profiles (for buyer/seller display name) + projects.
+    const userIds: string[] = []
+    const projectIds: string[] = []
+    for (const d of dealMap.values()) {
+      if (d.buyer_id) userIds.push(d.buyer_id)
+      if (d.seller_id) userIds.push(d.seller_id)
+      if (d.project_id) projectIds.push(d.project_id)
+    }
+
+    const { fetchProfilesByIds } = await import("./admin-join-helper")
+    const profileMap = await fetchProfilesByIds(userIds, supabase)
+
+    const projectMap = new Map<string, string>()
+    if (projectIds.length > 0) {
+      try {
+        const { data: projects } = await supabase
+          .from("projects")
+          .select("id, name")
+          .in("id", Array.from(new Set(projectIds)))
+        for (const p of (projects ?? []) as Array<{ id: string; name: string | null }>) {
+          projectMap.set(p.id, p.name ?? "—")
+        }
+      } catch { /* leave empty */ }
+    }
+
+    return (disputes as DisputeRow[]).map((d) => {
+      const deal = d.deal_id ? dealMap.get(d.deal_id) ?? null : null
+      const buyer = deal?.buyer_id ? profileMap.get(deal.buyer_id) ?? null : null
+      const seller = deal?.seller_id ? profileMap.get(deal.seller_id) ?? null : null
+      const projectName = deal?.project_id ? projectMap.get(deal.project_id) ?? "—" : "—"
       const status = dbStatusToUi(d.status)
       const resolution = dbStatusToResolution(d.status)
       return {
@@ -173,7 +222,7 @@ export async function getDisputesAdmin(
         buyer_name: nameFromProfile(buyer),
         seller_id: deal?.seller_id ?? "",
         seller_name: nameFromProfile(seller),
-        project_name: project?.name?.trim() || "—",
+        project_name: projectName.trim() || "—",
         reason: classifyReason(d.reason),
         description: d.reason ?? "",
         evidence_urls: Array.isArray(d.evidence_urls)
@@ -187,8 +236,6 @@ export async function getDisputesAdmin(
         resolved_at: d.resolved_at ? d.resolved_at.slice(0, 10) : undefined,
         amount: num(deal?.total_amount),
         shares: num(deal?.shares_amount),
-        // No dispute_messages table yet — render the timeline empty.
-        // Future phase wires deal_messages JOIN here.
         messages: [],
       }
     })

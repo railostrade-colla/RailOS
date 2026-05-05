@@ -76,14 +76,13 @@ function fmtDate(iso: string | null | undefined): string {
 export async function getAllTickets(): Promise<AdminTicketRow[]> {
   try {
     const supabase = createClient()
+    // Two-step manual join (Phase 10.41).
     const { data, error } = await supabase
       .from("support_tickets")
       .select(
         `id, user_id, subject, body, category, priority, status,
          assigned_to, last_message_at, closed_at, closed_reason,
-         created_at, updated_at,
-         user:profiles!user_id ( id, full_name, username, email, level, kyc_status ),
-         assignee:profiles!assigned_to ( id, full_name, username )`,
+         created_at, updated_at`,
       )
       .order("created_at", { ascending: false })
 
@@ -102,13 +101,43 @@ export async function getAllTickets(): Promise<AdminTicketRow[]> {
       updated_at: string
       closed_at?: string | null
       closed_reason?: string | null
-      user?: ProfileRef | ProfileRef[] | null
-      assignee?: ProfileRef | ProfileRef[] | null
     }
 
-    return (data as Row[]).map((r) => {
-      const u = unwrap(r.user)
-      const a = unwrap(r.assignee)
+    const rows = data as Row[]
+
+    // Profiles (ticket user + optional assignee). The shared helper
+    // only fetches full_name/username/level — for support we also
+    // need email + kyc_status, so query manually here.
+    const userIds = Array.from(
+      new Set(
+        [
+          ...rows.map((r) => r.user_id),
+          ...rows.map((r) => r.assigned_to).filter((x): x is string => Boolean(x)),
+        ].filter((x): x is string => Boolean(x)),
+      ),
+    )
+    interface SupportProfile {
+      id: string
+      full_name: string | null
+      username: string | null
+      email: string | null
+      level: string | null
+      kyc_status: string | null
+    }
+    const profileMap = new Map<string, SupportProfile>()
+    if (userIds.length > 0) {
+      try {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, full_name, username, email, level, kyc_status")
+          .in("id", userIds)
+        for (const p of (profs ?? []) as SupportProfile[]) profileMap.set(p.id, p)
+      } catch { /* leave empty */ }
+    }
+
+    return rows.map((r) => {
+      const u = profileMap.get(r.user_id) ?? null
+      const a = r.assigned_to ? profileMap.get(r.assigned_to) ?? null : null
       return {
         id: r.id,
         user_id: r.user_id,

@@ -79,16 +79,16 @@ export async function getKycSubmissions(
 ): Promise<KycSubmission[]> {
   try {
     const supabase = createClient()
+    // Two-step manual join (Phase 10.41) — avoids the
+    // `profiles!user_id` PostgREST FK inference that returns empty
+    // when the FK constraint is missing on kyc_submissions.
     const { data, error } = await supabase
       .from("kyc_submissions")
       .select(
-        `
-        id, user_id, full_name, date_of_birth, city,
-        document_type, document_number,
-        document_front_url, document_back_url, selfie_url,
-        status, review_notes, submitted_at,
-        profile:profiles!user_id ( full_name, username )
-        `,
+        `id, user_id, full_name, date_of_birth, city,
+         document_type, document_number,
+         document_front_url, document_back_url, selfie_url,
+         status, review_notes, submitted_at`,
       )
       .order("submitted_at", { ascending: false })
       .limit(limit)
@@ -100,8 +100,14 @@ export async function getKycSubmissions(
       return []
     }
 
+    const { fetchProfilesByIds } = await import("./admin-join-helper")
+    const profileMap = await fetchProfilesByIds(
+      data.map((r) => (r as { user_id: string | null }).user_id),
+      supabase,
+    )
+
     return (data as KycRow[]).map((r) => {
-      const profile = unwrapProfile(r.profile)
+      const profile = r.user_id ? profileMap.get(r.user_id) ?? null : null
       const userName =
         r.full_name?.trim() ||
         profile?.full_name?.trim() ||

@@ -247,6 +247,91 @@ export async function getMyUserId(): Promise<string | null> {
   }
 }
 
+// ─── Bootstrap + diagnostic (Phase 10.41) ────────────────────────
+
+export interface WhoamiAdminResult {
+  authenticated: boolean
+  user_id?: string
+  email?: string | null
+  full_name?: string | null
+  role: string
+  is_admin: boolean
+  is_super_admin: boolean
+  super_admin_count: number
+  has_profile_row: boolean
+}
+
+const WHOAMI_FALLBACK: WhoamiAdminResult = {
+  authenticated: false,
+  role: "unknown",
+  is_admin: false,
+  is_super_admin: false,
+  super_admin_count: 0,
+  has_profile_row: false,
+}
+
+/**
+ * Calls the `whoami_admin()` diagnostic RPC. Returns a "no auth"
+ * fallback if the RPC isn't installed yet (Phase 10.41 not applied).
+ * Used by the AdminDiagnosticBanner to surface why admin queries
+ * might be returning empty.
+ */
+export async function whoamiAdmin(): Promise<WhoamiAdminResult> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("whoami_admin")
+    if (error || !data) return WHOAMI_FALLBACK
+    const r = data as Partial<WhoamiAdminResult>
+    return {
+      authenticated: Boolean(r.authenticated),
+      user_id: r.user_id,
+      email: r.email ?? null,
+      full_name: r.full_name ?? null,
+      role: r.role ?? "unknown",
+      is_admin: Boolean(r.is_admin),
+      is_super_admin: Boolean(r.is_super_admin),
+      super_admin_count: Number(r.super_admin_count ?? 0),
+      has_profile_row: Boolean(r.has_profile_row),
+    }
+  } catch {
+    return WHOAMI_FALLBACK
+  }
+}
+
+export interface BootstrapResult {
+  success: boolean
+  reason?: string
+  user_id?: string
+  role?: string
+  existing_super_admin_count?: number
+}
+
+/**
+ * Calls `bootstrap_first_super_admin()` to self-promote when no
+ * super_admin exists in the system yet. Idempotent: subsequent calls
+ * after seeding return success=false with reason="already_seeded".
+ */
+export async function bootstrapFirstSuperAdmin(): Promise<BootstrapResult> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("bootstrap_first_super_admin")
+    if (error) {
+      const code = error.code ?? ""
+      const msg = error.message ?? ""
+      if (code === "42883" || /function .* does not exist/i.test(msg)) {
+        return { success: false, reason: "missing_migration" }
+      }
+      return { success: false, reason: msg }
+    }
+    return (data ?? { success: false, reason: "unknown" }) as BootstrapResult
+  } catch (err) {
+    return {
+      success: false,
+      reason: err instanceof Error ? err.message : "unknown",
+    }
+  }
+}
+
 // ─── User stats (Phase 10.32) ───────────────────────────────────
 
 /**

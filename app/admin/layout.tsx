@@ -4,6 +4,7 @@ import { useState, Suspense } from "react"
 import { usePathname } from "next/navigation"
 import { AdminSidebar } from "@/components/admin/Sidebar"
 import { AdminTopBar } from "@/components/admin/AdminTopBar"
+import { AdminDiagnosticBanner } from "@/components/admin/AdminDiagnosticBanner"
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(true)
@@ -25,6 +26,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {showTopBar && (
           <Suspense fallback={null}>
             <AdminTopBar />
+          </Suspense>
+        )}
+        {/* Renders only when admin auth/role is broken — invisible
+            on the happy path. */}
+        {showTopBar && (
+          <Suspense fallback={null}>
+            <AdminDiagnosticBanner />
           </Suspense>
         )}
         <Suspense fallback={null}>{children}</Suspense>

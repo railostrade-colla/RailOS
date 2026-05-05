@@ -34,14 +34,15 @@ function num(v: unknown, fallback = 0): number {
 export async function getAllApplications(): Promise<HealthcareApplication[]> {
   try {
     const supabase = createClient()
+    // Two-step manual join (Phase 10.41) — avoids the FK-inference
+    // empty-result bug when profiles!user_id isn't declared as FK.
     const { data, error } = await supabase
       .from("healthcare_applications")
       .select(
         `id, user_id, status, disease_type, diagnosis, doctor_name,
          hospital, total_cost, user_available, requested_amount,
          attachments, reviewed_by, reviewed_at, rejection_reason,
-         admin_notes, submitted_at, created_at,
-         user:profiles!user_id ( full_name, username )`,
+         admin_notes, submitted_at, created_at`,
       )
       .order("submitted_at", { ascending: false })
 
@@ -62,11 +63,16 @@ export async function getAllApplications(): Promise<HealthcareApplication[]> {
       reviewed_at?: string | null
       rejection_reason?: string | null
       submitted_at: string
-      user?: ProfileRef | ProfileRef[] | null
     }
 
+    const { fetchProfilesByIds } = await import("./admin-join-helper")
+    const profileMap = await fetchProfilesByIds(
+      (data as Row[]).map((r) => r.user_id),
+      supabase,
+    )
+
     return (data as Row[]).map((r): HealthcareApplication => {
-      const u = unwrap(r.user)
+      const u = r.user_id ? profileMap.get(r.user_id) ?? null : null
       // DB has 4 statuses (incl. 'cancelled'); mock only has 3.
       // Map 'cancelled' → 'rejected' for display continuity.
       const status: AppStatus =

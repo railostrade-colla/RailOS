@@ -82,12 +82,11 @@ export interface AdminSponsorshipRow {
 export async function getAllSponsorships(): Promise<AdminSponsorshipRow[]> {
   try {
     const supabase = createClient()
+    // Two-step manual join (Phase 10.41).
     const { data, error } = await supabase
       .from("sponsorships")
       .select(
-        `id, sponsor_id, child_id, type, amount, status, started_at,
-         sponsor:profiles!sponsor_id ( full_name, username ),
-         child:orphan_children!child_id ( first_name )`,
+        `id, sponsor_id, child_id, type, amount, status, started_at`,
       )
       .order("started_at", { ascending: false })
 
@@ -101,24 +100,40 @@ export async function getAllSponsorships(): Promise<AdminSponsorshipRow[]> {
       amount: number | string
       status: string
       started_at: string
-      sponsor?: { full_name?: string | null; username?: string | null } | { full_name?: string | null; username?: string | null }[] | null
-      child?: { first_name?: string | null } | { first_name?: string | null }[] | null
     }
 
-    function unwrap<T>(v: T | T[] | null | undefined): T | null {
-      if (!v) return null
-      return Array.isArray(v) ? v[0] ?? null : v
+    const rows = data as Row[]
+    const { fetchProfilesByIds } = await import("./admin-join-helper")
+    const profileMap = await fetchProfilesByIds(
+      rows.map((r) => r.sponsor_id),
+      supabase,
+    )
+
+    // Look up child names separately.
+    const childIds = Array.from(
+      new Set(rows.map((r) => r.child_id).filter(Boolean)),
+    )
+    const childMap = new Map<string, string>()
+    if (childIds.length > 0) {
+      try {
+        const { data: kids } = await supabase
+          .from("orphan_children")
+          .select("id, first_name")
+          .in("id", childIds)
+        for (const c of (kids ?? []) as Array<{ id: string; first_name: string | null }>) {
+          childMap.set(c.id, c.first_name ?? "—")
+        }
+      } catch { /* leave empty */ }
     }
 
-    return (data as Row[]).map((s) => {
-      const sp = unwrap(s.sponsor)
-      const ch = unwrap(s.child)
+    return rows.map((s) => {
+      const sp = s.sponsor_id ? profileMap.get(s.sponsor_id) ?? null : null
       return {
         id: s.id,
         sponsor_id: s.sponsor_id,
         sponsor_name: sp?.full_name?.trim() || sp?.username?.trim() || "—",
         child_id: s.child_id,
-        child_name: ch?.first_name ?? "—",
+        child_name: childMap.get(s.child_id) ?? "—",
         amount: num(s.amount),
         type: s.type,
         status: s.status,
