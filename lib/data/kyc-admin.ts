@@ -233,14 +233,55 @@ async function reviewKyc(params: {
   }
   try {
     const supabase = createClient()
+
+    // Phase 10.65 — preferred path: SECURITY DEFINER RPCs that
+    // bypass RLS and never hit the "Cannot coerce" PostgREST quirk
+    // when the UPDATE-then-SELECT chain returns 0 rows.
+    const rpcName = params.decision === "approved"
+      ? "admin_approve_kyc"
+      : "admin_reject_kyc"
+    const rpcArgs = params.decision === "approved"
+      ? { p_submission_id: params.submissionId }
+      : { p_submission_id: params.submissionId, p_reason: params.reason ?? "—" }
+
+    try {
+      const { data, error } = await supabase.rpc(rpcName, rpcArgs)
+      if (!error && data) {
+        const r = data as { success?: boolean; error?: string }
+        if (r.success) return { success: true }
+        if (r.error) {
+          const map: Record<string, ReviewKycResult["reason"]> = {
+            unauthenticated: "unauthenticated",
+            not_admin: "rls",
+            reason_required: "unknown",
+            not_found: "unknown",
+          }
+          return {
+            success: false,
+            reason: map[r.error] ?? "unknown",
+            error: r.error,
+          }
+        }
+      }
+      // RPC errored or returned null — fall through to legacy path
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.warn("[kyc-admin] RPC failed, trying legacy path:", error.message)
+      }
+    } catch (rpcErr) {
+      // eslint-disable-next-line no-console
+      console.warn("[kyc-admin] RPC threw, trying legacy path:", rpcErr)
+    }
+
+    // ─── Legacy fallback path (direct table write) ──────────────
     const {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return { success: false, reason: "unauthenticated" }
 
-    // Update the submission row first — gated by the Phase-Z admin
-    // policy, so non-admins fail fast.
-    const { data: row, error: subErr } = await supabase
+    // Use maybeSingle() so 0-row results return null instead of
+    // throwing "Cannot coerce the result to a single JSON object".
+    const { data: rows, error: subErr } = await supabase
       .from("kyc_submissions")
       .update({
         status: params.decision,
@@ -250,28 +291,29 @@ async function reviewKyc(params: {
       })
       .eq("id", params.submissionId)
       .select("user_id")
-      .single()
 
-    if (subErr || !row) {
-      const code = subErr?.code ?? ""
-      const msg = subErr?.message ?? ""
+    if (subErr) {
+      const code = subErr.code ?? ""
+      const msg = subErr.message ?? ""
       if (code === "42P01" || /relation .* does not exist/i.test(msg)) {
         return { success: false, reason: "missing_table", error: msg }
       }
       if (code === "42501" || /permission/i.test(msg)) {
         return { success: false, reason: "rls", error: msg }
       }
-      // eslint-disable-next-line no-console
-      console.error("[kyc-admin] reviewKyc submission:", msg)
       return { success: false, reason: "unknown", error: msg }
     }
 
-    // Best-effort: mirror to profiles.kyc_status so the user sees
-    // the verified badge on the next render. The submission row is
-    // authoritative; if this update fails (RLS, etc.) the trigger
-    // from 20260502_phase2_kyc_triggers.sql still fires its
-    // notification, and the source-of-truth is consistent.
-    const userId = (row as { user_id: string }).user_id
+    const updatedRows = (rows ?? []) as Array<{ user_id: string }>
+    if (updatedRows.length === 0) {
+      return {
+        success: false,
+        reason: "rls",
+        error: "0 rows updated — RLS blocked or submission missing",
+      }
+    }
+
+    const userId = updatedRows[0].user_id
     if (userId) {
       try {
         await supabase
