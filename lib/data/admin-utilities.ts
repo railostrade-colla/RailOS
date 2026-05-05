@@ -221,44 +221,67 @@ export interface AdminUserListRow {
 }
 
 export async function getAllUsersForAdmin(limit = 500): Promise<AdminUserListRow[]> {
+  const supabase = createClient()
+
+  interface Raw {
+    id: string
+    full_name: string | null
+    username: string | null
+    phone: string | null
+    email: string | null
+    role: string | null
+    level: string | null
+    kyc_status: string | null
+    created_at: string
+    last_seen_at: string | null
+  }
+
+  const mapRow = (p: Raw): AdminUserListRow => ({
+    id: p.id,
+    full_name: p.full_name ?? p.username ?? "—",
+    username: p.username,
+    phone: p.phone,
+    email: p.email,
+    role: p.role ?? "user",
+    level: p.level ?? "basic",
+    kyc_status: p.kyc_status ?? "not_submitted",
+    created_at: p.created_at,
+    last_seen_at: p.last_seen_at,
+    is_super_admin: p.role === "super_admin",
+    is_admin: p.role === "admin" || p.role === "super_admin",
+  })
+
+  // Phase 10.60 — preferred path: SECURITY DEFINER RPC that joins
+  // profiles + auth.users so admins see emails. Falls back to a direct
+  // profiles select if the RPC isn't deployed yet (so older databases
+  // don't break the panel).
   try {
-    const supabase = createClient()
+    const { data, error } = await supabase.rpc("get_all_users_for_admin", {
+      p_limit: limit,
+    })
+    if (!error && Array.isArray(data)) {
+      return (data as Raw[]).map(mapRow)
+    }
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn("[admin-utilities] get_all_users_for_admin RPC:", error.message)
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("[admin-utilities] get_all_users_for_admin threw:", err)
+  }
+
+  // Fallback: direct profiles read (no email — that lives on auth.users).
+  try {
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, full_name, username, phone, email, role, level, kyc_status, created_at, last_seen_at",
+        "id, full_name, username, phone, role, level, kyc_status, created_at, last_seen_at",
       )
       .order("created_at", { ascending: false })
       .limit(limit)
     if (error || !data) return []
-
-    interface Raw {
-      id: string
-      full_name: string | null
-      username: string | null
-      phone: string | null
-      email: string | null
-      role: string | null
-      level: string | null
-      kyc_status: string | null
-      created_at: string
-      last_seen_at: string | null
-    }
-
-    return (data as Raw[]).map((p): AdminUserListRow => ({
-      id: p.id,
-      full_name: p.full_name ?? p.username ?? "—",
-      username: p.username,
-      phone: p.phone,
-      email: p.email,
-      role: p.role ?? "user",
-      level: p.level ?? "basic",
-      kyc_status: p.kyc_status ?? "none",
-      created_at: p.created_at,
-      last_seen_at: p.last_seen_at,
-      is_super_admin: p.role === "super_admin",
-      is_admin: p.role === "admin" || p.role === "super_admin",
-    }))
+    return (data as Omit<Raw, "email">[]).map((r) => mapRow({ ...r, email: null }))
   } catch {
     return []
   }

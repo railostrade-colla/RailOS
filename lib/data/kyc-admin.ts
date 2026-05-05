@@ -71,17 +71,74 @@ function unwrapProfile(
 }
 
 /**
- * Loads KYC submissions newest-first. Admins see all rows; everyone
- * else gets an empty array (RLS).
+ * Loads KYC submissions newest-first. Admins see all rows.
+ *
+ * Phase 10.60: prefers `get_kyc_submissions_admin` RPC (SECURITY
+ * DEFINER, returns user email from auth.users + profile name).
+ * Falls back to the direct table read for older databases.
  */
 export async function getKycSubmissions(
   limit: number = 200,
 ): Promise<KycSubmission[]> {
+  const supabase = createClient()
+
+  // ─── Preferred path: SECURITY DEFINER RPC ────────────────────
   try {
-    const supabase = createClient()
-    // Two-step manual join (Phase 10.41) — avoids the
-    // `profiles!user_id` PostgREST FK inference that returns empty
-    // when the FK constraint is missing on kyc_submissions.
+    const { data: rpcData, error: rpcErr } = await supabase.rpc(
+      "get_kyc_submissions_admin",
+      { p_limit: limit },
+    )
+    if (!rpcErr && Array.isArray(rpcData)) {
+      interface RpcRow {
+        id: string
+        user_id: string | null
+        full_name: string | null
+        date_of_birth: string | null
+        city: string | null
+        document_type: string | null
+        document_front_url: string | null
+        document_back_url: string | null
+        selfie_url: string | null
+        status: string | null
+        review_notes: string | null
+        submitted_at: string | null
+        profile_name?: string | null
+        profile_username?: string | null
+        user_email?: string | null
+      }
+      return (rpcData as RpcRow[]).map((r) => ({
+        id: r.id,
+        user_id: r.user_id ?? "",
+        user_name:
+          r.full_name?.trim() ||
+          r.profile_name?.trim() ||
+          r.profile_username?.trim() ||
+          "—",
+        user_email:
+          r.user_email?.trim() ||
+          (r.profile_username ? `@${r.profile_username}` : "—"),
+        birth_date: r.date_of_birth ?? "",
+        city: r.city ?? "",
+        document_type: mapDocType(r.document_type),
+        front_url: r.document_front_url ?? "",
+        back_url: r.document_back_url ?? "",
+        selfie_url: r.selfie_url ?? "",
+        status: mapStatus(r.status),
+        rejection_reason: r.review_notes ?? undefined,
+        submitted_at: (r.submitted_at ?? "").slice(0, 10) || "—",
+      }))
+    }
+    if (rpcErr) {
+      // eslint-disable-next-line no-console
+      console.warn("[kyc-admin] get_kyc_submissions_admin RPC:", rpcErr.message)
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("[kyc-admin] RPC threw, falling back:", err)
+  }
+
+  // ─── Fallback: direct table read ─────────────────────────────
+  try {
     const { data, error } = await supabase
       .from("kyc_submissions")
       .select(
@@ -113,9 +170,6 @@ export async function getKycSubmissions(
         profile?.full_name?.trim() ||
         profile?.username?.trim() ||
         "—"
-      // We don't have email from the client (it's on auth.users, not
-      // profiles). Use the username when present so the admin still
-      // has a stable handle to copy.
       const handle = profile?.username?.trim() || ""
       return {
         id: r.id,

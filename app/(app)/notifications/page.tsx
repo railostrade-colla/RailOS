@@ -34,7 +34,15 @@ function familyOf(type: string): Exclude<FilterKey, "all"> | null {
   if (type.startsWith("project_") || type === "level_upgraded" || type.startsWith("kyc_"))
     return "projects"
   if (type === "support_reply" || type.startsWith("dispute_")) return "support"
-  if (type === "system" || type === "council_announcement") return "system"
+  // Phase 10.61 — `system_announcement` is the catch-all type used by
+  // admin broadcasts + the new notify_all_admins() helper. Make sure
+  // it lands in the "system" filter so users can find admin messages.
+  if (
+    type === "system" ||
+    type === "system_announcement" ||
+    type === "news_published" ||
+    type === "council_announcement"
+  ) return "system"
   return null
 }
 
