@@ -94,21 +94,22 @@ BEGIN
 
   v_total_amount := p_shares_amount * COALESCE(v_project.share_price, 0);
 
-  -- Insert the deal row
+  -- Insert the deal row.
+  -- ⚠ Real schema columns:
+  --   • `shares` (not `shares_amount`)
+  --   • `total_amount` is a GENERATED column — never write to it
+  --   • deal_type enum: primary | secondary | quick_sell
+  --   • status default = 'pending_seller_approval'
   INSERT INTO public.deals (
     buyer_id, seller_id, project_id,
-    shares_amount, price_per_share, total_amount,
-    status, deal_type, expires_at
+    deal_type, shares, price_per_share
   ) VALUES (
     v_uid,
     v_seller_id,
     p_project_id,
+    'primary'::deal_type,
     p_shares_amount,
-    v_project.share_price,
-    v_total_amount,
-    'pending_payment',
-    'direct_buy',
-    NOW() + INTERVAL '24 hours'  -- buyer has 24h to upload proof
+    COALESCE(v_project.share_price, 0)
   )
   RETURNING id INTO v_deal_id;
 

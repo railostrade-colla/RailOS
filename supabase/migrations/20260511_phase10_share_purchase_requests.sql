@@ -47,7 +47,7 @@ BEGIN
       SELECT
         d.id,
         d.created_at,
-        d.shares_amount,
+        d.shares AS shares_amount,  -- column is `shares`; alias for frontend
         d.total_amount,
         d.status::TEXT AS status,
         d.buyer_id,
@@ -87,11 +87,11 @@ BEGIN
       WHERE
         CASE p_status
           WHEN 'all' THEN TRUE
-          WHEN 'pending' THEN d.status::TEXT IN ('pending', 'pending_payment', 'awaiting_payment')
-          WHEN 'submitted' THEN d.status::TEXT IN ('payment_submitted', 'paid', 'pending_release')
-          WHEN 'disputed' THEN d.status::TEXT IN ('in_dispute', 'disputed')
+          WHEN 'pending' THEN d.status::TEXT IN ('pending_seller_approval', 'accepted')
+          WHEN 'submitted' THEN d.status::TEXT = 'payment_submitted'
+          WHEN 'disputed' THEN d.status::TEXT = 'disputed'
           WHEN 'completed' THEN d.status::TEXT = 'completed'
-          WHEN 'cancelled' THEN d.status::TEXT IN ('cancelled', 'cancelled_mutual', 'cancelled_expired')
+          WHEN 'cancelled' THEN d.status::TEXT IN ('cancelled', 'rejected', 'expired')
           ELSE TRUE
         END
       ORDER BY d.created_at DESC
@@ -132,14 +132,14 @@ BEGIN
   IF v_deal.id IS NULL THEN
     RETURN jsonb_build_object('success', FALSE, 'error', 'not_found');
   END IF;
-  IF v_deal.status::TEXT NOT IN ('payment_submitted', 'paid', 'pending_release', 'in_dispute', 'pending_payment') THEN
+  IF v_deal.status::TEXT NOT IN ('pending_seller_approval', 'accepted', 'payment_submitted', 'disputed') THEN
     RETURN jsonb_build_object('success', FALSE, 'error', 'invalid_status', 'current_status', v_deal.status::TEXT);
   END IF;
 
   -- Mark deal as completed (the existing trg_deal_completion trigger
   -- handles the actual share transfer + balance updates).
   UPDATE public.deals
-     SET status = 'completed',
+     SET status = 'completed'::deal_status,
          completed_at = COALESCE(completed_at, NOW())
    WHERE id = p_deal_id;
 
@@ -151,7 +151,7 @@ BEGIN
         'buyer_id', v_deal.buyer_id,
         'seller_id', v_deal.seller_id,
         'amount', v_deal.total_amount,
-        'shares', v_deal.shares_amount
+        'shares', v_deal.shares
       )
     );
   EXCEPTION WHEN OTHERS THEN NULL; END;
@@ -212,8 +212,7 @@ BEGIN
   END IF;
 
   UPDATE public.deals
-     SET status = 'cancelled_mutual',
-         cancelled_at = COALESCE(cancelled_at, NOW()),
+     SET status = 'cancelled'::deal_status,
          cancellation_reason = COALESCE(p_reason, 'إلغاء من الإدارة')
    WHERE id = p_deal_id;
 

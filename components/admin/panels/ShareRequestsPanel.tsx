@@ -45,18 +45,14 @@ const STATUS_META: Record<
   string,
   { label: string; color: "gray" | "yellow" | "blue" | "green" | "red" | "purple" }
 > = {
-  pending:            { label: "بانتظار الدفع",   color: "gray"   },
-  pending_payment:    { label: "بانتظار الدفع",   color: "gray"   },
-  awaiting_payment:   { label: "بانتظار الدفع",   color: "gray"   },
-  payment_submitted:  { label: "تم رفع الإثبات",  color: "yellow" },
-  paid:               { label: "مدفوعة",          color: "blue"   },
-  pending_release:    { label: "بانتظار التسليم", color: "yellow" },
-  completed:          { label: "مكتملة",          color: "green"  },
-  in_dispute:         { label: "نزاع",             color: "red"    },
-  disputed:           { label: "نزاع",             color: "red"    },
-  cancelled:          { label: "ملغاة",            color: "gray"   },
-  cancelled_mutual:   { label: "ملغاة",            color: "gray"   },
-  cancelled_expired:  { label: "ملغاة (انتهى الوقت)", color: "gray" },
+  pending_seller_approval: { label: "بانتظار البائع",   color: "gray"   },
+  accepted:                { label: "مقبولة",            color: "blue"   },
+  payment_submitted:       { label: "تم رفع الإثبات",   color: "yellow" },
+  completed:               { label: "مكتملة",           color: "green"  },
+  disputed:                { label: "نزاع",              color: "red"    },
+  rejected:                { label: "مرفوضة",            color: "red"    },
+  cancelled:               { label: "ملغاة",             color: "gray"   },
+  expired:                 { label: "انتهت المهلة",     color: "gray"   },
 }
 
 const PAYMENT_METHOD_LABELS: Record<string, { label: string; icon: string }> = {
@@ -94,9 +90,9 @@ export function ShareRequestsPanel() {
   useEffect(() => { refresh() }, [refresh])
 
   const stats = useMemo(() => {
-    const isPending = (s: string) => ["pending", "pending_payment", "awaiting_payment"].includes(s)
-    const isSubmitted = (s: string) => ["payment_submitted", "paid", "pending_release"].includes(s)
-    const isDisputed = (s: string) => ["in_dispute", "disputed"].includes(s)
+    const isPending = (s: string) => ["pending_seller_approval", "accepted"].includes(s)
+    const isSubmitted = (s: string) => s === "payment_submitted"
+    const isDisputed = (s: string) => s === "disputed"
     const isCompleted = (s: string) => s === "completed"
     return {
       total:     rows.length,
@@ -111,11 +107,11 @@ export function ShareRequestsPanel() {
   }, [rows])
 
   const filtered = useMemo(() => {
-    const isPending = (s: string) => ["pending", "pending_payment", "awaiting_payment"].includes(s)
-    const isSubmitted = (s: string) => ["payment_submitted", "paid", "pending_release"].includes(s)
-    const isDisputed = (s: string) => ["in_dispute", "disputed"].includes(s)
+    const isPending = (s: string) => ["pending_seller_approval", "accepted"].includes(s)
+    const isSubmitted = (s: string) => s === "payment_submitted"
+    const isDisputed = (s: string) => s === "disputed"
     const isCompleted = (s: string) => s === "completed"
-    const isCancelled = (s: string) => ["cancelled", "cancelled_mutual", "cancelled_expired"].includes(s)
+    const isCancelled = (s: string) => ["cancelled", "rejected", "expired"].includes(s)
 
     return rows.filter((r) => {
       if (filter === "pending" && !isPending(r.status)) return false
