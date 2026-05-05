@@ -101,6 +101,93 @@ export async function getDashboardStats(): Promise<DashboardStats | null> {
   }
 }
 
+// ─── Phase 10.62 — comprehensive dashboard overview ──────────────
+
+export interface DashboardOverview {
+  // Users
+  users_total: number
+  users_active_7d: number
+  users_active_30d: number
+  users_new_this_week: number
+  users_new_today: number
+  users_verified: number
+  users_pending_kyc: number
+  users_banned: number
+  // Investors
+  investors_count: number
+  investors_value: number
+  // Deals
+  deals_total: number
+  deals_completed: number
+  deals_pending: number
+  deals_disputed: number
+  deals_today: number
+  deals_volume_total: number
+  deals_volume_today: number
+  // Projects
+  projects_total: number
+  projects_active: number
+  projects_pending: number
+  projects_value: number
+  // Marketplace
+  listings_active: number
+  auctions_active: number
+  // Operations queue
+  disputes_open: number
+  kyc_pending: number
+  fee_requests_pending: number
+  ambassador_pending: number
+  support_open: number
+  share_mods_pending: number
+  // Shares
+  shares_total: number
+  shares_traded: number
+  // Health rates
+  completion_rate: number
+  dispute_rate: number
+  kyc_rate: number
+  // Snapshot timestamp
+  snapshot_at: string | null
+}
+
+const ZERO_OVERVIEW: DashboardOverview = {
+  users_total: 0, users_active_7d: 0, users_active_30d: 0,
+  users_new_this_week: 0, users_new_today: 0, users_verified: 0,
+  users_pending_kyc: 0, users_banned: 0,
+  investors_count: 0, investors_value: 0,
+  deals_total: 0, deals_completed: 0, deals_pending: 0,
+  deals_disputed: 0, deals_today: 0,
+  deals_volume_total: 0, deals_volume_today: 0,
+  projects_total: 0, projects_active: 0, projects_pending: 0,
+  projects_value: 0,
+  listings_active: 0, auctions_active: 0,
+  disputes_open: 0, kyc_pending: 0, fee_requests_pending: 0,
+  ambassador_pending: 0, support_open: 0, share_mods_pending: 0,
+  shares_total: 0, shares_traded: 0,
+  completion_rate: 0, dispute_rate: 0, kyc_rate: 0,
+  snapshot_at: null,
+}
+
+export async function getDashboardOverview(): Promise<DashboardOverview> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("get_dashboard_overview")
+    if (error || !data) return ZERO_OVERVIEW
+    const r = data as Partial<DashboardOverview> & { error?: string }
+    if (r.error) return ZERO_OVERVIEW
+    return {
+      ...ZERO_OVERVIEW,
+      ...Object.fromEntries(
+        Object.entries(r).map(([k, v]) =>
+          [k, typeof v === "string" && k !== "snapshot_at" ? Number(v) : v],
+        ),
+      ),
+    } as DashboardOverview
+  } catch {
+    return ZERO_OVERVIEW
+  }
+}
+
 // ─── Cleanup RPCs ────────────────────────────────────────────
 
 export async function cleanupExpiredShareCodes(): Promise<UtilityRpcResult> {
