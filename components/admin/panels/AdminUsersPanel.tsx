@@ -1,58 +1,55 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Search, X, Plus, Lock } from "lucide-react"
+/**
+ * AdminUsersPanel — Phase 10.59 rewrite.
+ *
+ * Reads the live admin/super-admin roster from `profiles` (no more
+ * MOCK_ADMIN_USERS). Super-admin gate stays — only the founder can
+ * promote/demote roles. The DB schema doesn't track per-permission
+ * checkboxes, so we display the role-level grant only and leave the
+ * fine-grained permissions matrix for a future phase.
+ *
+ * Actions:
+ *   • View basic profile info.
+ *   • Demote admin → user (super-admin only).
+ *   • Promote user → admin (super-admin only — done from the
+ *     Users hub list panel; here we keep only the demote flow).
+ */
+
+import { useEffect, useState, useCallback } from "react"
+import { Search, Lock, Crown, ShieldCheck } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
-  KPI, InnerTabBar, AdminEmpty,
+  KPI, AdminEmpty,
 } from "@/components/admin/ui"
 import {
-  MOCK_ADMIN_USERS,
-  ADMIN_ROLE_LABELS,
-  ADMIN_PERMISSION_LABELS,
-  ADMIN_STATUS_LABELS,
-  getAdminUsersStats,
-  countActiveSuperAdmins,
-  type AdminUserRecord,
-  type AdminPermission,
-  type AdminRoleId,
-  type AdminUserStatus,
-} from "@/lib/mock-data/adminUsers"
-import { isSuperAdminDB, getMyUserId } from "@/lib/data/admin-utilities"
+  getAllUsersForAdmin,
+  adminSetUserRole,
+  isSuperAdminDB,
+  getMyUserId,
+  type AdminUserListRow,
+} from "@/lib/data/admin-utilities"
 import { showSuccess, showError } from "@/lib/utils/toast"
-import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
-
-type RowAction = null | "view" | "edit_perms" | "suspend" | "reactivate" | "delete"
+const fmtDate = (iso: string | null | undefined) => iso ? iso.slice(0, 10) : "—"
 
 export function AdminUsersPanel() {
-  // ─── 🔒 Access guard: super_admin (founder) only ───
-  // Sole source of truth: `profiles.role === 'super_admin'` for the
-  // signed-in auth user. No mock fallback — that was a security hole
-  // (anyone whose profile.role wasn't super_admin would still pass
-  // because MOCK_CURRENT_ADMIN.role was hard-coded).
   const [accessChecked, setAccessChecked] = useState(false)
   const [accessAllowed, setAccessAllowed] = useState(false)
-
-  /** Current auth uid — used to block the user from suspending/deleting themselves. */
   const [myUserId, setMyUserId] = useState<string | null>(null)
 
-  // ─── All other state hooks declared BEFORE any early return so the
-  //     hook order stays stable across renders (React Rules of Hooks).
-  const [filter, setFilter] = useState<AdminUserStatus>("active")
+  const [users, setUsers] = useState<AdminUserListRow[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [selected, setSelected] = useState<AdminUserRecord | null>(null)
-  const [action, setAction] = useState<RowAction>(null)
 
-  const [showCreate, setShowCreate] = useState(false)
-  const [newName, setNewName] = useState("")
-  const [newEmail, setNewEmail] = useState("")
-  const [newPhone, setNewPhone] = useState("")
-  const [newRole, setNewRole] = useState<AdminRoleId>("moderator")
-  const [newPerms, setNewPerms] = useState<AdminPermission[]>([])
-  const [newNotes, setNewNotes] = useState("")
-  const [editPerms, setEditPerms] = useState<AdminPermission[]>([])
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    const rows = await getAllUsersForAdmin(500)
+    // Only admin + super_admin rows.
+    setUsers(rows.filter((u) => u.is_admin))
+    setLoading(false)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -61,11 +58,20 @@ export function AdminUsersPanel() {
       setAccessAllowed(isSuper)
       setMyUserId(uid)
       setAccessChecked(true)
+      if (isSuper) refresh()
     })
     return () => { cancelled = true }
-  }, [])
+  }, [refresh])
 
-  if (accessChecked && !accessAllowed) {
+  if (!accessChecked) {
+    return (
+      <div className="p-6 text-center text-xs text-neutral-500">
+        جاري التحقق من الصلاحيات...
+      </div>
+    )
+  }
+
+  if (!accessAllowed) {
     return (
       <div className="p-6 max-w-2xl mx-auto">
         <div className="bg-red-400/[0.05] border border-red-400/[0.25] rounded-2xl p-8 text-center">
@@ -75,86 +81,65 @@ export function AdminUsersPanel() {
           <div className="text-lg font-bold text-white mb-2">🚫 غير مصرَّح</div>
           <div className="text-xs text-neutral-400 leading-relaxed max-w-sm mx-auto">
             فقط <span className="text-purple-400 font-bold">المسؤول الأعلى (Super Admin)</span> يستطيع
-            إدارة الأدمنز الآخرين، إنشاءهم، تعديل صلاحياتهم، أو حذفهم.
-          </div>
-          <div className="mt-4 inline-block bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-1.5 text-[11px] text-neutral-500">
-            تحقّقنا من <span className="text-white font-bold">profiles.role</span> ولم تجد صلاحية super_admin.
+            استعراض وإدارة قائمة الأدمنز.
           </div>
         </div>
       </div>
     )
   }
-  if (!accessChecked) {
-    return (
-      <div className="p-6 text-center text-xs text-neutral-500">
-        جاري التحقق من الصلاحيات...
-      </div>
-    )
+
+  const filtered = users.filter((u) =>
+    !search ||
+    u.full_name.includes(search) ||
+    (u.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (u.username ?? "").toLowerCase().includes(search.toLowerCase()),
+  )
+
+  const stats = {
+    total:        users.length,
+    super_admins: users.filter((u) => u.is_super_admin).length,
+    admins:       users.filter((u) => u.role === "admin").length,
   }
 
-  const stats = getAdminUsersStats()
-
-  const filtered = MOCK_ADMIN_USERS
-    .filter((a) => a.status === filter)
-    .filter((a) => !search || a.full_name.includes(search) || a.email.toLowerCase().includes(search.toLowerCase()))
-
-  const togglePerm = (list: AdminPermission[], setList: (l: AdminPermission[]) => void, p: AdminPermission) => {
-    if (list.includes(p)) setList(list.filter((x) => x !== p))
-    else setList([...list, p])
+  const demote = async (u: AdminUserListRow) => {
+    if (u.is_super_admin) {
+      const remaining = users.filter((x) => x.is_super_admin).length
+      if (remaining <= 1) return showError("يجب وجود مسؤول أعلى واحد على الأقل")
+    }
+    if (u.id === myUserId) return showError("لا يمكنك حذف صلاحياتك بنفسك")
+    const ok = window.confirm(`إزالة صلاحيات الإدارة عن ${u.full_name}؟`)
+    if (!ok) return
+    const r = await adminSetUserRole(u.id, "user")
+    if (!r.success) return showError("فشل التحديث")
+    showSuccess(`✅ تم تحويل ${u.full_name} إلى مستخدم عادي`)
+    refresh()
   }
 
-  const handleCreate = () => {
-    if (!newName.trim() || !newEmail.trim()) return showError("الاسم والبريد إجباريان")
-    showSuccess(`✅ تم إنشاء حساب ${newName} كـ ${ADMIN_ROLE_LABELS[newRole].label} + إرسال invite للبريد`)
-    setShowCreate(false)
-    setNewName(""); setNewEmail(""); setNewPhone(""); setNewRole("moderator"); setNewPerms([]); setNewNotes("")
-  }
-
-  const handleAction = () => {
-    if (!selected || !action) return
-
-    // 🛡️ منع المسؤول من حذف/إيقاف نفسه — نقارن بـ auth uid الحقيقي.
-    if ((action === "suspend" || action === "delete") && myUserId && selected.id === myUserId) {
-      return showError("لا يمكنك إيقاف أو حذف نفسك")
-    }
-
-    // 🛡️ منع حذف آخر super_admin (founder)
-    if ((action === "suspend" || action === "delete") && selected.role === "founder") {
-      const remainingSuperAdmins = countActiveSuperAdmins()
-      if (remainingSuperAdmins <= 1) {
-        return showError("يجب وجود مسؤول أعلى (Super Admin) واحد على الأقل في النظام")
-      }
-    }
-
-    if (action === "edit_perms") {
-      showSuccess(`✅ تم تحديث صلاحيات ${selected.full_name}`)
-    }
-    if (action === "suspend") {
-      showSuccess(`⏸ تم إيقاف ${selected.full_name}`)
-    }
-    if (action === "reactivate") showSuccess(`▶️ تم إعادة تفعيل ${selected.full_name}`)
-    if (action === "delete") {
-      showSuccess(`🗑️ تم حذف ${selected.full_name}`)
-    }
-    setAction(null)
-    setSelected(null)
+  const promoteToSuper = async (u: AdminUserListRow) => {
+    const ok = window.confirm(`ترقية ${u.full_name} إلى مسؤول أعلى (super admin)؟`)
+    if (!ok) return
+    const r = await adminSetUserRole(u.id, "super_admin")
+    if (!r.success) return showError("فشل التحديث")
+    showSuccess(`👑 ${u.full_name} أصبح مسؤول أعلى`)
+    refresh()
   }
 
   return (
     <div className="p-6 max-w-screen-2xl">
       <div className="flex justify-between items-start mb-4 gap-3">
         <div>
-          <div className="text-lg font-bold text-white">🛡️ إدارة الإداريين</div>
-          <div className="text-xs text-neutral-500 mt-0.5">إنشاء + إدارة + صلاحيات حسابات الفريق الإداري</div>
+          <div className="text-lg font-bold text-white">👑 الإداريون</div>
+          <div className="text-xs text-neutral-500 mt-0.5">
+            قائمة الأدمنز + المسؤول الأعلى — مقروءة من قاعدة البيانات (profiles.role)
+          </div>
         </div>
-        <ActionBtn label="+ إضافة أدمن جديد" color="green" onClick={() => setShowCreate(true)} />
+        <ActionBtn label="🔄 تحديث" color="gray" sm onClick={refresh} />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <KPI label="الإجمالي"   val={stats.total}      color="#fff" />
-        <KPI label="مؤسّسون"   val={stats.founders}   color="#a855f7" />
-        <KPI label="مدراء"      val={stats.admins}     color="#4ADE80" />
-        <KPI label="مشرفون"    val={stats.moderators} color="#a3a3a3" />
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
+        <KPI label="إجمالي" val={fmtNum(stats.total)} color="#fff" />
+        <KPI label="مسؤولون أعلى" val={fmtNum(stats.super_admins)} color="#a855f7" />
+        <KPI label="مدراء" val={fmtNum(stats.admins)} color="#60A5FA" />
       </div>
 
       <div className="relative mb-3">
@@ -163,75 +148,77 @@ export function AdminUsersPanel() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="بحث (اسم/بريد)..."
+          placeholder="بحث (اسم/بريد/username)..."
           className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl pr-10 pl-4 py-2.5 text-sm text-white placeholder:text-neutral-500 outline-none focus:border-white/20"
         />
       </div>
 
-      <InnerTabBar
-        tabs={[
-          { key: "active",    label: "نشطون",  count: MOCK_ADMIN_USERS.filter((a) => a.status === "active").length },
-          { key: "suspended", label: "موقوفون", count: stats.suspended },
-          { key: "deleted",   label: "محذوفون", count: MOCK_ADMIN_USERS.filter((a) => a.status === "deleted").length },
-        ]}
-        active={filter}
-        onSelect={(k) => setFilter(k as AdminUserStatus)}
-      />
-
-      {filtered.length === 0 ? (
-        <AdminEmpty title="لا يوجد إداريون" />
+      {loading ? (
+        <AdminEmpty title="جاري التحميل..." />
+      ) : filtered.length === 0 ? (
+        <AdminEmpty
+          title="لا يوجد أدمنز"
+          body={
+            users.length === 0
+              ? "لا توجد سجلات بدور admin/super_admin في `profiles`. لترقية مستخدم اذهب إلى المستخدمون ▸ قائمة المستخدمين."
+              : "لا تطابق نتائج للبحث."
+          }
+        />
       ) : (
         <Table>
           <THead>
             <TH>الإداري</TH>
             <TH>الدور</TH>
-            <TH>الصلاحيات</TH>
+            <TH>username</TH>
+            <TH>تسجيل</TH>
             <TH>آخر دخول</TH>
-            <TH>الحالة</TH>
             <TH>إجراءات</TH>
           </THead>
           <TBody>
             {filtered.map((a) => {
-              const role = ADMIN_ROLE_LABELS[a.role]
-              const status = ADMIN_STATUS_LABELS[a.status]
-              const isFounder = a.role === "founder"
+              const isMe = a.id === myUserId
               return (
                 <TR key={a.id}>
                   <TD>
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-sm">
-                        {role.icon}
+                    <div>
+                      <div className="text-xs text-white font-bold flex items-center gap-1.5">
+                        {a.is_super_admin ? <Crown className="w-3.5 h-3.5 text-purple-400" /> : <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />}
+                        {a.full_name}
+                        {isMe && <span className="text-[10px] text-purple-400 font-bold">(أنت)</span>}
                       </div>
-                      <div>
-                        <div className="text-xs text-white font-bold">{a.full_name}</div>
-                        <div className="text-[10px] text-neutral-500" dir="ltr">{a.email}</div>
+                      <div className="text-[10px] text-neutral-500" dir="ltr">
+                        {a.email || a.phone || "—"}
                       </div>
                     </div>
                   </TD>
-                  <TD><Badge label={role.label} color={role.color} /></TD>
                   <TD>
-                    <span className="text-[11px] text-neutral-300 font-mono">
-                      {a.permissions.length} <span className="text-neutral-500">/ {Object.keys(ADMIN_PERMISSION_LABELS).length}</span>
+                    <Badge
+                      label={a.is_super_admin ? "👑 مسؤول أعلى" : "🛡 أدمن"}
+                      color={a.is_super_admin ? "purple" : "blue"}
+                    />
+                  </TD>
+                  <TD>
+                    <span className="text-[11px] text-neutral-400 font-mono" dir="ltr">
+                      @{a.username || "—"}
                     </span>
                   </TD>
-                  <TD><span className="text-[11px] text-neutral-500">{a.last_login_at || "—"}</span></TD>
-                  <TD><Badge label={status.label} color={status.color} /></TD>
+                  <TD>
+                    <span className="text-[11px] text-neutral-500" dir="ltr">{fmtDate(a.created_at)}</span>
+                  </TD>
+                  <TD>
+                    <span className="text-[11px] text-neutral-500" dir="ltr">{fmtDate(a.last_seen_at)}</span>
+                  </TD>
                   <TD>
                     <div className="flex gap-1.5">
-                      <ActionBtn label="عرض" color="gray" sm onClick={() => { setSelected(a); setAction("view") }} />
-                      {!isFounder && a.status === "active" && (
-                        <>
-                          <ActionBtn label="صلاحيات" color="blue" sm onClick={() => { setSelected(a); setAction("edit_perms"); setEditPerms(a.permissions) }} />
-                          <ActionBtn label="إيقاف" color="yellow" sm onClick={() => { setSelected(a); setAction("suspend") }} />
-                        </>
+                      {!a.is_super_admin && !isMe && (
+                        <ActionBtn label="👑 ترقية" color="purple" sm onClick={() => promoteToSuper(a)} />
                       )}
-                      {!isFounder && a.status === "suspended" && (
-                        <>
-                          <ActionBtn label="تفعيل" color="green" sm onClick={() => { setSelected(a); setAction("reactivate") }} />
-                          <ActionBtn label="حذف" color="red" sm onClick={() => { setSelected(a); setAction("delete") }} />
-                        </>
+                      {!isMe && (
+                        <ActionBtn label="↓ إزالة" color="red" sm onClick={() => demote(a)} />
                       )}
-                      {isFounder && <span className="text-[10px] text-purple-400 font-bold">🔒 محمي</span>}
+                      {isMe && (
+                        <span className="text-[10px] text-purple-400 font-bold">🔒 محمي</span>
+                      )}
                     </div>
                   </TD>
                 </TR>
@@ -241,165 +228,12 @@ export function AdminUsersPanel() {
         </Table>
       )}
 
-      {/* Create modal */}
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-start mb-4">
-              <div className="text-base font-bold text-white">+ إضافة أدمن جديد</div>
-              <button onClick={() => setShowCreate(false)} className="text-neutral-500 hover:text-white"><X className="w-5 h-5" /></button>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className="text-xs text-neutral-400 mb-1.5 block">الاسم الكامل *</label>
-                <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="مثلاً: محمد العامري" className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-white/20" />
-              </div>
-              <div>
-                <label className="text-xs text-neutral-400 mb-1.5 block">البريد الإلكتروني *</label>
-                <input type="email" dir="ltr" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="admin@railos.iq" className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-white/20" />
-              </div>
-              <div>
-                <label className="text-xs text-neutral-400 mb-1.5 block">الهاتف</label>
-                <input type="tel" dir="ltr" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="+964770..." className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-white/20" />
-              </div>
-              <div>
-                <label className="text-xs text-neutral-400 mb-1.5 block">الدور</label>
-                <select value={newRole} onChange={(e) => setNewRole(e.target.value as AdminRoleId)} className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-white/20">
-                  {(Object.entries(ADMIN_ROLE_LABELS) as [AdminRoleId, typeof ADMIN_ROLE_LABELS[AdminRoleId]][])
-                    .filter(([r]) => r !== "founder")
-                    .map(([r, m]) => <option key={r} value={r}>{m.icon} {m.label}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="mb-3">
-              <label className="text-xs text-neutral-400 mb-2 block">الصلاحيات (Checkboxes)</label>
-              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
-                {(Object.entries(ADMIN_PERMISSION_LABELS) as [AdminPermission, typeof ADMIN_PERMISSION_LABELS[AdminPermission]][]).map(([p, m]) => (
-                  <label key={p} className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.06] rounded-lg px-3 py-2 cursor-pointer hover:bg-white/[0.06]">
-                    <input type="checkbox" checked={newPerms.includes(p)} onChange={() => togglePerm(newPerms, setNewPerms, p)} className="w-4 h-4" />
-                    <span className="text-[11px] text-neutral-300 flex items-center gap-1">
-                      <span>{m.icon}</span>
-                      <span>{m.label}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <label className="text-xs text-neutral-400 mb-1.5 block">ملاحظات</label>
-              <textarea value={newNotes} onChange={(e) => setNewNotes(e.target.value)} rows={2} placeholder="اختياري..." className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-white/20 resize-none" />
-            </div>
-
-            <div className="flex gap-2">
-              <button onClick={() => setShowCreate(false)} className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إلغاء</button>
-              <button onClick={handleCreate} className="flex-1 py-3 rounded-xl bg-green-500/[0.15] border border-green-500/[0.3] text-green-400 text-sm font-bold hover:bg-green-500/[0.2] flex items-center justify-center gap-1.5">
-                <Plus className="w-3.5 h-3.5" />
-                إنشاء + إرسال invite
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* View / action modal */}
-      {selected && action && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-start mb-4">
-              <div className="text-base font-bold text-white">
-                {action === "view"        && `${ADMIN_ROLE_LABELS[selected.role].icon} ${selected.full_name}`}
-                {action === "edit_perms"  && "✏️ تعديل الصلاحيات"}
-                {action === "suspend"     && "⏸ إيقاف الحساب"}
-                {action === "reactivate"  && "▶️ إعادة تفعيل"}
-                {action === "delete"      && "🗑️ حذف الأدمن"}
-              </div>
-              <button onClick={() => { setAction(null); setSelected(null) }} className="text-neutral-500 hover:text-white"><X className="w-5 h-5" /></button>
-            </div>
-
-            {action === "view" && (
-              <>
-                <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 mb-3 space-y-1.5 text-xs">
-                  <div className="flex justify-between"><span className="text-neutral-500">البريد</span><span className="text-white" dir="ltr">{selected.email}</span></div>
-                  <div className="flex justify-between"><span className="text-neutral-500">الهاتف</span><span className="text-white" dir="ltr">{selected.phone || "—"}</span></div>
-                  <div className="flex justify-between"><span className="text-neutral-500">الدور</span><Badge label={ADMIN_ROLE_LABELS[selected.role].label} color={ADMIN_ROLE_LABELS[selected.role].color} /></div>
-                  <div className="flex justify-between"><span className="text-neutral-500">آخر دخول</span><span className="text-white">{selected.last_login_at || "—"}</span></div>
-                  <div className="flex justify-between"><span className="text-neutral-500">تاريخ الإنشاء</span><span className="text-white">{selected.created_at}</span></div>
-                </div>
-                <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 mb-3">
-                  <div className="text-[11px] font-bold text-neutral-400 mb-2">الصلاحيات</div>
-                  <div className="flex flex-wrap gap-1">
-                    {selected.permissions.length === 0 ? (
-                      <span className="text-[11px] text-neutral-500">— لا صلاحيات —</span>
-                    ) : (
-                      selected.permissions.map((p) => (
-                        <span key={p} className="bg-white/[0.05] border border-white/[0.08] rounded-md px-2 py-0.5 text-[10px] text-neutral-300">
-                          {ADMIN_PERMISSION_LABELS[p].icon} {ADMIN_PERMISSION_LABELS[p].label}
-                        </span>
-                      ))
-                    )}
-                  </div>
-                </div>
-                {selected.notes && (
-                  <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 mb-3">
-                    <div className="text-[11px] font-bold text-neutral-400 mb-1">ملاحظات</div>
-                    <div className="text-xs text-neutral-300">{selected.notes}</div>
-                  </div>
-                )}
-              </>
-            )}
-
-            {action === "edit_perms" && (
-              <>
-                <div className="text-xs text-neutral-300 mb-3">{selected.full_name}</div>
-                <div className="grid grid-cols-1 gap-2 mb-3">
-                  {(Object.entries(ADMIN_PERMISSION_LABELS) as [AdminPermission, typeof ADMIN_PERMISSION_LABELS[AdminPermission]][]).map(([p, m]) => (
-                    <label key={p} className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.06] rounded-lg px-3 py-2 cursor-pointer hover:bg-white/[0.06]">
-                      <input type="checkbox" checked={editPerms.includes(p)} onChange={() => togglePerm(editPerms, setEditPerms, p)} className="w-4 h-4" />
-                      <span className="text-[11px] text-neutral-300 flex items-center gap-1">
-                        <span>{m.icon}</span>
-                        <span>{m.label}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {(action === "suspend" || action === "reactivate" || action === "delete") && (
-              <div className={cn(
-                "rounded-xl p-3 mb-3 text-xs border",
-                action === "suspend"    && "bg-yellow-400/[0.05] border-yellow-400/[0.2] text-yellow-400",
-                action === "reactivate" && "bg-green-400/[0.05] border-green-400/[0.2] text-green-400",
-                action === "delete"     && "bg-red-400/[0.05] border-red-400/[0.2] text-red-400",
-              )}>
-                {action === "suspend"    && `سيتم إيقاف ${selected.full_name} مؤقّتاً. لا يستطيع الدخول حتى إعادة التفعيل.`}
-                {action === "reactivate" && `سيتم إعادة تفعيل ${selected.full_name} بنفس الصلاحيات السابقة.`}
-                {action === "delete"     && `⚠️ سيتم حذف ${selected.full_name} نهائياً. هذا إجراء لا رجعة فيه.`}
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              {action === "view" ? (
-                <button onClick={() => { setAction(null); setSelected(null) }} className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إغلاق</button>
-              ) : (
-                <>
-                  <button onClick={() => { setAction(null); setSelected(null) }} className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إلغاء</button>
-                  <button onClick={handleAction} className={cn(
-                    "flex-1 py-3 rounded-xl text-sm font-bold border",
-                    action === "edit_perms"  && "bg-blue-500/[0.15] border-blue-500/[0.3] text-blue-400",
-                    action === "suspend"     && "bg-yellow-500/[0.15] border-yellow-500/[0.3] text-yellow-400",
-                    action === "reactivate"  && "bg-green-500/[0.15] border-green-500/[0.3] text-green-400",
-                    action === "delete"      && "bg-red-500/[0.15] border-red-500/[0.3] text-red-400",
-                  )}>تأكيد</button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="mt-4 text-[11px] text-neutral-500 bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
+        💡 لإضافة أدمن جديد، اذهب إلى{" "}
+        <a className="font-bold underline" href="/admin?tab=users">المستخدمون ▸ قائمة المستخدمين</a>
+        {" "}واضغط <span className="font-bold">"👑 أدمن"</span> أمام المستخدم. الترقية تستدعي{" "}
+        <span className="font-mono text-yellow-400">admin_set_user_role</span> RPC.
+      </div>
     </div>
   )
 }

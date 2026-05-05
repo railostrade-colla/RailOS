@@ -5,6 +5,8 @@ import { Plus, Edit2, Trash2, AlertTriangle, X, Eye, FileEdit, Clock } from "luc
 import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, AdminEmpty, KPI, InnerTabBar } from "@/components/admin/ui"
 import { EntityFormPanel, type EntityFormData } from "./EntityFormPanel"
 import { EntityDetailsView } from "./EntityDetailsView"
+import { EmbeddedTabsHub } from "./EmbeddedTabsHub"
+import { ProjectWalletsPanel } from "./ProjectWalletsPanel"
 import { getAllProjects, getProjectByIdAdmin } from "@/lib/data/projects"
 import { getAllCompanies } from "@/lib/data/companies"
 import { getAllProjectWalletsAdmin, adminDeleteProject } from "@/lib/data/admin-utilities"
@@ -16,6 +18,24 @@ import {
 } from "@/lib/admin/entity-drafts"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
+
+/**
+ * Phase 10.59 — Projects section wraps the list panel + Project Wallets
+ * panel as embedded tabs. Project Wallets used to live in the Shares
+ * hub but the user wanted it grouped with project management.
+ */
+export function ProjectsPanel() {
+  return (
+    <EmbeddedTabsHub
+      title="▣ المشاريع"
+      subtitle="قائمة المشاريع + الشركات + المسودّات + محافظ المشاريع"
+      tabs={[
+        { key: "list", label: "📋 القائمة", hint: "كل المشاريع والشركات", Panel: ProjectsListPanel },
+        { key: "wallets", label: "🏦 محافظ المشاريع", hint: "العرض + الاحتياطي + إطلاق للسوق", Panel: ProjectWalletsPanel },
+      ]}
+    />
+  )
+}
 
 type MainTab = "list" | "create_project" | "create_company" | "view" | "edit"
 
@@ -104,7 +124,7 @@ const sectorIcon = (s: string) => {
   return "🏢"
 }
 
-export function ProjectsPanel() {
+function ProjectsListPanel() {
   const [mainTab, setMainTab] = useState<MainTab>("list")
   const [filter, setFilter] = useState<string>("all")
   const [deleteTarget, setDeleteTarget] = useState<EntityRow | null>(null)

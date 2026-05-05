@@ -199,6 +199,71 @@ export async function getUsersForAdminPicker(
   }
 }
 
+// ─── Admin Users List (Phase 10.59) ──────────────────────────────
+//
+// Lists all registered users for the admin Users page. Reads from
+// `profiles` directly (no FK joins) and pulls KYC status from the
+// same row. Optional follow-up reads `kyc_requests` only when needed.
+
+export interface AdminUserListRow {
+  id: string
+  full_name: string
+  username: string | null
+  phone: string | null
+  email: string | null
+  role: string
+  level: string
+  kyc_status: string
+  created_at: string
+  last_seen_at: string | null
+  is_super_admin: boolean
+  is_admin: boolean
+}
+
+export async function getAllUsersForAdmin(limit = 500): Promise<AdminUserListRow[]> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        "id, full_name, username, phone, email, role, level, kyc_status, created_at, last_seen_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(limit)
+    if (error || !data) return []
+
+    interface Raw {
+      id: string
+      full_name: string | null
+      username: string | null
+      phone: string | null
+      email: string | null
+      role: string | null
+      level: string | null
+      kyc_status: string | null
+      created_at: string
+      last_seen_at: string | null
+    }
+
+    return (data as Raw[]).map((p): AdminUserListRow => ({
+      id: p.id,
+      full_name: p.full_name ?? p.username ?? "—",
+      username: p.username,
+      phone: p.phone,
+      email: p.email,
+      role: p.role ?? "user",
+      level: p.level ?? "basic",
+      kyc_status: p.kyc_status ?? "none",
+      created_at: p.created_at,
+      last_seen_at: p.last_seen_at,
+      is_super_admin: p.role === "super_admin",
+      is_admin: p.role === "admin" || p.role === "super_admin",
+    }))
+  } catch {
+    return []
+  }
+}
+
 // ─── List all project wallets (Phase 10.51) ────────────────────
 
 export interface ProjectWalletAdminRow {

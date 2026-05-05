@@ -1,14 +1,24 @@
 "use client"
 
 /**
- * Alerts hub — embeds every alerts-related sub-panel as a top tab.
+ * Alerts hub — Phase 10.59 dedupe.
+ *
+ * Removed duplicate sub-panels that live elsewhere:
+ *   • DisputesPanel (lives in سجلّ القرارات / Log)
+ *   • MarketHealthPanel (lives in السوق / Market)
+ *   • AuditLogPanel (lives in سجلّ القرارات / Log)
+ *
+ * Kept the panels that genuinely belong here — the action inbox, the
+ * live market monitor, and the broadcaster. All three are
+ * DB-connected (no mocks):
+ *   • AdminRequestsHubPanel reads `admin_notifications` + per-type
+ *     pending lists via `lib/data/admin-requests`.
+ *   • MonitorPanel streams from the live trades feed.
+ *   • NotificationsBroadcasterPanel writes to `notifications`.
  */
 
 import { EmbeddedTabsHub } from "./EmbeddedTabsHub"
 import { AdminRequestsHubPanel } from "./AdminRequestsHubPanel"
-import { DisputesPanel } from "./DisputesPanel"
-import { MarketHealthPanel } from "./MarketHealthPanel"
-import { AuditLogPanel } from "./AuditLogPanel"
 import { MonitorPanel } from "./Monitor"
 import { NotificationsBroadcasterPanel } from "./NotificationsBroadcasterPanel"
 
@@ -16,12 +26,9 @@ export function AlertsPanel() {
   return (
     <EmbeddedTabsHub
       title="🚨 التنبيهات"
-      subtitle="كل الأحداث الإدارية المهمّة — موزّعة على لوحات متخصصة"
+      subtitle="مركز الطلبات + المراقبة الحيّة + إذاعة الإشعارات"
       tabs={[
-        { key: "requests", label: "🎯 مركز الطلبات", hint: "كل ما يحتاج إجراء", Panel: AdminRequestsHubPanel },
-        { key: "disputes", label: "⚖️ النزاعات", hint: "صفقات في حالة نزاع", Panel: DisputesPanel },
-        { key: "health", label: "📊 صحّة السوق", hint: "تحذيرات احتكار + ضغط بيع", Panel: MarketHealthPanel },
-        { key: "audit", label: "📜 سجلّ التدقيق", hint: "الأحداث الإدارية الأخيرة", Panel: AuditLogPanel },
+        { key: "requests", label: "🎯 مركز الطلبات", hint: "كل ما يحتاج إجراء — موافقات، طلبات، نزاعات", Panel: AdminRequestsHubPanel },
         { key: "monitor", label: "📡 مراقبة السوق", hint: "حركة التداول الحيّة", Panel: MonitorPanel },
         { key: "broadcast", label: "📢 إذاعة الإشعارات", hint: "إرسال إشعار للمستخدمين", Panel: NotificationsBroadcasterPanel },
       ]}

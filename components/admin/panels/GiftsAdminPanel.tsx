@@ -83,14 +83,26 @@ export function GiftsAdminPanel() {
   const [userSearch, setUserSearch] = useState("")
   const [users, setUsers] = useState<UserPickerRow[]>([])
   const [pickedUserId, setPickedUserId] = useState<string | null>(null)
+  const [pickerLoading, setPickerLoading] = useState(false)
   const pickedUser = users.find((u) => u.id === pickedUserId) ?? null
 
-  // Load users whenever filter or search changes (debounced)
+  // Phase 10.59: filter chip clicks should requery instantly (no
+  // debounce); only search-text typing is debounced. Otherwise chip
+  // clicks feel laggy and the user thinks the filters are broken.
   useEffect(() => {
+    let cancelled = false
+    setPickerLoading(true)
+    // 250ms debounce only kicks in if userSearch is non-empty
+    // (typing). Empty search → instant fetch.
+    const debounceMs = userSearch.trim().length > 0 ? 250 : 0
     const t = window.setTimeout(() => {
-      getUsersForAdminPicker(userFilter, userSearch, 50).then(setUsers)
-    }, 250)
-    return () => window.clearTimeout(t)
+      getUsersForAdminPicker(userFilter, userSearch, 50).then((rows) => {
+        if (cancelled) return
+        setUsers(rows)
+        setPickerLoading(false)
+      })
+    }, debounceMs)
+    return () => { cancelled = true; window.clearTimeout(t) }
   }, [userFilter, userSearch])
 
   // Load projects once for the "shares" gift type
@@ -311,9 +323,23 @@ export function GiftsAdminPanel() {
                 </button>
               </div>
             ) : (
-              <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl divide-y divide-white/[0.04] max-h-72 overflow-y-auto">
+              <>
+                <div className="text-[10px] text-neutral-500 mb-1.5 flex items-center gap-2">
+                  {pickerLoading ? (
+                    <span className="text-yellow-400">⏳ جاري الجلب من قاعدة البيانات...</span>
+                  ) : (
+                    <span>عُثر على <span className="text-white font-bold font-mono">{users.length}</span> مستخدم
+                      {userFilter !== "all" && (
+                        <span className="text-neutral-600"> · فلتر: {FILTER_OPTIONS.find((f) => f.key === userFilter)?.label}</span>
+                      )}
+                    </span>
+                  )}
+                </div>
+                <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl divide-y divide-white/[0.04] max-h-72 overflow-y-auto">
                 {users.length === 0 ? (
-                  <div className="text-center py-6 text-xs text-neutral-500">لا يوجد مستخدمون يطابقون الفلتر</div>
+                  <div className="text-center py-6 text-xs text-neutral-500">
+                    {pickerLoading ? "جاري التحميل..." : "لا يوجد مستخدمون يطابقون الفلتر"}
+                  </div>
                 ) : (
                   users.map((u) => (
                     <button
@@ -335,7 +361,8 @@ export function GiftsAdminPanel() {
                     </button>
                   ))
                 )}
-              </div>
+                </div>
+              </>
             )}
           </div>
 
