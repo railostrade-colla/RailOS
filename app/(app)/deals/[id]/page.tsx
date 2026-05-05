@@ -43,6 +43,7 @@ import {
 } from "@/lib/data/deal-actions"
 import { useRealtimeDeal } from "@/lib/realtime/useRealtimeDeal"
 import { createInvoice, getInvoicesBySourceId, type Invoice } from "@/lib/data/invoices"
+import { DealChat } from "@/components/deals/DealChat"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -578,6 +579,13 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
               عرض النزاع
               <ChevronLeft className="w-4 h-4" />
             </button>
+          )}
+
+          {/* ═══ Phase 10.63 — chat between buyer/seller (DB deals only) ═══ */}
+          {isDbDeal && (
+            <div className="mt-4">
+              <DealChat dealId={deal.id} currentUserId={authUserId} />
+            </div>
           )}
         </div>
       </div>
