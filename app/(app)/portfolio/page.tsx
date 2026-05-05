@@ -38,6 +38,7 @@ import { AccountSwitcher } from "@/components/wallet/AccountSwitcher"
 import { useActiveAccount } from "@/contexts/ActiveAccountContext"
 import { ShareTransferModal } from "@/components/portfolio/ShareTransferModal"
 import { ArrowRightLeft } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
 
 // TODO Phase 4.X — derive from this month's deals.total_amount sum.
 const CURRENT_USER_USED_THIS_MONTH = 0
@@ -161,6 +162,54 @@ function PortfolioContent() {
     })
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  // Phase 10.69 — realtime: refresh portfolio when:
+  //   • holdings change (new shares received / transferred)
+  //   • fee_unit_balances change (request approved / deduction)
+  //   • fee_unit_requests change (status update)
+  //   • deals where I'm buyer/seller change to completed
+  useEffect(() => {
+    let cancelled = false
+    const supabase = createClient()
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user || cancelled) return
+      const uid = user.id
+
+      const triggerRefresh = () => {
+        if (!cancelled) {
+          getPortfolioData().then((d) => {
+            if (!cancelled && d) setData(d)
+          })
+        }
+      }
+
+      channel = supabase
+        .channel(`portfolio:${uid}`)
+        .on("postgres_changes",
+          { event: "*", schema: "public", table: "holdings", filter: `user_id=eq.${uid}` },
+          triggerRefresh)
+        .on("postgres_changes",
+          { event: "*", schema: "public", table: "fee_unit_balances", filter: `user_id=eq.${uid}` },
+          triggerRefresh)
+        .on("postgres_changes",
+          { event: "*", schema: "public", table: "fee_unit_requests", filter: `user_id=eq.${uid}` },
+          triggerRefresh)
+        .on("postgres_changes",
+          { event: "UPDATE", schema: "public", table: "deals", filter: `buyer_id=eq.${uid}` },
+          triggerRefresh)
+        .subscribe()
+    })
+
+    return () => {
+      cancelled = true
+      if (channel) {
+        const supabase = createClient()
+        supabase.removeChannel(channel)
+      }
     }
   }, [])
 
