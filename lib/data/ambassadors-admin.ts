@@ -226,40 +226,69 @@ export async function getAmbassadorsAdmin(
     console.warn("[ambassadors-admin] RPC threw, falling back:", err)
   }
 
-  // ─── Path 2: legacy PostgREST query (kept for back-compat) ───
+  // ─── Path 2: two-step manual join (FK-independent fallback) ───
+  // Avoids `profiles!user_id` PostgREST inference which silently
+  // returns empty when the FK constraint isn't declared on the
+  // ambassadors table.
   try {
     const supabase = createClient()
-    const { data, error } = await supabase
+
+    const { data: rows, error } = await supabase
       .from("ambassadors")
       .select(
-        `
-        id, user_id, application_status, is_active,
-        application_reason, application_experience, social_media_links,
-        approved_by, approved_at, revoked_by, revoked_at, revoke_reason, admin_notes,
-        total_referrals, successful_referrals, total_rewards_earned,
-        applied_at,
-        profile:profiles!user_id ( full_name, username, level )
-        `,
+        `id, user_id, application_status, is_active,
+         application_reason, application_experience, social_media_links,
+         approved_by, approved_at, revoked_by, revoked_at, revoke_reason, admin_notes,
+         total_referrals, successful_referrals, total_rewards_earned,
+         applied_at`,
       )
       .order("applied_at", { ascending: false })
       .limit(limit)
 
-    if (error || !data) {
+    if (error || !rows) {
       if (error) {
         // eslint-disable-next-line no-console
         console.warn(
-          "[ambassadors-admin] getAmbassadorsAdmin (legacy path) failed:",
+          "[ambassadors-admin] getAmbassadorsAdmin (fallback) failed:",
           error.message,
           error.code,
-          "— apply Migration 10.38 (get_ambassadors_admin RPC) for the robust path",
         )
       }
       return []
     }
 
+    // Look up profiles separately; tolerate missing.
+    const userIds = Array.from(
+      new Set(
+        rows
+          .map((r) => (r as { user_id: string | null }).user_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    )
+    const profileMap = new Map<
+      string,
+      { full_name?: string | null; username?: string | null; level?: string | null }
+    >()
+    if (userIds.length > 0) {
+      try {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, full_name, username, level")
+          .in("id", userIds)
+        for (const p of (profs ?? []) as Array<{
+          id: string
+          full_name: string | null
+          username: string | null
+          level: string | null
+        }>) {
+          profileMap.set(p.id, { full_name: p.full_name, username: p.username, level: p.level })
+        }
+      } catch { /* leave empty */ }
+    }
+
     const out: AmbassadorAdmin[] = []
-    for (const row of data as AmbassadorRow[]) {
-      const profile = unwrapProfile(row.profile)
+    for (const row of rows as AmbassadorRow[]) {
+      const profile = row.user_id ? profileMap.get(row.user_id) ?? null : null
       const userName =
         profile?.full_name?.trim() ||
         profile?.username?.trim() ||

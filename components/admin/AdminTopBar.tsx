@@ -4,11 +4,12 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Bell, MessageCircle, Coins, Shield, ChevronDown, User, Sun, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils/cn"
+import { createClient } from "@/lib/supabase/client"
 import { showSuccess } from "@/lib/utils/toast"
 
 interface AdminNotification {
   id: string
-  type: "kyc" | "dispute" | "fee" | "support" | "ambassador" | "healthcare"
+  type: string
   icon: string
   title: string
   body: string
@@ -16,28 +17,65 @@ interface AdminNotification {
   href: string
 }
 
-/**
- * Production mode — every notification surface returns an empty list.
- * The previous implementation read from MOCK_KYC_SUBMISSIONS / MOCK_DISPUTES
- * etc. and surfaced fake "9+ pending" badges on a fresh deployment.
- *
- * TODO (Phase 10.37): wire each surface to its real DB count via a single
- * `get_admin_notifications()` RPC. Until then we surface zeros so admins
- * aren't lied to.
- */
-function getAdminNotifications(_limit: number = 10): AdminNotification[] {
-  return []
+interface NotificationCounts {
+  kyc: number
+  disputes: number
+  fees: number
+  support: number
+  ambassadors: number
+  healthcare: number
+  orphans: number
+  payment_proofs: number
+  total: number
 }
 
-function getUnreadCounts() {
-  return {
-    kyc: 0,
-    disputes: 0,
-    fees: 0,
-    support: 0,
-    ambassadors: 0,
-    healthcare: 0,
-    all: 0,
+const ZERO_COUNTS: NotificationCounts = {
+  kyc: 0, disputes: 0, fees: 0, support: 0,
+  ambassadors: 0, healthcare: 0, orphans: 0, payment_proofs: 0, total: 0,
+}
+
+/** Best-effort fetch for the recent items list (Phase 10.40 RPC). */
+async function fetchAdminNotifications(limit: number): Promise<AdminNotification[]> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("get_admin_notification_items", {
+      p_limit: limit,
+    })
+    if (error || !Array.isArray(data)) return []
+    return (data as AdminNotification[]).map((n) => ({
+      id: n.id,
+      type: n.type ?? "other",
+      icon: n.icon ?? "🔔",
+      title: n.title ?? "—",
+      body: n.body ?? "",
+      time: n.time ?? "",
+      href: n.href ?? "/admin?tab=requests_hub",
+    }))
+  } catch {
+    return []
+  }
+}
+
+/** Best-effort fetch for the badge counts (Phase 10.40 RPC). */
+async function fetchUnreadCounts(): Promise<NotificationCounts> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("get_admin_notification_counts")
+    if (error || !data) return ZERO_COUNTS
+    const r = data as Partial<NotificationCounts>
+    return {
+      kyc: Number(r.kyc ?? 0),
+      disputes: Number(r.disputes ?? 0),
+      fees: Number(r.fees ?? 0),
+      support: Number(r.support ?? 0),
+      ambassadors: Number(r.ambassadors ?? 0),
+      healthcare: Number(r.healthcare ?? 0),
+      orphans: Number(r.orphans ?? 0),
+      payment_proofs: Number(r.payment_proofs ?? 0),
+      total: Number(r.total ?? 0),
+    }
+  } catch {
+    return ZERO_COUNTS
   }
 }
 
@@ -48,8 +86,32 @@ export function AdminTopBar() {
   const [open, setOpen] = useState<DropdownId>(null)
   const ref = useRef<HTMLDivElement>(null)
 
-  const counts = getUnreadCounts()
-  const totalNotifs = counts.kyc + counts.disputes + counts.fees + counts.support + counts.ambassadors + counts.healthcare
+  // Phase 10.40 — real DB-backed counts + items.
+  const [counts, setCounts] = useState<NotificationCounts>(ZERO_COUNTS)
+  const [allNotifs, setAllNotifs] = useState<AdminNotification[]>([])
+  const totalNotifs = counts.total
+
+  // Initial fetch + polling every 30 s so the badges stay fresh while
+  // the admin works in another tab.
+  useEffect(() => {
+    let cancelled = false
+    const refresh = () => {
+      fetchUnreadCounts().then((c) => { if (!cancelled) setCounts(c) })
+    }
+    refresh()
+    const id = setInterval(refresh, 30_000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [])
+
+  // Lazy-load the items list when the user opens the bell dropdown.
+  useEffect(() => {
+    if (open !== "notifications") return
+    let cancelled = false
+    fetchAdminNotifications(15).then((rows) => {
+      if (!cancelled) setAllNotifs(rows)
+    })
+    return () => { cancelled = true }
+  }, [open])
 
   // Close on outside click
   useEffect(() => {
@@ -60,11 +122,10 @@ export function AdminTopBar() {
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
-  const allNotifs = open === "notifications" ? getAdminNotifications(10) : []
-  // Production mode — empty until the real DB-backed notifications RPC ships.
-  const recentSupport: { id: string; user_name: string; subject: string; created_at: string }[] = []
-  const recentFees: { id: string; user_name: string; requested_units: number; payment_method: string }[] = []
-  const recentKyc: { id: string; user_name: string; city?: string; submitted_at: string }[] = []
+  // Filtered subsets shown in the smaller "by category" dropdowns.
+  const recentSupport = allNotifs.filter((n) => n.type === "support").slice(0, 5)
+  const recentFees = allNotifs.filter((n) => n.type === "fee").slice(0, 5)
+  const recentKyc = allNotifs.filter((n) => n.type === "kyc").slice(0, 5)
 
   const handleNavigate = (href: string) => {
     setOpen(null)
@@ -153,9 +214,9 @@ export function AdminTopBar() {
         </Dropdown>
       )}
 
-      {/* ═══ Messages dropdown ═══ */}
+      {/* ═══ Messages dropdown (support tickets) ═══ */}
       {open === "messages" && (
-        <Dropdown title={`💬 الرسائل (${counts.support})`} onSeeAll={() => handleNavigate("/admin?tab=support_inbox")} ctaLabel="📥 صندوق الدعم" side="right" rightOffset="ml-32 lg:ml-44">
+        <Dropdown title={`💬 الرسائل (${counts.support})`} onSeeAll={() => handleNavigate("/admin?tab=content_mgmt")} ctaLabel="📥 صندوق الدعم" side="right" rightOffset="ml-32 lg:ml-44">
           {recentSupport.length === 0 ? (
             <div className="text-xs text-neutral-500 text-center py-6">لا تذاكر جديدة</div>
           ) : (
@@ -163,12 +224,12 @@ export function AdminTopBar() {
               {recentSupport.map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => handleNavigate("/admin?tab=support_inbox")}
+                  onClick={() => handleNavigate(t.href)}
                   className="w-full text-right p-3 hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 transition-colors"
                 >
-                  <div className="text-xs text-white font-bold truncate">{t.user_name}</div>
-                  <div className="text-[11px] text-neutral-400 truncate mt-0.5">{t.subject}</div>
-                  <div className="text-[9px] text-neutral-600 mt-0.5 font-mono">{t.created_at}</div>
+                  <div className="text-xs text-white font-bold truncate">{t.title}</div>
+                  {t.body && <div className="text-[11px] text-neutral-400 truncate mt-0.5">{t.body}</div>}
+                  <div className="text-[9px] text-neutral-600 mt-0.5 font-mono" dir="ltr">{t.time}</div>
                 </button>
               ))}
             </div>
@@ -176,16 +237,32 @@ export function AdminTopBar() {
         </Dropdown>
       )}
 
-      {/* ═══ Fees dropdown ═══ */}
+      {/* ═══ Fees dropdown (fee unit requests) ═══ */}
       {open === "fees" && (
         <Dropdown title={`💎 طلبات الرسوم (${counts.fees})`} onSeeAll={() => handleNavigate("/admin?tab=fees")} side="right" rightOffset="ml-20 lg:ml-32">
-          <div className="text-xs text-neutral-500 text-center py-6">لا طلبات معلّقة</div>
+          {recentFees.length === 0 ? (
+            <div className="text-xs text-neutral-500 text-center py-6">لا طلبات معلّقة</div>
+          ) : (
+            <div>
+              {recentFees.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => handleNavigate(f.href)}
+                  className="w-full text-right p-3 hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 transition-colors"
+                >
+                  <div className="text-xs text-white font-bold truncate">{f.title}</div>
+                  {f.body && <div className="text-[11px] text-neutral-400 truncate mt-0.5">{f.body}</div>}
+                  <div className="text-[9px] text-neutral-600 mt-0.5 font-mono" dir="ltr">{f.time}</div>
+                </button>
+              ))}
+            </div>
+          )}
         </Dropdown>
       )}
 
       {/* ═══ KYC dropdown ═══ */}
       {open === "kyc" && (
-        <Dropdown title={`🛡️ طلبات KYC (${counts.kyc})`} onSeeAll={() => handleNavigate("/admin?tab=kyc")} side="right" rightOffset="ml-8 lg:ml-20">
+        <Dropdown title={`🛡️ طلبات KYC (${counts.kyc})`} onSeeAll={() => handleNavigate("/admin?tab=users")} side="right" rightOffset="ml-8 lg:ml-20">
           {recentKyc.length === 0 ? (
             <div className="text-xs text-neutral-500 text-center py-6">لا طلبات معلّقة</div>
           ) : (
@@ -193,12 +270,12 @@ export function AdminTopBar() {
               {recentKyc.map((k) => (
                 <button
                   key={k.id}
-                  onClick={() => handleNavigate("/admin?tab=kyc")}
+                  onClick={() => handleNavigate(k.href)}
                   className="w-full text-right p-3 hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 transition-colors"
                 >
-                  <div className="text-xs text-white font-bold truncate">{k.user_name}</div>
-                  <div className="text-[11px] text-neutral-400 mt-0.5">{k.city || "—"}</div>
-                  <div className="text-[9px] text-neutral-600 mt-0.5 font-mono">{k.submitted_at}</div>
+                  <div className="text-xs text-white font-bold truncate">{k.title}</div>
+                  {k.body && <div className="text-[11px] text-neutral-400 mt-0.5">{k.body}</div>}
+                  <div className="text-[9px] text-neutral-600 mt-0.5 font-mono" dir="ltr">{k.time}</div>
                 </button>
               ))}
             </div>

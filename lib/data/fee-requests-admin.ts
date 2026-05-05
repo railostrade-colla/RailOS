@@ -151,39 +151,76 @@ export async function getFeeRequestsAdmin(
     console.warn("[fee-admin] RPC threw, falling back:", err)
   }
 
-  // ─── Path 2: legacy PostgREST query ───
+  // ─── Path 2: two-step manual join (FK-independent fallback) ───
+  // Splits the query so a missing FK constraint on fee_unit_requests
+  // can't break the entire fetch (the previous one-shot query with
+  // `profiles!user_id` + `fee_unit_balances!user_id` joins returned
+  // empty when either FK was missing).
   try {
     const supabase = createClient()
-    const { data, error } = await supabase
+
+    const { data: requests, error: reqError } = await supabase
       .from("fee_unit_requests")
       .select(
-        `
-        id, user_id, amount_requested, amount_approved,
-        payment_method, transaction_reference, proof_image_url,
-        status, admin_notes, rejection_reason, submitted_at,
-        profile:profiles!user_id ( full_name, username, level ),
-        balance:fee_unit_balances!user_id ( balance )
-        `,
+        `id, user_id, amount_requested, amount_approved,
+         payment_method, transaction_reference, proof_image_url,
+         status, admin_notes, rejection_reason, submitted_at`,
       )
       .order("submitted_at", { ascending: false })
       .limit(limit)
 
-    if (error || !data) {
-      if (error) {
+    if (reqError || !requests) {
+      if (reqError) {
         // eslint-disable-next-line no-console
         console.warn(
-          "[fee-admin] getFeeRequestsAdmin (legacy path) failed:",
-          error.message,
-          error.code,
-          "— apply Migration 10.38 (get_fee_requests_admin RPC) for the robust path",
+          "[fee-admin] getFeeRequestsAdmin (fallback) failed:",
+          reqError.message,
+          reqError.code,
         )
       }
       return []
     }
 
-    return (data as RequestRow[]).map((r) => {
-      const profile = unwrap(r.profile)
-      const balance = unwrap(r.balance)
+    // Collect unique user_ids and fetch their profiles + balances
+    // separately. Each lookup tolerates failure (returns null/empty
+    // map) so a single missing source table doesn't sink the whole
+    // panel.
+    const userIds = Array.from(
+      new Set(
+        requests
+          .map((r) => (r as { user_id: string | null }).user_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    )
+
+    const profileMap = new Map<string, ProfileRow>()
+    const balanceMap = new Map<string, number>()
+
+    if (userIds.length > 0) {
+      try {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, full_name, username, level")
+          .in("id", userIds)
+        for (const p of (profs ?? []) as Array<{ id: string } & ProfileRow>) {
+          profileMap.set(p.id, { full_name: p.full_name, username: p.username, level: p.level })
+        }
+      } catch { /* leave empty */ }
+
+      try {
+        const { data: bals } = await supabase
+          .from("fee_unit_balances")
+          .select("user_id, balance")
+          .in("user_id", userIds)
+        for (const b of (bals ?? []) as Array<{ user_id: string; balance: number | string | null }>) {
+          balanceMap.set(b.user_id, num(b.balance))
+        }
+      } catch { /* leave empty */ }
+    }
+
+    return (requests as RequestRow[]).map((r) => {
+      const profile = profileMap.get(r.user_id) ?? null
+      const balance = balanceMap.get(r.user_id) ?? 0
       const requested = num(r.amount_requested)
       const approved = num(r.amount_approved)
       // The mock fields `requested_units` and `amount_paid` look the
@@ -201,7 +238,7 @@ export async function getFeeRequestsAdmin(
           ? `@${profile.username.trim()}`
           : "—",
         user_level: mapLevel(profile?.level),
-        current_balance: num(balance?.balance),
+        current_balance: balance,
         requested_units: requested,
         amount_paid: requested,
         payment_method: mapPaymentMethod(r.payment_method),
