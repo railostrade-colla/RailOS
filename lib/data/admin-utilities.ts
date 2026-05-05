@@ -305,6 +305,15 @@ export interface AdminUserListRow {
   last_seen_at: string | null
   is_super_admin: boolean
   is_admin: boolean
+  // Phase 10.64 — extra fields surfaced by get_all_users_for_admin
+  is_ambassador: boolean
+  is_banned: boolean
+  ban_reason: string | null
+  banned_until: string | null
+  trades_completed: number
+  total_invested: number
+  rating_average: number
+  rating_count: number
 }
 
 export async function getAllUsersForAdmin(limit = 500): Promise<AdminUserListRow[]> {
@@ -321,6 +330,14 @@ export async function getAllUsersForAdmin(limit = 500): Promise<AdminUserListRow
     kyc_status: string | null
     created_at: string
     last_seen_at: string | null
+    is_ambassador?: boolean | null
+    is_banned?: boolean | null
+    ban_reason?: string | null
+    banned_until?: string | null
+    trades_completed?: number | null
+    total_invested?: number | string | null
+    rating_average?: number | string | null
+    rating_count?: number | null
   }
 
   const mapRow = (p: Raw): AdminUserListRow => ({
@@ -336,6 +353,14 @@ export async function getAllUsersForAdmin(limit = 500): Promise<AdminUserListRow
     last_seen_at: p.last_seen_at,
     is_super_admin: p.role === "super_admin",
     is_admin: p.role === "admin" || p.role === "super_admin",
+    is_ambassador: Boolean(p.is_ambassador) || p.role === "ambassador",
+    is_banned: Boolean(p.is_banned),
+    ban_reason: p.ban_reason ?? null,
+    banned_until: p.banned_until ?? null,
+    trades_completed: Number(p.trades_completed ?? 0),
+    total_invested: Number(p.total_invested ?? 0),
+    rating_average: Number(p.rating_average ?? 0),
+    rating_count: Number(p.rating_count ?? 0),
   })
 
   // Phase 10.60 — preferred path: SECURITY DEFINER RPC that joins
@@ -363,7 +388,7 @@ export async function getAllUsersForAdmin(limit = 500): Promise<AdminUserListRow
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, full_name, username, phone, role, level, kyc_status, created_at, last_seen_at",
+        "id, full_name, username, phone, role, level, kyc_status, created_at, last_seen_at, is_ambassador, is_banned, ban_reason, banned_until, trades_completed, total_invested, rating_average, rating_count",
       )
       .order("created_at", { ascending: false })
       .limit(limit)
@@ -372,6 +397,115 @@ export async function getAllUsersForAdmin(limit = 500): Promise<AdminUserListRow
   } catch {
     return []
   }
+}
+
+// ─── User-management actions (Phase 10.64) ──────────────────────
+
+export interface AdminUserFullDetails {
+  profile: {
+    id: string
+    full_name: string | null
+    username: string | null
+    phone: string | null
+    avatar_url: string | null
+    role: string
+    kyc_status: string
+    is_active: boolean
+    is_banned: boolean
+    ban_reason: string | null
+    banned_until: string | null
+    suspended_at: string | null
+    suspended_by: string | null
+    is_ambassador: boolean
+    rating_average: number
+    rating_count: number
+    trades_completed: number
+    total_invested: number
+    created_at: string
+    updated_at: string
+    last_seen_at: string | null
+    level: string
+  } | null
+  email: string | null
+  holdings_total: number
+  holdings_value: number
+  deals_total: number
+  deals_completed: number
+  ambassador: {
+    id: string
+    application_status: string
+    is_active: boolean
+    reward_percentage: number
+    application_reason: string | null
+    approved_at: string | null
+    revoked_at: string | null
+  } | null
+  kyc: {
+    id: string
+    status: string
+    document_type: string
+    city: string | null
+    submitted_at: string
+    reviewed_at: string | null
+    review_notes: string | null
+  } | null
+  avg_rating: number
+  rating_count: number
+  fetched_at: string | null
+}
+
+export async function getUserFullDetails(userId: string): Promise<AdminUserFullDetails | null> {
+  if (!userId) return null
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("get_user_full_details", {
+      p_user_id: userId,
+    })
+    if (error || !data) return null
+    const r = data as { error?: string } & AdminUserFullDetails
+    if (r.error) return null
+    return {
+      profile: r.profile ?? null,
+      email: r.email ?? null,
+      holdings_total: Number(r.holdings_total ?? 0),
+      holdings_value: Number(r.holdings_value ?? 0),
+      deals_total: Number(r.deals_total ?? 0),
+      deals_completed: Number(r.deals_completed ?? 0),
+      ambassador: r.ambassador ?? null,
+      kyc: r.kyc ?? null,
+      avg_rating: Number(r.avg_rating ?? 0),
+      rating_count: Number(r.rating_count ?? 0),
+      fetched_at: r.fetched_at ?? null,
+    }
+  } catch {
+    return null
+  }
+}
+
+export async function adminBanUser(
+  userId: string,
+  reason: string | null,
+  until: Date | null,
+): Promise<UtilityRpcResult> {
+  return callRpc("admin_ban_user", {
+    p_user_id: userId,
+    p_reason: reason,
+    p_until: until ? until.toISOString() : null,
+  })
+}
+
+export async function adminUnbanUser(userId: string): Promise<UtilityRpcResult> {
+  return callRpc("admin_unban_user", { p_user_id: userId })
+}
+
+export async function adminSetAmbassador(
+  userId: string,
+  enable: boolean,
+): Promise<UtilityRpcResult> {
+  return callRpc("admin_set_ambassador", {
+    p_user_id: userId,
+    p_enable: enable,
+  })
 }
 
 // ─── List all project wallets (Phase 10.51) ────────────────────
