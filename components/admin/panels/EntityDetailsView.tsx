@@ -5,10 +5,18 @@
  * Used inline by Projects.tsx when user clicks a row.
  */
 
+import { useEffect, useState } from "react"
 import { ArrowRight, Edit2, Wallet as WalletIcon, MapPin, Calendar, TrendingUp, Users, AlertTriangle } from "lucide-react"
 import { Badge, ActionBtn, KPI } from "@/components/admin/ui"
-import { getWalletByProject } from "@/lib/mock-data/projectWallets"
+import { getAllProjectWalletsAdmin } from "@/lib/data/admin-utilities"
 import { cn } from "@/lib/utils/cn"
+
+interface ProjectWalletAggregate {
+  balance: number
+  total_inflow: number
+  total_outflow: number
+  status: "active" | "frozen" | "closed"
+}
 
 // Loose entity-detail row shape — matches Projects.tsx EntityRow.
 // Kept here so this component doesn't import from a panel that
@@ -52,9 +60,31 @@ export interface EntityDetailsViewProps {
 
 export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewProps) {
   const isProject = entity.entity_type === "project"
-  const wallet = getWalletByProject(entity.id)
   const soldShares = entity.total_shares - entity.available_shares
   const soldPct = entity.total_shares > 0 ? Math.round((soldShares / entity.total_shares) * 100) : 0
+
+  // Fetch real wallet aggregate from DB. Empty until the async fetch
+  // resolves; if no wallets exist for this project, stays null.
+  const [wallet, setWallet] = useState<ProjectWalletAggregate | null>(null)
+  useEffect(() => {
+    if (!isProject) return
+    let cancelled = false
+    getAllProjectWalletsAdmin(500).then((rows) => {
+      if (cancelled) return
+      const match = rows.find((r) => r.project_id === entity.id || r.id === entity.id)
+      if (match) {
+        setWallet({
+          balance: match.balance,
+          total_inflow: match.total_inflow,
+          total_outflow: match.total_outflow,
+          status: match.status,
+        })
+      } else {
+        setWallet(null)
+      }
+    })
+    return () => { cancelled = true }
+  }, [entity.id, isProject])
 
   return (
     <div className="p-6 max-w-5xl">
@@ -164,6 +194,18 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
             <div className="bg-red-400/[0.05] border border-red-400/[0.2] rounded-lg p-3 text-center">
               <div className="text-[10px] text-neutral-500 mb-1">مصروفات</div>
               <div className="text-base font-bold text-red-400 font-mono">-{fmtNum(wallet.total_outflow)}</div>
+            </div>
+          </div>
+        ) : isProject && entity.status === "active" ? (
+          <div className="bg-orange-400/[0.05] border border-orange-400/[0.25] rounded-xl p-3 flex items-start gap-2 text-xs">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-orange-400 mt-0.5" strokeWidth={1.5} />
+            <div>
+              <div className="text-orange-400 font-bold mb-1">⚠ المحافظ غير منشَأة بعد</div>
+              <div className="text-neutral-300 leading-relaxed">
+                المشروع منشور لكن محافظه الـ 3 (عرض / سفير / احتياطي) لم تُنشَأ.
+                طبّق <span className="font-mono bg-black/30 px-1 rounded">Migration 10.52</span> في
+                Supabase SQL Editor لإنشائها تلقائياً.
+              </div>
             </div>
           </div>
         ) : (

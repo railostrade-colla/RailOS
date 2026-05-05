@@ -155,9 +155,9 @@ export function AuditLogPanel() {
       e.id,
       e.created_at,
       e.admin_name,
-      ROLE_LABELS[e.admin_role].label,
-      ACTION_LABELS[e.action].label,
-      ENTITY_TYPE_LABELS[e.entity_type],
+      ROLE_LABELS[e.admin_role]?.label ?? e.admin_role ?? "—",
+      ACTION_LABELS[e.action]?.label ?? e.action ?? "—",
+      ENTITY_TYPE_LABELS[e.entity_type] ?? e.entity_type ?? "—",
       e.entity_name,
       e.ip_address || "",
       (e.reason || "").replace(/"/g, '""'),
@@ -303,8 +303,14 @@ export function AuditLogPanel() {
             </THead>
             <TBody>
               {paginated.map((e) => {
-                const al = ACTION_LABELS[e.action]
-                const rl = ROLE_LABELS[e.admin_role]
+                // Defensive: real DB rows may carry action/role/entity_type
+                // values that were added after the mock label maps were
+                // last updated (e.g. "bootstrap_super_admin", "create_project",
+                // "market_open"). Falling back to a neutral label keeps
+                // the panel rendering instead of throwing on .label access.
+                const al = ACTION_LABELS[e.action] ?? { label: e.action ?? "—", color: "gray" as const }
+                const rl = ROLE_LABELS[e.admin_role] ?? { label: e.admin_role ?? "—", color: "gray" as const }
+                const et = ENTITY_TYPE_LABELS[e.entity_type] ?? (e.entity_type ?? "—")
                 return (
                   <TR key={e.id}>
                     <TD><span className="font-mono text-[11px] text-neutral-400" dir="ltr">{e.created_at}</span></TD>
@@ -315,7 +321,7 @@ export function AuditLogPanel() {
                       </div>
                     </TD>
                     <TD><Badge label={al.label} color={al.color} /></TD>
-                    <TD><span className="text-[11px] text-neutral-400">{ENTITY_TYPE_LABELS[e.entity_type]}</span></TD>
+                    <TD><span className="text-[11px] text-neutral-400">{et}</span></TD>
                     <TD>
                       <div className="text-xs">
                         <div className="text-white max-w-xs truncate">{e.entity_name}</div>
@@ -385,11 +391,14 @@ export function AuditLogPanel() {
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <div className="text-[10px] text-neutral-500 mb-1">الإجراء</div>
-                  <Badge label={ACTION_LABELS[selected.action].label} color={ACTION_LABELS[selected.action].color} />
+                  <Badge
+                    label={ACTION_LABELS[selected.action]?.label ?? selected.action ?? "—"}
+                    color={ACTION_LABELS[selected.action]?.color ?? "gray"}
+                  />
                 </div>
                 <div>
                   <div className="text-[10px] text-neutral-500 mb-1">نوع الكيان</div>
-                  <div className="text-white">{ENTITY_TYPE_LABELS[selected.entity_type]}</div>
+                  <div className="text-white">{ENTITY_TYPE_LABELS[selected.entity_type] ?? selected.entity_type ?? "—"}</div>
                 </div>
                 <div className="col-span-2">
                   <div className="text-[10px] text-neutral-500 mb-1">الكيان المتأثّر</div>
@@ -409,7 +418,10 @@ export function AuditLogPanel() {
                 </div>
                 <div>
                   <div className="text-[10px] text-neutral-500 mb-1">الدور</div>
-                  <Badge label={ROLE_LABELS[selected.admin_role].label} color={ROLE_LABELS[selected.admin_role].color} />
+                  <Badge
+                    label={ROLE_LABELS[selected.admin_role]?.label ?? selected.admin_role ?? "—"}
+                    color={ROLE_LABELS[selected.admin_role]?.color ?? "gray"}
+                  />
                 </div>
                 <div>
                   <div className="text-[10px] text-neutral-500 mb-1">التاريخ والوقت</div>
