@@ -845,23 +845,58 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 lg:col-span-2">
           <div className="text-sm font-bold text-white mb-4">4️⃣ المعلومات المالية</div>
 
-          {/* Row 1: project value + share price */}
+          {/* Phase 10.58 — financial fields LOCKED in edit mode.
+              The user explicitly asked: project value, share price,
+              and total shares are immutable after creation. To
+              increase the tradeable share count, use the wallet
+              panel's "release shares to market" action (super_admin). */}
+          {isEdit && (
+            <div className="bg-yellow-400/[0.05] border border-yellow-400/[0.25] rounded-xl p-3 mb-4 flex items-start gap-2.5">
+              <span className="text-base">🔒</span>
+              <div className="text-[11px] leading-relaxed">
+                <div className="text-yellow-400 font-bold mb-1">الحقول المالية مقفلة في وضع التعديل</div>
+                <div className="text-neutral-300">
+                  قيمة المشروع وسعر الحصة الابتدائي وعدد الحصص لا يُعدَّلون بعد الإنشاء.
+                  لزيادة الحصص المعروضة في السوق، استخدم زرّ
+                  <span className="font-bold text-white"> 📤 إطلاق حصص للسوق </span>
+                  من صفحة <span className="font-bold text-white">محافظ المشاريع</span> (Super Admin فقط).
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Row 1: project value + share price (locked in edit) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block">قيمة المشروع الكلّية (د.ع) *</label>
               <input
-                type="number" value={projectValue} onChange={(e) => setProjectValue(e.target.value)}
+                type="number" value={projectValue}
+                onChange={(e) => !isEdit && setProjectValue(e.target.value)}
+                readOnly={isEdit} disabled={isEdit}
                 placeholder="500000000"
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+                className={cn(
+                  "w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20",
+                  isEdit && "opacity-60 cursor-not-allowed"
+                )}
               />
             </div>
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block">سعر الحصّة الابتدائي (د.ع) *</label>
               <input
-                type="number" value={sharePrice} onChange={(e) => setSharePrice(e.target.value)}
+                type="number" value={sharePrice}
+                onChange={(e) => !isEdit && setSharePrice(e.target.value)}
+                readOnly={isEdit} disabled={isEdit}
                 placeholder="50000"
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+                className={cn(
+                  "w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20",
+                  isEdit && "opacity-60 cursor-not-allowed"
+                )}
               />
+              {isEdit && (
+                <div className="text-[10px] text-neutral-500 mt-1">
+                  💡 السعر الابتدائي يُحفظ كمرجع. السعر الحالي في السوق يتحدّث ديناميكياً.
+                </div>
+              )}
             </div>
           </div>
 
@@ -946,8 +981,12 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
               <input
                 type="number"
                 value={ownerPercent}
-                onChange={(e) => setOwnerPercent(e.target.value)}
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+                onChange={(e) => !isEdit && setOwnerPercent(e.target.value)}
+                readOnly={isEdit} disabled={isEdit}
+                className={cn(
+                  "w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20",
+                  isEdit && "opacity-60 cursor-not-allowed"
+                )}
               />
             </div>
             <div>
@@ -955,15 +994,39 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
                 <span>طرح للجمهور (%)</span>
                 <span className="text-[9px] text-green-400">للتداول في السوق</span>
               </label>
-              <input type="number" value={offeringPct} onChange={(e) => setOfferingPct(e.target.value)} className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20" />
+              <input
+                type="number" value={offeringPct}
+                onChange={(e) => !isEdit && setOfferingPct(e.target.value)}
+                readOnly={isEdit} disabled={isEdit}
+                className={cn(
+                  "w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20",
+                  isEdit && "opacity-60 cursor-not-allowed"
+                )}
+              />
             </div>
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block">سفير (%)</label>
-              <input type="number" value={ambassadorPct} onChange={(e) => setAmbassadorPct(e.target.value)} className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20" />
+              <input
+                type="number" value={ambassadorPct}
+                onChange={(e) => !isEdit && setAmbassadorPct(e.target.value)}
+                readOnly={isEdit} disabled={isEdit}
+                className={cn(
+                  "w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20",
+                  isEdit && "opacity-60 cursor-not-allowed"
+                )}
+              />
             </div>
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block">احتياطي (%)</label>
-              <input type="number" value={reservePct} onChange={(e) => setReservePct(e.target.value)} className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20" />
+              <input
+                type="number" value={reservePct}
+                onChange={(e) => !isEdit && setReservePct(e.target.value)}
+                readOnly={isEdit} disabled={isEdit}
+                className={cn(
+                  "w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20",
+                  isEdit && "opacity-60 cursor-not-allowed"
+                )}
+              />
             </div>
             <div className={cn(
               "rounded-xl p-3 flex justify-between text-xs border",

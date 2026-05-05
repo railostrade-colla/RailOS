@@ -120,17 +120,23 @@ export function ProjectWalletsPanel() {
       if (!result.success) {
         const map: Record<string, string> = {
           unauthenticated: "يجب تسجيل الدخول أولاً",
+          super_admin_only: "هذا الإجراء يتطلّب صلاحية Super Admin فقط",
           not_admin: "صلاحياتك لا تسمح بهذا الإجراء",
           invalid_amount: "الكمية غير صحيحة",
-          reserve_wallet_missing: "محفظة الاحتياطي غير موجودة",
-          offering_wallet_missing: "محفظة العرض غير موجودة",
-          reserve_wallet_frozen: "محفظة الاحتياطي مُجمَّدة",
-          offering_wallet_frozen: "محفظة العرض مُجمَّدة",
-          insufficient_reserve_shares: `متاح في الاحتياطي: ${result.available ?? "؟"} حصة`,
-          missing_table: "الجداول غير منشورة على الخادم بعد",
+          reserve_wallet_missing: "محفظة الاحتياطي غير موجودة — طبّق Migration 10.51",
+          offering_wallet_missing: "محفظة العرض غير موجودة — طبّق Migration 10.51",
+          reserve_wallet_frozen: "محفظة الاحتياطي مُجمَّدة — افكّ التجميد أوّلاً",
+          offering_wallet_frozen: "محفظة العرض مُجمَّدة — افكّ التجميد أوّلاً",
+          insufficient_reserve_shares: `متاح في الاحتياطي: ${result.available ?? "؟"} حصة فقط`,
+          missing_table: "الجداول غير منشورة — طبّق Migration 10.58",
           rls: "ليس لديك صلاحية لهذا الإجراء",
         }
-        showError(map[result.reason ?? ""] ?? "فشل إطلاق الحصص")
+        // eslint-disable-next-line no-console
+        console.warn("[release] failure:", result)
+        showError(
+          map[result.reason ?? ""] ??
+            `فشل إطلاق الحصص${result.reason ? ` (${result.reason})` : ""}`,
+        )
         return
       }
       showSuccess(

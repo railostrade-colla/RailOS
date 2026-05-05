@@ -6,9 +6,10 @@
  */
 
 import { useEffect, useState } from "react"
-import { ArrowRight, Edit2, Wallet as WalletIcon, MapPin, Calendar, TrendingUp, Users, AlertTriangle } from "lucide-react"
+import { ArrowRight, Edit2, Wallet as WalletIcon, MapPin, Calendar, TrendingUp, TrendingDown, Users, AlertTriangle } from "lucide-react"
 import { Badge, ActionBtn, KPI } from "@/components/admin/ui"
 import { getAllProjectWalletsAdmin } from "@/lib/data/admin-utilities"
+import { getProjectByIdAdmin } from "@/lib/data/projects"
 import { cn } from "@/lib/utils/cn"
 
 interface ProjectWalletAggregate {
@@ -16,6 +17,12 @@ interface ProjectWalletAggregate {
   total_inflow: number
   total_outflow: number
   status: "active" | "frozen" | "closed"
+}
+
+interface ProjectPrices {
+  launch_price: number       // Initial price at creation (immutable)
+  market_price: number       // Current dynamic price
+  change_pct: number         // (market - launch) / launch × 100
 }
 
 // Loose entity-detail row shape — matches Projects.tsx EntityRow.
@@ -66,6 +73,9 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
   // Fetch real wallet aggregate from DB. Empty until the async fetch
   // resolves; if no wallets exist for this project, stays null.
   const [wallet, setWallet] = useState<ProjectWalletAggregate | null>(null)
+  // Phase 10.58: fetch project's launch + current prices
+  const [prices, setPrices] = useState<ProjectPrices | null>(null)
+
   useEffect(() => {
     if (!isProject) return
     let cancelled = false
@@ -82,6 +92,14 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
       } else {
         setWallet(null)
       }
+    })
+    // Fetch full project for launch_price (share_price) + market_price (current_market_price)
+    getProjectByIdAdmin(entity.id).then((row) => {
+      if (cancelled || !row) return
+      const launch = Number(row.share_price ?? 0)
+      const market = Number(row.current_market_price ?? row.share_price ?? 0)
+      const change = launch > 0 ? ((market - launch) / launch) * 100 : 0
+      setPrices({ launch_price: launch, market_price: market, change_pct: change })
     })
     return () => { cancelled = true }
   }, [entity.id, isProject])
@@ -141,11 +159,53 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <KPI label="سعر الحصّة" val={entity.share_price ? fmtNum(entity.share_price) : "—"} color="#FBBF24" />
+        <KPI label="سعر الإطلاق" val={prices ? fmtNum(prices.launch_price) : (entity.share_price ? fmtNum(entity.share_price) : "—")} color="#FBBF24" />
         <KPI label="إجمالي الحصص" val={fmtNum(entity.total_shares)} color="#fff" />
         <KPI label="حصص متاحة" val={fmtNum(entity.available_shares)} color="#4ADE80" />
         <KPI label="القيمة الإجمالية" val={fmtNum(entity.project_value) + " د.ع"} color="#60A5FA" />
       </div>
+
+      {/* Phase 10.58 — Launch vs Market price comparison */}
+      {isProject && prices && (
+        <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-5">
+          <div className="flex items-center gap-2 mb-3">
+            {prices.change_pct >= 0
+              ? <TrendingUp className="w-4 h-4 text-green-400" strokeWidth={1.5} />
+              : <TrendingDown className="w-4 h-4 text-red-400" strokeWidth={1.5} />
+            }
+            <div className="text-sm font-bold text-white">سعر الإطلاق مقابل سعر السوق</div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-yellow-400/[0.05] border border-yellow-400/[0.2] rounded-lg p-3 text-center">
+              <div className="text-[10px] text-neutral-500 mb-1">سعر الإطلاق (مرجعي)</div>
+              <div className="text-base font-bold text-yellow-400 font-mono">{fmtNum(prices.launch_price)} د.ع</div>
+              <div className="text-[9px] text-neutral-600 mt-1">ثابت — وقت الإنشاء</div>
+            </div>
+            <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-lg p-3 text-center">
+              <div className="text-[10px] text-neutral-500 mb-1">سعر السوق الحالي</div>
+              <div className="text-base font-bold text-blue-400 font-mono">{fmtNum(prices.market_price)} د.ع</div>
+              <div className="text-[9px] text-neutral-600 mt-1">ديناميكي — يتحدّث مع السوق</div>
+            </div>
+            <div className={cn(
+              "rounded-lg p-3 text-center border",
+              prices.change_pct > 0 && "bg-green-400/[0.05] border-green-400/[0.2]",
+              prices.change_pct < 0 && "bg-red-400/[0.05] border-red-400/[0.2]",
+              prices.change_pct === 0 && "bg-neutral-400/[0.05] border-neutral-400/[0.2]",
+            )}>
+              <div className="text-[10px] text-neutral-500 mb-1">نسبة التغيّر</div>
+              <div className={cn(
+                "text-base font-bold font-mono",
+                prices.change_pct > 0 && "text-green-400",
+                prices.change_pct < 0 && "text-red-400",
+                prices.change_pct === 0 && "text-neutral-400",
+              )}>
+                {prices.change_pct > 0 ? "+" : ""}{prices.change_pct.toFixed(2)}%
+              </div>
+              <div className="text-[9px] text-neutral-600 mt-1">منذ الإطلاق</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Shares progress */}
       <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-5">
