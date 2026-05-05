@@ -524,12 +524,21 @@ function PortfolioContent() {
             ) : (
               <div className="space-y-2">
                 {holdings.map((h) => {
-                  const value = (h.project?.share_price || 0) * h.shares_owned
-                  const pct = h.project?.total_shares
-                    ? Math.round(((h.project.total_shares - (h.project.available_shares ?? 0)) / h.project.total_shares) * 100)
-                    : 0
-                  const change = (pct * 0.12).toFixed(1)
-                  const up = parseFloat(change) >= 0
+                  // Phase 10.71 — value = shares × current market price
+                  const marketPrice = h.project?.current_market_price ?? h.project?.share_price ?? 0
+                  const value = marketPrice * h.shares_owned
+                  // P/L vs buy price (مرجع للقيمة المرشَّحة)
+                  const pl = value - h.total_invested
+                  const plPct = h.total_invested > 0 ? (pl / h.total_invested) * 100 : 0
+                  const up = pl >= 0
+                  // نسبة التمويل = من الـ RPC (sold_shares من offering / total)
+                  const fundedPct = h.funded_pct ?? 0
+                  // إحصائيات الشراء/البيع للمستخدم في هذا المشروع
+                  const sharesBought = h.shares_bought ?? 0
+                  const sharesSold = h.shares_sold ?? 0
+                  const totalSoldAmount = h.total_sold_amount ?? 0
+                  // متوسط سعر البيع الفعلي
+                  const avgSellPrice = sharesSold > 0 ? totalSoldAmount / sharesSold : 0
                   return (
                     <div
                       key={h.id}
@@ -540,33 +549,77 @@ function PortfolioContent() {
                         className="w-full p-4 text-right"
                       >
                         <div className="flex items-center justify-between mb-3 pe-9">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-10 h-10 rounded-xl bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-lg">
-                              {sectorIcon(h.project?.sector || "")}
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-xl flex-shrink-0 overflow-hidden">
+                              {h.project?.logo_url ? (
+                                <img src={h.project.logo_url} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <span>{sectorIcon(h.project?.sector || "")}</span>
+                              )}
                             </div>
-                            <div>
-                              <div className="text-sm font-bold text-white">{h.project?.name}</div>
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold text-white truncate">
+                                {h.project?.name || "—"}
+                                {h.project?.symbol && (
+                                  <span className="text-[9px] text-neutral-500 mx-1.5 font-mono" dir="ltr">
+                                    {h.project.symbol}
+                                  </span>
+                                )}
+                              </div>
                               <div className="text-[10px] text-neutral-500 mt-0.5">
-                                {h.shares_owned} حصة • {fmtIQD(h.project?.share_price || 0)} IQD
+                                {h.shares_owned} حصة • سعر السوق: {fmtIQD(marketPrice)} IQD
                               </div>
                             </div>
                           </div>
-                          <div className="text-left">
+                          <div className="text-left flex-shrink-0">
                             <div className="text-sm font-bold text-white font-mono">{fmtIQD(value)}</div>
                             <div className={cn("text-[11px] font-bold mt-0.5", up ? "text-green-400" : "text-red-400")}>
-                              {up ? "↑" : "↓"} {change}%
+                              {up ? "↑" : "↓"} {plPct.toFixed(1)}%
                             </div>
                           </div>
                         </div>
+
+                        {/* Funded progress bar */}
                         <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
-                          <div className="h-full bg-white/60 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
+                          <div
+                            className="h-full bg-gradient-to-r from-blue-400 to-green-400 rounded-full transition-all duration-700"
+                            style={{ width: `${Math.min(100, fundedPct)}%` }}
+                          />
                         </div>
                         <div className="flex justify-between mt-1.5">
-                          <span className="text-[10px] text-neutral-500">مُموَّل {pct}%</span>
-                          <span className={cn("text-[10px]", up ? "text-green-400" : "text-red-400")}>
-                            {up ? "+" : ""}{fmtIQD((value * parseFloat(change)) / 100)} IQD
+                          <span className="text-[10px] text-neutral-500">مُموَّل {fundedPct.toFixed(1)}%</span>
+                          <span className={cn("text-[10px] font-mono", up ? "text-green-400" : "text-red-400")}>
+                            {up ? "+" : ""}{fmtIQD(pl)} IQD
                           </span>
                         </div>
+
+                        {/* Buy/Sell stats — Phase 10.71 */}
+                        {(sharesBought > 0 || sharesSold > 0) && (
+                          <div className="mt-3 pt-3 border-t border-white/[0.05] grid grid-cols-2 gap-2">
+                            <div className="bg-blue-400/[0.05] border border-blue-400/[0.15] rounded-lg p-2">
+                              <div className="text-[9px] text-blue-300/70 mb-0.5">📈 شراء (تمويل)</div>
+                              <div className="text-[11px] font-bold text-blue-300 font-mono">
+                                {sharesBought} حصة
+                              </div>
+                              {h.total_bought_amount !== undefined && h.total_bought_amount > 0 && (
+                                <div className="text-[9px] text-neutral-500 mt-0.5 font-mono">
+                                  {fmtIQD(h.total_bought_amount)} IQD
+                                </div>
+                              )}
+                            </div>
+                            <div className="bg-purple-400/[0.05] border border-purple-400/[0.15] rounded-lg p-2">
+                              <div className="text-[9px] text-purple-300/70 mb-0.5">📉 بيع</div>
+                              <div className="text-[11px] font-bold text-purple-300 font-mono">
+                                {sharesSold} حصة
+                              </div>
+                              {sharesSold > 0 && (
+                                <div className="text-[9px] text-neutral-500 mt-0.5 font-mono">
+                                  متوسط سعر البيع: {fmtIQD(avgSellPrice)} IQD
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </button>
                       {active.kind === "personal" && h.shares_owned > 0 && (
                         <button

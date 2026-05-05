@@ -37,6 +37,10 @@ export interface PortfolioHoldingProject {
   current_market_price: number | null
   total_shares: number
   available_shares: number
+  /** Project ticker symbol (e.g. "AGRI-01") for the logo placeholder. */
+  symbol?: string | null
+  /** Optional logo URL — falls back to a generated initial. */
+  logo_url?: string | null
 }
 
 export interface PortfolioHolding {
@@ -54,6 +58,17 @@ export interface PortfolioHolding {
   /** Computed: `shares × (current_market_price ?? share_price)`. */
   current_value: number
   project: PortfolioHoldingProject
+  // ─── Phase 10.71 fields (from get_my_holdings_full RPC) ─────
+  /** % of project offering wallet that's been sold (funding %). */
+  funded_pct?: number
+  /** Total shares user has bought from this project (cumulative). */
+  shares_bought?: number
+  /** Total shares user has sold from this project (cumulative). */
+  shares_sold?: number
+  /** Sum of total_amount on completed deals where user was seller. */
+  total_sold_amount?: number
+  /** Sum of total_amount on completed deals where user was buyer. */
+  total_bought_amount?: number
 }
 
 export interface PortfolioSummary {
@@ -246,13 +261,78 @@ async function fetchHoldings(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<PortfolioHolding[]> {
+  // Phase 10.71 — preferred path: get_my_holdings_full RPC bundles
+  // holdings + project info + funded_pct + buy/sell aggregates in
+  // one round-trip (SECURITY DEFINER bypasses any RLS quirks).
   try {
-    // Phase 10.70 — two-step manual join to bypass PostgREST FK
-    // inference issues. The previous version used `project:projects(...)`
-    // which silently returned `null` for project when the FK constraint
-    // wasn't picked up by PostgREST, causing the loop to `continue` and
-    // skip every holding — so the user would see 0 shares even when
-    // their holdings table was correctly populated.
+    const { data: rpcData, error: rpcErr } = await supabase.rpc(
+      "get_my_holdings_full",
+    )
+    if (!rpcErr && Array.isArray(rpcData) && rpcData.length > 0) {
+      interface RpcRow {
+        id: string
+        project_id: string
+        shares: number | string | null
+        frozen_shares: number | string | null
+        average_buy_price: number | string | null
+        total_invested: number | string | null
+        project_name: string | null
+        project_sector: string | null
+        project_share_price: number | string | null
+        market_price: number | string | null
+        project_total_shares: number | string | null
+        project_symbol: string | null
+        funded_pct: number | string | null
+        shares_bought_from_project: number | string | null
+        shares_sold_from_project: number | string | null
+        total_sold_amount: number | string | null
+        total_bought_amount: number | string | null
+      }
+      return (rpcData as RpcRow[]).map((r): PortfolioHolding => {
+        const shares = n(r.shares)
+        const sharePrice = n(r.project_share_price)
+        const marketPrice = r.market_price != null ? n(r.market_price) : sharePrice
+        return {
+          id: r.id,
+          project_id: r.project_id,
+          user_id: userId,
+          shares,
+          shares_owned: shares,
+          frozen_shares: n(r.frozen_shares),
+          average_buy_price: n(r.average_buy_price),
+          buy_price: n(r.average_buy_price),
+          total_invested: n(r.total_invested),
+          current_value: shares * marketPrice,
+          project: {
+            id: r.project_id,
+            name: r.project_name ?? "—",
+            sector: r.project_sector ?? "",
+            share_price: sharePrice,
+            current_market_price: r.market_price != null ? n(r.market_price) : null,
+            total_shares: n(r.project_total_shares),
+            available_shares: 0,
+            symbol: r.project_symbol ?? null,
+            logo_url: null,
+          },
+          funded_pct: n(r.funded_pct),
+          shares_bought: n(r.shares_bought_from_project),
+          shares_sold: n(r.shares_sold_from_project),
+          total_sold_amount: n(r.total_sold_amount),
+          total_bought_amount: n(r.total_bought_amount),
+        }
+      })
+    }
+    if (rpcErr) {
+      // eslint-disable-next-line no-console
+      console.warn("[portfolio] get_my_holdings_full RPC:", rpcErr.message)
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("[portfolio] RPC threw, falling back:", err)
+  }
+
+  try {
+    // Fallback (Phase 10.70) — two-step manual join.
     const { data: holdingRows, error } = await supabase
       .from("holdings")
       .select(
