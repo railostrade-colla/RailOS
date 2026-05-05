@@ -97,65 +97,68 @@ interface FeeRequestRpcRow extends Omit<RequestRow, "profile" | "balance"> {
 }
 
 /**
- * Fetch the fee-request review queue, newest-first.
- *
- * Strategy: try the Phase 10.38 RPC first (does the SQL join + bypasses
- * PostgREST FK inference), fall back to the legacy PostgREST query.
- * The legacy path returns empty when FK constraints are missing
- * between fee_unit_requests.user_id and profiles.id — which is the
- * production bug we're working around.
+ * Last-resort RPC fallback (Phase 10.38). Used only when the direct
+ * SELECT path fails entirely (e.g. fee_unit_requests table missing).
  */
-export async function getFeeRequestsAdmin(
-  limit: number = 200,
-): Promise<FeeUnitRequest[]> {
-  // ─── Path 1: RPC (preferred) ───
+async function rpcFallback(limit: number): Promise<FeeUnitRequest[]> {
   try {
     const supabase = createClient()
     const { data: rpcData, error: rpcError } = await supabase.rpc(
       "get_fee_requests_admin",
       { p_limit: limit },
     )
-    if (!rpcError && Array.isArray(rpcData)) {
-      return (rpcData as FeeRequestRpcRow[]).map((r) => {
-        const requested = num(r.amount_requested)
-        const approved = num(r.amount_approved)
-        return {
-          id: r.id,
-          user_id: r.user_id,
-          user_name: r.user_name?.trim() || "—",
-          user_email: r.user_handle?.trim() ? `@${r.user_handle.trim()}` : "—",
-          user_level: mapLevel(r.user_level),
-          current_balance: num(r.current_balance),
-          requested_units: requested,
-          amount_paid: requested,
-          payment_method: mapPaymentMethod(r.payment_method),
-          reference_number: r.transaction_reference ?? "—",
-          proof_image_url: r.proof_image_url ?? "",
-          status: mapStatus(r.status),
-          approved_units: approved > 0 ? approved : undefined,
-          rejection_reason: r.rejection_reason ?? undefined,
-          admin_notes: r.admin_notes ?? undefined,
-          submitted_at: dateOnly(r.submitted_at),
-        }
-      })
-    }
-    if (rpcError) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        "[fee-admin] RPC get_fee_requests_admin not available, falling back:",
-        rpcError.message,
-      )
-    }
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn("[fee-admin] RPC threw, falling back:", err)
+    if (rpcError || !Array.isArray(rpcData)) return []
+    return (rpcData as FeeRequestRpcRow[]).map((r) => {
+      const requested = num(r.amount_requested)
+      const approved = num(r.amount_approved)
+      return {
+        id: r.id,
+        user_id: r.user_id,
+        user_name: r.user_name?.trim() || "—",
+        user_email: r.user_handle?.trim() ? `@${r.user_handle.trim()}` : "—",
+        user_level: mapLevel(r.user_level),
+        current_balance: num(r.current_balance),
+        requested_units: requested,
+        amount_paid: requested,
+        payment_method: mapPaymentMethod(r.payment_method),
+        reference_number: r.transaction_reference ?? "—",
+        proof_image_url: r.proof_image_url ?? "",
+        status: mapStatus(r.status),
+        approved_units: approved > 0 ? approved : undefined,
+        rejection_reason: r.rejection_reason ?? undefined,
+        admin_notes: r.admin_notes ?? undefined,
+        submitted_at: dateOnly(r.submitted_at),
+      }
+    })
+  } catch {
+    return []
   }
+}
 
-  // ─── Path 2: two-step manual join (FK-independent fallback) ───
-  // Splits the query so a missing FK constraint on fee_unit_requests
-  // can't break the entire fetch (the previous one-shot query with
-  // `profiles!user_id` + `fee_unit_balances!user_id` joins returned
-  // empty when either FK was missing).
+/**
+ * Fetch the fee-request review queue, newest-first.
+ *
+ * Strategy (Phase 10.42 — primary path is the manual join, NOT the
+ * RPC):
+ *   1. Direct SELECT on fee_unit_requests with no FK joins.
+ *   2. Batched SELECT on profiles + fee_unit_balances by user_ids.
+ *   3. Stitch in JS.
+ *
+ * Why direct-first instead of RPC-first: in some deployments the
+ * RPC was returning an empty array (probably an is_admin() context
+ * mismatch) which short-circuited the function before the manual
+ * join ever ran. Direct SELECT only depends on the standard SELECT
+ * RLS policy — the same policy that powers the requests-hub query
+ * which the user already sees working.
+ *
+ * The Phase 10.38 RPC is still kept as a last-resort fallback so
+ * deployments where the table is missing entirely degrade
+ * gracefully.
+ */
+export async function getFeeRequestsAdmin(
+  limit: number = 200,
+): Promise<FeeUnitRequest[]> {
+  // ─── Path 1: direct SELECT + batched manual joins (PRIMARY) ───
   try {
     const supabase = createClient()
 
@@ -173,12 +176,13 @@ export async function getFeeRequestsAdmin(
       if (reqError) {
         // eslint-disable-next-line no-console
         console.warn(
-          "[fee-admin] getFeeRequestsAdmin (fallback) failed:",
+          "[fee-admin] direct SELECT failed, trying RPC fallback:",
           reqError.message,
           reqError.code,
         )
       }
-      return []
+      // Fall through to RPC fallback.
+      return await rpcFallback(limit)
     }
 
     // Collect unique user_ids and fetch their profiles + balances
@@ -253,8 +257,8 @@ export async function getFeeRequestsAdmin(
     })
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error("[fee-admin] getFeeRequestsAdmin threw:", err)
-    return []
+    console.error("[fee-admin] getFeeRequestsAdmin threw, trying RPC fallback:", err)
+    return await rpcFallback(limit)
   }
 }
 
