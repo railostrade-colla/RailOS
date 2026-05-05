@@ -218,15 +218,63 @@ export interface ProjectWalletAdminRow {
 /**
  * Fetches all project wallets across the platform, aggregated per
  * project. The DB stores 3 wallets per project (offering / ambassador
- * / reserve) but the admin UI shows ONE row per project. We aggregate
- * client-side: balance = total IQD value of available shares across
- * all 3 wallets.
+ * / reserve) but the admin UI shows ONE row per project.
  *
- * Two-step manual join — no FK assumption.
+ * Strategy (Phase 10.55):
+ *   • Path 1: get_project_wallets_admin RPC (SECURITY DEFINER —
+ *     bypasses RLS, does the aggregation in SQL, single roundtrip).
+ *   • Path 2: legacy two-step manual join — runs only if the RPC
+ *     hasn't been deployed yet.
  */
 export async function getAllProjectWalletsAdmin(
   limit = 200,
 ): Promise<ProjectWalletAdminRow[]> {
+  // ─── Path 1: RPC (preferred) ───
+  try {
+    const supabase = createClient()
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      "get_project_wallets_admin",
+      { p_limit: limit },
+    )
+    if (!rpcError && Array.isArray(rpcData)) {
+      interface RpcRow {
+        project_id: string
+        id: string
+        project_name: string
+        balance: number | string
+        total_inflow: number | string
+        total_outflow: number | string
+        status: "active" | "frozen" | "closed"
+        created_at: string
+        frozen_at: string | null
+        frozen_reason: string | null
+      }
+      return (rpcData as RpcRow[]).map((r) => ({
+        id: r.id,
+        project_id: r.project_id,
+        project_name: r.project_name,
+        balance: Number(r.balance),
+        total_inflow: Number(r.total_inflow),
+        total_outflow: Number(r.total_outflow),
+        status: r.status,
+        created_at: r.created_at,
+        frozen_at: r.frozen_at?.slice(0, 10) ?? undefined,
+        frozen_reason: r.frozen_reason ?? undefined,
+      }))
+    }
+    if (rpcError) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[admin-utilities] get_project_wallets_admin RPC failed, falling back:",
+        rpcError.message,
+      )
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("[admin-utilities] RPC threw, falling back:", err)
+  }
+
+  // ─── Path 2: legacy two-step manual join ───
   try {
     const supabase = createClient()
 
