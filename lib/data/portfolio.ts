@@ -247,17 +247,16 @@ async function fetchHoldings(
   userId: string,
 ): Promise<PortfolioHolding[]> {
   try {
-    const { data, error } = await supabase
+    // Phase 10.70 — two-step manual join to bypass PostgREST FK
+    // inference issues. The previous version used `project:projects(...)`
+    // which silently returned `null` for project when the FK constraint
+    // wasn't picked up by PostgREST, causing the loop to `continue` and
+    // skip every holding — so the user would see 0 shares even when
+    // their holdings table was correctly populated.
+    const { data: holdingRows, error } = await supabase
       .from("holdings")
       .select(
-        `
-        id, project_id, user_id, shares, frozen_shares,
-        average_buy_price, total_invested,
-        project:projects(
-          id, name, sector, share_price, current_market_price,
-          total_shares, available_shares
-        )
-      `,
+        "id, project_id, user_id, shares, frozen_shares, average_buy_price, total_invested",
       )
       .eq("user_id", userId)
       .order("last_acquired_at", { ascending: false })
@@ -267,19 +266,59 @@ async function fetchHoldings(
       console.error("[portfolio] holdings query error:", error.message)
       return []
     }
-    if (!data) return []
+    if (!holdingRows || holdingRows.length === 0) return []
+
+    interface RawHolding {
+      id: string
+      project_id: string
+      user_id: string
+      shares: number | string | null
+      frozen_shares: number | string | null
+      average_buy_price: number | string | null
+      total_invested: number | string | null
+    }
+
+    const rows = holdingRows as RawHolding[]
+    const projectIds = Array.from(
+      new Set(rows.map((r) => r.project_id).filter(Boolean)),
+    )
+
+    interface RawProject {
+      id: string
+      name: string | null
+      sector: string | null
+      share_price: number | string | null
+      current_market_price: number | string | null
+      total_shares: number | string | null
+      available_shares: number | string | null
+    }
+
+    const projectMap = new Map<string, RawProject>()
+    if (projectIds.length > 0) {
+      try {
+        const { data: projs } = await supabase
+          .from("projects")
+          .select(
+            "id, name, sector, share_price, current_market_price, total_shares, available_shares",
+          )
+          .in("id", projectIds)
+        for (const p of (projs ?? []) as RawProject[]) {
+          projectMap.set(p.id, p)
+        }
+      } catch {
+        // Non-fatal — render the holdings with placeholder project info.
+      }
+    }
 
     const out: PortfolioHolding[] = []
-    for (const row of data as HoldingRow[]) {
-      const project = unwrapJoined(row.project)
-      // Skip orphaned holdings (project deleted) — render-safe.
-      if (!project || !project.id) continue
-
+    for (const row of rows) {
+      const project = projectMap.get(row.project_id)
       const shares = n(row.shares)
-      const sharePrice = n(project.share_price)
-      const marketPrice = project.current_market_price != null
-        ? n(project.current_market_price)
-        : sharePrice
+      const sharePrice = project ? n(project.share_price) : 0
+      const marketPrice =
+        project && project.current_market_price != null
+          ? n(project.current_market_price)
+          : sharePrice
       const currentValue = shares * marketPrice
 
       out.push({
@@ -293,17 +332,20 @@ async function fetchHoldings(
         buy_price: n(row.average_buy_price),
         total_invested: n(row.total_invested),
         current_value: currentValue,
+        // If the project lookup failed (RLS / deleted), still surface
+        // the holding with placeholders so the founder sees the row
+        // and can investigate, instead of silently dropping it.
         project: {
-          id: project.id,
-          name: project.name ?? "",
-          sector: project.sector ?? "",
+          id: project?.id ?? row.project_id,
+          name: project?.name ?? "— مشروع غير معروف —",
+          sector: project?.sector ?? "",
           share_price: sharePrice,
           current_market_price:
-            project.current_market_price != null
+            project && project.current_market_price != null
               ? n(project.current_market_price)
               : null,
-          total_shares: n(project.total_shares),
-          available_shares: n(project.available_shares),
+          total_shares: project ? n(project.total_shares) : 0,
+          available_shares: project ? n(project.available_shares) : 0,
         },
       })
     }
