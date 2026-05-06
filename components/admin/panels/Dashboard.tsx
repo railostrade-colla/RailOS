@@ -114,7 +114,7 @@ export function DashboardPanel() {
           title="👥 المستخدمون والاستثمارات"
           action={<ActionBtn label="إدارة المستخدمين" color="gray" sm onClick={() => goTo("users")} />}
         />
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
           <KPI
             label="إجمالي المشتركين"
             val={fmtNum(overview?.users_total ?? 0)}
@@ -136,6 +136,12 @@ export function DashboardPanel() {
             val={fmtNum(overview?.investors_count ?? 0)}
             color="#C084FC"
           />
+          {/* Phase 10.74 — جديد: عدد الحصص المُستثمَرة */}
+          <KPI
+            label="الحصص المُستثمَرة"
+            val={fmtNum(overview?.shares_invested ?? 0)}
+            color="#a855f7"
+          />
           <KPI
             label="قيمة الاستثمارات"
             val={fmtMoney(overview?.investors_value ?? 0)}
@@ -148,7 +154,7 @@ export function DashboardPanel() {
       {/* ═══ Row 2 — تفاصيل المستخدمين والتفاعل ═══ */}
       <div className="mb-5">
         <SectionHeader title="📈 التفاعل والتحقّق" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <KPI
             label="مسجَّلون اليوم"
             val={fmtNum(overview?.users_new_today ?? 0)}
@@ -169,6 +175,13 @@ export function DashboardPanel() {
             val={fmtNum(overview?.users_banned ?? 0)}
             color="#F87171"
             accent={overview && overview.users_banned > 0 ? "rgba(248,113,113,0.05)" : undefined}
+          />
+          {/* Phase 10.74 — جديد: معلّقون (banned_until > NOW) */}
+          <KPI
+            label="معلّقون مؤقّتاً"
+            val={fmtNum(overview?.users_suspended ?? 0)}
+            color="#FB923C"
+            accent={overview && overview.users_suspended > 0 ? "rgba(251,146,60,0.05)" : undefined}
           />
         </div>
       </div>
@@ -198,11 +211,18 @@ export function DashboardPanel() {
           title="🏢 المشاريع والشركات"
           action={<ActionBtn label="إدارة" color="gray" sm onClick={() => goTo("projects")} />}
         />
+        {/* Phase 10.74 — split into projects subgrid + companies subgrid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <KPI label="إجمالي" val={fmtNum(overview?.projects_total ?? 0)} color="#fff" />
+          <KPI label="إجمالي المشاريع والشركات" val={fmtNum(overview?.combined_total ?? 0)} color="#fff" />
           <KPI label="مشاريع نشطة" val={fmtNum(overview?.projects_active ?? stats.activeProjects)} color="#60A5FA" />
-          <KPI label="قيد المراجعة" val={fmtNum(overview?.projects_pending ?? 0)} color="#FBBF24" />
-          <KPI label="القيمة الإجمالية" val={fmtMoney(overview?.projects_value ?? 0)} color="#FBBF24" accent="rgba(251,191,36,0.05)" />
+          <KPI label="شركات نشطة" val={fmtNum(overview?.companies_active ?? 0)} color="#22d3ee" />
+          <KPI label="قيد المراجعة" val={fmtNum(overview?.combined_pending ?? 0)} color="#FBBF24" />
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+          <KPI label="مشاريع معلّقة" val={fmtNum(overview?.projects_pending ?? 0)} color="#FBBF24" />
+          <KPI label="مشاريع منتهية" val={fmtNum(overview?.projects_closed ?? 0)} color="rgba(255,255,255,0.4)" />
+          <KPI label="شركات قيد التحقّق" val={fmtNum(overview?.companies_pending ?? 0)} color="#FB923C" />
+          <KPI label="القيمة الإجمالية" val={fmtMoney(overview?.combined_value ?? 0)} color="#FBBF24" accent="rgba(251,191,36,0.05)" />
         </div>
       </div>
 
@@ -212,8 +232,15 @@ export function DashboardPanel() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <KPI label="إجمالي الحصص" val={fmtNum(overview?.shares_total ?? 0)} color="#fff" />
           <KPI label="حصص متداولة" val={fmtNum(overview?.shares_traded ?? 0)} color="#4ADE80" />
+          {/* Phase 10.74 — جديد: حصص غير متداولة */}
+          <KPI label="حصص غير متداولة" val={fmtNum(overview?.shares_unsold ?? 0)} color="#a3a3a3" />
           <KPI label="عروض نشطة" val={fmtNum(overview?.listings_active ?? 0)} color="#60A5FA" />
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
           <KPI label="مزادات نشطة" val={fmtNum(overview?.auctions_active ?? 0)} color="#C084FC" />
+          {/* Phase 10.74 — جديد: مزادات محالة + غير محالة */}
+          <KPI label="مزادات محالة" val={fmtNum(overview?.auctions_won ?? 0)} color="#4ADE80" />
+          <KPI label="مزادات غير محالة" val={fmtNum(overview?.auctions_unwon ?? 0)} color="rgba(255,255,255,0.4)" />
         </div>
       </div>
 

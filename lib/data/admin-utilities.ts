@@ -113,9 +113,13 @@ export interface DashboardOverview {
   users_verified: number
   users_pending_kyc: number
   users_banned: number
+  /** Phase 10.74 — temporary suspensions (banned_until > NOW()). */
+  users_suspended: number
   // Investors
   investors_count: number
   investors_value: number
+  /** Phase 10.74 — Σ holdings.shares (across all users). */
+  shares_invested: number
   // Deals
   deals_total: number
   deals_completed: number
@@ -128,12 +132,28 @@ export interface DashboardOverview {
   projects_total: number
   projects_active: number
   projects_pending: number
+  /** Phase 10.74 — sold_out / completed / cancelled. */
+  projects_closed: number
   projects_value: number
+  // Companies (Phase 10.74)
+  companies_total: number
+  companies_active: number
+  companies_pending: number
+  // Combined (projects + companies) — Phase 10.74
+  combined_total: number
+  combined_pending: number
+  combined_value: number
   // Marketplace
   listings_active: number
   auctions_active: number
+  /** Phase 10.74 — status='ended' AND winner_id IS NOT NULL. */
+  auctions_won: number
+  /** Phase 10.74 — cancelled OR (ended AND winner_id IS NULL). */
+  auctions_unwon: number
   // Operations queue
   disputes_open: number
+  /** Phase 10.74 — all-time disputes count. */
+  disputes_total: number
   kyc_pending: number
   fee_requests_pending: number
   ambassador_pending: number
@@ -142,6 +162,8 @@ export interface DashboardOverview {
   // Shares
   shares_total: number
   shares_traded: number
+  /** Phase 10.74 — Σ project_wallets.available_shares. */
+  shares_unsold: number
   // Health rates
   completion_rate: number
   dispute_rate: number
@@ -153,17 +175,20 @@ export interface DashboardOverview {
 const ZERO_OVERVIEW: DashboardOverview = {
   users_total: 0, users_active_7d: 0, users_active_30d: 0,
   users_new_this_week: 0, users_new_today: 0, users_verified: 0,
-  users_pending_kyc: 0, users_banned: 0,
-  investors_count: 0, investors_value: 0,
+  users_pending_kyc: 0, users_banned: 0, users_suspended: 0,
+  investors_count: 0, investors_value: 0, shares_invested: 0,
   deals_total: 0, deals_completed: 0, deals_pending: 0,
   deals_disputed: 0, deals_today: 0,
   deals_volume_total: 0, deals_volume_today: 0,
   projects_total: 0, projects_active: 0, projects_pending: 0,
-  projects_value: 0,
-  listings_active: 0, auctions_active: 0,
-  disputes_open: 0, kyc_pending: 0, fee_requests_pending: 0,
+  projects_closed: 0, projects_value: 0,
+  companies_total: 0, companies_active: 0, companies_pending: 0,
+  combined_total: 0, combined_pending: 0, combined_value: 0,
+  listings_active: 0, auctions_active: 0, auctions_won: 0, auctions_unwon: 0,
+  disputes_open: 0, disputes_total: 0,
+  kyc_pending: 0, fee_requests_pending: 0,
   ambassador_pending: 0, support_open: 0, share_mods_pending: 0,
-  shares_total: 0, shares_traded: 0,
+  shares_total: 0, shares_traded: 0, shares_unsold: 0,
   completion_rate: 0, dispute_rate: 0, kyc_rate: 0,
   snapshot_at: null,
 }
