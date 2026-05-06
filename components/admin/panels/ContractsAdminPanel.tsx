@@ -173,11 +173,14 @@ export function ContractsAdminPanel() {
         subtitle="إدارة العقود والشراكات وحلّ النزاعات الداخلية"
       />
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      {/* KPIs — Phase 10.77: added إجمالي + ملغاة per Task-7 spec
+          (existing KPIs kept untouched per "don't delete" rule). */}
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-5">
+        <KPI label="الإجمالي" val={contracts.length} color="#fff" />
         <KPI label="بانتظار التفعيل" val={stats.pending} color="#FBBF24" accent="rgba(251,191,36,0.05)" />
         <KPI label="نشطة" val={stats.active} color="#4ADE80" />
         <KPI label="منتهية" val={stats.ended} color="#a3a3a3" />
+        <KPI label="ملغاة" val={stats.cancelled} color="#F87171" accent={stats.cancelled > 0 ? "rgba(248,113,113,0.05)" : undefined} />
         <KPI label="القيمة الإجمالية" val={fmtNum(stats.total_value) + " د.ع"} color="#60A5FA" />
       </div>
 
@@ -219,7 +222,12 @@ export function ContractsAdminPanel() {
                   </TD>
                   <TD>
                     <span className="text-[11px] text-neutral-300">
-                      {c.creator_id === "me" ? "أنت" : c.creator_id}
+                      {/* Phase 10.77: data layer puts the resolved creator
+                          name as partners[0].user.name. Fall back to "أنت"
+                          for legacy mock rows where creator_id="me", then
+                          to a short ID prefix as a last resort. */}
+                      {c.partners[0]?.user?.name
+                        ?? (c.creator_id === "me" ? "أنت" : c.creator_id?.slice(0, 8) ?? "—")}
                     </span>
                   </TD>
                   <TD>
@@ -271,7 +279,10 @@ export function ContractsAdminPanel() {
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <div className="text-[10px] text-neutral-500 mb-1">المنشئ</div>
-                  <div className="text-white">{selected.creator_id === "me" ? "أنت" : selected.creator_id}</div>
+                  <div className="text-white">
+                    {selected.partners[0]?.user?.name
+                      ?? (selected.creator_id === "me" ? "أنت" : selected.creator_id?.slice(0, 8) ?? "—")}
+                  </div>
                 </div>
                 <div>
                   <div className="text-[10px] text-neutral-500 mb-1">تاريخ الإنشاء</div>
