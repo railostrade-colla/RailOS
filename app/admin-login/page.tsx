@@ -1,8 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { Lock, Mail, Shield } from "lucide-react"
+import { Lock, Mail } from "lucide-react"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { signInWithEmail } from "@/lib/supabase/auth-helpers"
 import { createClient } from "@/lib/supabase/client"
@@ -67,10 +68,19 @@ export default function AdminLoginPage() {
   return (
     <div className="relative min-h-screen bg-black flex items-center justify-center p-4" dir="rtl">
 <div className="relative z-10 w-full max-w-sm">
-        {/* Logo */}
+        {/* Logo — Phase 10.83: replaced the purple Shield gradient
+            placeholder with the real /logo.png brand mark used
+            everywhere else in the app + admin sidebar. */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-600 to-purple-900 border border-purple-500/30 flex items-center justify-center mx-auto mb-4">
-            <Shield className="w-8 h-8 text-white" strokeWidth={1.5} />
+          <div className="w-20 h-20 rounded-2xl overflow-hidden border border-white/[0.1] bg-white/[0.04] flex items-center justify-center mx-auto mb-4">
+            <Image
+              src="/logo.png"
+              alt="RailOS"
+              width={80}
+              height={80}
+              className="w-full h-full object-contain"
+              priority
+            />
           </div>
           <div className="text-2xl font-bold text-white mb-1">RaiLOS</div>
           <div className="text-xs text-neutral-500">لوحة الإدارة - منطقة محمية</div>
