@@ -42,6 +42,7 @@ import {
   type PortfolioAnalytics,
   type PortfolioHistoryPoint,
 } from "@/lib/data/portfolio-analytics"
+import { getMyDistributions, type Distribution } from "@/lib/data/distributions"
 import { fmtLimit } from "@/lib/utils/contractLimits"
 import { cn } from "@/lib/utils/cn"
 
@@ -248,8 +249,35 @@ export default function InvestmentPage() {
     }
   }, [analytics, dbAnalytics, dbHistory])
 
-  const distributions = useMemo(() => getDistributionsByUser("me"), [])
-  const totalDistributions = useMemo(() => getTotalDistributions("me"), [])
+  // Phase 10.80 (Task 21) — distributions now from real DB. Falls
+  // back to the legacy mock when the table/RPC isn't available
+  // (preserves the "تاريخ التوزيعات" UI on a fresh deploy).
+  const [dbDistributions, setDbDistributions] = useState<Distribution[]>([])
+  useEffect(() => {
+    let cancelled = false
+    getMyDistributions().then((rows) => { if (!cancelled) setDbDistributions(rows) })
+    return () => { cancelled = true }
+  }, [])
+  const distributions = useMemo(() => {
+    if (dbDistributions.length > 0) {
+      return dbDistributions.map((d) => ({
+        id: String(d.id ?? ""),
+        user_id: String(d.user_id ?? ""),
+        project_id: String(d.project_id ?? ""),
+        project_name: String((d as { project_name?: string }).project_name ?? "—"),
+        amount: Number(d.amount ?? 0),
+        date: String(d.recorded_at ?? (d as { date?: string }).date ?? ""),
+        type: String((d as { type?: string }).type ?? "distribution"),
+      }))
+    }
+    return getDistributionsByUser("me")
+  }, [dbDistributions])
+  const totalDistributions = useMemo(() => {
+    if (dbDistributions.length > 0) {
+      return dbDistributions.reduce((s, d) => s + Number(d.amount ?? 0), 0)
+    }
+    return getTotalDistributions("me")
+  }, [dbDistributions])
 
   const [range, setRange] = useState<RangeId>("12m")
   const [search, setSearch] = useState("")

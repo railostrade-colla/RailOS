@@ -105,8 +105,10 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<MockProject | null>(mockProjects[id] || null)
   const [loading, setLoading] = useState(true)
   const trades = mockTrades
-  const investors = 247
-  const myShares = 0 // Mock - في الإنتاج: من holdings
+  // Phase 10.80 (Task 20) — investor count + my shares now from real
+  // DB instead of the hardcoded `247` and `0` placeholders.
+  const [investors, setInvestors] = useState(0)
+  const [myShares, setMyShares] = useState(0)
 
   // Real DB-backed project updates (Phase O). Fetched in parallel with
   // the project itself so the "تحديثات" tab is ready when the user
@@ -129,6 +131,41 @@ export default function ProjectDetailPage() {
         if (!project) setProject(mockProjects[id] || mockProjects["1"])
         setLoading(false)
       })
+    return () => { cancelled = true }
+  }, [id])
+
+  // Phase 10.80 — fetch real investor count + this user's holding for
+  // this project. Both are cheap COUNT/SELECT roundtrips.
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { createClient } = await import("@/lib/supabase/client")
+        const sb = createClient()
+        // Distinct investors in this project
+        const { count } = await sb
+          .from("holdings")
+          .select("user_id", { count: "exact", head: true })
+          .eq("project_id", id)
+          .gt("shares", 0)
+        if (!cancelled) setInvestors(count ?? 0)
+
+        // My shares in this project (if signed in)
+        const { data: auth } = await sb.auth.getUser()
+        if (auth?.user?.id) {
+          const { data: my } = await sb
+            .from("holdings")
+            .select("shares")
+            .eq("project_id", id)
+            .eq("user_id", auth.user.id)
+            .maybeSingle()
+          if (!cancelled) setMyShares(Number((my as { shares?: number } | null)?.shares ?? 0))
+        }
+      } catch {
+        /* ignore — keep zero defaults */
+      }
+    })()
     return () => { cancelled = true }
   }, [id])
 
