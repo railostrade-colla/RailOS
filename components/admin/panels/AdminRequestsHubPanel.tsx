@@ -45,6 +45,7 @@ import {
   type PendingShareRequest,
   type AdminInboxNotification,
 } from "@/lib/data/admin-requests"
+import { getDashboardOverview, type DashboardOverview } from "@/lib/data/admin-utilities"
 import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -77,9 +78,12 @@ export function AdminRequestsHubPanel() {
   })
   const [shareReqs, setShareReqs] = useState<PendingShareRequest[]>([])
   const [inbox, setInbox] = useState<AdminInboxNotification[]>([])
+  // Phase 10.75 — overview supplies the KYC pending count which isn't
+  // surfaced anywhere else on this panel.
+  const [overview, setOverview] = useState<DashboardOverview | null>(null)
 
   const refresh = useCallback(async () => {
-    const [r, f, d, dis, v, sh, ib] = await Promise.all([
+    const [r, f, d, dis, v, sh, ib, ov] = await Promise.all([
       getMyAdminRole(),
       getPendingFeeRequests(),
       getPendingDeals(),
@@ -87,6 +91,7 @@ export function AdminRequestsHubPanel() {
       getTradingVolumeStats(),
       getPendingShareRequests(),
       getAdminNotifications(50),
+      getDashboardOverview(),
     ])
     setRole(r)
     setFeeReqs(f)
@@ -95,6 +100,7 @@ export function AdminRequestsHubPanel() {
     setVolume(v)
     setShareReqs(sh)
     setInbox(ib)
+    setOverview(ov)
     setLoading(false)
   }, [])
 
@@ -205,10 +211,22 @@ export function AdminRequestsHubPanel() {
         }
       />
 
-      {/* Top KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
-        <KPI label="غير مُعالَج" val={inbox.filter((n) => !n.processed_by).length} color="#FBBF24" />
-        <KPI label="مقفول حالياً" val={inbox.filter((n) => n.locked_by).length} color="#60A5FA" />
+      {/* Top KPIs — Phase 10.75:
+          - "مقفول حالياً" REMOVED per founder request.
+          - "غير مُعالَج" now sums every pending source (shares + fees +
+            KYC + open disputes) instead of only inbox notifications. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <KPI
+          label="غير مُعالَج"
+          val={
+            shareReqs.length +
+            feeReqs.length +
+            disputes.length +
+            (overview?.kyc_pending ?? 0)
+          }
+          color="#FBBF24"
+          accent="rgba(251,191,36,0.05)"
+        />
         <KPI label="طلبات رسوم" val={feeReqs.length} color="#a855f7" />
         <KPI label="صفقات معلّقة" val={deals.length} color="#FB923C" />
         <KPI label="نزاعات مفتوحة" val={disputes.length} color="#F87171" />
