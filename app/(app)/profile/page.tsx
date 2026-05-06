@@ -25,8 +25,14 @@ import { signOut } from "@/lib/supabase/auth-helpers"
 import { showSuccess, showInfo } from "@/lib/utils/toast"
 // Profile + portfolio numbers both come from Supabase (Phases 4.1 + I).
 import { fmtLimit } from "@/lib/utils/contractLimits"
-import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/data/profile"
+import {
+  getCurrentUserProfile,
+  getMyProfileExtras,
+  type CurrentUserProfile,
+  type UserProfileExtras,
+} from "@/lib/data/profile"
 import { getPortfolioData, type PortfolioSummary } from "@/lib/data/portfolio"
+import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils/cn"
 
 // ─── Settings menu category ───────────────────────────────────
@@ -57,18 +63,41 @@ export default function ProfilePage() {
   // first-paint placeholder so the StatCards never render with NaN.
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null)
   const [dbPortfolio, setDbPortfolio] = useState<PortfolioSummary | null>(null)
+  const [extras, setExtras] = useState<UserProfileExtras | null>(null)
+  const [followsCount, setFollowsCount] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([getCurrentUserProfile(), getPortfolioData()]).then(
-      ([p, port]) => {
-        if (cancelled) return
-        setProfile(p)
-        if (port) setDbPortfolio(port.summary)
-        setLoading(false)
-      },
-    )
+    // Phase 10.81 (Task 23) — fetch profile + portfolio + onboarding
+    // extras + watchlist count in parallel. Each failure is isolated
+    // so a single missing source doesn't blank the whole page.
+    Promise.all([
+      getCurrentUserProfile(),
+      getPortfolioData(),
+      getMyProfileExtras(),
+      (async () => {
+        try {
+          const sb = createClient()
+          const { data: auth } = await sb.auth.getUser()
+          if (!auth?.user?.id) return 0
+          const { count } = await sb
+            .from("follows")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", auth.user.id)
+          return count ?? 0
+        } catch {
+          return 0
+        }
+      })(),
+    ]).then(([p, port, ext, fc]) => {
+      if (cancelled) return
+      setProfile(p)
+      if (port) setDbPortfolio(port.summary)
+      setExtras(ext)
+      setFollowsCount(fc)
+      setLoading(false)
+    })
     return () => {
       cancelled = true
     }
@@ -300,6 +329,33 @@ export default function ProfilePage() {
                 value={loading ? "..." : (profile?.level_label ?? "—")}
                 color="purple"
                 icon={<Trophy className="w-3 h-3" />}
+              />
+            </div>
+            {/* Phase 10.81 — extra row: watchlist count + KYC + onboarding */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mt-2.5">
+              <StatCard
+                label="أتابعهم"
+                value={loading ? "..." : followsCount}
+                color="blue"
+              />
+              <StatCard
+                label="حالة التوثيق"
+                value={loading ? "..." :
+                  profile?.kyc_status === "approved" ? "موثَّق" :
+                  profile?.kyc_status === "pending" ? "قيد المراجعة" :
+                  profile?.kyc_status === "rejected" ? "مرفوض" : "—"
+                }
+                color={profile?.kyc_status === "approved" ? "green" : "yellow"}
+              />
+              <StatCard
+                label="المهنة"
+                value={loading ? "..." : (extras?.profession ?? "—")}
+                color="purple"
+              />
+              <StatCard
+                label="المدينة"
+                value={loading ? "..." : (extras?.city ?? "—")}
+                color="blue"
               />
             </div>
           </div>

@@ -29,6 +29,9 @@ import {
 // Phase 10 — real DB listing creation (sell mode only; buy listings
 // will get their own schema in a follow-up).
 import { createListingDB } from "@/lib/data/portfolio-analytics"
+// Phase 10.81 (Task 19) — real holdings → "بيع" picker should only
+// show projects the user actually owns shares in.
+import { getPortfolioData, type PortfolioHolding } from "@/lib/data/portfolio"
 
 // إعدادات الرسوم
 const REPEAT_LISTING_FEE_PERCENT = 0.25 // 0.25% للإعلان المكرر
@@ -263,19 +266,47 @@ export default function CreateAdPage() {
   const [agreed, setAgreed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
+  // Phase 10.81 — real holdings from DB. Used to drive the "بيع"
+  // project picker so users can only list shares they actually own.
+  // Falls back to MOCK_HOLDINGS until the fetch resolves so first
+  // paint isn't empty.
+  const [dbHoldings, setDbHoldings] = useState<PortfolioHolding[]>([])
+  useEffect(() => {
+    let cancelled = false
+    getPortfolioData().then((d) => {
+      if (cancelled) return
+      if (d?.holdings) setDbHoldings(d.holdings.filter((h) => h.shares > 0))
+    })
+    return () => { cancelled = true }
+  }, [])
+
   // Calculations
   const sharesNum = parseInt(sharesInput) || 0
   const priceNum = parseInt(priceInput) || 0
   const minAmountNum = parseInt(minAmountInput) || 0
   const total = sharesNum * priceNum
 
-  const selectedHolding = MOCK_HOLDINGS.find((h) => h.project_id === selectedProjectId)
+  // Use DB holdings if loaded; otherwise mock for first paint.
+  const effectiveHoldings = dbHoldings.length > 0
+    ? dbHoldings.map((h) => ({
+        project_id: h.project_id,
+        shares_owned: h.shares_owned,
+        project: {
+          id: h.project.id,
+          name: h.project.name,
+          sector: h.project.sector,
+          share_price: h.project.share_price,
+        },
+      }))
+    : MOCK_HOLDINGS
+
+  const selectedHolding = effectiveHoldings.find((h) => h.project_id === selectedProjectId)
   const availableShares = selectedHolding?.shares_owned || 0
 
   const selectedProject = useMemo(() => {
-    if (adType === "sell") return MOCK_HOLDINGS.find((h) => h.project_id === selectedProjectId)?.project
+    if (adType === "sell") return effectiveHoldings.find((h) => h.project_id === selectedProjectId)?.project
     return MOCK_PROJECTS.find((p) => p.id === selectedProjectId)
-  }, [adType, selectedProjectId])
+  }, [adType, selectedProjectId, effectiveHoldings])
 
   const marketPrice = selectedProject?.share_price || 0
   const maxPrice = marketPrice
@@ -283,7 +314,7 @@ export default function CreateAdPage() {
   // Project list
   const projectList = useMemo(() => {
     if (adType === "sell") {
-      return MOCK_HOLDINGS.map((h) => ({
+      return effectiveHoldings.map((h) => ({
         id: h.project_id,
         name: h.project.name,
         sector: h.project.sector,
@@ -297,7 +328,7 @@ export default function CreateAdPage() {
       sector: p.sector,
       share_price: p.share_price,
     }))
-  }, [adType])
+  }, [adType, effectiveHoldings])
 
   // ─── Repeat Ad Detection ───
   const isRepeatAd = useMemo(() => {
