@@ -227,6 +227,11 @@ export function GiftsAdminPanel() {
   const stats = {
     total: gifts.length,
     active: gifts.filter((g) => g.status === "active").length,
+    // Phase 10.78 — distinct users with at least one active gift
+    // (renames KPI #2 from "نشطة" to "مُستخدمون" per Task-8 spec).
+    active_users: new Set(
+      gifts.filter((g) => g.status === "active").map((g) => g.user_id),
+    ).size,
     used: gifts.filter((g) => g.status === "used").length,
     expired: gifts.filter((g) => g.status === "expired").length,
   }
@@ -248,8 +253,10 @@ export function GiftsAdminPanel() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <KPI label="إجمالي" val={stats.total} color="#fff" />
-        <KPI label="نشطة" val={stats.active} color="#4ADE80" />
+        <KPI label="الإجمالي" val={stats.total} color="#fff" />
+        {/* Phase 10.78 — was "نشطة" (active gifts), now "مُستخدمون"
+            = distinct users with active gifts, per Task-8 spec. */}
+        <KPI label="مُستخدمون" val={stats.active_users} color="#4ADE80" />
         <KPI label="مُستخدَمة" val={stats.used} color="#60A5FA" />
         <KPI label="منتهية" val={stats.expired} color="#a3a3a3" />
       </div>
@@ -460,13 +467,21 @@ export function GiftsAdminPanel() {
             </div>
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block">السبب (اختياري)</label>
-              <input
-                type="text"
+              {/* Phase 10.78 — was free-text input, now a Select with
+                  4 predefined reasons per Task-8 spec. The selected
+                  label is what gets stored as `reason` so admin
+                  reports stay consistent across grants. */}
+              <select
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="مثلاً: مكافأة على نشاط..."
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
-              />
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-white/20"
+              >
+                <option value="">— اختر سبباً —</option>
+                <option value="ترحيب">🎉 ترحيب بمستخدم جديد</option>
+                <option value="مكافأة نشاط">🏆 مكافأة على نشاط</option>
+                <option value="تعويض">💝 تعويض عن مشكلة</option>
+                <option value="احتفال">🎊 احتفال / مناسبة</option>
+              </select>
             </div>
           </div>
 
