@@ -110,7 +110,6 @@ function RegisterPageInner() {
 
     if (data.user) {
       // Best-effort: attach the referral if a code was on the URL.
-      // Failures here are non-blocking — signup itself already succeeded.
       if (refCode) {
         try {
           await linkReferralByCode(refCode)
@@ -119,7 +118,10 @@ function RegisterPageInner() {
         }
       }
       showSuccess("تم إنشاء حسابك بنجاح، مرحباً في Railos! 🎉")
-      router.push("/dashboard")
+      // Phase 10.72 — fresh signups MUST complete profile before
+      // entering the app. The /profile-setup page itself routes to
+      // /dashboard once the form is submitted.
+      router.push("/profile-setup")
       router.refresh()
     }
   }

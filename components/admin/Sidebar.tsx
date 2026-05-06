@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react"
 import { ADMIN_NAV, ADMIN_SECTIONS, type AdminTab } from "@/lib/admin/types"
@@ -33,11 +34,40 @@ export function AdminSidebar({
     >
       {/* Header */}
       <div className="p-3 border-b border-white/[0.06] flex items-center justify-between">
-        {open && (
-          <div>
-            <div className="text-sm font-bold text-white">RaiLOS</div>
-            <div className="text-[9px] text-neutral-500">لوحة الإدارة</div>
+        {open ? (
+          <div
+            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => router.push("/admin?tab=dashboard")}
+            role="button"
+          >
+            <div className="w-9 h-9 rounded-lg overflow-hidden border border-white/[0.1] bg-white/[0.04] flex-shrink-0">
+              <Image
+                src="/logo.png"
+                alt="RailOS"
+                width={36}
+                height={36}
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white leading-none">RaiLOS</div>
+              <div className="text-[9px] text-neutral-500 mt-1">لوحة الإدارة</div>
+            </div>
           </div>
+        ) : (
+          <button
+            onClick={() => router.push("/admin?tab=dashboard")}
+            className="w-9 h-9 rounded-lg overflow-hidden border border-white/[0.1] bg-white/[0.04] hover:opacity-80 transition-opacity"
+            aria-label="RailOS Home"
+          >
+            <Image
+              src="/logo.png"
+              alt="RailOS"
+              width={36}
+              height={36}
+              className="w-full h-full object-contain"
+            />
+          </button>
         )}
         <button
           onClick={onToggle}

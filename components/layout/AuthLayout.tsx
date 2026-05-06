@@ -30,7 +30,7 @@ export function AuthLayout({
         <div className="relative z-10">
           <Link href="/" className="flex items-center gap-3">
             <Image
-              src="/icon.png"
+              src="/logo.png"
               alt="Railos"
               width={40}
               height={40}
@@ -82,7 +82,7 @@ export function AuthLayout({
         <div className="lg:hidden relative z-10 p-6 flex items-center justify-center">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
-              src="/icon.png"
+              src="/logo.png"
               alt="Railos"
               width={36}
               height={36}
