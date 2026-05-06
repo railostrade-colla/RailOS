@@ -179,7 +179,8 @@ export default function ProjectDetailPage() {
     return (
       <AppLayout>
         <div className="relative">
-          <GridBackground showCircles={false} />
+          {/* Phase 10.82 — solid black background per founder request
+              (was a grid+dots pattern). Keep DOM structure intact. */}
           <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20 space-y-3">
             <SkeletonCard />
             <SkeletonCard />
@@ -193,7 +194,10 @@ export default function ProjectDetailPage() {
   const pct = project.total_shares > 0
     ? Math.round(((project.total_shares - (project.available_shares ?? 0)) / project.total_shares) * 100)
     : 0
-  const marketCap = project.share_price * ((project.total_shares ?? 0) - (project.available_shares ?? 0))
+  // Phase 10.82 — spec: "القيمة السوقية = share_price × total_shares
+  // الإجمالي للمشروع". Was using (total - available) which is "sold
+  // value" not "market cap".
+  const marketCap = project.share_price * (project.total_shares ?? 0)
   const priceChange = (pct * 0.12).toFixed(1)
   const isUp = parseFloat(priceChange) >= 0
   const chartDays: Record<string, number> = { "1D": 24, "7D": 30, "30D": 60, "كل": 120 }
@@ -443,6 +447,15 @@ export default function ProjectDetailPage() {
                 <div className="divide-y divide-white/[0.04]">
                   {[
                     { label: "العائد السنوي المتوقع", value: project.return_min + "% - " + project.return_max + "%" },
+                    // Phase 10.82 — added monthly return = annual / 12
+                    {
+                      label: "العائد الشهري المتوقع",
+                      value:
+                        ((project.return_min ?? 0) / 12).toFixed(2) +
+                        "% - " +
+                        ((project.return_max ?? 0) / 12).toFixed(2) +
+                        "%",
+                    },
                     { label: "آلية التوزيع", value: project.distribution_type === "monthly" ? "شهري" : project.distribution_type === "quarterly" ? "ربع سنوي" : project.distribution_type === "semi_annual" ? "نصف سنوي" : "سنوي" },
                     { label: "مصدر العوائد", value: project.profit_source || "أرباح التشغيل" },
                   ].map((item, i) => (

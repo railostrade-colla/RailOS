@@ -81,6 +81,13 @@ export default function ProfileSetupPage() {
   const [gender, setGender] = useState<"male" | "female" | "">("")
   const [city, setCity] = useState<string>("")
   const [phone, setPhone] = useState("")
+  // Phase 10.82 — password section. Required when the user signed up
+  // via OAuth (no password yet) so they can also sign in with email
+  // + password going forward. Optional for users who already have
+  // a password from /register email signup.
+  const [password, setPassword] = useState("")
+  const [passwordConfirm, setPasswordConfirm] = useState("")
+  const [needsPassword, setNeedsPassword] = useState(false)
 
   // Pre-fill from existing profile + the user_profile_extras side-table
   // (Phase M migration) so users coming back from /settings keep all
@@ -90,6 +97,20 @@ export default function ProfileSetupPage() {
   // "+964" if present so the input shows just the local digits.
   useEffect(() => {
     let cancelled = false
+    // Phase 10.82 — also detect whether the user has a password
+    // identity. OAuth-only users need to set one before continuing.
+    ;(async () => {
+      try {
+        const sb = createClient()
+        const { data: auth } = await sb.auth.getUser()
+        if (!cancelled && auth?.user) {
+          const identities = (auth.user as { identities?: Array<{ provider?: string }> }).identities ?? []
+          const hasEmailIdentity = identities.some((i) => i.provider === "email")
+          setNeedsPassword(!hasEmailIdentity)
+        }
+      } catch { /* ignore */ }
+    })()
+
     Promise.all([getCurrentUserProfile(), getMyProfileExtras()]).then(
       ([p, extras]) => {
         if (cancelled) return
@@ -138,14 +159,22 @@ export default function ProfileSetupPage() {
   const [confirmAccuracy, setConfirmAccuracy] = useState(false)
 
   // ─── Section completion tracking ────────────────────────────────────
+  // Phase 10.82 — section 1 also requires a valid password when the
+  // user came in via OAuth (needsPassword=true). Email-signup users
+  // already have a password and can leave the field blank.
+  const passwordValid =
+    !needsPassword ||
+    (password.length >= 8 && password === passwordConfirm)
+
   const sectionComplete = useMemo(
     () => ({
-      1: !!fullName.trim() && !!birthDate && !!gender && !!city && phone.length >= 10,
+      1: !!fullName.trim() && !!birthDate && !!gender && !!city
+         && phone.length >= 10 && passwordValid,
       2: !!profession && !!incomeTier,
       3: goals.length > 0 && !!experience && preferredSectors.length > 0,
       4: agreeTerms && agreePrivacy && confirmAccuracy,
     }),
-    [fullName, birthDate, gender, city, phone, profession, incomeTier, goals, experience, preferredSectors, agreeTerms, agreePrivacy, confirmAccuracy],
+    [fullName, birthDate, gender, city, phone, passwordValid, profession, incomeTier, goals, experience, preferredSectors, agreeTerms, agreePrivacy, confirmAccuracy],
   )
 
   const allComplete =
@@ -161,10 +190,8 @@ export default function ProfileSetupPage() {
     )
 
   // ─── Submit handlers ────────────────────────────────────────────────
-  const handleSkip = () => {
-    showSuccess("يمكنك إكمال ملفك لاحقاً من الإعدادات")
-    router.push("/dashboard")
-  }
+  // Phase 10.82 — handleSkip removed; profile must be complete before
+  // entering the app per spec.
 
   const handleSubmit = async () => {
     if (!sectionComplete[1]) {
@@ -198,6 +225,25 @@ export default function ProfileSetupPage() {
         showError("غير مسجَّل دخول — يرجى إعادة تسجيل الدخول")
         setSubmitting(false)
         return
+      }
+
+      // ── 0) Phase 10.82 — set password if provided ──────────────
+      // Required for OAuth users (needsPassword=true). Optional for
+      // email-signup users who already have one. Soft-fail: if
+      // password update fails (e.g. weak), surface error but DON'T
+      // block — the user can retry from /reset-password.
+      if (password && password.length >= 8) {
+        const { error: pwErr } = await supabase.auth.updateUser({ password })
+        if (pwErr) {
+          // eslint-disable-next-line no-console
+          console.error("[profile-setup] password update:", pwErr.message)
+          if (needsPassword) {
+            showError("تعذّر تعيين كلمة المرور — " + pwErr.message)
+            setSubmitting(false)
+            return
+          }
+          // For optional case, just log and continue.
+        }
       }
 
       // ── 1) Update profiles (canonical fields: name + phone) ───
@@ -373,6 +419,56 @@ export default function ProfileSetupPage() {
                 />
               </div>
             </Field>
+
+            {/* Phase 10.82 — password section. Required for OAuth users
+                (needsPassword=true), optional for email-signup users who
+                already have one. */}
+            <div className="mt-3 pt-3 border-t border-white/[0.06]">
+              <div className="text-[11px] text-neutral-400 mb-2 font-bold flex items-center gap-1.5">
+                🔐 كلمة المرور
+                {needsPassword ? (
+                  <span className="text-red-400">*</span>
+                ) : (
+                  <span className="text-neutral-600 text-[10px]">(اختياري — مُعيّنة سابقاً)</span>
+                )}
+              </div>
+              {needsPassword && (
+                <div className="text-[10px] text-yellow-400 mb-2 leading-relaxed">
+                  دخلت عبر Google — عيِّن كلمة مرور لتتمكن من الدخول بالبريد لاحقاً.
+                </div>
+              )}
+              <Field label={"كلمة المرور " + (needsPassword ? "*" : "(8 أحرف على الأقل)")}>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="********"
+                  className="form-input font-mono"
+                  dir="ltr"
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+              </Field>
+              {password.length > 0 && (
+                <Field label="تأكيد كلمة المرور *">
+                  <input
+                    type="password"
+                    value={passwordConfirm}
+                    onChange={(e) => setPasswordConfirm(e.target.value)}
+                    placeholder="********"
+                    className={cn(
+                      "form-input font-mono",
+                      passwordConfirm.length > 0 && password !== passwordConfirm && "border-red-400/40",
+                    )}
+                    dir="ltr"
+                    autoComplete="new-password"
+                  />
+                  {passwordConfirm.length > 0 && password !== passwordConfirm && (
+                    <div className="text-[10px] text-red-400 mt-1">كلمتا المرور غير متطابقتين</div>
+                  )}
+                </Field>
+              )}
+            </div>
           </Section>
 
           {/* ═══════════════ Section 2: Professional info ═══════════════ */}
@@ -557,19 +653,15 @@ export default function ProfileSetupPage() {
             />
           </Section>
 
-          {/* ═══════════════ Action buttons ═══════════════ */}
+          {/* ═══════════════ Action buttons ═══════════════
+               Phase 10.82 — "تخطّي للآن" button removed per founder spec:
+               profile must be complete before /dashboard is accessible. */}
           <div className="flex gap-2.5 mt-6">
-            <button
-              onClick={handleSkip}
-              className="flex-1 bg-white/[0.05] border border-white/[0.1] text-neutral-300 py-3.5 rounded-xl text-sm hover:bg-white/[0.08] transition-colors"
-            >
-              تخطّي للآن
-            </button>
             <button
               onClick={handleSubmit}
               disabled={submitting}
               className={cn(
-                "flex-[2] py-3.5 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2",
+                "flex-1 py-3.5 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2",
                 allComplete && !submitting
                   ? "bg-neutral-100 text-black hover:bg-neutral-200"
                   : "bg-white/[0.08] text-neutral-500 cursor-not-allowed",

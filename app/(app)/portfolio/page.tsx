@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Send, Download, Zap, CreditCard, TrendingUp, X, Coins, ArrowDownToLine, ArrowUpFromLine, Briefcase, BarChart3, History, Trophy, Sparkles, Users } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -237,6 +237,137 @@ function PortfolioContent() {
   // Level (DB → InvestorLevel; supports basic/advanced/pro, downgrades elite → basic)
   const userLevel: InvestorLevel = safeInvestorLevel(data?.level)
 
+  // ─── Phase 10.82 — unified history tab feed ───────────────────
+  // Combines deals + fee transactions + fee requests + share
+  // transfers in one timeline. Heavier sources are fetched lazily
+  // via supabase client; cheap ones come from `data` (already loaded).
+  interface HistoryEntry {
+    id: string
+    kind: "deal" | "fee" | "request" | "transfer"
+    icon: string
+    title: string
+    subtitle?: string
+    amount?: number  // signed: + = inflow, - = outflow
+    statusBadge?: string
+    created_at: string
+  }
+  const [extraHistory, setExtraHistory] = useState<HistoryEntry[]>([])
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { createClient: cc } = await import("@/lib/supabase/client")
+        const sb = cc()
+        const { data: auth } = await sb.auth.getUser()
+        if (!auth?.user?.id || cancelled) return
+        const uid = auth.user.id
+        const out: HistoryEntry[] = []
+
+        // Deals (buyer or seller)
+        try {
+          const { data: deals } = await sb
+            .from("deals")
+            .select("id, buyer_id, seller_id, status, total_amount, shares, created_at, project_id")
+            .or(`buyer_id.eq.${uid},seller_id.eq.${uid}`)
+            .order("created_at", { ascending: false })
+            .limit(100)
+          for (const d of (deals ?? []) as Array<{
+            id: string; buyer_id: string; seller_id: string;
+            status: string; total_amount: number; shares: number;
+            created_at: string;
+          }>) {
+            const isBuyer = d.buyer_id === uid
+            out.push({
+              id: "deal-" + d.id,
+              kind: "deal",
+              icon: isBuyer ? "📥" : "📤",
+              title: (isBuyer ? "شراء" : "بيع") + " " + d.shares + " حصة",
+              subtitle: "صفقة #" + d.id.slice(0, 8),
+              amount: d.status === "completed"
+                ? (isBuyer ? -d.total_amount : d.total_amount)
+                : undefined,
+              statusBadge:
+                d.status === "completed" ? undefined :
+                d.status === "cancelled" ? "ملغاة" :
+                d.status === "disputed" ? "نزاع" :
+                "معلّقة",
+              created_at: d.created_at,
+            })
+          }
+        } catch { /* ignore */ }
+
+        // Share transfers
+        try {
+          const { data: transfers } = await sb
+            .from("share_transfers")
+            .select("id, from_user_id, to_user_id, shares, status, created_at, project_id")
+            .or(`from_user_id.eq.${uid},to_user_id.eq.${uid}`)
+            .order("created_at", { ascending: false })
+            .limit(50)
+          for (const t of (transfers ?? []) as Array<{
+            id: string; from_user_id: string; to_user_id: string;
+            shares: number; status: string; created_at: string;
+          }>) {
+            const isOutgoing = t.from_user_id === uid
+            out.push({
+              id: "xfer-" + t.id,
+              kind: "transfer",
+              icon: isOutgoing ? "↗️" : "↙️",
+              title: (isOutgoing ? "إرسال " : "استلام ") + t.shares + " حصة",
+              subtitle: "تحويل #" + t.id.slice(0, 8),
+              amount: undefined,
+              statusBadge: t.status,
+              created_at: t.created_at,
+            })
+          }
+        } catch { /* ignore */ }
+
+        if (!cancelled) setExtraHistory(out)
+      } catch { /* ignore */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const unifiedHistory: HistoryEntry[] = useMemo(() => {
+    const out: HistoryEntry[] = [...extraHistory]
+
+    // Add fee unit transactions (already loaded)
+    for (const t of feeTransactions) {
+      const op = opLabel(t.op_type)
+      const isInflow = t.op_type.includes("buy") || t.op_type.includes("received") || t.op_type.includes("deposit")
+      out.push({
+        id: "fee-tx-" + t.id,
+        kind: "fee",
+        icon: op.icon,
+        title: op.label,
+        subtitle: t.project_name || undefined,
+        amount: isInflow ? t.amount : -t.amount,
+        created_at: t.created_at,
+      })
+    }
+
+    // Add fee requests (pending/approved/rejected)
+    for (const r of feeRequests) {
+      out.push({
+        id: "fee-req-" + r.id,
+        kind: "request",
+        icon: "💎",
+        title: "طلب شحن وحدات",
+        subtitle: r.payment_method,
+        statusBadge:
+          r.status === "approved" ? "موافق" :
+          r.status === "rejected" ? "مرفوض" :
+          "قيد المراجعة",
+        created_at: r.created_at,
+      })
+    }
+
+    return out.sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    )
+  }, [extraHistory, feeTransactions, feeRequests])
+  // ─── /Phase 10.82 ─────────────────────────────────────────────
+
   const submitFeeRequest = async () => {
     if (!feeAmount || feeAmount < 1) {
       showError("أدخل عدداً صحيحاً موجباً")
@@ -313,20 +444,21 @@ function PortfolioContent() {
           {/* ═══ Personal view (only when on personal account) ═══ */}
           {active.kind === "personal" && (
           <>
-          {/* بطاقة الحدود الشهرية */}
-          <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-5 backdrop-blur">
+          {/* بطاقة الحدود الشهرية — Phase 10.82: قُلّص حجمها للنصف.
+              p-5 → p-3, mb-5 → mb-3, text-2xl → text-base. */}
+          <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3 mb-3 backdrop-blur">
 
             {/* الحد الفردي */}
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-2">
               <div>
-                <div className="text-xs text-neutral-400 mb-1">حدّك الشهري الفردي</div>
-                <div className="text-2xl font-bold text-white font-mono">
+                <div className="text-[10px] text-neutral-400 mb-0.5">حدّك الشهري الفردي</div>
+                <div className="text-base font-bold text-white font-mono">
                   {fmtLimit(LEVEL_LIMITS[userLevel])} د.ع
                 </div>
               </div>
-              <div className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2">
-                <span className="text-base">{LEVEL_ICONS[userLevel]}</span>
-                <span className="text-xs font-bold text-white">{LEVEL_LABELS[userLevel]}</span>
+              <div className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1">
+                <span className="text-sm">{LEVEL_ICONS[userLevel]}</span>
+                <span className="text-[10px] font-bold text-white">{LEVEL_LABELS[userLevel]}</span>
               </div>
             </div>
 
@@ -464,13 +596,14 @@ function PortfolioContent() {
             </div>
           </div>
 
-          {/* Tabs */}
+          {/* Tabs — Phase 10.82: removed "الرسوم" tab; the unified
+              السجل tab now shows deals + fee transactions + transfers
+              all in one timeline (per founder spec). */}
           <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-4">
             {[
               { key: "holdings" as const, label: "الحصص", icon: Briefcase },
               { key: "stats" as const, label: "الإحصائيات", icon: BarChart3 },
               { key: "history" as const, label: "السجل", icon: History },
-              { key: "fee_units" as const, label: "💳 الرسوم", icon: Coins },
             ].map((t) => (
               <button
                 key={t.key}
@@ -686,33 +819,57 @@ function PortfolioContent() {
             </div>
           )}
 
-          {/* History Tab */}
+          {/* History Tab — Phase 10.82: unified timeline.
+               Sources:
+                 • deals   (buyer or seller, completed/cancelled/disputed)
+                 • feeTransactions  (fee_unit_transactions ledger)
+                 • feeRequests      (charge requests, all statuses)
+                 • share_transfers  (sent/received)
+               Sorted newest first. */}
           {tab === "history" && (
-            feeTransactions.length === 0 ? (
+            unifiedHistory.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-5xl mb-4">📋</div>
                 <div className="text-sm text-neutral-400">لا توجد عمليات مسجّلة بعد</div>
               </div>
             ) : (
               <div className="space-y-2">
-                {feeTransactions.map((entry) => {
-                  const op = opLabel(entry.op_type)
-                  return (
-                    <div key={entry.id} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3 flex items-center gap-3">
-                      <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0", op.bg)}>
-                        <span className="text-base">{op.icon}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm text-white">{op.label}</div>
-                        <div className="text-[10px] text-neutral-500 mt-0.5">{entry.project_name || ""} {entry.project_name ? "•" : ""} {fmtDate(entry.created_at)}</div>
-                      </div>
-                      <div className={cn("text-sm font-bold font-mono", op.color)}>
-                        {entry.op_type.includes("buy") || entry.op_type.includes("received") ? "+" : "-"}
-                        {fmtIQD(entry.amount)}
+                {unifiedHistory.map((entry) => (
+                  <div key={entry.id} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3 flex items-center gap-3">
+                    <div className={cn(
+                      "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 border",
+                      entry.kind === "deal" ? "bg-blue-400/[0.1] border-blue-400/[0.25]" :
+                      entry.kind === "fee" ? "bg-yellow-400/[0.1] border-yellow-400/[0.25]" :
+                      entry.kind === "request" ? "bg-purple-400/[0.1] border-purple-400/[0.25]" :
+                      "bg-green-400/[0.1] border-green-400/[0.25]",
+                    )}>
+                      <span className="text-base">{entry.icon}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-white truncate">{entry.title}</div>
+                      <div className="text-[10px] text-neutral-500 mt-0.5">
+                        {entry.subtitle ? entry.subtitle + " • " : ""}{fmtDate(entry.created_at)}
                       </div>
                     </div>
-                  )
-                })}
+                    <div className={cn(
+                      "text-sm font-bold font-mono",
+                      entry.amount === undefined ? "text-neutral-500" :
+                      entry.amount >= 0 ? "text-green-400" : "text-red-400",
+                    )}>
+                      {entry.amount !== undefined && (
+                        <>
+                          {entry.amount >= 0 ? "+" : ""}
+                          {fmtIQD(entry.amount)}
+                        </>
+                      )}
+                      {entry.statusBadge && (
+                        <span className="text-[9px] block text-neutral-400 mt-0.5">
+                          {entry.statusBadge}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )
           )}
