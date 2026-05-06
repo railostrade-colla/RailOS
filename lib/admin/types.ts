@@ -86,9 +86,10 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { key: "council_admin",     label: "المجلس",   icon: "🏛️", section: "الحوكمة" },
   { key: "ambassadors_admin", label: "السفراء",  icon: "🌟", section: "الحوكمة" },
 
-  // البرامج الاجتماعية
+  // البرامج الاجتماعية — Phase 10.79 (Task 15): added discounts_admin
   { key: "healthcare_admin", label: "الرعاية الصحية",  icon: "🏥", section: "البرامج الاجتماعية" },
   { key: "orphans_admin",    label: "رعاية الأيتام",   icon: "👶", section: "البرامج الاجتماعية" },
+  { key: "discounts_admin",  label: "الخصومات",        icon: "🏷️", section: "البرامج الاجتماعية" },
 
   // المحتوى — single entry, all sub-tabs are inside
   { key: "content_mgmt",     label: "المحتوى",   icon: "📝", section: "المحتوى" },

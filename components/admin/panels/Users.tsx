@@ -1,19 +1,17 @@
 "use client"
 
 /**
- * Users hub — Phase 10.59 restructure.
+ * Users hub — Phase 10.79 (Task 13).
  *
- * Tabs (in order):
- *   • قائمة المستخدمون — actual registered users from `profiles`
- *     with admin actions (read replaces the old MOCK_ADMIN_USERS).
- *   • التحقق (KYC) — KYC review queue.
- *   • سجلّ مستخدم — single-user deep-stats lookup.
- *   • النزاعات — deal disputes.
- *   • صندوق الدعم — support tickets.
- *   • المستويات — level upgrade/downgrade settings.
+ * "المستويات" tab REMOVED — it lives in /admin?tab=system → "المستويات"
+ * tab. Same level_settings panel, single source of truth, no drift.
  *
- * Admins/super-admins management was MOVED to the System hub
- * (per user request, "Users page is for actual users only").
+ * Current tabs (5):
+ *   • قائمة المستخدمين — registered users with admin actions
+ *   • التحقق (KYC) — review queue
+ *   • سجلّ مستخدم — single-user deep-stats lookup
+ *   • النزاعات — deal disputes
+ *   • صندوق الدعم — support tickets
  */
 
 import { EmbeddedTabsHub } from "./EmbeddedTabsHub"
@@ -22,7 +20,6 @@ import { KycPanel } from "./KycPanel"
 import { UserStatsPanel } from "./UserStatsPanel"
 import { DisputesPanel } from "./DisputesPanel"
 import { SupportInboxPanel } from "./SupportInboxPanel"
-import { LevelSettingsPanel } from "./LevelSettingsPanel"
 
 export function UsersPanel() {
   return (
@@ -35,7 +32,6 @@ export function UsersPanel() {
         { key: "stats", label: "📋 سجلّ مستخدم", hint: "إحصائيات تفصيلية لمستخدم واحد", Panel: UserStatsPanel },
         { key: "disputes", label: "⚖️ النزاعات", hint: "حلّ نزاعات الصفقات", Panel: DisputesPanel },
         { key: "support", label: "💬 صندوق الدعم", hint: "ردّ على تذاكر الدعم", Panel: SupportInboxPanel },
-        { key: "levels", label: "⚙️ المستويات", hint: "متطلبات الترقية + التنزيل", Panel: LevelSettingsPanel },
       ]}
     />
   )
