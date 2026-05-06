@@ -63,7 +63,10 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { key: "dashboard",    label: "لوحة التحكم",   icon: "◈",  section: "رئيسي" },
   { key: "requests_hub", label: "مركز الطلبات",  icon: "🎯", section: "رئيسي" },
   { key: "monitor",      label: "مراقبة السوق",   icon: "📡", section: "رئيسي" },
-  { key: "alerts",       label: "التنبيهات",      icon: "🚨", section: "رئيسي" },
+  // Phase 10.76 — "التنبيهات" sidebar link removed per founder request.
+  // The page itself (Alerts.tsx + tab=alerts route) stays for deep-links
+  // and topbar/dashboard CTAs that still need a target, but no sidebar
+  // entry. Replaced by the unified "مركز الطلبات" above.
   { key: "log",          label: "سجل القرارات",   icon: "📋", section: "رئيسي" },
 
   // العمليات — only the entry-points that DON'T live as a tab inside another hub

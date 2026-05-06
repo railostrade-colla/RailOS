@@ -46,11 +46,10 @@ export function EmbeddedTabsHub({ title, subtitle, tabs }: EmbeddedTabsHubProps)
   return (
     <div className="min-h-screen">
       {/* Header strip + tab bar — sticky so the tabs stay visible while
-          the inner panel scrolls. */}
+          the inner panel scrolls. Phase 10.76: removed the yellow
+          "↻ تمت إعادة الترتيب" notice — that note was helpful right
+          after the Phase 10.36 reshuffle, but it's noise now. */}
       <div className="sticky top-[56px] z-20 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/[0.06] px-6 pt-5 pb-3">
-        <div className="text-xs text-yellow-400 font-bold uppercase tracking-wide mb-1">
-          ↻ تمت إعادة الترتيب
-        </div>
         <div className="text-lg font-bold text-white">{title}</div>
         <div className="text-xs text-neutral-500 mb-3">
           {activeTab?.hint || subtitle}

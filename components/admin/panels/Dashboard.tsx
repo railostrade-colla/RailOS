@@ -248,7 +248,7 @@ export function DashboardPanel() {
       <div className="mb-5">
         <SectionHeader
           title="📥 صندوق الإجراءات"
-          action={<ActionBtn label="مركز الطلبات" color="gray" sm onClick={() => goTo("alerts")} />}
+          action={<ActionBtn label="مركز الطلبات" color="gray" sm onClick={() => goTo("requests_hub")} />}
         />
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           <KPI

@@ -306,7 +306,7 @@ export function AdminTopBar() {
 
       {/* ═══ Notifications dropdown ═══ */}
       {open === "notifications" && (
-        <Dropdown title={`🔔 الإشعارات (${totalNotifs})`} onSeeAll={() => handleNavigate("/admin?tab=alerts")} side="right" rightOffset="ml-44 lg:ml-56">
+        <Dropdown title={`🔔 الإشعارات (${totalNotifs})`} onSeeAll={() => handleNavigate("/admin?tab=requests_hub")} side="right" rightOffset="ml-44 lg:ml-56">
           {allNotifs.length === 0 ? (
             <div className="text-xs text-neutral-500 text-center py-6">لا إشعارات جديدة</div>
           ) : (
