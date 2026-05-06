@@ -75,6 +75,9 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
   const [wallet, setWallet] = useState<ProjectWalletAggregate | null>(null)
   // Phase 10.58: fetch project's launch + current prices
   const [prices, setPrices] = useState<ProjectPrices | null>(null)
+  // Phase 10.84 — project's uploaded logo so the hero icon shows the
+  // real brand image instead of the generic sector emoji.
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isProject) return
@@ -100,6 +103,16 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
       const market = Number(row.current_market_price ?? row.share_price ?? 0)
       const change = launch > 0 ? ((market - launch) / launch) * 100 : 0
       setPrices({ launch_price: launch, market_price: market, change_pct: change })
+      // Phase 10.84 — pull whichever logo column is populated. The
+      // project schema has used several names over phases (logo_url,
+      // logo, image_url) so we accept any of them.
+      const r = row as Record<string, unknown>
+      const logo =
+        (r.logo_url as string | undefined) ??
+        (r.logo as string | undefined) ??
+        (r.image_url as string | undefined) ??
+        null
+      setLogoUrl(logo && logo.trim() ? logo : null)
     })
     return () => { cancelled = true }
   }, [entity.id, isProject])
@@ -128,10 +141,27 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className={cn(
-              "w-14 h-14 rounded-2xl border flex items-center justify-center text-3xl flex-shrink-0",
+              "w-14 h-14 rounded-2xl border flex items-center justify-center text-3xl flex-shrink-0 overflow-hidden",
               isProject ? "bg-blue-400/[0.1] border-blue-400/[0.3]" : "bg-purple-400/[0.1] border-purple-400/[0.3]"
             )}>
-              {sectorIcon(entity.sector)}
+              {/* Phase 10.84 — show uploaded project/company logo when
+                  available; fall back to the sector emoji. */}
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={entity.name}
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    // Hide the broken-image so the parent's fallback
+                    // (sector emoji) becomes visible. We achieve this
+                    // by clearing logoUrl on next paint.
+                    setLogoUrl(null)
+                    ;(e.target as HTMLImageElement).style.display = "none"
+                  }}
+                />
+              ) : (
+                sectorIcon(entity.sector)
+              )}
             </div>
             <div className="min-w-0">
               <div className="text-xl font-bold text-white">{entity.name}</div>
