@@ -252,7 +252,12 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
   //   read-only count that the admin can't override.
   useEffect(() => {
     if (sharePriceNum > 0 && projectValueNum0 > 0) {
-      const auto = Math.floor(projectValueNum0 / sharePriceNum)
+      // Use Math.round to avoid floating-point drift:
+      // e.g. 1_000_000_000 / 25_000 can yield 40_000.000...01 in IEEE 754,
+      // and Math.floor would still give 40_000 — but for values that land
+      // just below an integer (39_999.999…) Math.floor silently drops 1.
+      // Math.round gives the user-intended exact integer in all cases.
+      const auto = Math.round(projectValueNum0 / sharePriceNum)
       setTotalShares(String(auto))
     }
   }, [sharePriceNum, projectValueNum0])
@@ -362,8 +367,11 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
     setOfferingPct(String(offered))
   }, [ownerPctNum])
 
-  const ownerSharesCount = Math.floor(totalSharesNum * ownerPctNum / 100)
-  const offeredSharesCount = Math.max(0, totalSharesNum - ownerSharesCount)
+  // Compute the OFFERING bucket first with Math.round so floating-point
+  // in the percentage doesn't silently add/drop 1 share.  The owner
+  // bucket gets the exact remainder so the two always sum to totalSharesNum.
+  const offeredSharesCount = Math.round(totalSharesNum * (Number(offeringPct) || 0) / 100)
+  const ownerSharesCount   = Math.max(0, totalSharesNum - offeredSharesCount)
 
   // Phase 10.90 — uploads a real file (PDF / DOCX / ZIP / image) and
   // stores it as a base64 data URL on the document record. No external

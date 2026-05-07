@@ -190,8 +190,11 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
       setWalletSplit({
         offering_pct:    offPct,
         reserve_pct:     resPct,
-        offering_shares: Math.floor(totalShares * (offPct / 100)),
-        reserve_shares:  Math.floor(totalShares * (resPct / 100)),
+        // Math.round prevents floating-point drift (e.g. 40000 × 0.4 ≈
+        // 16000.000000000002 in IEEE 754 → Math.floor gave 16000, but the
+        // inverse case (…9999…) would silently drop 1).
+        offering_shares: Math.round(totalShares * (offPct / 100)),
+        reserve_shares:  Math.round(totalShares * (resPct / 100)),
       })
     })
     return () => { cancelled = true }
