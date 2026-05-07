@@ -40,6 +40,20 @@ import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
+// ── Comma-formatting helpers for large IQD inputs ─────────────────
+// commaFmt: raw numeric string → display string with commas
+//   "1000000000" → "1,000,000,000"
+const commaFmt = (raw: string | number): string => {
+  const str = typeof raw === "number" ? String(raw) : raw
+  const digits = str.replace(/,/g, "")
+  if (!digits) return ""
+  const n = Number(digits)
+  return isNaN(n) ? str : n.toLocaleString("en-US")
+}
+// commaParse: typed value → stripped digits only (no commas)
+//   "1,000,000" → "1000000"
+const commaParse = (v: string): string => v.replace(/[^0-9]/g, "")
+
 export type EntityType = "project" | "company"
 export type EntityMode = "create" | "edit"
 export type EntitySector = "agriculture" | "real_estate" | "industrial" | "commercial" | "services" | "medical"
@@ -1029,10 +1043,11 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block">قيمة المشروع الكلّية (د.ع) *</label>
               <input
-                type="number" value={projectValue}
-                onChange={(e) => !isEdit && setProjectValue(e.target.value)}
+                type="text" inputMode="numeric"
+                value={commaFmt(projectValue)}
+                onChange={(e) => !isEdit && setProjectValue(commaParse(e.target.value))}
                 readOnly={isEdit} disabled={isEdit}
-                placeholder="500000000"
+                placeholder="500,000,000"
                 className={cn(
                   "w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20",
                   isEdit && "opacity-60 cursor-not-allowed"
@@ -1042,10 +1057,11 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block">سعر الحصّة الابتدائي (د.ع) *</label>
               <input
-                type="number" value={sharePrice}
-                onChange={(e) => !isEdit && setSharePrice(e.target.value)}
+                type="text" inputMode="numeric"
+                value={commaFmt(sharePrice)}
+                onChange={(e) => !isEdit && setSharePrice(commaParse(e.target.value))}
                 readOnly={isEdit} disabled={isEdit}
-                placeholder="50000"
+                placeholder="50,000"
                 className={cn(
                   "w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20",
                   isEdit && "opacity-60 cursor-not-allowed"
@@ -1080,15 +1096,19 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block">رأس المال المطلوب (د.ع)</label>
               <input
-                type="number" value={capitalNeeded} onChange={(e) => setCapitalNeeded(e.target.value)}
-                placeholder="200000000"
+                type="text" inputMode="numeric"
+                value={commaFmt(capitalNeeded)}
+                onChange={(e) => setCapitalNeeded(commaParse(e.target.value))}
+                placeholder="200,000,000"
                 className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
               />
             </div>
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block">رأس المال المُحقَّق (د.ع)</label>
               <input
-                type="number" value={capitalRaised} onChange={(e) => setCapitalRaised(e.target.value)}
+                type="text" inputMode="numeric"
+                value={commaFmt(capitalRaised)}
+                onChange={(e) => setCapitalRaised(commaParse(e.target.value))}
                 placeholder="0"
                 className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
               />
@@ -1314,8 +1334,10 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
             <div className="mt-3">
               <label className="text-xs text-neutral-400 mb-1.5 block">الإيرادات (للمنجز فقط)</label>
               <input
-                type="number" value={revenue} onChange={(e) => setRevenue(e.target.value)}
-                placeholder="مثلاً: 25000000"
+                type="text" inputMode="numeric"
+                value={commaFmt(revenue)}
+                onChange={(e) => setRevenue(commaParse(e.target.value))}
+                placeholder="25,000,000"
                 className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
               />
             </div>
