@@ -69,9 +69,14 @@ export function ProjectWalletsPanel() {
     project_id: string
     project_name: string
     market_price: number
+    /** Immutable total shares of the project (owner + all wallets) */
     total_shares: number
     offering_total: number
     offering_available: number
+    ambassador_total: number
+    ambassador_available: number
+    reserve_total: number
+    reserve_available: number
     sold_shares: number
     investors_count: number
     total_market_value: number
@@ -112,6 +117,27 @@ export function ProjectWalletsPanel() {
       }
       const projectId =
         (selected as ProjectWallet & { project_id?: string }).project_id ?? selected.id
+
+      // Client-side validation against 90% cap
+      const adminRow = adminRows.find((r) => r.project_id === selected.id)
+      if (adminRow) {
+        const totalProject = adminRow.total_shares
+        const ownerShares = Math.max(
+          0,
+          totalProject - (adminRow.offering_total + adminRow.ambassador_total + adminRow.reserve_total)
+        )
+        const maxCap90 = Math.max(0, Math.floor(0.9 * totalProject) - adminRow.offering_total)
+        const maxAddable = Math.min(ownerShares, maxCap90)
+        if (amt > ownerShares) {
+          return showError(`حصص المالك المتاحة: ${fmtNum(ownerShares)} حصة فقط`)
+        }
+        if (amt > maxCap90) {
+          return showError(
+            `الطرح للجمهور لا يتجاوز 90٪ من إجمالي المشروع · يمكن إضافة ${fmtNum(maxAddable)} حصة كحد أقصى`
+          )
+        }
+      }
+
       const result = await adminAddSharesToOffering(projectId, amt, reason.trim() || undefined)
       if (!result.success) {
         const map: Record<string, string> = {
@@ -120,10 +146,12 @@ export function ProjectWalletsPanel() {
           not_admin: "صلاحياتك لا تسمح بهذا الإجراء",
           invalid_amount: "الكمية غير صحيحة",
           project_not_found: "المشروع غير موجود",
-          insufficient_company_shares: `حصص الشركة المتاحة: ${result.available ?? "؟"} حصة فقط`,
+          insufficient_owner_shares: `حصص المالك المتاحة: ${result.available ?? "؟"} حصة فقط`,
+          insufficient_company_shares: `حصص المالك المتاحة: ${result.available ?? "؟"} حصة فقط`,
+          offering_cap_exceeded: `الطرح لا يتجاوز 90٪ · الحد المتاح: ${result.available ?? "؟"} حصة`,
           offering_wallet_missing: "محفظة العرض غير موجودة",
           offering_wallet_frozen: "محفظة العرض مُجمَّدة — افكّ التجميد أوّلاً",
-          missing_table: "الـ RPC غير منشور — طبّق Migration 10.85",
+          missing_table: "الـ RPC غير منشور — طبّق Migration 10.92",
           rls: "ليس لديك صلاحية لهذا الإجراء",
         }
         // eslint-disable-next-line no-console
@@ -134,9 +162,16 @@ export function ProjectWalletsPanel() {
         )
         return
       }
-      showSuccess(
-        `➕ تم طرح ${fmtNum(amt)} حصة جديدة · إجمالي حصص الشركة: ${fmtNum(result.company_total_after ?? 0)}`,
-      )
+      // Special case: owner's shares are now 0 — ownership should transfer
+      if (result.ownership_transfer_needed) {
+        showSuccess(
+          `➕ تم طرح ${fmtNum(amt)} حصة للعرض · ⚠️ حصص المالك وصلت صفر — يجب تحويل ملكية المشروع يدوياً إلى المستثمر الأكبر`
+        )
+      } else {
+        showSuccess(
+          `➕ تم طرح ${fmtNum(amt)} حصة جديدة · حصص المالك المتبقية: ${fmtNum(result.owner_shares_after ?? 0)}`
+        )
+      }
     }
 
     if (action === "release") {
@@ -502,22 +537,45 @@ export function ProjectWalletsPanel() {
               )}
             </div>
 
-            {action === "add_shares" && (
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                <div className="bg-purple-400/[0.05] border border-purple-400/[0.2] rounded-lg p-3 text-center">
-                  <div className="text-[10px] text-neutral-500 mb-1">إجمالي حصص الشركة</div>
-                  <div className="text-base font-bold text-purple-400 font-mono">
-                    {fmtNum(adminRow?.total_shares ?? 0)}
+            {action === "add_shares" && (() => {
+              const totalProject = adminRow?.total_shares ?? 0
+              const offeringTotal = adminRow?.offering_total ?? 0
+              const ambassadorTotal = adminRow?.ambassador_total ?? 0
+              const reserveTotal = adminRow?.reserve_total ?? 0
+              // Owner shares = total project shares minus all wallet allocations
+              const ownerShares = Math.max(0, totalProject - offeringTotal - ambassadorTotal - reserveTotal)
+              const cap90 = Math.floor(0.9 * totalProject)
+              const maxAddable = Math.max(0, Math.min(ownerShares, cap90 - offeringTotal))
+              return (
+                <>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <div className="bg-purple-400/[0.05] border border-purple-400/[0.2] rounded-lg p-3 text-center">
+                      <div className="text-[10px] text-neutral-500 mb-1">حصص المالك المتاحة</div>
+                      <div className="text-base font-bold text-purple-400 font-mono">
+                        {fmtNum(ownerShares)}
+                      </div>
+                      <div className="text-[9px] text-neutral-600 mt-0.5">
+                        {totalProject > 0 ? ((ownerShares / totalProject) * 100).toFixed(1) : "0"}٪
+                      </div>
+                    </div>
+                    <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-lg p-3 text-center">
+                      <div className="text-[10px] text-neutral-500 mb-1">المعروض للجمهور حالياً</div>
+                      <div className="text-base font-bold text-blue-400 font-mono">
+                        {fmtNum(offeringTotal)}
+                      </div>
+                      <div className="text-[9px] text-neutral-600 mt-0.5">
+                        {totalProject > 0 ? ((offeringTotal / totalProject) * 100).toFixed(1) : "0"}٪ من {fmtNum(totalProject)}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-lg p-3 text-center">
-                  <div className="text-[10px] text-neutral-500 mb-1">المعروض حالياً</div>
-                  <div className="text-base font-bold text-blue-400 font-mono">
-                    {fmtNum(adminRow?.offering_total ?? 0)}
-                  </div>
-                </div>
-              </div>
-            )}
+                  {maxAddable < ownerShares && offeringTotal > 0 && (
+                    <div className="bg-yellow-400/[0.06] border border-yellow-400/[0.2] rounded-lg p-2 mb-3 text-[10px] text-yellow-400 text-center">
+                      ⚡ الحد الأقصى للطرح 90٪ من إجمالي المشروع ({fmtNum(cap90)} حصة) · متاح الآن: {fmtNum(maxAddable)}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
 
             {action === "freeze" && (
               <>
@@ -557,63 +615,91 @@ export function ProjectWalletsPanel() {
               </>
             )}
 
-            {action === "add_shares" && (
-              <>
-                <label className="text-xs text-neutral-400 mb-2 block font-bold">
-                  عدد الحصص الجديدة للطرح
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  max={adminRow?.total_shares ?? undefined}
-                  value={releaseAmount}
-                  onChange={(e) => setReleaseAmount(e.target.value)}
-                  placeholder="مثلاً: 5000"
-                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20 mb-3"
-                />
-                {(() => {
-                  const amt = Math.floor(Number(releaseAmount)) || 0
-                  const companyTotal = adminRow?.total_shares ?? 0
-                  const offeringTotal = adminRow?.offering_total ?? 0
-                  if (amt <= 0 || companyTotal <= 0) return null
-                  const newCompany = Math.max(0, companyTotal - amt)
-                  const newOffering = offeringTotal + amt
-                  const newPct = companyTotal > 0
-                    ? ((newCompany / companyTotal) * 100).toFixed(1)
-                    : "0"
-                  return (
-                    <div className="bg-white/[0.03] border border-white/[0.08] rounded-lg p-3 mb-3 text-[11px] text-neutral-300 leading-relaxed">
+            {action === "add_shares" && (() => {
+              const totalProject = adminRow?.total_shares ?? 0
+              const offeringTotal = adminRow?.offering_total ?? 0
+              const ambassadorTotal = adminRow?.ambassador_total ?? 0
+              const reserveTotal = adminRow?.reserve_total ?? 0
+              const ownerShares = Math.max(0, totalProject - offeringTotal - ambassadorTotal - reserveTotal)
+              const cap90 = Math.floor(0.9 * totalProject)
+              const maxAddable = Math.max(0, Math.min(ownerShares, cap90 - offeringTotal))
+              const amt = Math.floor(Number(releaseAmount)) || 0
+              const newOwner = Math.max(0, ownerShares - amt)
+              const newOffering = offeringTotal + amt
+              const ownerPctAfter = totalProject > 0 ? ((newOwner / totalProject) * 100).toFixed(1) : "0"
+              const offeringPctAfter = totalProject > 0 ? ((newOffering / totalProject) * 100).toFixed(1) : "0"
+              const exceeds90 = newOffering > cap90
+              const ownerReachesZero = newOwner === 0 && amt > 0
+
+              return (
+                <>
+                  <label className="text-xs text-neutral-400 mb-2 block font-bold">
+                    عدد الحصص الجديدة للطرح
+                    {maxAddable > 0 && (
+                      <span className="text-neutral-600 font-normal mr-1">(الحد الأقصى: {fmtNum(maxAddable)})</span>
+                    )}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    max={maxAddable > 0 ? maxAddable : undefined}
+                    value={releaseAmount}
+                    onChange={(e) => setReleaseAmount(e.target.value)}
+                    placeholder="مثلاً: 5,000"
+                    className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20 mb-3"
+                  />
+                  {amt > 0 && totalProject > 0 && (
+                    <div className={cn(
+                      "border rounded-lg p-3 mb-3 text-[11px] leading-relaxed",
+                      exceeds90
+                        ? "bg-red-400/[0.05] border-red-400/[0.2] text-red-300"
+                        : "bg-white/[0.03] border-white/[0.08] text-neutral-300"
+                    )}>
+                      {exceeds90 && (
+                        <div className="text-red-400 font-bold mb-2 text-xs">
+                          ⛔ تجاوز الحد! الطرح لا يتجاوز 90٪ ({fmtNum(cap90)} حصة)
+                        </div>
+                      )}
                       <div className="flex justify-between mb-1">
-                        <span>إجمالي حصص الشركة بعد الإضافة:</span>
-                        <span className="font-mono font-bold text-purple-400">{fmtNum(newCompany)}</span>
+                        <span>حصص المالك بعد الإضافة:</span>
+                        <span className={cn("font-mono font-bold", ownerReachesZero ? "text-red-400" : "text-purple-400")}>
+                          {fmtNum(newOwner)} <span className="text-neutral-500">({ownerPctAfter}٪)</span>
+                        </span>
                       </div>
                       <div className="flex justify-between mb-1">
-                        <span>المعروض في السوق بعد الإضافة:</span>
-                        <span className="font-mono font-bold text-blue-400">{fmtNum(newOffering)}</span>
+                        <span>المعروض للجمهور بعد الإضافة:</span>
+                        <span className={cn("font-mono font-bold", exceeds90 ? "text-red-400" : "text-blue-400")}>
+                          {fmtNum(newOffering)} <span className="text-neutral-500">({offeringPctAfter}٪)</span>
+                        </span>
                       </div>
                       <div className="flex justify-between">
-                        <span>نسبة امتلاك الشركة المتبقية:</span>
-                        <span className="font-mono font-bold text-yellow-400">{newPct}%</span>
+                        <span>إجمالي المشروع:</span>
+                        <span className="font-mono font-bold text-neutral-400">{fmtNum(totalProject)}</span>
                       </div>
+                      {ownerReachesZero && !exceeds90 && (
+                        <div className="mt-2 pt-2 border-t border-white/[0.06] text-yellow-400 text-[10px]">
+                          ⚠️ حصص المالك ستصبح صفر — سيتم تحويل ملكية المشروع تلقائياً إلى أعلى مستثمر
+                        </div>
+                      )}
                     </div>
-                  )
-                })()}
-                <label className="text-xs text-neutral-400 mb-2 block font-bold">السبب (اختياري)</label>
-                <textarea
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  rows={2}
-                  placeholder="مثلاً: زيادة رأس المال — جولة طرح ثانية..."
-                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20 resize-none mb-3"
-                />
-                <div className="bg-purple-400/[0.04] border border-purple-400/[0.15] rounded-lg p-2.5 text-[11px] text-purple-300 mb-4 leading-relaxed">
-                  💡 ستُخصم الحصص من <b className="text-white">إجمالي حصص الشركة</b> وتُضاف إلى{" "}
-                  <b className="text-white">محفظة العرض</b> — تتاح للبيع المباشر، المزاد، أو الإهداء.
-                  بمجرّد تنفيذ الإضافة تنخفض نسبة امتلاك الشركة.
-                </div>
-              </>
-            )}
+                  )}
+                  <label className="text-xs text-neutral-400 mb-2 block font-bold">السبب (اختياري)</label>
+                  <textarea
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    rows={2}
+                    placeholder="مثلاً: زيادة رأس المال — جولة طرح ثانية..."
+                    className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20 resize-none mb-3"
+                  />
+                  <div className="bg-purple-400/[0.04] border border-purple-400/[0.15] rounded-lg p-2.5 text-[11px] text-purple-300 mb-4 leading-relaxed">
+                    💡 ستُنقل الحصص من <b className="text-white">حصص المالك</b> إلى{" "}
+                    <b className="text-white">محفظة الطرح للجمهور</b> — تتاح للتداول مباشرةً.
+                    الحد الأقصى للطرح الكلي: <b className="text-white">90٪</b> من إجمالي المشروع.
+                  </div>
+                </>
+              )
+            })()}
 
             <div className="flex gap-2">
               <button onClick={() => { setAction(null); setReason(""); setReleaseAmount("") }} className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إلغاء</button>

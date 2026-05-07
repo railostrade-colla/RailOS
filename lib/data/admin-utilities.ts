@@ -891,10 +891,18 @@ export interface AddSharesToOfferingResult {
   reason?: string
   error?: string
   amount?: number
+  /** Available shares (used in error messages for cap/owner checks) */
   available?: number
+  /** @deprecated use owner_shares_after instead */
   company_total_after?: number
+  /** Owner's remaining shares after the operation */
+  owner_shares_after?: number
   offering_total_after?: number
   offering_available_after?: number
+  /** True when owner's shares reached 0 — admin should manually transfer project ownership */
+  ownership_transfer_needed?: boolean
+  /** ID of the top investor when ownership_transfer_needed is true */
+  top_investor_id?: string
 }
 
 /** Take N shares from the company-held pool and inject them into the
