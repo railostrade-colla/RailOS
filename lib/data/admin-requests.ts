@@ -65,17 +65,9 @@ export interface VolumeStats {
   month: { count: number; total: number }
 }
 
-export interface PendingShareRequest {
-  id: string
-  project_id: string
-  project_name: string
-  modification_type: "increase" | "decrease"
-  shares_amount: number
-  reason: string | null
-  status: string
-  requested_by_name: string
-  created_at: string
-}
+// Phase 11.01 — PendingShareRequest interface removed (share_modification
+// system was deleted entirely; adding shares now happens via Project Wallets
+// → "إضافة حصص للطرح").
 
 export interface AdminRoleInfo {
   is_admin: boolean
@@ -318,90 +310,9 @@ export async function getTradingVolumeStats(): Promise<VolumeStats> {
   }
 }
 
-/**
- * Returns pending share-modification requests across ALL statuses
- * the requests-hub cares about (`pending_super_admin` + `pending`).
- * Phase 10.59: switched to a two-step manual join so a missing FK
- * constraint can't make the list disappear.
- */
-export async function getPendingShareRequests(): Promise<PendingShareRequest[]> {
-  try {
-    const supabase = createClient()
-    // Step 1: rows alone, no FK joins.
-    const { data, error } = await supabase
-      .from("share_modification_requests")
-      .select(
-        `id, project_id, requested_by, modification_type, shares_amount,
-         reason, status, created_at`,
-      )
-      .in("status", ["pending_super_admin", "pending"])
-      .order("created_at", { ascending: false })
-
-    if (error || !data) return []
-
-    interface Row {
-      id: string
-      project_id: string
-      requested_by: string | null
-      modification_type: "increase" | "decrease"
-      shares_amount: number | string
-      reason: string | null
-      status: string
-      created_at: string
-    }
-    const rows = data as Row[]
-
-    // Step 2: batched lookups for project names + requester names.
-    const projectIds = Array.from(
-      new Set(rows.map((r) => r.project_id).filter(Boolean)),
-    )
-    const userIds = Array.from(
-      new Set(rows.map((r) => r.requested_by).filter((x): x is string => Boolean(x))),
-    )
-
-    const projectMap = new Map<string, string>()
-    if (projectIds.length > 0) {
-      try {
-        const { data: projs } = await supabase
-          .from("projects")
-          .select("id, name")
-          .in("id", projectIds)
-        for (const p of (projs ?? []) as Array<{ id: string; name: string | null }>) {
-          projectMap.set(p.id, p.name ?? "—")
-        }
-      } catch { /* leave empty */ }
-    }
-
-    const userMap = new Map<string, string>()
-    if (userIds.length > 0) {
-      try {
-        const { data: users } = await supabase
-          .from("profiles")
-          .select("id, full_name, username")
-          .in("id", userIds)
-        for (const u of (users ?? []) as Array<{ id: string; full_name: string | null; username: string | null }>) {
-          userMap.set(u.id, (u.full_name ?? u.username ?? "—") as string)
-        }
-      } catch { /* leave empty */ }
-    }
-
-    return rows.map((r) => {
-      return {
-        id: r.id,
-        project_id: r.project_id,
-        project_name: projectMap.get(r.project_id) ?? "—",
-        modification_type: r.modification_type,
-        shares_amount: num(r.shares_amount),
-        reason: r.reason,
-        status: r.status,
-        requested_by_name: r.requested_by ? userMap.get(r.requested_by) ?? "—" : "—",
-        created_at: r.created_at,
-      }
-    })
-  } catch {
-    return []
-  }
-}
+// Phase 11.01 — getPendingShareRequests() removed entirely. The
+// share_modification_requests table + its admin flow were retired
+// in favour of the project-wallet "إضافة حصص للطرح" RPC.
 
 // ─── Notification locking (RPCs) ──────────────────────────────
 

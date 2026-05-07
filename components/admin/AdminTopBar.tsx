@@ -7,7 +7,7 @@
  *   1. 🔔 Bell        → all admin notifications via get_admin_notification_items
  *                       + count via get_admin_notification_counts
  *   2. 💬 Chat        → support_tickets WHERE status IN ('open','in_progress')
- *   3. 📦 Orders      → COMBINED: share_modification_requests pending
+ *   3. 📦 Orders      → fee_unit_requests pending (share_modification removed in 11.01)
  *                       + fee_unit_requests pending (Phase 10.73 — was just fees)
  *   4. 🛡 Shield      → kyc_submissions WHERE status = 'pending'
  *   5. 👤 Profile     → real profiles row + auth.users.email (was hardcoded)
@@ -114,23 +114,10 @@ async function fetchUnreadCounts(): Promise<NotificationCounts> {
   }
 }
 
-/**
- * Phase 10.73 — share_modification_requests pending count is not in the
- * unified counts RPC, so we fetch it separately for the Orders badge.
- */
-async function fetchSharesPendingCount(): Promise<number> {
-  try {
-    const supabase = createClient()
-    const { count, error } = await supabase
-      .from("share_modification_requests")
-      .select("id", { count: "exact", head: true })
-      .in("status", ["pending", "pending_super_admin"])
-    if (error) return 0
-    return count ?? 0
-  } catch {
-    return 0
-  }
-}
+// Phase 11.01 — fetchSharesPendingCount() and the share_modification_requests
+// table were removed entirely. The Orders badge now reflects only fee_requests
+// pending count; share-purchase requests have their own dedicated badge in
+// the Order Center (طلبات الحصص tab).
 
 /** Phase 10.73 — current admin profile (replaces hardcoded "Admin@Main"). */
 async function fetchAdminProfile(): Promise<AdminProfile | null> {
@@ -172,20 +159,20 @@ export function AdminTopBar() {
   const ref = useRef<HTMLDivElement>(null)
 
   const [counts, setCounts] = useState<NotificationCounts>(ZERO_COUNTS)
-  const [sharesPending, setSharesPending] = useState<number>(0)
   const [allNotifs, setAllNotifs] = useState<AdminNotification[]>([])
   const [profile, setProfile] = useState<AdminProfile | null>(null)
 
   const totalNotifs = counts.total
-  // Combined Orders badge = pending shares + pending fee requests.
-  const ordersCount = counts.fees + sharesPending
+  // Phase 11.01 — Orders badge now = pending fee requests only.
+  // Share-modification was removed; share-purchase pending count lives
+  // inside the Order Center "طلبات الحصص" tab.
+  const ordersCount = counts.fees
 
   // Initial fetch + polling every 30 s.
   useEffect(() => {
     let cancelled = false
     const refresh = () => {
       fetchUnreadCounts().then((c) => { if (!cancelled) setCounts(c) })
-      fetchSharesPendingCount().then((n) => { if (!cancelled) setSharesPending(n) })
     }
     refresh()
     const id = setInterval(refresh, 30_000)
@@ -353,13 +340,11 @@ export function AdminTopBar() {
         </Dropdown>
       )}
 
-      {/* ═══ Orders dropdown (shares + fees combined) — Phase 10.73 ═══ */}
+      {/* ═══ Orders dropdown — Phase 11.01: fees-only (share_mod removed) ═══ */}
       {open === "orders" && (
         <Dropdown title={`📦 الطلبات (${ordersCount})`} onSeeAll={() => handleNavigate("/admin?tab=requests_hub")} ctaLabel="مركز الطلبات ←" side="right" rightOffset="ml-20 lg:ml-32">
           <div className="px-3 pt-2 pb-1 text-[9px] text-neutral-600 flex items-center gap-2">
-            <span>📈 حصص: <span className="text-yellow-400 font-mono">{sharesPending}</span></span>
-            <span className="text-neutral-700">·</span>
-            <span>💎 رسوم: <span className="text-yellow-400 font-mono">{counts.fees}</span></span>
+            <span>💎 رسوم معلّقة: <span className="text-yellow-400 font-mono">{counts.fees}</span></span>
           </div>
           {recentOrders.length === 0 ? (
             <div className="text-xs text-neutral-500 text-center py-6">لا طلبات معلّقة</div>

@@ -46,8 +46,7 @@ export type AdminTab =
   | "invoices_admin"
   // Phase 9.4 — admin requests hub (locking + 5-tab inbox)
   | "requests_hub"
-  // Phase 9.5 — share modification with two-factor authorization
-  | "share_modification"
+  // Phase 9.5 (share_modification) was removed in Phase 11.01.
   // Phase 9.6 — user gifts (admin grants, user redeems)
   | "gifts_admin"
 
