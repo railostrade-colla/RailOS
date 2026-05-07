@@ -241,9 +241,25 @@ export default function ProjectDetailPage() {
           {/* Hero */}
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-3">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-14 h-14 rounded-2xl bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-3xl flex-shrink-0">
-                {sectorIcon(project.sector)}
-              </div>
+              {/* Phase 10.99c — show uploaded project logo when available;
+                  fall back to the sector emoji otherwise. */}
+              {(project.logo_url || project.logo) ? (
+                <div className="w-14 h-14 rounded-2xl border border-white/[0.1] overflow-hidden bg-white/[0.06] flex-shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={project.logo_url || project.logo}
+                    alt={project.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      ;(e.currentTarget as HTMLImageElement).style.display = "none"
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="w-14 h-14 rounded-2xl bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-3xl flex-shrink-0">
+                  {sectorIcon(project.sector)}
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <div className="text-xl font-bold text-white truncate">{project.name}</div>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
