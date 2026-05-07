@@ -67,10 +67,12 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
         const map: Record<string, string> = {
           unauthenticated: "سجّل دخولك أولاً",
           invalid_amount: "أدخل عدد حصص صحيح",
+          invalid_share_price: "سعر الحصة غير صالح — راجع بيانات المشروع",
           project_not_found: "المشروع غير موجود",
           project_not_active: "المشروع ليس نشطاً للشراء حالياً",
           insufficient_offering_shares: "الحصص المتاحة في عَرض المشروع غير كافية",
           cannot_buy_own_project: "لا يمكنك شراء مشروعك الخاص",
+          deal_insert_failed: "فشل تسجيل الصفقة — طبّق Migration 10.99d في Supabase",
           trading_suspended: suspReason
             ? `⏸️ التداول معلق مؤقتاً: ${suspReason}`
             : "⏸️ تم تعليق التداول على هذا المشروع مؤقتاً",
@@ -78,6 +80,8 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
             ? `🔒 شراء الحصص معلق مؤقتاً: ${suspReason}`
             : "🔒 تم تعليق شراء الحصص الجديدة مؤقتاً",
         }
+        // eslint-disable-next-line no-console
+        console.warn("[direct-buy] failure:", dbResult)
         return showError(map[dbResult.error ?? ""] ?? `تعذّر إرسال الطلب — ${dbResult.error}`)
       }
 
