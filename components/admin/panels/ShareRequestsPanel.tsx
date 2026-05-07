@@ -89,8 +89,14 @@ export function ShareRequestsPanel() {
 
   useEffect(() => { refresh() }, [refresh])
 
+  // Phase 10.99e — `pending_payment` is the status set by submit_direct_buy_request.
+  // Treat it as a pending state alongside pending_seller_approval / accepted so
+  // direct-buy requests appear in the "بانتظار الدفع" filter from the moment
+  // the user submits, before the proof is reviewed.
+  const PENDING_STATUSES = ["pending_payment", "pending_seller_approval", "accepted"]
+
   const stats = useMemo(() => {
-    const isPending = (s: string) => ["pending_seller_approval", "accepted"].includes(s)
+    const isPending = (s: string) => PENDING_STATUSES.includes(s)
     const isSubmitted = (s: string) => s === "payment_submitted"
     const isDisputed = (s: string) => s === "disputed"
     const isCompleted = (s: string) => s === "completed"
@@ -107,7 +113,7 @@ export function ShareRequestsPanel() {
   }, [rows])
 
   const filtered = useMemo(() => {
-    const isPending = (s: string) => ["pending_seller_approval", "accepted"].includes(s)
+    const isPending = (s: string) => PENDING_STATUSES.includes(s)
     const isSubmitted = (s: string) => s === "payment_submitted"
     const isDisputed = (s: string) => s === "disputed"
     const isCompleted = (s: string) => s === "completed"
