@@ -70,6 +70,11 @@ interface EntityDetailRow {
   founded_year?: number | string
   offering_start?: string
   offering_end?: string
+  /** Phase 10.93 — trading & offering suspension state */
+  trading_suspended?: boolean
+  trading_suspension_reason?: string | null
+  offering_suspended?: boolean
+  offering_suspension_reason?: string | null
 }
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -480,14 +485,14 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
               <span className="text-neutral-500">حالة التداول</span>
               <Badge
                 label={
-                  (entity as {trading_suspended?: boolean}).trading_suspended
+                  entity.trading_suspended
                     ? "تداول معلق"
                     : entity.status === "active"
                       ? "نشط للتداول"
                       : "غير منشور"
                 }
                 color={
-                  (entity as {trading_suspended?: boolean}).trading_suspended
+                  entity.trading_suspended
                     ? "red"
                     : entity.status === "active"
                       ? "green"
@@ -495,22 +500,20 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
                 }
               />
             </div>
-            {(entity as {trading_suspended?: boolean; trading_suspension_reason?: string | null}).trading_suspended &&
-              (entity as {trading_suspension_reason?: string | null}).trading_suspension_reason && (
+            {entity.trading_suspended && entity.trading_suspension_reason && (
               <div className="text-[10px] text-red-400/80 bg-red-400/[0.06] border border-red-400/[0.15] rounded-lg px-2.5 py-1.5 leading-relaxed">
-                ⏸️ {(entity as {trading_suspension_reason?: string | null}).trading_suspension_reason}
+                ⏸️ {entity.trading_suspension_reason}
               </div>
             )}
-            {(entity as {offering_suspended?: boolean}).offering_suspended && (
+            {entity.offering_suspended && (
               <div className="flex justify-between">
                 <span className="text-neutral-500">الحصص المتبقية</span>
                 <Badge label="شراء معلق" color="yellow" />
               </div>
             )}
-            {(entity as {offering_suspended?: boolean; offering_suspension_reason?: string | null}).offering_suspended &&
-              (entity as {offering_suspension_reason?: string | null}).offering_suspension_reason && (
+            {entity.offering_suspended && entity.offering_suspension_reason && (
               <div className="text-[10px] text-yellow-400/80 bg-yellow-400/[0.06] border border-yellow-400/[0.15] rounded-lg px-2.5 py-1.5 leading-relaxed">
-                🔒 {(entity as {offering_suspension_reason?: string | null}).offering_suspension_reason}
+                🔒 {entity.offering_suspension_reason}
               </div>
             )}
             <div className="flex justify-between">

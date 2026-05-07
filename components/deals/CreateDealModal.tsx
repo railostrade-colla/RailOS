@@ -58,7 +58,7 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
       if (!dbResult.success) {
         setSubmitting(false)
         // Phase 10.93: suspension errors carry a `reason` field from the RPC
-        const suspReason = (dbResult as Record<string, unknown>).reason as string | undefined
+        const suspReason = dbResult.reason
         const map: Record<string, string> = {
           unauthenticated: "سجّل دخولك أولاً",
           invalid_amount: "أدخل عدد حصص صحيح",

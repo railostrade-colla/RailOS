@@ -15,6 +15,8 @@ export interface DirectBuyResult {
   total_amount?: number
   expires_at?: string
   error?: string
+  /** Phase 10.93 — suspension reason from RPC (trading_suspended / offering_suspended) */
+  reason?: string
 }
 
 export async function submitDirectBuyRequest(
@@ -32,8 +34,14 @@ export async function submitDirectBuyRequest(
       p_shares_amount: sharesAmount,
     })
     if (error) return { success: false, error: error.message }
-    const r = (data ?? {}) as Record<string, unknown> & { success?: boolean; error?: string }
-    if (!r.success) return { success: false, error: String(r.error ?? "unknown") }
+    const r = (data ?? {}) as Record<string, unknown> & { success?: boolean; error?: string; reason?: string }
+    if (!r.success) {
+      return {
+        success: false,
+        error: String(r.error ?? "unknown"),
+        reason: r.reason ? String(r.reason) : undefined,
+      }
+    }
     return {
       success: true,
       deal_id: String(r.deal_id),
