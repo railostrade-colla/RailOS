@@ -16,6 +16,7 @@ import {
   adminFreezeProject,
   adminUnfreezeProject,
   adminReleaseSharesToMarket,
+  adminAddSharesToOffering,
   getAllProjectWalletsAdmin,
 } from "@/lib/data/admin-utilities"
 import { showSuccess, showError } from "@/lib/utils/toast"
@@ -24,8 +25,10 @@ import { cn } from "@/lib/utils/cn"
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 // Note: "transfer" (cash) was removed — the platform doesn't move money,
-// only shares + fee-units. "release" moves shares from reserve → offering.
-type WalletAction = null | "freeze" | "unfreeze" | "release"
+// only shares + fee-units. "release" moves shares from reserve → offering;
+// "add_shares" (Phase 10.85) takes shares from the company-held pool
+// (projects.total_shares) and injects them into the offering wallet.
+type WalletAction = null | "freeze" | "unfreeze" | "release" | "add_shares"
 
 export function ProjectWalletsPanel() {
   const [filter, setFilter] = useState<string>("all")
@@ -99,6 +102,42 @@ export function ProjectWalletsPanel() {
   const handleAction = async () => {
     if (!selected || !action) return
     if (action === "freeze" && !reason.trim()) return showError("سبب التجميد مطلوب")
+
+    if (action === "add_shares") {
+      const amt = Math.floor(Number(releaseAmount))
+      if (!amt || amt <= 0) return showError("الكمية غير صحيحة")
+      const isUuid = /^[0-9a-f-]{36}$/i.test(selected.id)
+      if (!isUuid) {
+        return showError("المحفظة الحالية للعرض فقط — اختر محفظة من DB")
+      }
+      const projectId =
+        (selected as ProjectWallet & { project_id?: string }).project_id ?? selected.id
+      const result = await adminAddSharesToOffering(projectId, amt, reason.trim() || undefined)
+      if (!result.success) {
+        const map: Record<string, string> = {
+          unauthenticated: "يجب تسجيل الدخول أولاً",
+          super_admin_only: "هذا الإجراء يتطلّب صلاحية Super Admin فقط",
+          not_admin: "صلاحياتك لا تسمح بهذا الإجراء",
+          invalid_amount: "الكمية غير صحيحة",
+          project_not_found: "المشروع غير موجود",
+          insufficient_company_shares: `حصص الشركة المتاحة: ${result.available ?? "؟"} حصة فقط`,
+          offering_wallet_missing: "محفظة العرض غير موجودة",
+          offering_wallet_frozen: "محفظة العرض مُجمَّدة — افكّ التجميد أوّلاً",
+          missing_table: "الـ RPC غير منشور — طبّق Migration 10.85",
+          rls: "ليس لديك صلاحية لهذا الإجراء",
+        }
+        // eslint-disable-next-line no-console
+        console.warn("[add_shares] failure:", result)
+        showError(
+          map[result.reason ?? ""] ??
+            `فشل إضافة الحصص${result.reason ? ` (${result.reason})` : ""}`,
+        )
+        return
+      }
+      showSuccess(
+        `➕ تم طرح ${fmtNum(amt)} حصة جديدة · إجمالي حصص الشركة: ${fmtNum(result.company_total_after ?? 0)}`,
+      )
+    }
 
     if (action === "release") {
       const amt = Math.floor(Number(releaseAmount))
@@ -410,14 +449,20 @@ export function ProjectWalletsPanel() {
             })()}
 
             {/* Actions */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {selected.status === "active" ? (
                 <ActionBtn label="❄️ تجميد" color="yellow" onClick={() => setAction("freeze")} />
               ) : (
                 <ActionBtn label="✅ فكّ تجميد" color="green" onClick={() => setAction("unfreeze")} />
               )}
               <ActionBtn
-                label="📤 إطلاق حصص للسوق"
+                label="➕ إضافة حصص للطرح"
+                color="purple"
+                onClick={() => setAction("add_shares")}
+                disabled={selected.status !== "active"}
+              />
+              <ActionBtn
+                label="📤 نقل من الاحتياطي"
                 color="blue"
                 onClick={() => setAction("release")}
                 disabled={selected.status !== "active"}
@@ -429,20 +474,24 @@ export function ProjectWalletsPanel() {
       )}
 
       {/* Confirm modal */}
-      {selected && action && (
+      {selected && action && (() => {
+        const adminRow = adminRows.find((r) => r.project_id === selected.id)
+        return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-w-md">
             <div className="text-base font-bold text-white mb-4">
               {action === "freeze" && "❄️ تجميد المحفظة"}
               {action === "unfreeze" && "✅ فكّ التجميد"}
-              {action === "release" && "📤 إطلاق حصص للسوق"}
+              {action === "release" && "📤 نقل من الاحتياطي للعرض"}
+              {action === "add_shares" && "➕ إضافة حصص للطرح من حصص الشركة"}
             </div>
 
             <div className={cn(
               "rounded-xl p-3 mb-4 text-xs border",
               action === "freeze" && "bg-yellow-400/[0.05] border-yellow-400/[0.2] text-yellow-400",
               action === "unfreeze" && "bg-green-400/[0.05] border-green-400/[0.2] text-green-400",
-              action === "release" && "bg-blue-400/[0.05] border-blue-400/[0.2] text-blue-400"
+              action === "release" && "bg-blue-400/[0.05] border-blue-400/[0.2] text-blue-400",
+              action === "add_shares" && "bg-purple-400/[0.05] border-purple-400/[0.2] text-purple-400"
             )}>
               المحفظة: <span className="font-bold text-white">{selected.project_name}</span>
               {action === "release" && (
@@ -452,6 +501,23 @@ export function ProjectWalletsPanel() {
                 </>
               )}
             </div>
+
+            {action === "add_shares" && (
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <div className="bg-purple-400/[0.05] border border-purple-400/[0.2] rounded-lg p-3 text-center">
+                  <div className="text-[10px] text-neutral-500 mb-1">إجمالي حصص الشركة</div>
+                  <div className="text-base font-bold text-purple-400 font-mono">
+                    {fmtNum(adminRow?.total_shares ?? 0)}
+                  </div>
+                </div>
+                <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-lg p-3 text-center">
+                  <div className="text-[10px] text-neutral-500 mb-1">المعروض حالياً</div>
+                  <div className="text-base font-bold text-blue-400 font-mono">
+                    {fmtNum(adminRow?.offering_total ?? 0)}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {action === "freeze" && (
               <>
@@ -491,18 +557,78 @@ export function ProjectWalletsPanel() {
               </>
             )}
 
+            {action === "add_shares" && (
+              <>
+                <label className="text-xs text-neutral-400 mb-2 block font-bold">
+                  عدد الحصص الجديدة للطرح
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  max={adminRow?.total_shares ?? undefined}
+                  value={releaseAmount}
+                  onChange={(e) => setReleaseAmount(e.target.value)}
+                  placeholder="مثلاً: 5000"
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20 mb-3"
+                />
+                {(() => {
+                  const amt = Math.floor(Number(releaseAmount)) || 0
+                  const companyTotal = adminRow?.total_shares ?? 0
+                  const offeringTotal = adminRow?.offering_total ?? 0
+                  if (amt <= 0 || companyTotal <= 0) return null
+                  const newCompany = Math.max(0, companyTotal - amt)
+                  const newOffering = offeringTotal + amt
+                  const newPct = companyTotal > 0
+                    ? ((newCompany / companyTotal) * 100).toFixed(1)
+                    : "0"
+                  return (
+                    <div className="bg-white/[0.03] border border-white/[0.08] rounded-lg p-3 mb-3 text-[11px] text-neutral-300 leading-relaxed">
+                      <div className="flex justify-between mb-1">
+                        <span>إجمالي حصص الشركة بعد الإضافة:</span>
+                        <span className="font-mono font-bold text-purple-400">{fmtNum(newCompany)}</span>
+                      </div>
+                      <div className="flex justify-between mb-1">
+                        <span>المعروض في السوق بعد الإضافة:</span>
+                        <span className="font-mono font-bold text-blue-400">{fmtNum(newOffering)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>نسبة امتلاك الشركة المتبقية:</span>
+                        <span className="font-mono font-bold text-yellow-400">{newPct}%</span>
+                      </div>
+                    </div>
+                  )
+                })()}
+                <label className="text-xs text-neutral-400 mb-2 block font-bold">السبب (اختياري)</label>
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  rows={2}
+                  placeholder="مثلاً: زيادة رأس المال — جولة طرح ثانية..."
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20 resize-none mb-3"
+                />
+                <div className="bg-purple-400/[0.04] border border-purple-400/[0.15] rounded-lg p-2.5 text-[11px] text-purple-300 mb-4 leading-relaxed">
+                  💡 ستُخصم الحصص من <b className="text-white">إجمالي حصص الشركة</b> وتُضاف إلى{" "}
+                  <b className="text-white">محفظة العرض</b> — تتاح للبيع المباشر، المزاد، أو الإهداء.
+                  بمجرّد تنفيذ الإضافة تنخفض نسبة امتلاك الشركة.
+                </div>
+              </>
+            )}
+
             <div className="flex gap-2">
               <button onClick={() => { setAction(null); setReason(""); setReleaseAmount("") }} className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إلغاء</button>
               <button onClick={handleAction} className={cn(
                 "flex-1 py-3 rounded-xl text-sm font-bold border",
                 action === "freeze" && "bg-yellow-500/[0.15] border-yellow-500/[0.3] text-yellow-400",
                 action === "unfreeze" && "bg-green-500/[0.15] border-green-500/[0.3] text-green-400",
-                action === "release" && "bg-blue-500/[0.15] border-blue-500/[0.3] text-blue-400"
+                action === "release" && "bg-blue-500/[0.15] border-blue-500/[0.3] text-blue-400",
+                action === "add_shares" && "bg-purple-500/[0.15] border-purple-500/[0.3] text-purple-400"
               )}>تأكيد</button>
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

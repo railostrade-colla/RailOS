@@ -10,19 +10,43 @@ import { ArrowRight, Edit2, Wallet as WalletIcon, MapPin, Calendar, TrendingUp, 
 import { Badge, ActionBtn, KPI } from "@/components/admin/ui"
 import { getAllProjectWalletsAdmin } from "@/lib/data/admin-utilities"
 import { getProjectByIdAdmin } from "@/lib/data/projects"
+import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils/cn"
 
+// Phase 10.89 — wallet container values per the founder's spec:
+//   • balance  = offering_available × current_market_price
+//   • revenue  = SUM(deals.total_amount) where status='completed'
+//                (covers both primary "direct" + auction sales)
+//   • expenses = SUM(ambassador_commissions.commission_value)
+//                (gifts paid out from the offering wallet)
+// Plus the offering wallet's raw counts so the sale-progress card
+// can show the right percentages (sold / offering_total instead of
+// sold / total_shares).
 interface ProjectWalletAggregate {
-  balance: number
-  total_inflow: number
-  total_outflow: number
-  status: "active" | "frozen" | "closed"
+  balance:        number  // offering_available × market_price
+  total_inflow:   number  // ∑ deals.total_amount (completed)
+  total_outflow:  number  // ∑ ambassador_commissions.commission_value
+  status:         "active" | "frozen" | "closed"
+  offering_total:     number
+  offering_available: number
+  sold_from_offering: number
+  market_price:       number
 }
 
 interface ProjectPrices {
   launch_price: number       // Initial price at creation (immutable)
   market_price: number       // Current dynamic price
   change_pct: number         // (market - launch) / launch × 100
+}
+
+// Phase 10.88 — wallet split percentages from the project row.
+// Read straight off the `projects` table so we don't depend on the
+// 3-wallet aggregate landing first.
+interface WalletSplit {
+  offering_pct: number
+  reserve_pct: number
+  offering_shares: number
+  reserve_shares: number
 }
 
 // Loose entity-detail row shape — matches Projects.tsx EntityRow.
@@ -67,8 +91,6 @@ export interface EntityDetailsViewProps {
 
 export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewProps) {
   const isProject = entity.entity_type === "project"
-  const soldShares = entity.total_shares - entity.available_shares
-  const soldPct = entity.total_shares > 0 ? Math.round((soldShares / entity.total_shares) * 100) : 0
 
   // Fetch real wallet aggregate from DB. Empty until the async fetch
   // resolves; if no wallets exist for this project, stays null.
@@ -78,21 +100,66 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
   // Phase 10.84 — project's uploaded logo so the hero icon shows the
   // real brand image instead of the generic sector emoji.
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  // Phase 10.88 — wallet split read off the `projects` row. Used to
+  // tag the "available shares" card with its offering % and to render
+  // the reserve-shares card ("never sold").
+  const [walletSplit, setWalletSplit] = useState<WalletSplit | null>(null)
 
   useEffect(() => {
     if (!isProject) return
     let cancelled = false
-    getAllProjectWalletsAdmin(500).then((rows) => {
+
+    // Phase 10.89 — fan out three queries in parallel:
+    //   1. project_wallets aggregate (per-wallet shares + market_price)
+    //   2. deals: ∑ total_amount where status='completed'  → revenue
+    //   3. ambassador_commissions: ∑ commission_value      → expenses
+    const supabase = createClient()
+    const walletsP = getAllProjectWalletsAdmin(500)
+    const revenueP = supabase
+      .from("deals")
+      .select("total_amount")
+      .eq("project_id", entity.id)
+      .eq("status", "completed")
+    const expensesP = supabase
+      .from("ambassador_commissions")
+      .select("commission_value")
+      .eq("project_id", entity.id)
+
+    Promise.all([walletsP, revenueP, expensesP]).then(([rows, dealsRes, ambRes]) => {
       if (cancelled) return
       const match = rows.find((r) => r.project_id === entity.id || r.id === entity.id)
+
+      // Sum revenue (deals) — best-effort; missing column / RLS = 0.
+      let revenue = 0
+      const deals = (dealsRes?.data ?? []) as Array<{ total_amount: number | string | null }>
+      for (const d of deals) revenue += Number(d.total_amount ?? 0)
+
+      // Sum expenses (ambassador commissions). Table may not exist on
+      // older DBs (Phase 10.86 migration not applied) → treat as 0.
+      let expenses = 0
+      const amb = (ambRes?.data ?? []) as Array<{ commission_value: number | string | null }>
+      for (const a of amb) expenses += Number(a.commission_value ?? 0)
+
       if (match) {
+        const offeringTotal     = match.offering_total ?? 0
+        const offeringAvailable = match.offering_available ?? 0
+        const soldFromOffering  = Math.max(0, offeringTotal - offeringAvailable)
+        const marketPrice       = match.market_price ?? 0
+        const balance           = offeringAvailable * marketPrice
+
         setWallet({
-          balance: match.balance,
-          total_inflow: match.total_inflow,
-          total_outflow: match.total_outflow,
-          status: match.status,
+          balance,
+          total_inflow:       revenue,
+          total_outflow:      expenses,
+          status:             match.status,
+          offering_total:     offeringTotal,
+          offering_available: offeringAvailable,
+          sold_from_offering: soldFromOffering,
+          market_price:       marketPrice,
         })
       } else {
+        // Project still has revenue/expenses even if wallets aren't
+        // wired yet — surface them with an empty offering split.
         setWallet(null)
       }
     })
@@ -113,9 +180,22 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
         (r.image_url as string | undefined) ??
         null
       setLogoUrl(logo && logo.trim() ? logo : null)
+
+      // Phase 10.88: derive wallet split percentages + share counts.
+      // The form persists offering_percentage/reserve_percentage on
+      // the project row; ambassador_percentage is now retired (10.86).
+      const totalShares = Number(r.total_shares ?? entity.total_shares ?? 0)
+      const offPct = Number(r.offering_percentage ?? 0)
+      const resPct = Number(r.reserve_percentage ?? 0)
+      setWalletSplit({
+        offering_pct:    offPct,
+        reserve_pct:     resPct,
+        offering_shares: Math.floor(totalShares * (offPct / 100)),
+        reserve_shares:  Math.floor(totalShares * (resPct / 100)),
+      })
     })
     return () => { cancelled = true }
-  }, [entity.id, isProject])
+  }, [entity.id, entity.total_shares, isProject])
 
   return (
     <div className="p-6 max-w-5xl">
@@ -237,7 +317,22 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
         </div>
       )}
 
-      {/* Shares progress */}
+      {/* Shares progress — Phase 10.89: percentages are now relative
+          to the OFFERING total (not project total), per the founder's
+          spec: «النسبة تمثل الحصص المطروحة للبيع — كم بيع منها». */}
+      {(() => {
+        const offeringTotal     = wallet?.offering_total
+          ?? walletSplit?.offering_shares
+          ?? 0
+        const offeringAvailable = wallet?.offering_available
+          ?? entity.available_shares
+          ?? 0
+        const soldShares = wallet?.sold_from_offering
+          ?? Math.max(0, offeringTotal - offeringAvailable)
+        const soldPct = offeringTotal > 0
+          ? Math.round((soldShares / offeringTotal) * 100)
+          : 0
+        return (
       <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-5">
         <div className="flex items-center gap-2 mb-3">
           <TrendingUp className="w-4 h-4 text-green-400" strokeWidth={1.5} />
@@ -245,7 +340,7 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
         </div>
         <div className="flex items-baseline gap-2 mb-3">
           <span className="text-3xl font-bold text-white font-mono">{soldPct}%</span>
-          <span className="text-xs text-neutral-500">من الحصص بِيعت</span>
+          <span className="text-xs text-neutral-500">من الحصص المطروحة بِيعت</span>
         </div>
         <div className="h-3 bg-white/[0.06] rounded-full overflow-hidden mb-3">
           <div
@@ -253,19 +348,53 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
             style={{ width: `${Math.min(100, soldPct)}%` }}
           />
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 mb-2">
           <div className="bg-green-400/[0.05] border border-green-400/[0.2] rounded-lg p-3 text-center">
-            <div className="text-[10px] text-neutral-500 mb-1">حصص مُباعة</div>
+            <div className="text-[10px] text-neutral-500 mb-1">حصص مُباعة للمستخدمين</div>
             <div className="text-base font-bold text-green-400 font-mono">{fmtNum(soldShares)}</div>
+            {offeringTotal > 0 && (
+              <div className="text-[9px] text-neutral-600 mt-1">من أصل {fmtNum(offeringTotal)} مطروحة</div>
+            )}
           </div>
           <div className="bg-yellow-400/[0.05] border border-yellow-400/[0.2] rounded-lg p-3 text-center">
-            <div className="text-[10px] text-neutral-500 mb-1">حصص متاحة</div>
-            <div className="text-base font-bold text-yellow-400 font-mono">{fmtNum(entity.available_shares)}</div>
+            <div className="text-[10px] text-neutral-500 mb-1 flex items-center justify-center gap-1.5">
+              <span>حصص متاحة</span>
+              {walletSplit && walletSplit.offering_pct > 0 && (
+                <span className="text-[9px] bg-yellow-400/[0.15] border border-yellow-400/[0.3] text-yellow-400 px-1.5 py-0.5 rounded font-mono">
+                  {walletSplit.offering_pct}%
+                </span>
+              )}
+            </div>
+            <div className="text-base font-bold text-yellow-400 font-mono">{fmtNum(offeringAvailable)}</div>
+            <div className="text-[9px] text-neutral-600 mt-1">المطروح ناقص المُباع</div>
           </div>
         </div>
+        {/* Reserve shares — never tradable. Always shown so the admin
+            knows how many shares are held back from the market. */}
+        {walletSplit && walletSplit.reserve_pct > 0 && (
+          <div className="bg-red-400/[0.04] border border-red-400/[0.2] rounded-lg p-3 mt-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[11px] font-bold text-red-400">🔒 حصص الاحتياطي</span>
+                <span className="text-[9px] bg-red-400/[0.15] border border-red-400/[0.3] text-red-400 px-1.5 py-0.5 rounded font-mono">
+                  {walletSplit.reserve_pct}%
+                </span>
+              </div>
+              <div className="text-base font-bold text-red-400 font-mono">{fmtNum(walletSplit.reserve_shares)}</div>
+            </div>
+            <div className="text-[10px] text-neutral-400 mt-2 leading-relaxed">
+              ⚠️ حصص الاحتياطي لا تُعرض للبيع أبداً ولا تُتداول في السوق. تبقى محجوزة بشكل دائم لحماية الكيان.
+            </div>
+          </div>
+        )}
       </div>
+        )
+      })()}
 
-      {/* Wallet */}
+      {/* Wallet — Phase 10.89:
+            • balance  = available_for_public × current_market_price
+            • inflow   = ∑ deals.total_amount (completed)
+            • outflow  = ∑ ambassador_commissions.commission_value */}
       <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-5">
         <div className="flex items-center gap-2 mb-3">
           <WalletIcon className="w-4 h-4 text-blue-400" strokeWidth={1.5} />
@@ -273,17 +402,22 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
         </div>
         {wallet ? (
           <div className="grid grid-cols-3 gap-2">
-            <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-lg p-3 text-center">
+            <div className="bg-blue-400/[0.05] border border-blue-400/[0.2] rounded-lg p-3 text-center" title="الحصص المتاحة للجمهور × سعر السوق الحالي">
               <div className="text-[10px] text-neutral-500 mb-1">الرصيد</div>
-              <div className="text-base font-bold text-blue-400 font-mono">{fmtNum(wallet.balance)}</div>
+              <div className="text-base font-bold text-blue-400 font-mono">{fmtNum(Math.round(wallet.balance))}</div>
+              <div className="text-[9px] text-neutral-600 mt-1">
+                {fmtNum(wallet.offering_available)} × {fmtNum(Math.round(wallet.market_price))} د.ع
+              </div>
             </div>
-            <div className="bg-green-400/[0.05] border border-green-400/[0.2] rounded-lg p-3 text-center">
+            <div className="bg-green-400/[0.05] border border-green-400/[0.2] rounded-lg p-3 text-center" title="إجمالي قيمة الصفقات المُكتملة (مباشر + مزاد)">
               <div className="text-[10px] text-neutral-500 mb-1">إيرادات</div>
-              <div className="text-base font-bold text-green-400 font-mono">+{fmtNum(wallet.total_inflow)}</div>
+              <div className="text-base font-bold text-green-400 font-mono">+{fmtNum(Math.round(wallet.total_inflow))}</div>
+              <div className="text-[9px] text-neutral-600 mt-1">من الصفقات المُكتملة</div>
             </div>
-            <div className="bg-red-400/[0.05] border border-red-400/[0.2] rounded-lg p-3 text-center">
+            <div className="bg-red-400/[0.05] border border-red-400/[0.2] rounded-lg p-3 text-center" title="عمولات السفراء + الحصص الموزَّعة كهدايا من محفظة العرض">
               <div className="text-[10px] text-neutral-500 mb-1">مصروفات</div>
-              <div className="text-base font-bold text-red-400 font-mono">-{fmtNum(wallet.total_outflow)}</div>
+              <div className="text-base font-bold text-red-400 font-mono">-{fmtNum(Math.round(wallet.total_outflow))}</div>
+              <div className="text-[9px] text-neutral-600 mt-1">عمولات + هدايا</div>
             </div>
           </div>
         ) : isProject && entity.status === "active" ? (
@@ -292,7 +426,7 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
             <div>
               <div className="text-orange-400 font-bold mb-1">⚠ المحافظ غير منشَأة بعد</div>
               <div className="text-neutral-300 leading-relaxed">
-                المشروع منشور لكن محافظه الـ 3 (عرض / سفير / احتياطي) لم تُنشَأ.
+                المشروع منشور لكن محافظه (عرض / احتياطي) لم تُنشَأ.
                 طبّق <span className="font-mono bg-black/30 px-1 rounded">Migration 10.52</span> في
                 Supabase SQL Editor لإنشائها تلقائياً.
               </div>
@@ -342,17 +476,23 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
             <div className="flex justify-between">
               <span className="text-neutral-500">حالة التداول</span>
               <Badge
-                label={entity.status === "active" ? "متاح" : "معلّق"}
+                label={entity.status === "active" ? "متداوَل" : "معلّق"}
                 color={entity.status === "active" ? "green" : "yellow"}
               />
             </div>
             <div className="flex justify-between">
               <span className="text-neutral-500">حصص قابلة للتداول</span>
-              <span className="text-white font-mono">{fmtNum(entity.available_shares)}</span>
+              <span className="text-white font-mono">
+                {fmtNum(wallet?.offering_available ?? entity.available_shares)}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-neutral-500">القيمة السوقية</span>
-              <span className="text-yellow-400 font-mono font-bold">{fmtNum(entity.share_price * entity.total_shares)} د.ع</span>
+              <span className="text-yellow-400 font-mono font-bold">
+                {fmtNum(Math.round(
+                  (prices?.market_price ?? entity.share_price) * entity.total_shares
+                ))} د.ع
+              </span>
             </div>
           </div>
         </div>

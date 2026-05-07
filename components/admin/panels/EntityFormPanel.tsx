@@ -59,13 +59,15 @@ export interface EntityFormData {
   share_price?: string
   total_shares?: string
   offering_pct?: string
-  ambassador_pct?: string
   reserve_pct?: string
   offering_start?: string
   offering_end?: string
   return_min?: string
   return_max?: string
   duration_months?: string
+  /** Phase 10.90: when true, project has no scheduled end and the
+   *  months input is hidden. */
+  duration_open?: boolean
   risk_level?: RiskLevel
 
   // Extended fields (admin form expansion)
@@ -150,6 +152,12 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
   // these would upload to Supabase Storage and store the URL.
   const [logoUrl, setLogoUrl] = useState<string>(initialData?.logo_url ?? "")
   const [coverUrl, setCoverUrl] = useState<string>(initialData?.cover_url ?? "")
+  // Phase 10.90 — multi-image gallery (project work, team, ops, etc.)
+  // shown in the project-details image carousel.
+  const [galleryImages, setGalleryImages] = useState<string[]>(
+    initialData?.project_images ?? initialData?.company_images ?? [],
+  )
+  const galleryInputRef = useRef<HTMLInputElement>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
 
@@ -174,17 +182,34 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
   // §4 price
   const [sharePrice, setSharePrice] = useState(initialData?.share_price ?? "")
   const [totalShares, setTotalShares] = useState(initialData?.total_shares ?? "")
-  // §5 split — defaults sum to 100% INCLUDING owner% (60+30+2+8=100)
+  // §5 split — Phase 10.90: only TWO admin-editable buckets remain:
+  //   • owner_percent      — kept by the company / not for sale
+  //   • offering_percentage — listed on the public market
+  // Phase 10.86 retired the ambassador bucket (now a runtime grant);
+  // Phase 10.90 retires the reserve bucket per the founder's spec.
+  // owner + offering = 100. Defaults: 70 + 30 = 100.
   const [offeringPct, setOfferingPct] = useState(initialData?.offering_pct ?? "30")
-  const [ambassadorPct, setAmbassadorPct] = useState(initialData?.ambassador_pct ?? "2")
-  const [reservePct, setReservePct] = useState(initialData?.reserve_pct ?? "8")
-  // §6 dates
+  // §6 dates — Phase 10.90: removed manual start + end inputs.
+  // offering_start_date is auto-set to NOW() when the project is
+  // published; offering_end_date is no longer used (project either
+  // has an open-ended duration or a months-bounded one — see below).
   const [offeringStart, setOfferingStart] = useState(initialData?.offering_start ?? "")
-  const [offeringEnd, setOfferingEnd] = useState(initialData?.offering_end ?? "")
+  // Reserved here only so the legacy autosave/draft hooks still
+  // compile; we never expose an input for it any more.
+  const [offeringEnd] = useState(initialData?.offering_end ?? "")
   // §7 returns + risk
-  const [returnMin, setReturnMin] = useState(initialData?.return_min ?? "12")
-  const [returnMax, setReturnMax] = useState(initialData?.return_max ?? "18")
+  // Phase 10.87: the input field is now MONTHLY (not annual). The
+  // annual return is derived dynamically (× 12) and shown read-only.
+  // Defaults: 1% monthly = 12% annual / 1.5% monthly = 18% annual.
+  const [returnMin, setReturnMin] = useState(initialData?.return_min ?? "1")
+  const [returnMax, setReturnMax] = useState(initialData?.return_max ?? "1.5")
   const [durationMonths, setDurationMonths] = useState(initialData?.duration_months ?? "36")
+  // Phase 10.90: open-ended vs fixed-months toggle. When `durationOpen`
+  // is true the months input is hidden and the project has no scheduled
+  // end. When false the admin enters a number of months.
+  const [durationOpen, setDurationOpen] = useState<boolean>(
+    initialData?.duration_open ?? !initialData?.duration_months,
+  )
   const [riskLevel, setRiskLevel] = useState<RiskLevel>(initialData?.risk_level ?? "medium")
 
   // ─── §8 Extended classification (symbol moved to §1) ───
@@ -214,10 +239,9 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
   const [ownerEmail, setOwnerEmail] = useState(initialData?.owner_email ?? "")
   const [detailedAddress, setDetailedAddress] = useState(initialData?.detailed_address ?? "")
 
-  // ─── §12 Documents ───
+  // ─── §12 Documents (Phase 10.90: file upload, no more URL inputs) ──
   const [documents, setDocuments] = useState<ProjectDocument[]>(initialData?.documents ?? [])
-  const [newDocName, setNewDocName] = useState("")
-  const [newDocUrl, setNewDocUrl] = useState("")
+  const docInputRef = useRef<HTMLInputElement>(null)
 
   const sharePriceNum = Number(sharePrice) || 0
   const projectValueNum0 = Number(projectValue) || 0
@@ -235,13 +259,10 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
 
   const totalSharesNum = Number(totalShares) || 0
   const totalValue = sharePriceNum * totalSharesNum
-  // Owner% is now part of the 100% wallet split (see §5 below).
+  // Phase 10.90: only TWO buckets remain in §5 (owner + offering).
+  // Reserve is auto = 0; ambassador retired in 10.86. Sum must = 100.
   const ownerPctNum = Number(ownerPercent) || 0
-  const totalPct =
-    ownerPctNum +
-    (Number(offeringPct) || 0) +
-    (Number(ambassadorPct) || 0) +
-    (Number(reservePct) || 0)
+  const totalPct = ownerPctNum + (Number(offeringPct) || 0)
 
   // ─── Load taken symbols once + auto-generate on name change ───
   useEffect(() => {
@@ -289,10 +310,11 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
         logo_url: logoUrl, cover_url: coverUrl,
         city, address, coords,
         share_price: sharePrice, total_shares: totalShares,
-        offering_pct: offeringPct, ambassador_pct: ambassadorPct, reserve_pct: reservePct,
+        offering_pct: offeringPct,
         offering_start: offeringStart, offering_end: offeringEnd,
         return_min: returnMin, return_max: returnMax,
-        duration_months: durationMonths, risk_level: riskLevel,
+        duration_months: durationMonths, duration_open: durationOpen,
+        risk_level: riskLevel,
         entity_type: entityTypeField, build_status: buildStatus,
         quality, revenue, project_value: projectValue,
         listing_percent: listingPercent, capital_needed: capitalNeeded,
@@ -311,9 +333,9 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
     name, symbol, companyId, sector, shortDesc, longDesc,
     visionText, goalsText, managementText, logoUrl, coverUrl,
     city, address, coords, sharePrice, totalShares,
-    offeringPct, ambassadorPct, reservePct,
+    offeringPct,
     offeringStart, offeringEnd, returnMin, returnMax,
-    durationMonths, riskLevel, entityTypeField, buildStatus,
+    durationMonths, durationOpen, riskLevel, entityTypeField, buildStatus,
     quality, revenue, projectValue, listingPercent, capitalNeeded,
     capitalRaised, ownerPercent, offerPercent, investmentType,
     distributionType, profitSource, ownerName, ownerPhone, ownerEmail,
@@ -329,40 +351,66 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
     ? Math.min(100, (Number(capitalRaised) / Number(capitalNeeded)) * 100)
     : 0
 
-  // ─── Owner% drives offered% automatically ───
-  // User requested: "نسبة المالك بعدها يحدد تلقائي نسبة المطروح في
-  //   السوق للتداول ويحدد عدد الحصص المطروحة والباقية ملك المالك."
+  // ─── Owner% drives offered% automatically (Phase 10.90) ───
+  // With reserve + ambassador buckets retired the math collapses to a
+  // simple complement: offering = 100 − owner. We mirror the value
+  // into BOTH `offerPercent` (legacy field used by §9) and the new
+  // wallet-split `offeringPct` field used by §5 so they never drift.
   useEffect(() => {
     const offered = Math.max(0, 100 - ownerPctNum)
     setOfferPercent(String(offered))
+    setOfferingPct(String(offered))
   }, [ownerPctNum])
 
   const ownerSharesCount = Math.floor(totalSharesNum * ownerPctNum / 100)
   const offeredSharesCount = Math.max(0, totalSharesNum - ownerSharesCount)
 
-  const addDocument = () => {
-    if (!newDocName.trim() || !newDocUrl.trim()) {
-      showError("اكتب اسم الوثيقة ورابطها")
+  // Phase 10.90 — uploads a real file (PDF / DOCX / ZIP / image) and
+  // stores it as a base64 data URL on the document record. No external
+  // hosting required — the file travels with the project payload and
+  // the read-only details view renders it as a download link.
+  const handleDocumentUpload = (file: File) => {
+    if (!file) return
+    // Soft cap at 5 MB so the form payload doesn't explode. The DB
+    // column is TEXT (no hard limit) but anything larger should go
+    // through Supabase Storage in a future iteration.
+    const MAX_BYTES = 5 * 1024 * 1024
+    if (file.size > MAX_BYTES) {
+      showError("الحد الأقصى لكل وثيقة 5MB")
       return
     }
-    setDocuments([...documents, { name: newDocName.trim(), url: newDocUrl.trim() }])
-    setNewDocName("")
-    setNewDocUrl("")
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const url = ev.target?.result
+      if (typeof url !== "string") return
+      setDocuments((prev) => [
+        ...prev,
+        {
+          name: file.name,
+          url,
+          size: file.size,
+          mime_type: file.type || undefined,
+        },
+      ])
+    }
+    reader.onerror = () => showError("فشل قراءة الملف")
+    reader.readAsDataURL(file)
   }
   const removeDocument = (index: number) => {
     setDocuments(documents.filter((_, i) => i !== index))
   }
 
+  // Phase 10.90 — offering_start_date is auto-set on publish, and the
+  // end date / reserve fields are gone. The only date-side requirement
+  // left is "if duration is fixed-months, the months value must be > 0".
   const isValid =
     name.trim().length >= 3 &&
-    // companyId is now OPTIONAL for projects — empty string means
-    // "بلا (مشروع مباشر)" and is allowed.
+    // companyId is OPTIONAL — empty = "بلا (مشروع مباشر)".
     shortDesc.trim().length >= 20 &&
     sharePriceNum > 0 &&
     totalSharesNum > 0 &&
     Math.abs(totalPct - 100) < 0.01 &&
-    !!offeringStart &&
-    !!offeringEnd &&
+    (durationOpen || (Number(durationMonths) || 0) > 0) &&
     !!city.trim()
 
   const titlePrefix = isEdit
@@ -381,10 +429,11 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
     logo_url: logoUrl, cover_url: coverUrl,
     city, address, coords,
     share_price: sharePrice, total_shares: totalShares,
-    offering_pct: offeringPct, ambassador_pct: ambassadorPct, reserve_pct: reservePct,
+    offering_pct: offeringPct,
     offering_start: offeringStart, offering_end: offeringEnd,
     return_min: returnMin, return_max: returnMax,
-    duration_months: durationMonths, risk_level: riskLevel,
+    duration_months: durationMonths, duration_open: durationOpen,
+    risk_level: riskLevel,
     entity_type: entityTypeField, build_status: buildStatus,
     quality, revenue, project_value: projectValue,
     listing_percent: listingPercent, capital_needed: capitalNeeded,
@@ -478,19 +527,50 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
         project_type: sector,
         share_price: Number(sharePrice) || 0,
         total_shares: Number(totalShares) || 0,
-        // Wallet split now includes owner% — but the RPC still takes
-        // only the 3 wallet percentages (offering/ambassador/reserve).
-        // We pass the 3 sub-percentages directly; owner% lives outside
-        // the wallet system as a top-level "kept by owner" tag.
+        // Phase 10.86: ambassador wallet bucket retired. We now pass
+        // ambassador_percentage=0 so the auto-created ambassador
+        // wallet stays empty — the 2% ambassador grant is paid at
+        // runtime from the offering wallet on a per-investor first-
+        // investment basis (see migration 20260507 follow-up).
         offering_percentage: Number(offeringPct) || 30,
-        ambassador_percentage: Number(ambassadorPct) || 2,
-        reserve_percentage: Number(reservePct) || 8,
+        ambassador_percentage: 0,
+        // Phase 10.90: reserve bucket retired in the form. We pass 0
+        // so the auto-created reserve wallet stays empty.
+        reserve_percentage: 0,
         location_city: city.trim() || undefined,
-        offering_start_date: offeringStart || undefined,
-        offering_end_date: offeringEnd || undefined,
+        // Phase 10.90: offering_start_date is the publish date by
+        // default (admin no longer enters a start date). Empty input
+        // → auto today's ISO date.
+        offering_start_date:
+          (offeringStart && offeringStart.trim()) ||
+          new Date().toISOString().slice(0, 10),
+        // offering_end_date retired — no input in §6.
+        offering_end_date: undefined,
         // companyId === "" means "بلا (مشروع مباشر)" → null in DB
         company_id: companyId.trim() ? companyId : null,
         status: "active",
+        // Phase 10.87: form collects MONTHLY % values; we multiply by
+        // 12 so the DB receives ANNUAL figures (matches finance.ts +
+        // existing project-detail rendering conventions).
+        expected_return_min: (Number(returnMin) || 0) * 12,
+        expected_return_max: (Number(returnMax) || 0) * 12,
+        // Phase 10.88: persist brand assets so the admin details view
+        // and the app project page can show the real logo instead of
+        // the generic sector emoji.
+        logo_url: logoUrl.trim() || undefined,
+        cover_url: coverUrl.trim() || undefined,
+        // Phase 10.90: full-form payload
+        duration_open: durationOpen,
+        duration_months: durationOpen ? undefined : Number(durationMonths) || undefined,
+        documents: documents,
+        gallery_images: galleryImages,
+        owner_name: ownerName?.trim() || undefined,
+        owner_phone: ownerPhone?.trim() || undefined,
+        owner_email: ownerEmail?.trim() || undefined,
+        detailed_address: detailedAddress?.trim() || undefined,
+        profit_source: profitSource?.trim() || undefined,
+        distribution_type: distributionType,
+        risk_level: riskLevel,
       })
       if (!result.success) {
         const map: Record<string, string> = {
@@ -506,7 +586,7 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
         showError(map[result.reason ?? ""] ?? `فشل إنشاء المشروع${result.error ? ": " + result.error : ""}`)
         return
       }
-      showSuccess(`✅ تم نشر "${name}" + إنشاء 3 محافظ (عرض/سفير/احتياطي)`)
+      showSuccess(`✅ تم نشر "${name}" + إنشاء محافظ المشروع (عرض/احتياطي)`)
       clearCurrentDraft(draftKind)
       onDone?.()
       return
@@ -805,6 +885,77 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
               </button>
             )}
           </div>
+
+          {/* Phase 10.90 — Multi-image gallery (project work / team /
+              ops). Each image is base64-encoded and travels with the
+              project payload — shown in the project-details carousel. */}
+          <div className="lg:col-span-2 mt-4">
+            <label className="text-xs text-neutral-400 mb-1.5 block flex items-center gap-1.5">
+              <span>معرض الصور</span>
+              <span className="text-[9px] text-neutral-500">
+                صور عمل، صور الإدارة، صور المنشأة — تظهر في معرض صفحة المشروع
+              </span>
+            </label>
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = e.target.files
+                if (!files || files.length === 0) return
+                const MAX_BYTES = 3 * 1024 * 1024
+                Array.from(files).forEach((file) => {
+                  if (file.size > MAX_BYTES) {
+                    showError(`${file.name}: أكبر من 3MB`)
+                    return
+                  }
+                  const reader = new FileReader()
+                  reader.onload = (ev) => {
+                    const url = ev.target?.result
+                    if (typeof url === "string") {
+                      setGalleryImages((prev) => [...prev, url])
+                    }
+                  }
+                  reader.readAsDataURL(file)
+                })
+                if (e.target) e.target.value = ""
+              }}
+            />
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-2">
+              {galleryImages.map((src, i) => (
+                <div
+                  key={i}
+                  className="relative bg-white/[0.04] border border-white/[0.08] rounded-lg overflow-hidden aspect-square group"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt={`صورة ${i + 1}`} className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setGalleryImages(galleryImages.filter((_, idx) => idx !== i))
+                    }
+                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label="حذف"
+                  >
+                    <X className="w-3.5 h-3.5" strokeWidth={2.5} />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => galleryInputRef.current?.click()}
+                className="aspect-square bg-white/[0.04] border-2 border-dashed border-white/[0.15] hover:border-white/[0.25] rounded-lg flex flex-col items-center justify-center gap-1.5 transition-colors"
+              >
+                <Plus className="w-6 h-6 text-neutral-400" strokeWidth={1.5} />
+                <span className="text-[10px] text-neutral-500">إضافة صورة</span>
+              </button>
+            </div>
+            <div className="text-[10px] text-neutral-500">
+              يمكنك رفع عدّة صور دفعة واحدة — حدّ أقصى 3MB لكل صورة
+            </div>
+          </div>
         </div>
 
         {/* §3 Location */}
@@ -969,9 +1120,19 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
           </div>
         </div>
 
-        {/* §5 Wallet split — 4 components: owner + offering + ambassador + reserve = 100% */}
+        {/* §5 Wallet split — 3 components: owner + offering + reserve = 100%
+            Phase 10.86: removed dedicated "ambassador" bucket. The 2%
+            ambassador commission is now a runtime per-investor reward
+            taken from the offering wallet on first investment via a
+            referral link, not a pre-allocated wallet. */}
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5">
           <div className="text-sm font-bold text-white mb-4">5️⃣ توزيع المحافظ (المجموع 100%)</div>
+          <div className="bg-purple-400/[0.04] border border-purple-400/[0.15] rounded-lg p-2.5 text-[11px] text-purple-300 mb-3 leading-relaxed">
+            💡 السفير لم يعد يأخذ محفظة مسبقة. عند استثمار مستخدم جديد عبر
+            رابط الإحالة يحصل السفير تلقائياً على <b className="text-white">2%</b> من
+            قيمة استثمار المستخدم (حصصاً من محفظة العرض)، لمرة واحدة فقط
+            لكل مستخدم جديد.
+          </div>
           <div className="space-y-3">
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block flex items-center gap-1.5">
@@ -997,30 +1158,6 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
               <input
                 type="number" value={offeringPct}
                 onChange={(e) => !isEdit && setOfferingPct(e.target.value)}
-                readOnly={isEdit} disabled={isEdit}
-                className={cn(
-                  "w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20",
-                  isEdit && "opacity-60 cursor-not-allowed"
-                )}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">سفير (%)</label>
-              <input
-                type="number" value={ambassadorPct}
-                onChange={(e) => !isEdit && setAmbassadorPct(e.target.value)}
-                readOnly={isEdit} disabled={isEdit}
-                className={cn(
-                  "w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20",
-                  isEdit && "opacity-60 cursor-not-allowed"
-                )}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">احتياطي (%)</label>
-              <input
-                type="number" value={reservePct}
-                onChange={(e) => !isEdit && setReservePct(e.target.value)}
                 readOnly={isEdit} disabled={isEdit}
                 className={cn(
                   "w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20",
@@ -1056,22 +1193,68 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
           </div>
         </div>
 
-        {/* §6 Dates */}
+        {/* §6 Dates — Phase 10.90:
+              • offering_start_date is set to today on publish (no input)
+              • offering_end_date retired
+              • duration is either مفتوحة (open-ended) or محددة بالأشهر */}
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5">
-          <div className="text-sm font-bold text-white mb-4">6️⃣ تواريخ الطرح</div>
+          <div className="text-sm font-bold text-white mb-4">6️⃣ مدّة المشروع</div>
+          <div className="bg-blue-400/[0.04] border border-blue-400/[0.15] rounded-lg p-2.5 text-[11px] text-blue-300 mb-3 leading-relaxed">
+            💡 تاريخ بدء الطرح يُسجَّل تلقائياً يوم نشر المشروع — لا حاجة لإدخاله يدوياً.
+          </div>
           <div className="space-y-3">
+            {/* Open vs fixed-months toggle */}
             <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">بدء الطرح *</label>
-              <input type="date" value={offeringStart} onChange={(e) => setOfferingStart(e.target.value)} className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20" />
+              <label className="text-xs text-neutral-400 mb-2 block">
+                {isProject ? "مدّة المشروع" : "مدّة الطرح"}
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDurationOpen(true)}
+                  className={cn(
+                    "py-2.5 rounded-lg text-xs font-bold border transition-colors",
+                    durationOpen
+                      ? "bg-purple-400/[0.15] border-purple-400/[0.4] text-purple-400"
+                      : "bg-white/[0.04] border-white/[0.08] text-neutral-400"
+                  )}
+                >
+                  ♾️ مدّة مفتوحة
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDurationOpen(false)}
+                  className={cn(
+                    "py-2.5 rounded-lg text-xs font-bold border transition-colors",
+                    !durationOpen
+                      ? "bg-blue-400/[0.15] border-blue-400/[0.4] text-blue-400"
+                      : "bg-white/[0.04] border-white/[0.08] text-neutral-400"
+                  )}
+                >
+                  📅 محدّدة بالأشهر
+                </button>
+              </div>
             </div>
-            <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">انتهاء الطرح *</label>
-              <input type="date" value={offeringEnd} onChange={(e) => setOfferingEnd(e.target.value)} className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20" />
-            </div>
-            <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">{isProject ? "مدّة المشروع (شهور)" : "مدّة الطرح (شهور)"}</label>
-              <input type="number" value={durationMonths} onChange={(e) => setDurationMonths(e.target.value)} className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20" />
-            </div>
+            {!durationOpen && (
+              <div>
+                <label className="text-xs text-neutral-400 mb-1.5 block">عدد الأشهر *</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={durationMonths}
+                  onChange={(e) => setDurationMonths(e.target.value)}
+                  placeholder="مثلاً: 36"
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+                />
+              </div>
+            )}
+            {durationOpen && (
+              <div className="bg-purple-400/[0.04] border border-purple-400/[0.15] rounded-lg p-3 text-[11px] text-purple-300 leading-relaxed">
+                ♾️ المشروع بمدّة مفتوحة — يستمرّ حتى يقرّر المالك إنهاءه. لا تاريخ
+                انتهاء مُسبق.
+              </div>
+            )}
           </div>
         </div>
 
@@ -1135,19 +1318,51 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
             الملكية انتقلت إلى §5، وحقل listingPercent تم استبداله
             بحقل ownerPercent في توزيع المحافظ. */}
 
-        {/* §7 Returns + risk */}
+        {/* §7 Returns + risk
+            Phase 10.87 — the input is the MONTHLY return; the annual
+            return is derived dynamically (× 12) below. */}
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5">
           <div className="text-sm font-bold text-white mb-4">7️⃣ العائد والمخاطر</div>
           <div className="grid grid-cols-2 gap-2 mb-3">
             <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">عائد أدنى (%)</label>
-              <input type="number" value={returnMin} onChange={(e) => setReturnMin(e.target.value)} className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-3 text-sm text-white font-mono outline-none focus:border-white/20" />
+              <label className="text-xs text-neutral-400 mb-1.5 block">عائد شهري أدنى (%)</label>
+              <input
+                type="number" step="0.01" value={returnMin}
+                onChange={(e) => setReturnMin(e.target.value)}
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+              />
             </div>
             <div>
-              <label className="text-xs text-neutral-400 mb-1.5 block">عائد أقصى (%)</label>
-              <input type="number" value={returnMax} onChange={(e) => setReturnMax(e.target.value)} className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-3 text-sm text-white font-mono outline-none focus:border-white/20" />
+              <label className="text-xs text-neutral-400 mb-1.5 block">عائد شهري أقصى (%)</label>
+              <input
+                type="number" step="0.01" value={returnMax}
+                onChange={(e) => setReturnMax(e.target.value)}
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-3 text-sm text-white font-mono outline-none focus:border-white/20"
+              />
             </div>
           </div>
+          {/* Dynamic annual return (read-only, computed live × 12) */}
+          {(() => {
+            const mn = Number(returnMin) || 0
+            const mx = Number(returnMax) || 0
+            const annualMin = (mn * 12)
+            const annualMax = (mx * 12)
+            const fmt = (v: number) =>
+              Number.isInteger(v) ? String(v) : v.toFixed(2)
+            return (
+              <div className="bg-green-400/[0.05] border border-green-400/[0.2] rounded-xl p-3 mb-3">
+                <div className="flex justify-between items-center">
+                  <div className="text-[11px] text-neutral-400">
+                    العائد السنوي المحسوب
+                    <span className="text-[9px] text-neutral-500 mr-1.5">(تلقائي × 12 شهر)</span>
+                  </div>
+                  <div className="text-sm font-bold text-green-400 font-mono">
+                    {fmt(annualMin)}% — {fmt(annualMax)}%
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
           <label className="text-xs text-neutral-400 mb-1.5 block">مستوى المخاطر</label>
           <div className="grid grid-cols-3 gap-2">
             {RISK_OPTIONS.map((r) => (
@@ -1243,53 +1458,73 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
           </div>
         </div>
 
-        {/* §1️⃣2️⃣ Documents (Media gallery already in §2) */}
+        {/* §1️⃣2️⃣ Documents — Phase 10.90: file uploads, NOT URLs.
+            Each picked file is base64-encoded and stored on the
+            project payload so admins don't need external hosting. */}
         <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 lg:col-span-2">
           <div className="text-sm font-bold text-white mb-4">1️⃣2️⃣ الأوراق الرسمية والمستندات</div>
 
           {/* Existing documents list */}
           {documents.length > 0 && (
             <div className="space-y-2 mb-3">
-              {documents.map((doc, i) => (
-                <div key={i} className="bg-white/[0.04] border border-white/[0.08] rounded-lg p-2.5 flex items-center gap-3">
-                  <FileText className="w-4 h-4 text-blue-400 flex-shrink-0" strokeWidth={1.5} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-white font-bold truncate">{doc.name}</div>
-                    <div className="text-[10px] text-neutral-500 truncate" dir="ltr">{doc.url}</div>
+              {documents.map((doc, i) => {
+                const isUpload = doc.url?.startsWith("data:")
+                const sizeKb = doc.size ? (doc.size / 1024).toFixed(1) : null
+                return (
+                  <div key={i} className="bg-white/[0.04] border border-white/[0.08] rounded-lg p-2.5 flex items-center gap-3">
+                    <FileText className="w-4 h-4 text-blue-400 flex-shrink-0" strokeWidth={1.5} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-white font-bold truncate">{doc.name}</div>
+                      <div className="text-[10px] text-neutral-500 flex items-center gap-2">
+                        {isUpload ? (
+                          <span className="bg-green-400/[0.1] text-green-400 px-1.5 py-0.5 rounded text-[9px]">
+                            ✓ مرفوع
+                          </span>
+                        ) : (
+                          <span className="bg-neutral-400/[0.1] text-neutral-400 px-1.5 py-0.5 rounded text-[9px]">
+                            رابط خارجي
+                          </span>
+                        )}
+                        {doc.mime_type && <span>{doc.mime_type}</span>}
+                        {sizeKb && <span>{sizeKb} KB</span>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeDocument(i)}
+                      className="text-red-400 hover:text-red-300 flex-shrink-0"
+                      aria-label="حذف"
+                    >
+                      <X className="w-4 h-4" strokeWidth={2} />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => removeDocument(i)}
-                    className="text-red-400 hover:text-red-300 flex-shrink-0"
-                    aria-label="حذف"
-                  >
-                    <X className="w-4 h-4" strokeWidth={2} />
-                  </button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 
-          {/* Add new document */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr,2fr,auto] gap-2">
-            <input
-              type="text" value={newDocName} onChange={(e) => setNewDocName(e.target.value)}
-              placeholder="اسم الوثيقة (مثلاً: عقد التأسيس)"
-              className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
-            />
-            <input
-              type="text" value={newDocUrl} onChange={(e) => setNewDocUrl(e.target.value)}
-              placeholder="https://example.com/document.pdf"
-              dir="ltr"
-              className="bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 font-mono"
-            />
-            <button
-              onClick={addDocument}
-              className="bg-blue-500/[0.15] border border-blue-500/30 hover:bg-blue-500/[0.2] text-blue-400 rounded-xl px-4 py-2.5 text-xs font-bold flex items-center gap-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
-              إضافة
-            </button>
-          </div>
+          {/* Upload button (file picker) */}
+          <input
+            ref={docInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.rar,.png,.jpg,.jpeg,.txt"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) handleDocumentUpload(file)
+              if (e.target) e.target.value = ""  // allow re-uploading same file
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => docInputRef.current?.click()}
+            className="w-full bg-white/[0.04] border-2 border-dashed border-white/[0.15] hover:border-white/[0.25] rounded-xl p-5 transition-colors flex flex-col items-center gap-2"
+          >
+            <Upload className="w-6 h-6 text-blue-400" strokeWidth={1.5} />
+            <span className="text-xs text-white font-bold">رفع وثيقة</span>
+            <span className="text-[10px] text-neutral-500">
+              PDF / Word / Excel / ZIP / صور — حدّ أقصى 5MB لكل ملف
+            </span>
+          </button>
 
           <div className="text-[10px] text-neutral-500 mt-2 leading-relaxed">
             مثال: عقد التأسيس، الترخيص التجاري، شهادة الملكية، الميزانية الأخيرة...

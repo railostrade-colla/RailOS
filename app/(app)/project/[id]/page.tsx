@@ -444,17 +444,40 @@ export default function ProjectDetailPage() {
 
               <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-3">
                 <div className="text-sm font-bold text-white mb-3">العوائد المتوقعة</div>
+                {/* Phase 10.87 — Monthly + annual side-by-side cards.
+                    DB stores annual; monthly = annual / 12. */}
+                {(() => {
+                  const annualMin = project.return_min ?? 0
+                  const annualMax = project.return_max ?? 0
+                  const monthlyMin = annualMin / 12
+                  const monthlyMax = annualMax / 12
+                  const fmt = (v: number) =>
+                    Number.isInteger(v) ? String(v) : v.toFixed(2)
+                  return (
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                      <div className="bg-green-400/[0.06] border border-green-400/[0.2] rounded-xl p-3 text-center">
+                        <div className="text-[10px] text-neutral-400 mb-1">العائد الشهري المتوقع</div>
+                        <div className="text-base font-bold text-green-400 font-mono">
+                          {fmt(monthlyMin)}% — {fmt(monthlyMax)}%
+                        </div>
+                      </div>
+                      <div className="bg-emerald-400/[0.06] border border-emerald-400/[0.2] rounded-xl p-3 text-center">
+                        <div className="text-[10px] text-neutral-400 mb-1">العائد السنوي المتوقع</div>
+                        <div className="text-base font-bold text-emerald-400 font-mono">
+                          {fmt(annualMin)}% — {fmt(annualMax)}%
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
                 <div className="divide-y divide-white/[0.04]">
                   {[
-                    { label: "العائد السنوي المتوقع", value: project.return_min + "% - " + project.return_max + "%" },
-                    // Phase 10.82 — added monthly return = annual / 12
                     {
-                      label: "العائد الشهري المتوقع",
+                      label: "مستوى المخاطر",
                       value:
-                        ((project.return_min ?? 0) / 12).toFixed(2) +
-                        "% - " +
-                        ((project.return_max ?? 0) / 12).toFixed(2) +
-                        "%",
+                        project.risk_level === "low" ? "🟢 منخفض" :
+                        project.risk_level === "medium" ? "🟡 متوسط" :
+                        project.risk_level === "high" ? "🔴 مرتفع" : "—",
                     },
                     { label: "آلية التوزيع", value: project.distribution_type === "monthly" ? "شهري" : project.distribution_type === "quarterly" ? "ربع سنوي" : project.distribution_type === "semi_annual" ? "نصف سنوي" : "سنوي" },
                     { label: "مصدر العوائد", value: project.profit_source || "أرباح التشغيل" },
@@ -604,24 +627,39 @@ export default function ProjectDetailPage() {
                 </div>
               )}
 
-              {/* ═══ Documents (admin form data) ═══ */}
+              {/* ═══ Documents (Phase 10.90 — uploaded files OR external links) ═══ */}
               {project.documents && project.documents.length > 0 && (
                 <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-3">
                   <div className="text-sm font-bold text-white mb-3">📁 الأوراق الرسمية</div>
                   <div className="space-y-2">
-                    {project.documents.map((doc, i) => (
-                      <a
-                        key={i}
-                        href={doc.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2.5 bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.06] rounded-lg p-2.5 transition-colors"
-                      >
-                        <span className="text-blue-400">📄</span>
-                        <span className="text-xs text-white flex-1 truncate">{doc.name}</span>
-                        <span className="text-[10px] text-blue-400">تنزيل ←</span>
-                      </a>
-                    ))}
+                    {project.documents.map((doc, i) => {
+                      const isUpload = doc.url?.startsWith("data:")
+                      const sizeKb =
+                        (doc as { size?: number }).size != null
+                          ? ((doc as { size?: number }).size! / 1024).toFixed(1)
+                          : null
+                      return (
+                        <a
+                          key={i}
+                          href={doc.url}
+                          download={isUpload ? doc.name : undefined}
+                          target={isUpload ? undefined : "_blank"}
+                          rel={isUpload ? undefined : "noopener noreferrer"}
+                          className="flex items-center gap-2.5 bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.06] rounded-lg p-2.5 transition-colors"
+                        >
+                          <span className="text-blue-400">📄</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs text-white truncate">{doc.name}</div>
+                            {sizeKb && (
+                              <div className="text-[10px] text-neutral-500">{sizeKb} KB</div>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-blue-400">
+                            {isUpload ? "↓ تنزيل" : "↗ فتح"}
+                          </span>
+                        </a>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -725,25 +763,50 @@ export default function ProjectDetailPage() {
             </div>
           )}
 
-          {/* Gallery Tab */}
-          {tab === "gallery" && (
-            <div className="mb-3">
-              <div className="grid grid-cols-2 gap-2">
-                {galleryEmojis.map((img, i) => (
-                  <div
-                    key={i}
-                    className="aspect-[4/3] bg-white/[0.05] border border-white/[0.08] rounded-2xl flex items-center justify-center text-5xl cursor-pointer hover:bg-white/[0.07] transition-colors"
-                  >
-                    {img}
+          {/* Gallery Tab — Phase 10.90: real gallery_images from admin form */}
+          {tab === "gallery" && (() => {
+            const realImages =
+              project.gallery_images ??
+              project.project_images ??
+              project.company_images ??
+              []
+            if (realImages.length === 0) {
+              return (
+                <div className="mb-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    {galleryEmojis.map((img, i) => (
+                      <div
+                        key={i}
+                        className="aspect-[4/3] bg-white/[0.05] border border-white/[0.08] rounded-2xl flex items-center justify-center text-5xl"
+                      >
+                        {img}
+                      </div>
+                    ))}
                   </div>
+                  <div className="text-center mt-3 text-[11px] text-neutral-500">
+                    <ImageIcon className="w-4 h-4 mx-auto mb-1.5 opacity-40" />
+                    لا توجد صور بعد — أضِفها من لوحة التحكم
+                  </div>
+                </div>
+              )
+            }
+            return (
+              <div className="mb-3 grid grid-cols-2 gap-2">
+                {realImages.map((src, i) => (
+                  <a
+                    key={i}
+                    href={src}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="aspect-[4/3] bg-white/[0.05] border border-white/[0.08] rounded-2xl overflow-hidden block hover:border-white/[0.2] transition-colors"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={src} alt={`صورة ${i + 1}`} className="w-full h-full object-cover" />
+                  </a>
                 ))}
               </div>
-              <div className="text-center mt-3 text-[11px] text-neutral-500">
-                <ImageIcon className="w-4 h-4 mx-auto mb-1.5 opacity-40" />
-                سيتم رفع الصور الحقيقية من لوحة التحكم
-              </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* History Tab */}
           {tab === "history" && (

@@ -871,6 +871,81 @@ export async function adminReleaseSharesToMarket(
   }
 }
 
+// ─── Add shares to offering (Phase 10.85) ──────────────────────
+//
+// Companion to adminReleaseSharesToMarket but with different semantics:
+//   • release_shares_to_market: moves shares between TWO wallets
+//                                (reserve → offering); project total
+//                                stays constant.
+//   • add_shares_to_offering:   takes shares from the company-held
+//                                pool (`projects.total_shares`) and
+//                                injects them into the offering
+//                                wallet — the company's ownership
+//                                percentage drops accordingly.
+//
+// This is the flow wired to the new "➕ إضافة حصص للطرح" button in
+// ProjectWalletsPanel; see migration 20260507_phase10_add_shares_to_offering.
+
+export interface AddSharesToOfferingResult {
+  success: boolean
+  reason?: string
+  error?: string
+  amount?: number
+  available?: number
+  company_total_after?: number
+  offering_total_after?: number
+  offering_available_after?: number
+}
+
+/** Take N shares from the company-held pool and inject them into the
+ *  project's offering wallet. Decrements `projects.total_shares` and
+ *  increments offering.total_shares + offering.available_shares. */
+export async function adminAddSharesToOffering(
+  projectId: string,
+  amount: number,
+  reason?: string,
+): Promise<AddSharesToOfferingResult> {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { success: false, reason: "invalid_amount" }
+  }
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("admin_add_shares_to_offering", {
+      p_project_id: projectId,
+      p_amount: amount,
+      p_reason: reason ?? null,
+    })
+    if (error) {
+      const code = error.code ?? ""
+      const msg = error.message ?? ""
+      if (
+        code === "42883" ||
+        code === "42P01" ||
+        /function .* does not exist/i.test(msg)
+      ) {
+        return { success: false, reason: "missing_table", error: msg }
+      }
+      if (code === "42501") return { success: false, reason: "rls", error: msg }
+      return { success: false, reason: "unknown", error: msg }
+    }
+    const result = (data ?? {}) as AddSharesToOfferingResult & { error?: string }
+    if (!result.success) {
+      return {
+        success: false,
+        reason: result.reason ?? result.error ?? "unknown",
+        available: result.available,
+      }
+    }
+    return result
+  } catch (err) {
+    return {
+      success: false,
+      reason: "unknown",
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
 // ─── Admin role checks (Phase 10.12) ────────────────────────────
 
 /** Calls the `is_admin()` SQL helper. Returns false on any failure. */

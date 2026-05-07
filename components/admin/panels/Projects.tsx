@@ -83,7 +83,6 @@ function fullRowToInitialData(
     share_price:   numStr(get<number | string>("share_price") ?? fallbackRow.share_price),
     total_shares:  numStr(get<number | string>("total_shares") ?? fallbackRow.total_shares),
     offering_pct:  numStr(get<number | string>("offering_percentage") ?? "90"),
-    ambassador_pct:numStr(get<number | string>("ambassador_percentage") ?? "2"),
     reserve_pct:   numStr(get<number | string>("reserve_percentage") ?? "8"),
     offering_start:get<string>("offering_start_date") ?? "",
     offering_end:  get<string>("offering_end_date") ?? "",
@@ -108,7 +107,6 @@ function rowToInitialData(row: EntityRow): EntityFormData {
     share_price:   String(row.share_price || ""),
     total_shares:  String(row.total_shares || ""),
     offering_pct:  "90",
-    ambassador_pct:"2",
     reserve_pct:   "8",
   }
 }

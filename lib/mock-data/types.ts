@@ -53,7 +53,13 @@ export type ProjectDistributionType = "monthly" | "quarterly" | "semi_annual" | 
 
 export interface ProjectDocument {
   name: string
+  /** Either an http(s) link OR a `data:<mime>;base64,...` payload when
+   *  the admin uploaded the file directly (Phase 10.90). */
   url: string
+  /** File size in bytes. Optional — only set for uploaded files. */
+  size?: number
+  /** MIME type. Optional — only set for uploaded files. */
+  mime_type?: string
 }
 
 export interface Project {
@@ -107,6 +113,10 @@ export interface Project {
   cover_image?: string
   project_images?: string[]
   company_images?: string[]
+  /** Phase 10.90 — canonical multi-image gallery field stored on the
+   *  projects row. Old `project_images` / `company_images` are kept
+   *  as aliases for backward compatibility. */
+  gallery_images?: string[]
   documents?: ProjectDocument[]
 
   // ─── Card-display extras (market / cards) ───
