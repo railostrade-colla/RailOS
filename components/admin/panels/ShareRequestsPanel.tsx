@@ -372,22 +372,45 @@ export function ShareRequestsPanel() {
             </div>
 
             <div className="p-5 space-y-4">
-              {/* Proof image */}
-              {selected.payment_proof?.proof_image_url && (
-                <button
-                  onClick={() => setZoomImage(selected.payment_proof!.proof_image_url)}
-                  className="block w-full bg-black border border-white/[0.06] rounded-xl overflow-hidden relative group"
-                >
-                  <img
-                    src={selected.payment_proof.proof_image_url}
-                    alt="proof"
-                    className="w-full h-auto max-h-80 object-contain mx-auto"
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100">
-                    <ZoomIn className="w-6 h-6 text-white" />
+              {/* Phase 11.02 — Proof image is ALWAYS rendered as a section.
+                  When present → image with zoom-on-click.
+                  When missing → friendly placeholder (so admin can see at
+                  a glance that the buyer has not uploaded a proof yet). */}
+              <div>
+                <div className="text-[11px] font-bold text-neutral-400 mb-2 flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  صورة إثبات الدفع
+                </div>
+                {selected.payment_proof?.proof_image_url ? (
+                  <button
+                    onClick={() => setZoomImage(selected.payment_proof!.proof_image_url)}
+                    className="block w-full bg-black border border-white/[0.06] rounded-xl overflow-hidden relative group"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={selected.payment_proof.proof_image_url}
+                      alt="إثبات الدفع"
+                      className="w-full h-auto max-h-80 object-contain mx-auto"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100">
+                      <ZoomIn className="w-6 h-6 text-white" />
+                    </div>
+                    <div className="absolute top-2 right-2 bg-green-400/[0.15] border border-green-400/[0.3] rounded-md px-2 py-0.5">
+                      <span className="text-[10px] text-green-400 font-bold">✓ تم الرفع</span>
+                    </div>
+                  </button>
+                ) : (
+                  <div className="bg-yellow-400/[0.04] border-2 border-dashed border-yellow-400/[0.2] rounded-xl p-6 text-center">
+                    <ImageIcon className="w-8 h-8 text-yellow-400/60 mx-auto mb-2" strokeWidth={1.5} />
+                    <div className="text-xs text-yellow-300 font-bold mb-1">
+                      لم يرفع المشتري صورة إثبات الدفع بعد
+                    </div>
+                    <div className="text-[10px] text-neutral-500 leading-relaxed">
+                      انتظر حتى يقوم المشتري بإكمال رفع الصورة، أو راجع الصفقة لمعرفة السبب.
+                    </div>
                   </div>
-                </button>
-              )}
+                )}
+              </div>
 
               {/* Details */}
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 space-y-1.5 text-xs">

@@ -117,9 +117,11 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
       // Phase 10.97 — submit the payment proof together with the deal
       // so the admin sees both at once. proofDataUrl is a base64 data
       // URL captured inside this modal via PaymentInstructionsBlock.
+      // Phase 11.02 — surface proof-submission errors (was a silent
+      // try/catch; now logs + shows a warning toast so admin/user can see).
       if (dbResult.deal_id && proofDataUrl) {
         try {
-          await submitPaymentProof({
+          const proofResult = await submitPaymentProof({
             deal_id: dbResult.deal_id,
             payment_method: paymentMethod,
             amount_paid: total,
@@ -127,8 +129,25 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
             transaction_reference: null,
             notes: null,
           })
-        } catch {
-          // Non-fatal: deal is created; proof can be re-uploaded from /deals/:id
+          if (!proofResult.success) {
+            // eslint-disable-next-line no-console
+            console.warn("[direct-buy] proof upload failed:", proofResult)
+            const proofErrorMap: Record<string, string> = {
+              invalid_payment_method: "طريقة الدفع غير مدعومة في DB — طبّق Migration 11.02",
+              insert_failed: "تعذّر حفظ صورة الإثبات — قد تكون كبيرة جداً (>1MB)",
+              proof_required: "صورة الإثبات مطلوبة",
+              not_buyer: "الصلاحيات لا تسمح",
+              invalid_status: "حالة الصفقة لا تسمح برفع إثبات",
+            }
+            showError(
+              "✅ تم إنشاء الطلب لكن فشل رفع الإثبات: " +
+                (proofErrorMap[proofResult.error ?? ""] ?? proofResult.error ?? "خطأ غير معروف")
+            )
+          }
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error("[direct-buy] proof upload threw:", err)
+          showError("تم إنشاء الطلب لكن تعذّر رفع الإثبات — حاول رفعه من صفحة الصفقة")
         }
       }
 
