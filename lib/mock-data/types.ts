@@ -114,7 +114,11 @@ export interface Project {
 
   // ─── Admin form: media + documents ───
   logo?: string
+  /** Phase 10.99b — canonical logo URL stored on projects.logo_url.
+   *  Cards/details views prefer this; `logo` kept as legacy alias. */
+  logo_url?: string
   cover_image?: string
+  cover_url?: string
   project_images?: string[]
   company_images?: string[]
   /** Phase 10.90 — canonical multi-image gallery field stored on the

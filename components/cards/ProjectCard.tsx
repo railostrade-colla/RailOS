@@ -56,6 +56,10 @@ export interface ProjectCardData {
   distribution_type?: "monthly" | "quarterly" | "semi_annual" | "annual"
   capital_needed?: number
   capital_raised?: number
+  /** Phase 10.99b — uploaded brand assets. When `logo_url` exists, the
+   *  card renders the real logo image instead of the sector emoji. */
+  logo_url?: string
+  logo?: string
 }
 
 interface ProjectCardProps {
@@ -144,9 +148,27 @@ export function ProjectCard({ project, variant = "full" }: ProjectCardProps) {
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className={cn("w-11 h-11 rounded-xl border flex items-center justify-center text-xl flex-shrink-0", c.bg, c.border)}>
-            {sectorIcon(project.sector)}
-          </div>
+          {/* Phase 10.99b — show the uploaded project logo when available,
+              otherwise fall back to the sector emoji on a coloured tile. */}
+          {(project.logo_url || project.logo) ? (
+            <div className="w-11 h-11 rounded-xl border border-white/[0.1] overflow-hidden bg-white/[0.04] flex-shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={project.logo_url || project.logo}
+                alt={project.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  // If the URL is broken, hide the img so the parent
+                  // background colour shows through cleanly.
+                  ;(e.currentTarget as HTMLImageElement).style.display = "none"
+                }}
+              />
+            </div>
+          ) : (
+            <div className={cn("w-11 h-11 rounded-xl border flex items-center justify-center text-xl flex-shrink-0", c.bg, c.border)}>
+              {sectorIcon(project.sector)}
+            </div>
+          )}
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 mb-0.5">
               <span className="text-sm font-bold text-white truncate">{project.name}</span>

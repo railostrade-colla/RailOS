@@ -115,6 +115,13 @@ function dbToProject(row: DBProject): Project {
     distribution_type: distributionType,
     profit_source: row.profit_source || undefined,
     symbol: row.symbol || undefined,
+    // Phase 10.99b — surface the brand assets so the discover cards
+    // and project details page show the real uploaded logo instead
+    // of the sector emoji.
+    logo_url: row.logo_url || undefined,
+    logo: row.logo_url || undefined,           // legacy alias
+    cover_url: row.cover_url || row.cover_image_url || undefined,
+    cover_image: row.cover_url || row.cover_image_url || undefined,  // legacy alias
   }
 }
 
