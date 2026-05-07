@@ -4,9 +4,10 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { X, ShoppingCart, AlertTriangle, Loader2 } from "lucide-react"
 import { useRealtime } from "@/lib/realtime/RealtimeProvider"
-import { submitDirectBuyRequest } from "@/lib/data/direct-buy"
+import { submitDirectBuyRequest, submitPaymentProof } from "@/lib/data/direct-buy"
 import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
+import { PaymentInstructionsBlock } from "@/components/payment/PaymentInstructionsBlock"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
@@ -32,17 +33,21 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
   const [agreed, setAgreed] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [waiting, setWaiting] = useState(false)
+  // Phase 10.97 — payment proof captured inside the modal
+  const [proofDataUrl, setProofDataUrl] = useState<string | null>(null)
 
   if (!open) return null
 
   const sharesNum = parseInt(shares) || 0
   const total = sharesNum * project.share_price
-  const isValid = sharesNum > 0 && sharesNum <= project.available_shares && agreed
+  const isValid =
+    sharesNum > 0 && sharesNum <= project.available_shares && agreed && proofDataUrl !== null
 
   const handleSubmit = async () => {
     if (!isValid) {
       if (sharesNum < 1) return showError("أدخل عدد حصص صحيح")
       if (sharesNum > project.available_shares) return showError("لا يوجد عدد كافٍ من الحصص")
+      if (!proofDataUrl) return showError("يجب رفع صورة إثبات الدفع")
       if (!agreed) return showError("يجب الموافقة على القوانين")
       return
     }
@@ -91,17 +96,27 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
         })
       } catch { /* non-fatal — DB row is the source of truth */ }
 
+      // Phase 10.97 — submit the payment proof together with the deal
+      // so the admin sees both at once. proofDataUrl is a base64 data
+      // URL captured inside this modal via PaymentInstructionsBlock.
+      if (dbResult.deal_id && proofDataUrl) {
+        try {
+          await submitPaymentProof({
+            deal_id: dbResult.deal_id,
+            payment_method: "master_card",
+            amount_paid: total,
+            proof_image_url: proofDataUrl,
+            transaction_reference: null,
+            notes: null,
+          })
+        } catch {
+          // Non-fatal: deal is created; proof can be re-uploaded from /deals/:id
+        }
+      }
+
       setSubmitting(false)
       setWaiting(true)
-      showSuccess("✅ تم إرسال الطلب — الإدارة ستراجعه")
-
-      // Navigate the buyer to the deal page so they can upload the
-      // payment proof.
-      if (dbResult.deal_id) {
-        setTimeout(() => {
-          router.push(`/deals/${dbResult.deal_id}`)
-        }, 1200)
-      }
+      showSuccess("✅ تم إرسال الطلب + إثبات الدفع — الإدارة ستراجعه")
     } catch (error) {
       setSubmitting(false)
       showError("فشل إرسال الطلب، حاول مرة أخرى")
@@ -140,6 +155,7 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
               setWaiting(false)
               setShares("1")
               setAgreed(false)
+              setProofDataUrl(null)
               onClose()
               showInfo("يمكنك متابعة التطبيق، سنُعلمك بالرد")
             }}
@@ -221,6 +237,20 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
             <div className="text-[11px] text-red-400">
               العدد المطلوب أكبر من المتاح ({project.available_shares} حصة فقط)
             </div>
+          </div>
+        )}
+
+        {/* Phase 10.97 — payment instructions + proof upload */}
+        {sharesNum > 0 && sharesNum <= project.available_shares && (
+          <div className="mb-4">
+            <PaymentInstructionsBlock
+              proofDataUrl={proofDataUrl}
+              onProofChange={setProofDataUrl}
+              title="💳 معلومات تحويل المبلغ"
+              subtitle={`حوّل ${fmtNum(total)} د.ع وارفع صورة الإثبات`}
+              required
+              compact
+            />
           </div>
         )}
 

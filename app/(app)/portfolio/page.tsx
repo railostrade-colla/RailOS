@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Send, Download, Zap, CreditCard, TrendingUp, X, Coins, ArrowDownToLine, ArrowUpFromLine, Briefcase, BarChart3, History, Trophy, Sparkles, Users } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
+import { PaymentInstructionsBlock } from "@/components/payment/PaymentInstructionsBlock"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 import {
@@ -109,6 +110,8 @@ function PortfolioContent() {
   const [feeAmount, setFeeAmount] = useState(0)
   const [feeNote, setFeeNote] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<"zaincash" | "mastercard" | "bank">("zaincash")
+  // Phase 10.97 — payment proof captured inside the fee-request modal
+  const [feeProofDataUrl, setFeeProofDataUrl] = useState<string | null>(null)
 
   // Phase 4.2 — Real DB-backed portfolio data.
   const [data, setData] = useState<PortfolioData | null>(null)
@@ -387,11 +390,16 @@ function PortfolioContent() {
       showError("اختر طريقة الدفع")
       return
     }
+    if (!feeProofDataUrl) {
+      showError("يجب رفع صورة إثبات الدفع")
+      return
+    }
     setSubmittingFee(true)
     const id = await apiSubmitFeeRequest({
       amount_requested: feeAmount,
       payment_method: paymentMethod,
       notes: feeNote || undefined,
+      proof_image_url: feeProofDataUrl,
     })
     setSubmittingFee(false)
 
@@ -400,6 +408,7 @@ function PortfolioContent() {
       setShowFeeModal(false)
       setFeeAmount(0)
       setFeeNote("")
+      setFeeProofDataUrl(null)
       // Refresh to show the new pending request immediately.
       void refresh()
     } else {
@@ -1020,6 +1029,18 @@ function PortfolioContent() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Phase 10.97 — payment instructions + proof upload */}
+            <div className="mb-4">
+              <PaymentInstructionsBlock
+                proofDataUrl={feeProofDataUrl}
+                onProofChange={setFeeProofDataUrl}
+                title="💳 معلومات تحويل المبلغ"
+                subtitle="حوّل قيمة الوحدات وارفع صورة إثبات الدفع"
+                required
+                compact
+              />
             </div>
 
             {/* Note */}

@@ -14,6 +14,7 @@ import { MarketEnginePanel } from "./MarketEnginePanel"
 import { FeeConfigAdvancedPanel } from "./FeeConfig"
 import { LevelSettingsPanel } from "./LevelSettingsPanel"
 import { AuditLogPanel } from "./AuditLogPanel"
+import { PaymentSettingsPanel } from "./PaymentSettingsPanel"
 
 export function SystemPanel() {
   return (
@@ -22,6 +23,7 @@ export function SystemPanel() {
       subtitle="إعدادات النظام والإداريين والسجلات"
       tabs={[
         { key: "admins", label: "👑 الإداريون", hint: "إنشاء + صلاحيات (super-admin only)", Panel: AdminUsersPanel },
+        { key: "payment", label: "💳 إعدادات الدفع", hint: "ماستر كارد + هاتف التحويل + التعليمات", Panel: PaymentSettingsPanel },
         { key: "engine", label: "⚙ محرّك السوق", hint: "صندوق الاستقرار + سجل التدخّلات + التعهّدات", Panel: MarketEnginePanel },
         { key: "market_settings", label: "📈 إعدادات السوق", hint: "حدود + قواعد التداول", Panel: MarketSettingsAdvancedPanel },
         { key: "market_state", label: "🚦 حالة السوق", hint: "إيقاف / تشغيل / صيانة", Panel: MarketStatePanel },
