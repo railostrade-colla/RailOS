@@ -93,16 +93,23 @@ export function computeContractLimit(members: Pick<ContractMember, "level">[]) {
 }
 
 /**
- * تنسيق رقم بالدينار العراقي بصيغة مختصرة
- * 10000000 → "10M"
- * 1500000000 → "1.5B"
+ * تنسيق رقم بالدينار العراقي بصيغة مختصرة بالعربي.
+ * 10,000,000      → "10 مليون"
+ * 1,500,000,000   → "1.5 مليار"
+ * 1,000,000,000   → "1 مليار"  (drops trailing ".0")
+ * <1,000,000      → uses toLocaleString
  */
 export function fmtLimit(amount: number): string {
+  const trim = (s: string) => (s.endsWith(".0") ? s.slice(0, -2) : s)
   if (amount >= 1_000_000_000) {
-    return (amount / 1_000_000_000).toFixed(amount % 1_000_000_000 === 0 ? 0 : 2) + "B"
+    const val = amount / 1_000_000_000
+    const fixed = val.toFixed(amount % 1_000_000_000 === 0 ? 0 : 2)
+    return `${trim(fixed)} مليار`
   }
   if (amount >= 1_000_000) {
-    return (amount / 1_000_000).toFixed(amount % 1_000_000 === 0 ? 0 : 1) + "M"
+    const val = amount / 1_000_000
+    const fixed = val.toFixed(amount % 1_000_000 === 0 ? 0 : 1)
+    return `${trim(fixed)} مليون`
   }
   return amount.toLocaleString("en-US")
 }

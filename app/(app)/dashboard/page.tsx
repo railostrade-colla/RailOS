@@ -50,12 +50,22 @@ import { LEVEL_LABELS, LEVEL_ICONS } from "@/lib/utils/contractLimits"
 import { cn } from "@/lib/utils/cn"
 
 // ─── Helpers ────────────────────────────────────────────────────
+// Arabic compact-number formatting per founder spec:
+//   1,500,000,000 → "1.5 مليار"
+//   5,000,000     → "5 مليون"
+//   12,500        → "12 ألف"
+// Drops trailing ".0" so round numbers read clean ("1 مليار" not "1.0 مليار").
 function fmtCompact(n: number): string {
   const abs = Math.abs(n)
-  if (abs >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + "B"
-  if (abs >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M"
-  if (abs >= 1_000) return (n / 1_000).toFixed(0) + "K"
-  return n.toString()
+  const suffix = (val: number, label: string) => {
+    const rounded = val.toFixed(1)
+    const trimmed = rounded.endsWith(".0") ? rounded.slice(0, -2) : rounded
+    return `${trimmed} ${label}`
+  }
+  if (abs >= 1_000_000_000) return suffix(n / 1_000_000_000, "مليار")
+  if (abs >= 1_000_000)     return suffix(n / 1_000_000,     "مليون")
+  if (abs >= 1_000)         return suffix(n / 1_000,         "ألف")
+  return n.toLocaleString("en-US")
 }
 
 function getGreeting(): string {

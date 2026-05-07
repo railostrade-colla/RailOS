@@ -58,9 +58,10 @@ export function CompanyCard({ company, variant = "full" }: CompanyCardProps) {
   const r = riskColor(company.risk_level)
 
   const formatPrice = (p: number) => {
-    if (p >= 1_000_000) return (p / 1_000_000).toFixed(p % 1_000_000 === 0 ? 0 : 1) + "M"
-    if (p >= 1_000) return (p / 1_000).toFixed(0) + "K"
-    return p.toString()
+    const trim = (s: string) => (s.endsWith(".0") ? s.slice(0, -2) : s)
+    if (p >= 1_000_000) return `${trim((p / 1_000_000).toFixed(p % 1_000_000 === 0 ? 0 : 1))} مليون`
+    if (p >= 1_000) return `${(p / 1_000).toFixed(0)} ألف`
+    return p.toLocaleString("en-US")
   }
 
   const handleFollow = (e: React.MouseEvent) => {
