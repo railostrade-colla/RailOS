@@ -185,9 +185,16 @@ export function UsersListPanel() {
         super_admin_only: "هذا الإجراء يتطلب Super Admin",
         invalid_level: "مستوى غير صالح",
         user_not_found: "المستخدم غير موجود",
-        missing_table: "طبّق Migration 10.98 أولاً",
+        missing_table: "طبّق Migration 10.99 أولاً في Supabase SQL Editor",
+        update_failed: "فشل التحديث في قاعدة البيانات — طبّق Migration 10.99 (يضيف عمود level)",
+        unknown: "خطأ في الاتصال — حاول مرة أخرى",
       }
-      return showError(map[r.reason ?? ""] ?? "فشل تحديث المستوى")
+      // eslint-disable-next-line no-console
+      console.warn("[setUserLevel] failure:", r)
+      return showError(
+        map[r.reason ?? ""] ??
+          `فشل تحديث المستوى${r.error ? ` (${r.error})` : ""}`
+      )
     }
     showSuccess(`📊 تم تحديث مستوى ${u.full_name} إلى ${LEVEL_LABEL[level]?.label ?? level}`)
     refresh()
