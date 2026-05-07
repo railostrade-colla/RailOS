@@ -257,6 +257,112 @@ export async function adminCreateProject(
   }
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// Admin: update an existing project (Phase 10.94)
+// ──────────────────────────────────────────────────────────────────────
+
+export interface AdminUpdateProjectInput {
+  id: string
+  name: string
+  short_description?: string
+  description?: string
+  project_type?: string
+  company_id?: string | null
+  symbol?: string
+  /** Brand assets */
+  logo_url?: string
+  cover_url?: string
+  gallery_images?: string[]
+  documents?: Array<{ name: string; url: string; size?: number; mime_type?: string }>
+  /** Location */
+  location_city?: string
+  location_address?: string
+  detailed_address?: string
+  /** Dates + duration */
+  offering_start_date?: string
+  offering_end_date?: string
+  duration_open?: boolean
+  duration_months?: number
+  /** Returns — pass ANNUAL %; caller multiplies monthly × 12 */
+  expected_return_min?: number
+  expected_return_max?: number
+  /** Classification */
+  risk_level?: string
+  distribution_type?: string
+  profit_source?: string
+  /** Owner contact */
+  owner_name?: string
+  owner_phone?: string
+  owner_email?: string
+  /** Status — passing 'active' on a draft publishes it. */
+  status?: "draft" | "active" | "coming_soon" | "sold_out" | "completed"
+}
+
+export interface AdminUpdateProjectResult {
+  success: boolean
+  reason?: string
+  error?: string
+  project_id?: string
+}
+
+export async function adminUpdateProject(
+  input: AdminUpdateProjectInput,
+): Promise<AdminUpdateProjectResult> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("admin_update_project", {
+      p_project_id: input.id,
+      p_name: input.name,
+      p_short_description: input.short_description ?? null,
+      p_description: input.description ?? null,
+      p_project_type: input.project_type ?? null,
+      p_company_id: input.company_id ?? null,
+      p_symbol: input.symbol ?? null,
+      p_logo_url: input.logo_url ?? null,
+      p_cover_url: input.cover_url ?? null,
+      p_gallery_images: input.gallery_images ?? null,
+      p_documents: input.documents ?? null,
+      p_location_city: input.location_city ?? null,
+      p_location_address: input.location_address ?? null,
+      p_detailed_address: input.detailed_address ?? null,
+      p_offering_start_date: input.offering_start_date ?? null,
+      p_offering_end_date: input.offering_end_date ?? null,
+      p_duration_open: input.duration_open ?? null,
+      p_duration_months: input.duration_months ?? null,
+      p_expected_return_min: input.expected_return_min ?? null,
+      p_expected_return_max: input.expected_return_max ?? null,
+      p_risk_level: input.risk_level ?? null,
+      p_distribution_type: input.distribution_type ?? null,
+      p_profit_source: input.profit_source ?? null,
+      p_owner_name: input.owner_name ?? null,
+      p_owner_phone: input.owner_phone ?? null,
+      p_owner_email: input.owner_email ?? null,
+      p_status: input.status ?? null,
+    })
+    if (error) {
+      const code = error.code ?? ""
+      const msg = error.message ?? ""
+      if (code === "42883" || code === "42P01") {
+        return { success: false, reason: "missing_table", error: msg }
+      }
+      if (code === "42501") return { success: false, reason: "rls", error: msg }
+      return { success: false, reason: "unknown", error: msg }
+    }
+    const result = (data ?? {}) as AdminUpdateProjectResult
+    if (!result.success) {
+      return { success: false, reason: result.reason ?? result.error ?? "unknown" }
+    }
+    invalidateProjectCaches()
+    return result
+  } catch (err) {
+    return {
+      success: false,
+      reason: "unknown",
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
 /** Drop cached project lists — call after any admin mutation. */
 function invalidateProjectCaches(): void {
   // Lazy import to keep the module tree-shake friendly.

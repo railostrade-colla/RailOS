@@ -16,7 +16,7 @@ import { ActionBtn } from "@/components/admin/ui"
 import { ALL_COMPANIES } from "@/lib/mock-data/companies"
 import { createProjectWallet } from "@/lib/mock-data/projectWallets"
 import { adminCreateCompany } from "@/lib/data/companies"
-import { adminCreateProject, getAllProjects } from "@/lib/data/projects"
+import { adminCreateProject, adminUpdateProject, getAllProjects } from "@/lib/data/projects"
 import { getAllCompanies } from "@/lib/data/companies"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { calculateTotalShares, calculateOfferedShares } from "@/lib/utils/finance"
@@ -257,6 +257,13 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
   const [documents, setDocuments] = useState<ProjectDocument[]>(initialData?.documents ?? [])
   const docInputRef = useRef<HTMLInputElement>(null)
 
+  // ─── Phase 10.94 — publish confirmation modal ───
+  // When admin clicks "نشر" we DON'T submit immediately — we open a
+  // review modal so the admin can double-check the data first. The
+  // actual save runs on confirm.
+  const [showPublishConfirm, setShowPublishConfirm] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
   const sharePriceNum = Number(sharePrice) || 0
   const projectValueNum0 = Number(projectValue) || 0
 
@@ -478,22 +485,78 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
       return
     }
 
-    // Active publish: validate. If incomplete, ask the admin to
-    // confirm rather than blocking entirely (some fields may be
-    // legitimately empty for early-stage projects).
-    if (status === "active" && !isValid) {
-      const proceed = window.confirm(
-        "بعض الحقول الإجبارية فارغة أو النسب لا تساوي 100%.\n\n" +
-        "هل تريد المتابعة بالنشر مع البيانات الحالية؟"
+    // Phase 10.94: validation feedback is now shown inside the publish
+    // confirmation modal (يحذّر المستخدم قبل الضغط على «تأكيد ونشر»),
+    // so we no longer block here with a native window.confirm.
+    // ── Phase 10.94: persist project edits to DB ──
+    if (isEdit && isProject) {
+      const projectId = initialData?.id
+      if (!projectId) {
+        showError("معرّف المشروع غير موجود — أعد فتح التعديل")
+        return
+      }
+      const fullDescription = [
+        longDesc.trim(),
+        visionText.trim() ? `# الرؤية\n${visionText.trim()}` : "",
+        goalsText.trim() ? `# الأهداف\n${goalsText.trim()}` : "",
+        managementText.trim() ? `# الإدارة\n${managementText.trim()}` : "",
+      ].filter(Boolean).join("\n\n")
+
+      const result = await adminUpdateProject({
+        id: projectId,
+        name: name.trim(),
+        short_description: shortDesc.trim() || undefined,
+        description: fullDescription || shortDesc.trim() || undefined,
+        project_type: sector,
+        company_id: companyId.trim() ? companyId : null,
+        logo_url: logoUrl.trim() || undefined,
+        cover_url: coverUrl.trim() || undefined,
+        gallery_images: galleryImages,
+        documents: documents,
+        location_city: city.trim() || undefined,
+        location_address: address.trim() || undefined,
+        detailed_address: detailedAddress.trim() || undefined,
+        offering_start_date: offeringStart || undefined,
+        duration_open: durationOpen,
+        duration_months: durationOpen ? undefined : Number(durationMonths) || undefined,
+        // Convert MONTHLY input back to ANNUAL for DB
+        expected_return_min: (Number(returnMin) || 0) * 12,
+        expected_return_max: (Number(returnMax) || 0) * 12,
+        risk_level: riskLevel,
+        distribution_type: distributionType,
+        profit_source: profitSource.trim() || undefined,
+        owner_name: ownerName.trim() || undefined,
+        owner_phone: ownerPhone.trim() || undefined,
+        owner_email: ownerEmail.trim() || undefined,
+        // Status update — passes "active" if admin clicked publish, else keeps current
+        status: status === "active" ? "active" : undefined,
+      })
+      if (!result.success) {
+        const map: Record<string, string> = {
+          unauthenticated: "سجّل دخولك أولاً",
+          not_admin: "صلاحياتك لا تسمح",
+          invalid_name: "اسم المشروع مطلوب",
+          project_not_found: "المشروع غير موجود",
+          company_not_found: "الشركة الأمّ غير موجودة",
+          missing_table: "طبّق Migration 10.94 أولاً",
+          rls: "صلاحياتك لا تسمح",
+        }
+        showError(map[result.reason ?? ""] ?? `فشل حفظ التعديلات${result.error ? ": " + result.error : ""}`)
+        return
+      }
+      showSuccess(status === "active"
+        ? `✅ تم حفظ التعديلات + نشر "${name}"`
+        : `💾 تم حفظ التعديلات`
       )
-      if (!proceed) return
+      onDone?.()
+      return
     }
     if (isEdit) {
+      // Companies edit not yet wired to DB — keep toast-only fallback.
       showSuccess(status === "active"
-        ? `✅ تم حفظ التعديلات + نشر${isProject ? " المشروع" : " الشركة"}`
+        ? `✅ تم حفظ التعديلات + نشر "${name}"`
         : "💾 تم حفظ التعديلات كمسودّة"
       )
-      // Edit mode never had an autosave entry to clear.
       onDone?.()
       return
     }
@@ -1030,8 +1093,8 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
                 <div className="text-yellow-400 font-bold mb-1">الحقول المالية مقفلة في وضع التعديل</div>
                 <div className="text-neutral-300">
                   قيمة المشروع وسعر الحصة الابتدائي وعدد الحصص لا يُعدَّلون بعد الإنشاء.
-                  لزيادة الحصص المعروضة في السوق، استخدم زرّ
-                  <span className="font-bold text-white"> 📤 إطلاق حصص للسوق </span>
+                  لزيادة الحصص المعروضة للجمهور، استخدم زرّ
+                  <span className="font-bold text-white"> ➕ إضافة حصص للطرح </span>
                   من صفحة <span className="font-bold text-white">محافظ المشاريع</span> (Super Admin فقط).
                 </div>
               </div>
@@ -1587,12 +1650,124 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
                 : `📤 نشر${isValid ? "" : " (مع تحذير)"}`
           }
           color="green"
-          onClick={() => handleSave("active")}
+          onClick={() => setShowPublishConfirm(true)}
         />
       </div>
       {!isValid && !isEdit && (
         <div className="mt-2 text-[10px] text-yellow-400 leading-relaxed">
           ⚠️ بعض الحقول غير مكتملة. يمكنك المتابعة بالنشر — سيُطلب تأكيدك أولاً.
+        </div>
+      )}
+
+      {/* Phase 10.94 — Publish/Edit confirmation modal */}
+      {showPublishConfirm && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <div className="text-base font-bold text-white">
+                  {isEdit
+                    ? "✅ تأكيد حفظ التعديلات"
+                    : `📤 مراجعة وتأكيد النشر`}
+                </div>
+                <div className="text-xs text-neutral-500 mt-1">
+                  {isEdit
+                    ? "راجع التعديلات قبل الحفظ"
+                    : "راجع البيانات أدناه — بعد التأكيد سيُنشر المشروع وتُنشأ محافظه تلقائياً"}
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPublishConfirm(false)}
+                className="text-neutral-500 hover:text-white"
+                aria-label="إغلاق"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-4 mb-4 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-neutral-500">الاسم</span>
+                <span className="text-white font-bold">{name || "—"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500">القطاع</span>
+                <span className="text-white">{sector}</span>
+              </div>
+              {isProject && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">قيمة المشروع</span>
+                    <span className="text-yellow-400 font-mono">{commaFmt(projectValue || "0")} د.ع</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">سعر الحصة</span>
+                    <span className="text-yellow-400 font-mono">{commaFmt(sharePrice || "0")} د.ع</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">إجمالي الحصص</span>
+                    <span className="text-blue-400 font-mono">{fmtNum(totalSharesNum)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">الطرح للجمهور</span>
+                    <span className="text-purple-400 font-mono">{offeringPct}٪ ({fmtNum(Math.round(totalSharesNum * (Number(offeringPct) || 0) / 100))} حصة)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">حصص المالك</span>
+                    <span className="text-neutral-300 font-mono">{ownerPercent}٪ ({fmtNum(Math.round(totalSharesNum * (Number(ownerPercent) || 0) / 100))} حصة)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">العائد المتوقع (شهري)</span>
+                    <span className="text-green-400">{returnMin}٪ – {returnMax}٪</span>
+                  </div>
+                </>
+              )}
+              {city && (
+                <div className="flex justify-between">
+                  <span className="text-neutral-500">المدينة</span>
+                  <span className="text-white">{city}</span>
+                </div>
+              )}
+            </div>
+
+            {!isValid && !isEdit && (
+              <div className="bg-yellow-400/[0.06] border border-yellow-400/[0.2] rounded-lg p-3 mb-4 text-[11px] text-yellow-300 leading-relaxed">
+                ⚠️ بعض الحقول الإجبارية فارغة أو النسب لا تساوي 100٪. يمكنك المتابعة لكن قد يحتاج المشروع إلى تعديلات لاحقاً.
+              </div>
+            )}
+
+            <div className="bg-blue-400/[0.04] border border-blue-400/[0.15] rounded-lg p-2.5 mb-4 text-[11px] text-blue-300 leading-relaxed">
+              💡 {isEdit
+                ? "لا يمكن تعديل إجمالي الحصص أو سعر الحصة هنا. لزيادة الحصص استخدم زر «إضافة حصص للطرح» في محفظة المشروع."
+                : "بعد النشر ستُقفل قيمة المشروع وسعر الحصة وإجمالي الحصص. لزيادة الحصص لاحقاً استخدم محفظة المشروع."}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowPublishConfirm(false)}
+                disabled={submitting}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={async () => {
+                  setSubmitting(true)
+                  setShowPublishConfirm(false)
+                  await handleSave("active")
+                  setSubmitting(false)
+                }}
+                disabled={submitting}
+                className="flex-1 py-3 rounded-xl bg-green-500/[0.15] border border-green-500/[0.3] text-green-400 text-sm font-bold hover:bg-green-500/[0.2] disabled:opacity-50"
+              >
+                {submitting
+                  ? "جارٍ الحفظ..."
+                  : isEdit
+                    ? "✅ تأكيد وحفظ التعديلات"
+                    : "📤 تأكيد ونشر المشروع"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

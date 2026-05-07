@@ -68,7 +68,7 @@ function dbToFormSector(t: string | null | undefined): EntityFormData["sector"] 
   return undefined
 }
 
-/** Pre-populate the edit form from a FULL DB row (Phase 10.53). */
+/** Pre-populate the edit form from a FULL DB row (Phase 10.94 — full mapping). */
 function fullRowToInitialData(
   row: Record<string, unknown>,
   fallbackRow: EntityRow,
@@ -76,26 +76,121 @@ function fullRowToInitialData(
   const get = <T,>(key: string): T | undefined => row[key] as T | undefined
   const numStr = (v: unknown): string =>
     v === null || v === undefined || v === "" ? "" : String(v)
+  const str = (v: unknown): string => (v === null || v === undefined ? "" : String(v))
+
+  // Description may come back as one big blob with our # الرؤية / # الأهداف
+  // / # الإدارة sections. Split it back so each section pre-fills its own
+  // textarea instead of dumping everything into long_desc.
+  const fullDesc = String(get<string>("description") ?? "")
+  let longDesc = fullDesc
+  let visionText = ""
+  let goalsText = ""
+  let managementText = ""
+  const visionMatch = fullDesc.match(/#\s*الرؤية\s*\n([\s\S]*?)(?=\n#\s|$)/)
+  const goalsMatch = fullDesc.match(/#\s*الأهداف\s*\n([\s\S]*?)(?=\n#\s|$)/)
+  const mgmtMatch = fullDesc.match(/#\s*الإدارة\s*\n([\s\S]*?)(?=\n#\s|$)/)
+  if (visionMatch || goalsMatch || mgmtMatch) {
+    visionText = visionMatch?.[1]?.trim() ?? ""
+    goalsText = goalsMatch?.[1]?.trim() ?? ""
+    managementText = mgmtMatch?.[1]?.trim() ?? ""
+    // long_desc = everything before the first # section
+    const firstHashIdx = fullDesc.indexOf("# ")
+    longDesc = firstHashIdx > 0 ? fullDesc.slice(0, firstHashIdx).trim() : ""
+  }
+
+  // Returns: DB stores ANNUAL %; the form input is MONTHLY (÷ 12).
+  const annualMin = Number(get<number | string>("expected_return_min") ?? get<number | string>("return_min") ?? 0)
+  const annualMax = Number(get<number | string>("expected_return_max") ?? get<number | string>("return_max") ?? 0)
+  const monthlyMin = annualMin > 0 ? (annualMin / 12).toFixed(2) : ""
+  const monthlyMax = annualMax > 0 ? (annualMax / 12).toFixed(2) : ""
+
+  // Date columns may come back as full timestamps; the input expects YYYY-MM-DD.
+  const dateStr = (v: unknown): string => {
+    if (!v) return ""
+    const s = String(v)
+    return s.length >= 10 ? s.slice(0, 10) : s
+  }
+
+  // Documents + gallery (jsonb) — already arrays in JS land
+  const documentsRaw = get<unknown>("documents")
+  const documents = Array.isArray(documentsRaw)
+    ? (documentsRaw as Array<Record<string, unknown>>).map((d) => ({
+        name: String(d.name ?? ""),
+        url: String(d.url ?? ""),
+        size: typeof d.size === "number" ? d.size : undefined,
+        mime_type: typeof d.mime_type === "string" ? d.mime_type : undefined,
+      }))
+    : []
+  const galleryRaw = get<unknown>("gallery_images")
+  const galleryImages = Array.isArray(galleryRaw)
+    ? (galleryRaw as unknown[]).filter((g): g is string => typeof g === "string")
+    : []
+
+  // Wallet split: owner = 100 − offering
+  const offeringPct = Number(get<number | string>("offering_percentage") ?? 30)
+  const ownerPct = Math.max(0, 100 - offeringPct)
 
   return {
-    id:            (get<string>("id") ?? fallbackRow.id),
-    name:          (get<string>("name") ?? fallbackRow.name),
-    parent_company_id: get<string>("company_id") ?? "",
-    sector:        dbToFormSector(get<string>("project_type")),
-    short_desc:    get<string>("short_description") ?? "",
-    long_desc:     get<string>("description") ?? "",
-    city:          get<string>("location_city") ?? "",
-    share_price:   numStr(get<number | string>("share_price") ?? fallbackRow.share_price),
-    total_shares:  numStr(get<number | string>("total_shares") ?? fallbackRow.total_shares),
-    offering_pct:  numStr(get<number | string>("offering_percentage") ?? "90"),
-    reserve_pct:   numStr(get<number | string>("reserve_percentage") ?? "8"),
-    offering_start:get<string>("offering_start_date") ?? "",
-    offering_end:  get<string>("offering_end_date") ?? "",
-    symbol:        get<string>("symbol") ?? "",
-    project_value: numStr(get<number | string>("total_value")),
-    capital_needed:numStr(get<number | string>("total_value")),
-    capital_raised:numStr(get<number | string>("total_value")),
-    detailed_address: get<string>("location_address") ?? "",
+    id:                 (get<string>("id") ?? fallbackRow.id),
+    name:               (get<string>("name") ?? fallbackRow.name),
+    parent_company_id:  str(get<string>("company_id")),
+    sector:             dbToFormSector(get<string>("project_type")),
+    symbol:             str(get<string>("symbol")),
+
+    // Descriptions (split back into structured sections)
+    short_desc:         str(get<string>("short_description")),
+    long_desc:          longDesc,
+    vision:             visionText,
+    goals:              goalsText,
+    management:         managementText,
+
+    // Brand assets
+    logo_url:           str(get<string>("logo_url")),
+    cover_url:          str(get<string>("cover_url") ?? get<string>("cover_image_url")),
+    project_images:     galleryImages,
+    documents:          documents,
+
+    // Location
+    city:               str(get<string>("location_city")),
+    address:            str(get<string>("location_address")),
+    detailed_address:   str(get<string>("detailed_address")),
+
+    // Price + shares (LOCKED in edit mode but still pre-filled for display)
+    share_price:        numStr(get<number | string>("share_price") ?? fallbackRow.share_price),
+    total_shares:       numStr(get<number | string>("total_shares") ?? fallbackRow.total_shares),
+    project_value:      numStr(get<number | string>("total_value")),
+
+    // Wallet split
+    offering_pct:       String(offeringPct),
+    owner_percent:      String(ownerPct),
+    offer_percent:      String(offeringPct),
+    reserve_pct:        numStr(get<number | string>("reserve_percentage") ?? "0"),
+    listing_percent:    String(offeringPct),
+
+    // Dates + duration
+    offering_start:     dateStr(get<string>("offering_start_date")),
+    offering_end:       dateStr(get<string>("offering_end_date")),
+    duration_open:      Boolean(get<boolean>("duration_open") ?? !get("duration_months")),
+    duration_months:    numStr(get<number | string>("duration_months")),
+
+    // Returns (monthly in form, annual in DB)
+    return_min:         monthlyMin,
+    return_max:         monthlyMax,
+
+    // Risk + classification
+    risk_level:         (get<string>("risk_level") as EntityFormData["risk_level"]) ?? "medium",
+    distribution_type:  (get<string>("distribution_type") as EntityFormData["distribution_type"]) ?? "quarterly",
+    investment_type:    (get<string>("investment_type") as EntityFormData["investment_type"]) ?? "direct",
+
+    // Profit + capital
+    profit_source:      str(get<string>("profit_source")),
+    capital_needed:     numStr(get<number | string>("total_value")),
+    capital_raised:     numStr(get<number | string>("total_value")),
+
+    // Owner contact
+    owner_name:         str(get<string>("owner_name")),
+    owner_phone:        str(get<string>("owner_phone")),
+    owner_email:        str(get<string>("owner_email")),
   }
 }
 
