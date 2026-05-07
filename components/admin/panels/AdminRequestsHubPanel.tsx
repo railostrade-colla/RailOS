@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react"
-import { Lock, RefreshCw, AlertOctagon, Eye } from "lucide-react"
+import { RefreshCw, AlertOctagon, Eye } from "lucide-react"
 import {
   Badge,
   ActionBtn,
@@ -32,7 +32,6 @@ import {
   getPendingDeals,
   getOpenDisputes,
   getTradingVolumeStats,
-  getPendingShareRequests,
   getAdminNotifications,
   lockNotification,
   processNotification,
@@ -42,10 +41,14 @@ import {
   type PendingDeal,
   type OpenDispute,
   type VolumeStats,
-  type PendingShareRequest,
   type AdminInboxNotification,
 } from "@/lib/data/admin-requests"
 import { getDashboardOverview, type DashboardOverview } from "@/lib/data/admin-utilities"
+import {
+  getSharePurchaseRequestsAdmin,
+  type SharePurchaseRequestRow,
+} from "@/lib/data/share-purchase-requests"
+import { ShareRequestsPanel } from "./ShareRequestsPanel"
 import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -77,31 +80,40 @@ export function AdminRequestsHubPanel() {
     week: { count: 0, total: 0 },
     month: { count: 0, total: 0 },
   })
-  const [shareReqs, setShareReqs] = useState<PendingShareRequest[]>([])
+  // Phase 10.99g — purchase requests count for the "طلبات الحصص" tab badge.
+  // Only counts pending_payment + pending_seller_approval + accepted +
+  // payment_submitted (the actionable states for admin).
+  // The legacy share-modification queue (PendingShareRequest) was retired
+  // here when the tab swapped to embedding ShareRequestsPanel.
+  const [purchaseReqsPending, setPurchaseReqsPending] = useState<number>(0)
   const [inbox, setInbox] = useState<AdminInboxNotification[]>([])
   // Phase 10.75 — overview supplies the KYC pending count which isn't
   // surfaced anywhere else on this panel.
   const [overview, setOverview] = useState<DashboardOverview | null>(null)
 
   const refresh = useCallback(async () => {
-    const [r, f, d, dis, v, sh, ib, ov] = await Promise.all([
+    const [r, f, d, dis, v, ib, ov, pr] = await Promise.all([
       getMyAdminRole(),
       getPendingFeeRequests(),
       getPendingDeals(),
       getOpenDisputes(),
       getTradingVolumeStats(),
-      getPendingShareRequests(),
       getAdminNotifications(50),
       getDashboardOverview(),
+      getSharePurchaseRequestsAdmin("all", 500),
     ])
     setRole(r)
     setFeeReqs(f)
     setDeals(d)
     setDisputes(dis)
     setVolume(v)
-    setShareReqs(sh)
     setInbox(ib)
     setOverview(ov)
+    // Count actionable purchase requests for the tab badge.
+    const pending = (pr as SharePurchaseRequestRow[]).filter((row) =>
+      ["pending_payment", "pending_seller_approval", "accepted", "payment_submitted"].includes(row.status),
+    ).length
+    setPurchaseReqsPending(pending)
     setLoading(false)
   }, [])
 
@@ -191,8 +203,10 @@ export function AdminRequestsHubPanel() {
   // Phase 10.99f — طلبات الحصص is now the FIRST tab so admins land
   // directly on actionable share-purchase requests when they open the
   // Order Center (per founder spec).
+  // Phase 10.99g — count = pending purchase requests (deals), not the
+  // legacy share-modification requests.
   const tabs = [
-    { key: "shares" as const, label: "📋 طلبات الحصص", count: shareReqs.length },
+    { key: "shares" as const, label: "📋 طلبات الحصص", count: purchaseReqsPending },
     { key: "inbox" as const, label: "📬 صندوق الإشعارات", count: inbox.filter((n) => !n.processed_by).length },
     { key: "volume" as const, label: "📊 حجم التداول" },
     { key: "fees" as const, label: "💳 وحدات الرسوم", count: feeReqs.length },
@@ -223,7 +237,7 @@ export function AdminRequestsHubPanel() {
         <KPI
           label="غير مُعالَج"
           val={
-            shareReqs.length +
+            purchaseReqsPending +
             feeReqs.length +
             disputes.length +
             (overview?.kyc_pending ?? 0)
@@ -245,7 +259,9 @@ export function AdminRequestsHubPanel() {
         ) : (
           <Table>
             <THead>
-              <TH>النوع</TH>
+              {/* Phase 10.99g — "النوع" column removed per founder spec.
+                  The notification type is internal metadata; users only
+                  need title + priority + status. */}
               <TH>العنوان</TH>
               <TH>الأولوية</TH>
               <TH>الحالة</TH>
@@ -275,7 +291,6 @@ export function AdminRequestsHubPanel() {
 
                 return (
                   <TR key={n.id}>
-                    <TD><span className="text-[11px] font-mono text-neutral-400">{n.notification_type}</span></TD>
                     <TD>
                       <div className="text-xs text-white font-bold max-w-xs truncate">{n.title}</div>
                       <div className="text-[10px] text-neutral-500 max-w-xs truncate">{n.message}</div>
@@ -328,45 +343,16 @@ export function AdminRequestsHubPanel() {
         )
       )}
 
-      {/* ═══════ Tab: Shares (Feature 5 placeholder) ═══════ */}
+      {/* ═══════ Tab: Shares — Phase 10.99g ═══════
+          Now embeds the full ShareRequestsPanel (which renders user
+          share-PURCHASE requests with payment proofs, invoice button,
+          confirm/cancel actions). Replaces the older inline render of
+          share-MODIFICATION requests, which were a different feature
+          entirely and don't belong in the buyer-facing requests hub. */}
       {tab === "shares" && (
-        shareReqs.length === 0 ? (
-          <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-8 text-center">
-            <Lock className="w-10 h-10 text-neutral-500 mx-auto mb-3" strokeWidth={1.5} />
-            <div className="text-sm font-bold text-white mb-1">لا توجد طلبات حصص حالياً</div>
-            <div className="text-xs text-neutral-500">
-              تتفعّل هذه الواجهة كاملاً بعد إنجاز الميزة 5 (تعديل الحصص برمز ثنائي).
-            </div>
-          </div>
-        ) : (
-          <Table>
-            <THead>
-              <TH>المشروع</TH>
-              <TH>النوع</TH>
-              <TH>عدد الحصص</TH>
-              <TH>طالب التعديل</TH>
-              <TH>السبب</TH>
-              <TH>التاريخ</TH>
-            </THead>
-            <TBody>
-              {shareReqs.map((r) => (
-                <TR key={r.id}>
-                  <TD>{r.project_name}</TD>
-                  <TD>
-                    <Badge
-                      label={r.modification_type === "increase" ? "زيادة" : "تقليل"}
-                      color={r.modification_type === "increase" ? "green" : "red"}
-                    />
-                  </TD>
-                  <TD><span className="font-mono text-yellow-400 font-bold">{fmtNum(r.shares_amount)}</span></TD>
-                  <TD>{r.requested_by_name}</TD>
-                  <TD><span className="text-[11px] text-neutral-400 max-w-xs line-clamp-1">{r.reason ?? "—"}</span></TD>
-                  <TD><span className="text-[11px] text-neutral-500">{fmtDate(r.created_at)}</span></TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
-        )
+        <div className="-mx-6 -my-2">
+          <ShareRequestsPanel />
+        </div>
       )}
 
       {/* ═══════ Tab: Volume (read-only) ═══════ */}
