@@ -1,9 +1,11 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react"
-import { ADMIN_NAV, ADMIN_SECTIONS, type AdminTab } from "@/lib/admin/types"
+import { ADMIN_NAV, type AdminTab } from "@/lib/admin/types"
+import { getMyAdminPermissions, type AdminPermission } from "@/lib/data/admin-permissions"
 import { cn } from "@/lib/utils/cn"
 
 export function AdminSidebar({
@@ -16,6 +18,27 @@ export function AdminSidebar({
   const router = useRouter()
   const searchParams = useSearchParams()
   const currentTab = (searchParams?.get("tab") || "dashboard") as AdminTab
+
+  // Phase 11.00 — load the caller's permissions once and filter the
+  // sidebar so a regular admin only sees the sections they were granted.
+  // super_admin gets "*" → all items visible.
+  const [perms, setPerms] = useState<AdminPermission[] | "*" | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    getMyAdminPermissions().then((p) => {
+      if (!cancelled) setPerms(p)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  const allowed = (item: typeof ADMIN_NAV[number]): boolean => {
+    if (perms === null) return true              // still loading — render all (avoids flicker)
+    if (perms === "*") return true               // super_admin
+    if (!item.requiredPermission) return true    // public/admin-default item
+    return perms.includes(item.requiredPermission)
+  }
+  const visibleNav = ADMIN_NAV.filter(allowed)
+  const visibleSections = Array.from(new Set(visibleNav.map((n) => n.section)))
 
   const goTo = (tab: AdminTab) => {
     router.push(`/admin?tab=${tab}`)
@@ -80,14 +103,14 @@ export function AdminSidebar({
 
       {/* Nav */}
       <div className="flex-1 overflow-y-auto py-2">
-        {ADMIN_SECTIONS.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section} className="mb-2">
             {open && (
               <div className="px-3 py-1.5 text-[9px] text-neutral-600 font-bold tracking-wider uppercase">
                 {section}
               </div>
             )}
-            {ADMIN_NAV.filter((n) => n.section === section).map((item) => (
+            {visibleNav.filter((n) => n.section === section).map((item) => (
               <button
                 key={item.key}
                 onClick={() => goTo(item.key)}

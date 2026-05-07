@@ -51,51 +51,69 @@ export type AdminTab =
   // Phase 9.6 — user gifts (admin grants, user redeems)
   | "gifts_admin"
 
+/** Capability vocabulary kept in sync with lib/data/admin-permissions.ts. */
+export type AdminPermission =
+  | "manage_users"
+  | "manage_projects"
+  | "manage_companies"
+  | "manage_orders"
+  | "manage_kyc"
+  | "manage_market"
+  | "manage_payments"
+  | "manage_fees"
+  | "manage_content"
+  | "manage_admins"
+  | "view_audit"
+  | "view_dashboard"
+
 export interface AdminNavItem {
   key: AdminTab
   label: string
   icon: string
   section: string
+  /** Phase 11.00 — capability needed to see this nav entry. super_admin
+   *  bypasses (sees everything). undefined = always visible to any admin. */
+  requiredPermission?: AdminPermission
 }
 
 export const ADMIN_NAV: AdminNavItem[] = [
   // رئيسي — overview/dashboard surfaces
-  { key: "dashboard",    label: "لوحة التحكم",   icon: "◈",  section: "رئيسي" },
-  { key: "requests_hub", label: "مركز الطلبات",  icon: "🎯", section: "رئيسي" },
-  { key: "monitor",      label: "مراقبة السوق",   icon: "📡", section: "رئيسي" },
+  { key: "dashboard",    label: "لوحة التحكم",   icon: "◈",  section: "رئيسي", requiredPermission: "view_dashboard" },
+  { key: "requests_hub", label: "مركز الطلبات",  icon: "🎯", section: "رئيسي", requiredPermission: "manage_orders" },
+  { key: "monitor",      label: "مراقبة السوق",   icon: "📡", section: "رئيسي", requiredPermission: "manage_market" },
   // Phase 10.76 — "التنبيهات" sidebar link removed per founder request.
   // The page itself (Alerts.tsx + tab=alerts route) stays for deep-links
   // and topbar/dashboard CTAs that still need a target, but no sidebar
   // entry. Replaced by the unified "مركز الطلبات" above.
-  { key: "log",          label: "سجل القرارات",   icon: "📋", section: "رئيسي" },
+  { key: "log",          label: "سجل القرارات",   icon: "📋", section: "رئيسي", requiredPermission: "view_audit" },
 
   // العمليات — only the entry-points that DON'T live as a tab inside another hub
-  { key: "contracts_admin",  label: "العقود",     icon: "🤝", section: "العمليات" },
-  { key: "gifts_admin",      label: "الهدايا",    icon: "🎁", section: "العمليات" },
+  { key: "contracts_admin",  label: "العقود",     icon: "🤝", section: "العمليات", requiredPermission: "manage_orders" },
+  { key: "gifts_admin",      label: "الهدايا",    icon: "🎁", section: "العمليات", requiredPermission: "manage_content" },
 
   // المشاريع — projects has its own dedicated page (also embedded in Market hub)
-  { key: "projects",         label: "المشاريع",   icon: "▣", section: "المشاريع" },
+  { key: "projects",         label: "المشاريع",   icon: "▣", section: "المشاريع", requiredPermission: "manage_projects" },
 
   // الهَبات — single-entry hubs
-  { key: "market",           label: "السوق والمزادات", icon: "◉",  section: "السوق" },
-  { key: "shares",           label: "الحصص والتداول",  icon: "◎",  section: "الحصص" },
-  { key: "fees",             label: "الرسوم",          icon: "💰", section: "الرسوم" },
-  { key: "users",            label: "المستخدمون",       icon: "⊙",  section: "المستخدمون" },
+  { key: "market",           label: "السوق والمزادات", icon: "◉",  section: "السوق", requiredPermission: "manage_market" },
+  { key: "shares",           label: "الحصص والتداول",  icon: "◎",  section: "الحصص", requiredPermission: "manage_orders" },
+  { key: "fees",             label: "الرسوم",          icon: "💰", section: "الرسوم", requiredPermission: "manage_fees" },
+  { key: "users",            label: "المستخدمون",       icon: "⊙",  section: "المستخدمون", requiredPermission: "manage_users" },
 
   // الحوكمة — items that don't live inside another hub
-  { key: "council_admin",     label: "المجلس",   icon: "🏛️", section: "الحوكمة" },
-  { key: "ambassadors_admin", label: "السفراء",  icon: "🌟", section: "الحوكمة" },
+  { key: "council_admin",     label: "المجلس",   icon: "🏛️", section: "الحوكمة", requiredPermission: "manage_users" },
+  { key: "ambassadors_admin", label: "السفراء",  icon: "🌟", section: "الحوكمة", requiredPermission: "manage_users" },
 
   // البرامج الاجتماعية — Phase 10.79 (Task 15): added discounts_admin
-  { key: "healthcare_admin", label: "الرعاية الصحية",  icon: "🏥", section: "البرامج الاجتماعية" },
-  { key: "orphans_admin",    label: "رعاية الأيتام",   icon: "👶", section: "البرامج الاجتماعية" },
-  { key: "discounts_admin",  label: "الخصومات",        icon: "🏷️", section: "البرامج الاجتماعية" },
+  { key: "healthcare_admin", label: "الرعاية الصحية",  icon: "🏥", section: "البرامج الاجتماعية", requiredPermission: "manage_content" },
+  { key: "orphans_admin",    label: "رعاية الأيتام",   icon: "👶", section: "البرامج الاجتماعية", requiredPermission: "manage_content" },
+  { key: "discounts_admin",  label: "الخصومات",        icon: "🏷️", section: "البرامج الاجتماعية", requiredPermission: "manage_content" },
 
   // المحتوى — single entry, all sub-tabs are inside
-  { key: "content_mgmt",     label: "المحتوى",   icon: "📝", section: "المحتوى" },
+  { key: "content_mgmt",     label: "المحتوى",   icon: "📝", section: "المحتوى", requiredPermission: "manage_content" },
 
-  // النظام — single entry, all sub-tabs are inside
-  { key: "system",           label: "النظام",    icon: "⚙",  section: "النظام" },
+  // النظام — single entry, all sub-tabs are inside (admin mgmt requires super_admin)
+  { key: "system",           label: "النظام",    icon: "⚙",  section: "النظام", requiredPermission: "manage_admins" },
 
   // ملاحظة بعد إعادة الترتيب (Phase 10.36):
   //  جميع البنود التالية باتت تبويبات داخل لوحات الـ hub، فأُزيلت من السلايدبار

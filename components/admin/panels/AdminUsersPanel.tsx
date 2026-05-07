@@ -16,8 +16,8 @@
  *     Users hub list panel; here we keep only the demote flow).
  */
 
-import { useEffect, useState, useCallback } from "react"
-import { Search, Lock, Crown, ShieldCheck } from "lucide-react"
+import { useEffect, useState, useCallback, useMemo } from "react"
+import { Search, Lock, Crown, ShieldCheck, X, UserPlus } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
   KPI, AdminEmpty,
@@ -29,7 +29,16 @@ import {
   getMyUserId,
   type AdminUserListRow,
 } from "@/lib/data/admin-utilities"
+import {
+  adminGrantAdmin,
+  adminSetAdminPermissions,
+  ALL_PERMISSIONS,
+  DEFAULT_PERMISSIONS,
+  PERMISSION_LABELS,
+  type AdminPermission,
+} from "@/lib/data/admin-permissions"
 import { showSuccess, showError } from "@/lib/utils/toast"
+import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 const fmtDate = (iso: string | null | undefined) => iso ? iso.slice(0, 10) : "—"
@@ -43,9 +52,22 @@ export function AdminUsersPanel() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
 
+  // Phase 11.00 — Add-Admin modal state
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [allUsers, setAllUsers] = useState<AdminUserListRow[]>([])
+  const [pickerSearch, setPickerSearch] = useState("")
+  const [pickedUserId, setPickedUserId] = useState<string | null>(null)
+  const [permSet, setPermSet] = useState<Set<AdminPermission>>(new Set(DEFAULT_PERMISSIONS))
+  const [submitting, setSubmitting] = useState(false)
+
+  // Phase 11.00 — Edit-permissions modal state (for existing admins)
+  const [editPermsFor, setEditPermsFor] = useState<AdminUserListRow | null>(null)
+  const [editPermSet, setEditPermSet] = useState<Set<AdminPermission>>(new Set())
+
   const refresh = useCallback(async () => {
     setLoading(true)
     const rows = await getAllUsersForAdmin(500)
+    setAllUsers(rows)
     // Only admin + super_admin rows.
     setUsers(rows.filter((u) => u.is_admin))
     setLoading(false)
@@ -124,6 +146,106 @@ export function AdminUsersPanel() {
     refresh()
   }
 
+  // ─── Phase 11.00 — Add Admin flow ─────────────────────────────
+  const openAddModal = () => {
+    setShowAddModal(true)
+    setPickedUserId(null)
+    setPickerSearch("")
+    setPermSet(new Set(DEFAULT_PERMISSIONS))
+  }
+  const closeAddModal = () => {
+    setShowAddModal(false)
+    setPickedUserId(null)
+    setPermSet(new Set(DEFAULT_PERMISSIONS))
+  }
+  const togglePerm = (p: AdminPermission) => {
+    setPermSet((cur) => {
+      const next = new Set(cur)
+      if (next.has(p)) next.delete(p)
+      else next.add(p)
+      return next
+    })
+  }
+  const submitAddAdmin = async () => {
+    if (!pickedUserId) return showError("اختر المستخدم أولاً")
+    if (permSet.size === 0) {
+      const ok = window.confirm("لم تختر أي صلاحية. هل تريد المتابعة (الأدمن لن يرى أي شيء)؟")
+      if (!ok) return
+    }
+    setSubmitting(true)
+    const r = await adminGrantAdmin(pickedUserId, Array.from(permSet))
+    setSubmitting(false)
+    if (!r.success) {
+      const map: Record<string, string> = {
+        super_admin_only: "هذا الإجراء يتطلب Super Admin",
+        user_not_found: "المستخدم غير موجود",
+        invalid_permissions: "قائمة الصلاحيات غير صالحة",
+        missing_table: "طبّق Migration 11.00 في Supabase أولاً",
+      }
+      return showError(map[r.reason ?? ""] ?? `فشل الإضافة${r.error ? ": " + r.error : ""}`)
+    }
+    const u = allUsers.find((x) => x.id === pickedUserId)
+    showSuccess(`✅ تم تعيين ${u?.full_name ?? "المستخدم"} كأدمن مع ${permSet.size} صلاحية`)
+    closeAddModal()
+    refresh()
+  }
+
+  // ─── Phase 11.00 — Edit permissions flow ──────────────────────
+  const openEditPerms = (u: AdminUserListRow) => {
+    setEditPermsFor(u)
+    // Read existing permissions from the user row if exposed by the
+    // shape (admin_permissions column). Falls back to "all" so the
+    // admin sees the full preset.
+    const cur = (u as AdminUserListRow & { admin_permissions?: unknown }).admin_permissions
+    const arr = Array.isArray(cur) ? (cur as AdminPermission[]) : ALL_PERMISSIONS
+    setEditPermSet(new Set(arr))
+  }
+  const closeEditPerms = () => {
+    setEditPermsFor(null)
+    setEditPermSet(new Set())
+  }
+  const toggleEditPerm = (p: AdminPermission) => {
+    setEditPermSet((cur) => {
+      const next = new Set(cur)
+      if (next.has(p)) next.delete(p)
+      else next.add(p)
+      return next
+    })
+  }
+  const submitEditPerms = async () => {
+    if (!editPermsFor) return
+    setSubmitting(true)
+    const r = await adminSetAdminPermissions(editPermsFor.id, Array.from(editPermSet))
+    setSubmitting(false)
+    if (!r.success) {
+      const map: Record<string, string> = {
+        super_admin_only: "هذا الإجراء يتطلب Super Admin",
+        not_an_admin: "هذا المستخدم ليس أدمن",
+        missing_table: "طبّق Migration 11.00 أولاً",
+      }
+      return showError(map[r.reason ?? ""] ?? "فشل التحديث")
+    }
+    showSuccess(`✅ تم تحديث صلاحيات ${editPermsFor.full_name}`)
+    closeEditPerms()
+    refresh()
+  }
+
+  // List of non-admin users for the picker (filtered by search)
+  const pickerCandidates = useMemo(() => {
+    return allUsers
+      .filter((u) => !u.is_admin)
+      .filter((u) => {
+        if (!pickerSearch) return true
+        const q = pickerSearch.toLowerCase()
+        return (
+          u.full_name.toLowerCase().includes(q) ||
+          (u.email ?? "").toLowerCase().includes(q) ||
+          (u.username ?? "").toLowerCase().includes(q)
+        )
+      })
+      .slice(0, 30)
+  }, [allUsers, pickerSearch])
+
   return (
     <div className="p-6 max-w-screen-2xl">
       <div className="flex justify-between items-start mb-4 gap-3">
@@ -133,7 +255,16 @@ export function AdminUsersPanel() {
             قائمة الأدمنز + المسؤول الأعلى — مقروءة من قاعدة البيانات (profiles.role)
           </div>
         </div>
-        <ActionBtn label="🔄 تحديث" color="gray" sm onClick={refresh} />
+        <div className="flex gap-2">
+          <button
+            onClick={openAddModal}
+            className="px-3 py-1.5 rounded-lg bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-400 text-xs font-bold hover:bg-blue-500/[0.2] flex items-center gap-1.5"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            إضافة أدمن
+          </button>
+          <ActionBtn label="🔄 تحديث" color="gray" sm onClick={refresh} />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
@@ -209,7 +340,15 @@ export function AdminUsersPanel() {
                     <span className="text-[11px] text-neutral-500" dir="ltr">{fmtDate(a.last_seen_at)}</span>
                   </TD>
                   <TD>
-                    <div className="flex gap-1.5">
+                    <div className="flex gap-1.5 flex-wrap">
+                      {!a.is_super_admin && !isMe && (
+                        <ActionBtn
+                          label="🛠 الصلاحيات"
+                          color="blue"
+                          sm
+                          onClick={() => openEditPerms(a)}
+                        />
+                      )}
                       {!a.is_super_admin && !isMe && (
                         <ActionBtn label="👑 ترقية" color="purple" sm onClick={() => promoteToSuper(a)} />
                       )}
@@ -229,11 +368,270 @@ export function AdminUsersPanel() {
       )}
 
       <div className="mt-4 text-[11px] text-neutral-500 bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
-        💡 لإضافة أدمن جديد، اذهب إلى{" "}
-        <a className="font-bold underline" href="/admin?tab=users">المستخدمون ▸ قائمة المستخدمين</a>
-        {" "}واضغط <span className="font-bold">"👑 أدمن"</span> أمام المستخدم. الترقية تستدعي{" "}
-        <span className="font-mono text-yellow-400">admin_set_user_role</span> RPC.
+        💡 الأدمن يرى فقط الأقسام التي مُنح صلاحية الوصول إليها. لتعديل صلاحيات
+        أدمن موجود، اضغط <span className="font-bold text-white">🛠 الصلاحيات</span> أمام صفّه.
       </div>
+
+      {/* ═══════ Phase 11.00 — Add Admin modal ═══════ */}
+      {showAddModal && (
+        <div
+          className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={closeAddModal}
+        >
+          <div
+            className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between sticky top-0 bg-[#0a0a0a]/95 backdrop-blur z-10">
+              <div>
+                <div className="text-base font-bold text-white">👑 إضافة أدمن جديد</div>
+                <div className="text-[10px] text-neutral-500 mt-0.5">
+                  اختر المستخدم ثم حدّد الصلاحيات التي يستطيع الوصول إليها
+                </div>
+              </div>
+              <button onClick={closeAddModal} className="text-neutral-500 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* User picker */}
+              <div>
+                <label className="text-xs text-neutral-400 mb-2 block font-bold">
+                  1. اختر المستخدم <span className="text-red-400">*</span>
+                </label>
+                <div className="relative mb-2">
+                  <Search className="w-3.5 h-3.5 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={pickerSearch}
+                    onChange={(e) => setPickerSearch(e.target.value)}
+                    placeholder="بحث (اسم/بريد/username)..."
+                    className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg pr-9 pl-3 py-2 text-xs text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
+                  />
+                </div>
+                <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg max-h-48 overflow-y-auto divide-y divide-white/[0.04]">
+                  {pickerCandidates.length === 0 ? (
+                    <div className="text-center text-[11px] text-neutral-500 py-6">
+                      {pickerSearch ? "لا توجد نتائج" : "كل المستخدمين أدمنز بالفعل"}
+                    </div>
+                  ) : (
+                    pickerCandidates.map((u) => {
+                      const isPicked = pickedUserId === u.id
+                      return (
+                        <button
+                          key={u.id}
+                          onClick={() => setPickedUserId(u.id)}
+                          className={cn(
+                            "w-full px-3 py-2 text-right hover:bg-white/[0.06] transition-colors flex items-center justify-between gap-2",
+                            isPicked && "bg-blue-400/[0.08]",
+                          )}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs text-white font-bold truncate">{u.full_name}</div>
+                            <div className="text-[10px] text-neutral-500 truncate" dir="ltr">
+                              {u.email ?? u.username ?? "—"}
+                            </div>
+                          </div>
+                          {isPicked && (
+                            <span className="text-[10px] text-blue-400 font-bold flex-shrink-0">✓ مختار</span>
+                          )}
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Permissions checkboxes */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-neutral-400 font-bold">
+                    2. الصلاحيات <span className="text-neutral-500 font-normal">({permSet.size})</span>
+                  </label>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => setPermSet(new Set(ALL_PERMISSIONS))}
+                      className="text-[10px] text-blue-400 hover:text-blue-300"
+                    >
+                      تحديد الكل
+                    </button>
+                    <span className="text-neutral-600">·</span>
+                    <button
+                      onClick={() => setPermSet(new Set())}
+                      className="text-[10px] text-neutral-400 hover:text-white"
+                    >
+                      إلغاء الكل
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {ALL_PERMISSIONS.map((p) => {
+                    const meta = PERMISSION_LABELS[p]
+                    const isOn = permSet.has(p)
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => togglePerm(p)}
+                        className={cn(
+                          "px-3 py-2 rounded-lg border text-right transition-colors",
+                          isOn
+                            ? "bg-blue-400/[0.08] border-blue-400/[0.3]"
+                            : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[11px] font-bold text-white flex items-center gap-1">
+                              <span>{meta.icon}</span>
+                              <span>{meta.label}</span>
+                            </div>
+                            <div className="text-[10px] text-neutral-500 mt-0.5 leading-snug">
+                              {meta.hint}
+                            </div>
+                          </div>
+                          <div
+                            className={cn(
+                              "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0",
+                              isOn
+                                ? "bg-blue-400 border-blue-400 text-black"
+                                : "border-neutral-600",
+                            )}
+                          >
+                            {isOn && <span className="text-[10px] font-bold">✓</span>}
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-white/[0.06] sticky bottom-0 bg-[#0a0a0a]/95 backdrop-blur flex gap-2">
+              <button
+                onClick={closeAddModal}
+                disabled={submitting}
+                className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={submitAddAdmin}
+                disabled={submitting || !pickedUserId}
+                className="flex-1 py-2.5 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-300 text-sm font-bold hover:bg-blue-500/[0.2] disabled:opacity-50"
+              >
+                {submitting ? "جاري الإضافة..." : "👑 تأكيد الإضافة"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════ Phase 11.00 — Edit Permissions modal ═══════ */}
+      {editPermsFor && (
+        <div
+          className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={closeEditPerms}
+        >
+          <div
+            className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between sticky top-0 bg-[#0a0a0a]/95 backdrop-blur z-10">
+              <div>
+                <div className="text-base font-bold text-white">🛠 تعديل صلاحيات الأدمن</div>
+                <div className="text-[10px] text-neutral-500 mt-0.5">
+                  {editPermsFor.full_name}
+                </div>
+              </div>
+              <button onClick={closeEditPerms} className="text-neutral-500 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-neutral-400 font-bold">
+                  الصلاحيات <span className="text-neutral-500 font-normal">({editPermSet.size})</span>
+                </span>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => setEditPermSet(new Set(ALL_PERMISSIONS))}
+                    className="text-[10px] text-blue-400 hover:text-blue-300"
+                  >
+                    تحديد الكل
+                  </button>
+                  <span className="text-neutral-600">·</span>
+                  <button
+                    onClick={() => setEditPermSet(new Set())}
+                    className="text-[10px] text-neutral-400 hover:text-white"
+                  >
+                    إلغاء الكل
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {ALL_PERMISSIONS.map((p) => {
+                  const meta = PERMISSION_LABELS[p]
+                  const isOn = editPermSet.has(p)
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => toggleEditPerm(p)}
+                      className={cn(
+                        "px-3 py-2 rounded-lg border text-right transition-colors",
+                        isOn
+                          ? "bg-blue-400/[0.08] border-blue-400/[0.3]"
+                          : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]",
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[11px] font-bold text-white flex items-center gap-1">
+                            <span>{meta.icon}</span>
+                            <span>{meta.label}</span>
+                          </div>
+                          <div className="text-[10px] text-neutral-500 mt-0.5 leading-snug">
+                            {meta.hint}
+                          </div>
+                        </div>
+                        <div
+                          className={cn(
+                            "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0",
+                            isOn
+                              ? "bg-blue-400 border-blue-400 text-black"
+                              : "border-neutral-600",
+                          )}
+                        >
+                          {isOn && <span className="text-[10px] font-bold">✓</span>}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-white/[0.06] sticky bottom-0 bg-[#0a0a0a]/95 backdrop-blur flex gap-2">
+              <button
+                onClick={closeEditPerms}
+                disabled={submitting}
+                className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={submitEditPerms}
+                disabled={submitting}
+                className="flex-1 py-2.5 rounded-xl bg-green-500/[0.15] border border-green-500/[0.3] text-green-300 text-sm font-bold hover:bg-green-500/[0.2] disabled:opacity-50"
+              >
+                {submitting ? "جاري الحفظ..." : "💾 حفظ"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
