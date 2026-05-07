@@ -170,10 +170,10 @@ function ProjectsListPanel() {
       for (const w of walletAggregates) {
         offeringAvailMap.set(w.project_id, w.offering_available)
         suspensionMap.set(w.project_id, {
-          trading_suspended: (w as Record<string, unknown>).trading_suspended as boolean ?? false,
-          trading_suspension_reason: (w as Record<string, unknown>).trading_suspension_reason as string | null ?? null,
-          offering_suspended: (w as Record<string, unknown>).offering_suspended as boolean ?? false,
-          offering_suspension_reason: (w as Record<string, unknown>).offering_suspension_reason as string | null ?? null,
+          trading_suspended: w.trading_suspended ?? false,
+          trading_suspension_reason: w.trading_suspension_reason ?? null,
+          offering_suspended: w.offering_suspended ?? false,
+          offering_suspension_reason: w.offering_suspension_reason ?? null,
         })
       }
 

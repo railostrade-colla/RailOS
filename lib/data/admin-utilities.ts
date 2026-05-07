@@ -604,6 +604,11 @@ export interface ProjectWalletAdminRow {
   created_at: string
   frozen_at?: string
   frozen_reason?: string
+  /** Phase 10.93 — trading & offering suspension */
+  trading_suspended?: boolean
+  trading_suspension_reason?: string | null
+  offering_suspended?: boolean
+  offering_suspension_reason?: string | null
 }
 
 /**
