@@ -60,7 +60,8 @@ type SubTab = "shares" | "volume" | "fees" | "deals" | "disputes" | "inbox"
 const POLL_INTERVAL_MS = 30_000
 
 export function AdminRequestsHubPanel() {
-  const [tab, setTab] = useState<SubTab>("inbox")
+  // Phase 10.99f — default tab is now "shares" (طلبات الحصص).
+  const [tab, setTab] = useState<SubTab>("shares")
   const [role, setRole] = useState<AdminRoleInfo>({
     is_admin: false,
     is_super_admin: false,
@@ -187,9 +188,12 @@ export function AdminRequestsHubPanel() {
     )
   }
 
+  // Phase 10.99f — طلبات الحصص is now the FIRST tab so admins land
+  // directly on actionable share-purchase requests when they open the
+  // Order Center (per founder spec).
   const tabs = [
-    { key: "inbox" as const, label: "📬 صندوق الإشعارات", count: inbox.filter((n) => !n.processed_by).length },
     { key: "shares" as const, label: "📋 طلبات الحصص", count: shareReqs.length },
+    { key: "inbox" as const, label: "📬 صندوق الإشعارات", count: inbox.filter((n) => !n.processed_by).length },
     { key: "volume" as const, label: "📊 حجم التداول" },
     { key: "fees" as const, label: "💳 وحدات الرسوم", count: feeReqs.length },
     { key: "deals" as const, label: "🤝 الصفقات", count: deals.length },

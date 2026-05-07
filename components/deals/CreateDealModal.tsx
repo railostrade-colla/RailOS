@@ -4,10 +4,22 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { X, ShoppingCart, AlertTriangle, Loader2 } from "lucide-react"
 import { useRealtime } from "@/lib/realtime/RealtimeProvider"
-import { submitDirectBuyRequest, submitPaymentProof } from "@/lib/data/direct-buy"
+import { submitDirectBuyRequest, submitPaymentProof, type PaymentMethod } from "@/lib/data/direct-buy"
 import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 import { PaymentInstructionsBlock } from "@/components/payment/PaymentInstructionsBlock"
+
+// Phase 10.99f — let the user pick the actual payment method used.
+// Stored on payment_proofs so admin sees it in the share-requests
+// table and on the printed invoice/ownership contract.
+const PAYMENT_METHODS: { id: PaymentMethod; label: string; icon: string }[] = [
+  { id: "master_card",   label: "Master Card",     icon: "💳" },
+  { id: "zain_cash",     label: "Zain Cash",       icon: "💰" },
+  { id: "asia_hawala",   label: "Asia Hawala",     icon: "🏧" },
+  { id: "bank_transfer", label: "تحويل بنكي",       icon: "🏦" },
+  { id: "ki_card",       label: "Ki Card",         icon: "💳" },
+  { id: "other",         label: "أخرى",            icon: "💵" },
+]
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
@@ -35,6 +47,8 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
   const [waiting, setWaiting] = useState(false)
   // Phase 10.97 — payment proof captured inside the modal
   const [proofDataUrl, setProofDataUrl] = useState<string | null>(null)
+  // Phase 10.99f — user-picked payment method (stored on payment_proofs)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("master_card")
 
   if (!open) return null
 
@@ -107,7 +121,7 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
         try {
           await submitPaymentProof({
             deal_id: dbResult.deal_id,
-            payment_method: "master_card",
+            payment_method: paymentMethod,
             amount_paid: total,
             proof_image_url: proofDataUrl,
             transaction_reference: null,
@@ -240,6 +254,33 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
             <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
             <div className="text-[11px] text-red-400">
               العدد المطلوب أكبر من المتاح ({project.available_shares} حصة فقط)
+            </div>
+          </div>
+        )}
+
+        {/* Phase 10.99f — payment method picker */}
+        {sharesNum > 0 && sharesNum <= project.available_shares && (
+          <div className="mb-4">
+            <label className="text-xs text-neutral-400 font-bold mb-2 block">
+              طريقة الدفع <span className="text-red-400">*</span>
+            </label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {PAYMENT_METHODS.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setPaymentMethod(m.id)}
+                  className={cn(
+                    "py-2 px-2 rounded-lg border text-[10px] flex flex-col items-center gap-0.5 transition-colors",
+                    paymentMethod === m.id
+                      ? "bg-blue-400/[0.1] border-blue-400/[0.4] text-blue-300 font-bold"
+                      : "bg-white/[0.04] border-white/[0.06] text-neutral-400 hover:bg-white/[0.06]"
+                  )}
+                >
+                  <span className="text-base">{m.icon}</span>
+                  <span>{m.label}</span>
+                </button>
+              ))}
             </div>
           </div>
         )}

@@ -20,8 +20,7 @@
  */
 
 import { useEffect, useMemo, useState, useCallback } from "react"
-import { Search, X, ZoomIn, FileText, Image as ImageIcon, Eye, AlertTriangle } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { Search, X, ZoomIn, Image as ImageIcon, AlertTriangle } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
   KPI, AdminEmpty, InnerTabBar,
@@ -35,6 +34,7 @@ import {
 } from "@/lib/data/share-purchase-requests"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
+import { DealInvoiceModal } from "./DealInvoiceModal"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 const fmtMoney = (n: number) => fmtNum(n) + " د.ع"
@@ -67,10 +67,11 @@ const PAYMENT_METHOD_LABELS: Record<string, { label: string; icon: string }> = {
 type ActionMode = null | "confirm" | "cancel"
 
 export function ShareRequestsPanel() {
-  const router = useRouter()
   const [rows, setRows] = useState<SharePurchaseRequestRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<RequestStatusFilter>("submitted")
+  // Phase 10.99f — default filter is now "pending" (بانتظار الدفع) so
+  // direct-buy requests appear front-and-centre when admin opens this tab.
+  const [filter, setFilter] = useState<RequestStatusFilter>("pending")
   const [search, setSearch] = useState("")
 
   // Detail modal
@@ -79,6 +80,8 @@ export function ShareRequestsPanel() {
   const [actionMode, setActionMode] = useState<ActionMode>(null)
   const [reason, setReason] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  // Phase 10.99f — invoice modal target (deal currently being printed)
+  const [invoiceFor, setInvoiceFor] = useState<SharePurchaseRequestRow | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -257,12 +260,10 @@ export function ShareRequestsPanel() {
             <TH>المبلغ</TH>
             <TH>طريقة الدفع</TH>
             <TH>الإثبات</TH>
-            <TH>الحالة</TH>
             <TH>إجراءات</TH>
           </THead>
           <TBody>
             {filtered.map((r) => {
-              const meta = STATUS_META[r.status] ?? { label: r.status, color: "gray" as const }
               const pm = r.payment_proof
                 ? PAYMENT_METHOD_LABELS[r.payment_proof.payment_method] ?? PAYMENT_METHOD_LABELS.other
                 : null
@@ -321,18 +322,7 @@ export function ShareRequestsPanel() {
                     )}
                   </TD>
                   <TD>
-                    <div className="flex flex-col gap-0.5">
-                      <Badge label={meta.label} color={meta.color} />
-                      {r.has_dispute && (
-                        <span className="text-[9px] text-red-400 flex items-center gap-0.5 mt-0.5">
-                          <AlertTriangle className="w-2.5 h-2.5" />
-                          نزاع مفتوح
-                        </span>
-                      )}
-                    </div>
-                  </TD>
-                  <TD>
-                    <div className="flex gap-1.5 flex-wrap">
+                    <div className="flex gap-1.5 flex-wrap items-center">
                       <ActionBtn
                         label="عرض"
                         color="blue"
@@ -343,8 +333,13 @@ export function ShareRequestsPanel() {
                         label="فاتورة"
                         color="gray"
                         sm
-                        onClick={() => router.push(`/deals/${r.id}`)}
+                        onClick={() => setInvoiceFor(r)}
                       />
+                      {r.has_dispute && (
+                        <span title="نزاع مفتوح">
+                          <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+                        </span>
+                      )}
                     </div>
                   </TD>
                 </TR>
@@ -459,9 +454,9 @@ export function ShareRequestsPanel() {
             {/* Actions */}
             <div className="px-5 py-3 border-t border-white/[0.06] sticky bottom-0 bg-[#0a0a0a]/95 backdrop-blur grid grid-cols-3 gap-2">
               <ActionBtn
-                label="📄 الفاتورة الكاملة"
+                label="📄 فاتورة + عقد ملكية"
                 color="blue"
-                onClick={() => router.push(`/deals/${selected.id}`)}
+                onClick={() => setInvoiceFor(selected)}
               />
               {selected.status !== "completed" && (
                 <>
@@ -554,8 +549,18 @@ export function ShareRequestsPanel() {
           >
             <X className="w-6 h-6" />
           </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={zoomImage} alt="zoom" className="max-w-full max-h-full object-contain rounded-lg" />
         </div>
+      )}
+
+      {/* Phase 10.99f — printable ownership invoice */}
+      {invoiceFor && (
+        <DealInvoiceModal
+          open
+          onClose={() => setInvoiceFor(null)}
+          deal={invoiceFor}
+        />
       )}
     </div>
   )
