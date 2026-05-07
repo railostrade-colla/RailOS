@@ -236,13 +236,21 @@ export function ProjectWalletsPanel() {
         action === "suspend_offering" || action === "resume_offering") {
       const projectId =
         (selected as ProjectWallet & { project_id?: string }).project_id ?? selected.id
-      const rpcMap = {
-        suspend_trading:  () => adminSuspendTrading(projectId, reason.trim() || undefined),
-        resume_trading:   () => adminResumeTrading(projectId),
-        suspend_offering: () => adminSuspendOffering(projectId, reason.trim() || undefined),
-        resume_offering:  () => adminResumeOffering(projectId),
+      let result: { success: boolean; reason?: string }
+      let successMessage = ""
+      if (action === "suspend_trading") {
+        result = await adminSuspendTrading(projectId, reason.trim() || undefined)
+        successMessage = `⏸️ تم تعليق التداول لـ ${selected.project_name}`
+      } else if (action === "resume_trading") {
+        result = await adminResumeTrading(projectId)
+        successMessage = `▶️ تم استئناف التداول لـ ${selected.project_name}`
+      } else if (action === "suspend_offering") {
+        result = await adminSuspendOffering(projectId, reason.trim() || undefined)
+        successMessage = `🔒 تم تعليق الشراء المباشر لـ ${selected.project_name}`
+      } else {
+        result = await adminResumeOffering(projectId)
+        successMessage = `🔓 تم استئناف الشراء المباشر لـ ${selected.project_name}`
       }
-      const result = await rpcMap[action]()
       if (!result.success) {
         const errMap: Record<string, string> = {
           unauthenticated: "يجب تسجيل الدخول أولاً",
@@ -253,13 +261,7 @@ export function ProjectWalletsPanel() {
         showError(errMap[result.reason ?? ""] ?? `فشل العملية (${result.reason ?? "unknown"})`)
         return
       }
-      const labels: Record<typeof action, string> = {
-        suspend_trading:  `⏸️ تم تعليق التداول لـ ${selected.project_name}`,
-        resume_trading:   `▶️ تم استئناف التداول لـ ${selected.project_name}`,
-        suspend_offering: `🔒 تم تعليق الشراء المباشر لـ ${selected.project_name}`,
-        resume_offering:  `🔓 تم استئناف الشراء المباشر لـ ${selected.project_name}`,
-      }
-      showSuccess(labels[action])
+      showSuccess(successMessage)
     }
 
     if (action === "freeze") {
