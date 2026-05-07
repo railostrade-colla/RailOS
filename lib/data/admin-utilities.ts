@@ -277,6 +277,45 @@ export async function adminUnfreezeProject(
   }) as Promise<UtilityRpcResult & { wallets_unfrozen?: number }>
 }
 
+// ─── Trading & Offering Suspension (Phase 10.93) ──────────────
+
+/** Suspends ALL trading (buy + sell) for a project. Super-admin only. */
+export async function adminSuspendTrading(
+  projectId: string,
+  reason?: string,
+): Promise<UtilityRpcResult> {
+  return callRpc("admin_suspend_trading", {
+    p_project_id: projectId,
+    p_reason: reason ?? null,
+  })
+}
+
+/** Resumes trading after a suspension. Super-admin only. */
+export async function adminResumeTrading(
+  projectId: string,
+): Promise<UtilityRpcResult> {
+  return callRpc("admin_resume_trading", { p_project_id: projectId })
+}
+
+/** Suspends new direct-buy requests (unsold offering shares) only.
+ *  Secondary-market trades between investors are unaffected. */
+export async function adminSuspendOffering(
+  projectId: string,
+  reason?: string,
+): Promise<UtilityRpcResult> {
+  return callRpc("admin_suspend_offering", {
+    p_project_id: projectId,
+    p_reason: reason ?? null,
+  })
+}
+
+/** Resumes offering (new direct-buy) after a suspension. */
+export async function adminResumeOffering(
+  projectId: string,
+): Promise<UtilityRpcResult> {
+  return callRpc("admin_resume_offering", { p_project_id: projectId })
+}
+
 // ─── User picker for gifts (Phase 10.54) ──────────────────────
 
 export type UserPickerFilter = "all" | "new" | "active" | "inactive"

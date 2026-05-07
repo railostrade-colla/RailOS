@@ -17,6 +17,10 @@ import {
   adminUnfreezeProject,
   adminReleaseSharesToMarket,
   adminAddSharesToOffering,
+  adminSuspendTrading,
+  adminResumeTrading,
+  adminSuspendOffering,
+  adminResumeOffering,
   getAllProjectWalletsAdmin,
 } from "@/lib/data/admin-utilities"
 import { showSuccess, showError } from "@/lib/utils/toast"
@@ -28,7 +32,11 @@ const fmtNum = (n: number) => n.toLocaleString("en-US")
 // only shares + fee-units. "release" moves shares from reserve → offering;
 // "add_shares" (Phase 10.85) takes shares from the company-held pool
 // (projects.total_shares) and injects them into the offering wallet.
+// Phase 10.93: "suspend_trading" / "resume_trading" block all buy+sell;
+//              "suspend_offering" / "resume_offering" block new direct buys only.
 type WalletAction = null | "freeze" | "unfreeze" | "release" | "add_shares"
+  | "suspend_trading" | "resume_trading"
+  | "suspend_offering" | "resume_offering"
 
 export function ProjectWalletsPanel() {
   const [filter, setFilter] = useState<string>("all")
@@ -86,6 +94,11 @@ export function ProjectWalletsPanel() {
     balance: number
     total_inflow: number
     total_outflow: number
+    /** Phase 10.93 — trading & offering suspension */
+    trading_suspended: boolean
+    trading_suspension_reason: string | null
+    offering_suspended: boolean
+    offering_suspension_reason: string | null
   }>
 
   const stats = {
@@ -216,6 +229,37 @@ export function ProjectWalletsPanel() {
       showSuccess(
         `📤 تم إطلاق ${fmtNum(amt)} حصة للسوق · باق في الاحتياطي: ${fmtNum(result.reserve_remaining ?? 0)}`,
       )
+    }
+
+    // ── Phase 10.93: Trading suspension ──────────────────────────
+    if (action === "suspend_trading" || action === "resume_trading" ||
+        action === "suspend_offering" || action === "resume_offering") {
+      const projectId =
+        (selected as ProjectWallet & { project_id?: string }).project_id ?? selected.id
+      const rpcMap = {
+        suspend_trading:  () => adminSuspendTrading(projectId, reason.trim() || undefined),
+        resume_trading:   () => adminResumeTrading(projectId),
+        suspend_offering: () => adminSuspendOffering(projectId, reason.trim() || undefined),
+        resume_offering:  () => adminResumeOffering(projectId),
+      }
+      const result = await rpcMap[action]()
+      if (!result.success) {
+        const errMap: Record<string, string> = {
+          unauthenticated: "يجب تسجيل الدخول أولاً",
+          super_admin_only: "هذا الإجراء يتطلّب صلاحية Super Admin",
+          project_not_found: "المشروع غير موجود",
+          missing_table: "طبّق Migration 10.93 أولاً",
+        }
+        showError(errMap[result.reason ?? ""] ?? `فشل العملية (${result.reason ?? "unknown"})`)
+        return
+      }
+      const labels: Record<typeof action, string> = {
+        suspend_trading:  `⏸️ تم تعليق التداول لـ ${selected.project_name}`,
+        resume_trading:   `▶️ تم استئناف التداول لـ ${selected.project_name}`,
+        suspend_offering: `🔒 تم تعليق الشراء المباشر لـ ${selected.project_name}`,
+        resume_offering:  `🔓 تم استئناف الشراء المباشر لـ ${selected.project_name}`,
+      }
+      showSuccess(labels[action])
     }
 
     if (action === "freeze") {
@@ -448,6 +492,31 @@ export function ProjectWalletsPanel() {
                 <div className="text-xs text-neutral-300">{selected.frozen_reason}</div>
               </div>
             )}
+            {/* Phase 10.93: suspension banners */}
+            {(() => {
+              const ar = adminRows.find((r) => r.project_id === selected.id)
+              if (!ar) return null
+              return (
+                <>
+                  {ar.trading_suspended && (
+                    <div className="bg-red-400/[0.05] border border-red-400/[0.2] rounded-xl p-3 mb-3">
+                      <div className="text-[11px] font-bold text-red-400 mb-1">⏸️ التداول معلق</div>
+                      {ar.trading_suspension_reason && (
+                        <div className="text-xs text-neutral-300">{ar.trading_suspension_reason}</div>
+                      )}
+                    </div>
+                  )}
+                  {ar.offering_suspended && (
+                    <div className="bg-orange-400/[0.05] border border-orange-400/[0.2] rounded-xl p-3 mb-3">
+                      <div className="text-[11px] font-bold text-orange-400 mb-1">🔒 شراء الحصص المتبقية معلق</div>
+                      {ar.offering_suspension_reason && (
+                        <div className="text-xs text-neutral-300">{ar.offering_suspension_reason}</div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
 
             {/* Transactions */}
             <SectionHeader title="📋 سجلّ الحركات" />
@@ -484,26 +553,42 @@ export function ProjectWalletsPanel() {
             })()}
 
             {/* Actions */}
-            <div className="grid grid-cols-2 gap-2">
-              {selected.status === "active" ? (
-                <ActionBtn label="❄️ تجميد" color="yellow" onClick={() => setAction("freeze")} />
-              ) : (
-                <ActionBtn label="✅ فكّ تجميد" color="green" onClick={() => setAction("unfreeze")} />
-              )}
-              <ActionBtn
-                label="➕ إضافة حصص للطرح"
-                color="purple"
-                onClick={() => setAction("add_shares")}
-                disabled={selected.status !== "active"}
-              />
-              <ActionBtn
-                label="📤 نقل من الاحتياطي"
-                color="blue"
-                onClick={() => setAction("release")}
-                disabled={selected.status !== "active"}
-              />
-              <button onClick={() => setSelected(null)} className="px-3 py-1.5 text-xs rounded-md bg-white/[0.05] border border-white/[0.1] text-neutral-300 hover:bg-white/[0.08]">إغلاق</button>
-            </div>
+            {(() => {
+              const ar = adminRows.find((r) => r.project_id === selected.id)
+              return (
+                <div className="grid grid-cols-2 gap-2">
+                  {selected.status === "active" ? (
+                    <ActionBtn label="❄️ تجميد المحفظة" color="yellow" onClick={() => setAction("freeze")} />
+                  ) : (
+                    <ActionBtn label="✅ فكّ التجميد" color="green" onClick={() => setAction("unfreeze")} />
+                  )}
+                  <ActionBtn
+                    label="➕ إضافة حصص للطرح"
+                    color="purple"
+                    onClick={() => setAction("add_shares")}
+                    disabled={selected.status !== "active"}
+                  />
+                  <ActionBtn
+                    label="📤 نقل من الاحتياطي"
+                    color="blue"
+                    onClick={() => setAction("release")}
+                    disabled={selected.status !== "active"}
+                  />
+                  {/* Phase 10.93: Trading suspension */}
+                  {ar?.trading_suspended ? (
+                    <ActionBtn label="▶️ استئناف التداول" color="green" onClick={() => setAction("resume_trading")} />
+                  ) : (
+                    <ActionBtn label="⏸️ تعليق التداول" color="red" onClick={() => setAction("suspend_trading")} />
+                  )}
+                  {ar?.offering_suspended ? (
+                    <ActionBtn label="🔓 استئناف الحصص المتبقية" color="green" onClick={() => setAction("resume_offering")} />
+                  ) : (
+                    <ActionBtn label="🔒 تعليق الحصص المتبقية" color="yellow" onClick={() => setAction("suspend_offering")} />
+                  )}
+                  <button onClick={() => setSelected(null)} className="px-3 py-1.5 text-xs rounded-md bg-white/[0.05] border border-white/[0.1] text-neutral-300 hover:bg-white/[0.08]">إغلاق</button>
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
@@ -519,6 +604,10 @@ export function ProjectWalletsPanel() {
               {action === "unfreeze" && "✅ فكّ التجميد"}
               {action === "release" && "📤 نقل من الاحتياطي للعرض"}
               {action === "add_shares" && "➕ إضافة حصص للطرح من حصص الشركة"}
+              {action === "suspend_trading" && "⏸️ تعليق التداول الكلي"}
+              {action === "resume_trading" && "▶️ استئناف التداول"}
+              {action === "suspend_offering" && "🔒 تعليق الحصص المتبقية للشراء"}
+              {action === "resume_offering" && "🔓 استئناف الحصص المتبقية"}
             </div>
 
             <div className={cn(
@@ -526,7 +615,11 @@ export function ProjectWalletsPanel() {
               action === "freeze" && "bg-yellow-400/[0.05] border-yellow-400/[0.2] text-yellow-400",
               action === "unfreeze" && "bg-green-400/[0.05] border-green-400/[0.2] text-green-400",
               action === "release" && "bg-blue-400/[0.05] border-blue-400/[0.2] text-blue-400",
-              action === "add_shares" && "bg-purple-400/[0.05] border-purple-400/[0.2] text-purple-400"
+              action === "add_shares" && "bg-purple-400/[0.05] border-purple-400/[0.2] text-purple-400",
+              action === "suspend_trading" && "bg-red-400/[0.05] border-red-400/[0.2] text-red-400",
+              action === "resume_trading" && "bg-green-400/[0.05] border-green-400/[0.2] text-green-400",
+              action === "suspend_offering" && "bg-orange-400/[0.05] border-orange-400/[0.2] text-orange-400",
+              action === "resume_offering" && "bg-green-400/[0.05] border-green-400/[0.2] text-green-400",
             )}>
               المحفظة: <span className="font-bold text-white">{selected.project_name}</span>
               {action === "release" && (
@@ -576,6 +669,39 @@ export function ProjectWalletsPanel() {
                 </>
               )
             })()}
+
+            {/* Phase 10.93: suspend/resume UI */}
+            {(action === "suspend_trading" || action === "suspend_offering") && (
+              <>
+                <div className={cn(
+                  "rounded-xl p-3 mb-4 text-xs border leading-relaxed",
+                  action === "suspend_trading"
+                    ? "bg-red-400/[0.05] border-red-400/[0.2] text-red-300"
+                    : "bg-orange-400/[0.05] border-orange-400/[0.2] text-orange-300"
+                )}>
+                  {action === "suspend_trading"
+                    ? "⚠️ سيُوقَف جميع أوامر البيع والشراء للمشروع فوراً. سيُعلَم المستثمرون بسبب التعليق."
+                    : "⚠️ سيُوقَف شراء الحصص المتبقية (الشراء المباشر الجديد فقط). الصفقات الجارية بين المستثمرين لن تتأثر."}
+                </div>
+                <label className="text-xs text-neutral-400 mb-2 block font-bold">السبب (اختياري — يُعرض للمستخدمين)</label>
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  rows={3}
+                  placeholder={action === "suspend_trading"
+                    ? "مثلاً: إعادة تقييم المشروع — سيُستأنف خلال 48 ساعة"
+                    : "مثلاً: تعليق الطرح موقتاً لمراجعة السعر"}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20 resize-none mb-4"
+                />
+              </>
+            )}
+            {(action === "resume_trading" || action === "resume_offering") && (
+              <div className="bg-green-400/[0.05] border border-green-400/[0.2] rounded-xl p-3 mb-4 text-xs text-green-300 leading-relaxed">
+                {action === "resume_trading"
+                  ? "✅ سيُستأنَف التداول الكامل (بيع وشراء) لهذا المشروع فوراً."
+                  : "✅ سيُستأنَف الشراء المباشر للحصص المتبقية فوراً."}
+              </div>
+            )}
 
             {action === "freeze" && (
               <>
@@ -708,7 +834,11 @@ export function ProjectWalletsPanel() {
                 action === "freeze" && "bg-yellow-500/[0.15] border-yellow-500/[0.3] text-yellow-400",
                 action === "unfreeze" && "bg-green-500/[0.15] border-green-500/[0.3] text-green-400",
                 action === "release" && "bg-blue-500/[0.15] border-blue-500/[0.3] text-blue-400",
-                action === "add_shares" && "bg-purple-500/[0.15] border-purple-500/[0.3] text-purple-400"
+                action === "add_shares" && "bg-purple-500/[0.15] border-purple-500/[0.3] text-purple-400",
+                action === "suspend_trading" && "bg-red-500/[0.15] border-red-500/[0.3] text-red-400",
+                action === "resume_trading" && "bg-green-500/[0.15] border-green-500/[0.3] text-green-400",
+                action === "suspend_offering" && "bg-orange-500/[0.15] border-orange-500/[0.3] text-orange-400",
+                action === "resume_offering" && "bg-green-500/[0.15] border-green-500/[0.3] text-green-400",
               )}>تأكيد</button>
             </div>
           </div>

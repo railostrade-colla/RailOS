@@ -52,6 +52,11 @@ interface EntityRow {
   total_shares: number
   available_shares: number
   project_value: number
+  /** Phase 10.93 — trading & offering suspension state */
+  trading_suspended: boolean
+  trading_suspension_reason: string | null
+  offering_suspended: boolean
+  offering_suspension_reason: string | null
 }
 
 /** Map a Project type DB enum back to the form's sector option. */
@@ -155,8 +160,21 @@ function ProjectsListPanel() {
       // The Phase 10.57 RPC returns offering_available per project, so we
       // use that directly instead of the old 90% hardcode.
       const offeringAvailMap = new Map<string, number>()
+      // Phase 10.93: suspension state from wallet aggregates
+      const suspensionMap = new Map<string, {
+        trading_suspended: boolean
+        trading_suspension_reason: string | null
+        offering_suspended: boolean
+        offering_suspension_reason: string | null
+      }>()
       for (const w of walletAggregates) {
         offeringAvailMap.set(w.project_id, w.offering_available)
+        suspensionMap.set(w.project_id, {
+          trading_suspended: (w as Record<string, unknown>).trading_suspended as boolean ?? false,
+          trading_suspension_reason: (w as Record<string, unknown>).trading_suspension_reason as string | null ?? null,
+          offering_suspended: (w as Record<string, unknown>).offering_suspended as boolean ?? false,
+          offering_suspension_reason: (w as Record<string, unknown>).offering_suspension_reason as string | null ?? null,
+        })
       }
 
       const projectRows: EntityRow[] = (projects as Array<{
@@ -186,6 +204,7 @@ function ProjectsListPanel() {
           available = Number(p.available_shares ?? 0)
         }
 
+        const susp = suspensionMap.get(p.id)
         return {
           id: p.id,
           name: p.name,
@@ -197,6 +216,10 @@ function ProjectsListPanel() {
           total_shares: total,
           available_shares: available,
           project_value: price * total,
+          trading_suspended: susp?.trading_suspended ?? false,
+          trading_suspension_reason: susp?.trading_suspension_reason ?? null,
+          offering_suspended: susp?.offering_suspended ?? false,
+          offering_suspension_reason: susp?.offering_suspension_reason ?? null,
         }
       })
       const companyRows: EntityRow[] = (companies as Array<{
@@ -215,6 +238,10 @@ function ProjectsListPanel() {
         total_shares: 0,
         available_shares: 0,
         project_value: 0,
+        trading_suspended: false,
+        trading_suspension_reason: null,
+        offering_suspended: false,
+        offering_suspension_reason: null,
       }))
       setEntities([...projectRows, ...companyRows])
     })

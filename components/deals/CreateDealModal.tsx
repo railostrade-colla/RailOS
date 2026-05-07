@@ -57,6 +57,8 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
 
       if (!dbResult.success) {
         setSubmitting(false)
+        // Phase 10.93: suspension errors carry a `reason` field from the RPC
+        const suspReason = (dbResult as Record<string, unknown>).reason as string | undefined
         const map: Record<string, string> = {
           unauthenticated: "سجّل دخولك أولاً",
           invalid_amount: "أدخل عدد حصص صحيح",
@@ -64,6 +66,12 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
           project_not_active: "المشروع ليس نشطاً للشراء حالياً",
           insufficient_offering_shares: "الحصص المتاحة في عَرض المشروع غير كافية",
           cannot_buy_own_project: "لا يمكنك شراء مشروعك الخاص",
+          trading_suspended: suspReason
+            ? `⏸️ التداول معلق مؤقتاً: ${suspReason}`
+            : "⏸️ تم تعليق التداول على هذا المشروع مؤقتاً",
+          offering_suspended: suspReason
+            ? `🔒 شراء الحصص معلق مؤقتاً: ${suspReason}`
+            : "🔒 تم تعليق شراء الحصص الجديدة مؤقتاً",
         }
         return showError(map[dbResult.error ?? ""] ?? `تعذّر إرسال الطلب — ${dbResult.error}`)
       }
