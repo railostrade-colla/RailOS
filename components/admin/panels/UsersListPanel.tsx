@@ -15,8 +15,8 @@
  *     in the System ▸ Admins panel, not here.
  */
 
-import { useEffect, useMemo, useState, useCallback } from "react"
-import { Search, X, Ban, Crown, Star, Clock, AlertTriangle } from "lucide-react"
+import { useEffect, useMemo, useState, useCallback, useRef } from "react"
+import { Search, ChevronDown } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
   KPI, AdminEmpty, InnerTabBar,
@@ -27,6 +27,8 @@ import {
   adminBanUser,
   adminUnbanUser,
   adminSetAmbassador,
+  adminSetUserLevel,
+  adminSetUserKyc,
   type AdminUserListRow,
 } from "@/lib/data/admin-utilities"
 import { UserDetailsModal } from "./UserDetailsModal"
@@ -55,14 +57,6 @@ const KYC_LABEL: Record<string, { label: string; color: "green" | "yellow" | "re
   not_submitted: { label: "—",            color: "gray"   },
 }
 
-// Predefined ban durations
-const BAN_DURATIONS = [
-  { key: "1d",  label: "يوم واحد",      hours: 24 },
-  { key: "7d",  label: "أسبوع",         hours: 24 * 7 },
-  { key: "30d", label: "شهر",            hours: 24 * 30 },
-  { key: "perm", label: "دائم",          hours: 0 },
-] as const
-
 export function UsersListPanel() {
   const [users, setUsers] = useState<AdminUserListRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,10 +66,22 @@ export function UsersListPanel() {
 
   // Modals
   const [detailsUserId, setDetailsUserId] = useState<string | null>(null)
-  const [banTarget, setBanTarget] = useState<AdminUserListRow | null>(null)
-  const [banReason, setBanReason] = useState("")
-  const [banDuration, setBanDuration] = useState<typeof BAN_DURATIONS[number]["key"]>("7d")
   const [submitting, setSubmitting] = useState(false)
+
+  // Phase 10.98 — per-row dropdown menus (level + ban). Single key
+  // tracks which row (and which menu) is open; click anywhere else closes.
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!openMenu) return
+    const close = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenu(null)
+      }
+    }
+    document.addEventListener("mousedown", close)
+    return () => document.removeEventListener("mousedown", close)
+  }, [openMenu])
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -152,14 +158,84 @@ export function UsersListPanel() {
     refresh()
   }
 
-  const handleBanSubmit = async () => {
-    if (!banTarget) return
-    const dur = BAN_DURATIONS.find((d) => d.key === banDuration)!
-    const until = dur.hours > 0
-      ? new Date(Date.now() + dur.hours * 3600 * 1000)
-      : null  // permanent
+  const unban = async (u: AdminUserListRow) => {
+    const ok = window.confirm(`رفع الحظر عن ${u.full_name}؟`)
+    if (!ok) return
     setSubmitting(true)
-    const r = await adminBanUser(banTarget.id, banReason || null, until)
+    const r = await adminUnbanUser(u.id)
+    setSubmitting(false)
+    if (!r.success) return showError("فشل رفع الحظر")
+    showSuccess(`✓ تم رفع الحظر عن ${u.full_name}`)
+    refresh()
+  }
+
+  // ─── Phase 10.98 actions ───────────────────────────────────────
+  const setUserLevel = async (
+    u: AdminUserListRow,
+    level: "basic" | "advanced" | "pro" | "elite",
+  ) => {
+    if (!isSuper) return showError("فقط Super Admin يستطيع تعديل المستوى")
+    if (level === u.level) return setOpenMenu(null)
+    setOpenMenu(null)
+    setSubmitting(true)
+    const r = await adminSetUserLevel(u.id, level)
+    setSubmitting(false)
+    if (!r.success) {
+      const map: Record<string, string> = {
+        super_admin_only: "هذا الإجراء يتطلب Super Admin",
+        invalid_level: "مستوى غير صالح",
+        user_not_found: "المستخدم غير موجود",
+        missing_table: "طبّق Migration 10.98 أولاً",
+      }
+      return showError(map[r.reason ?? ""] ?? "فشل تحديث المستوى")
+    }
+    showSuccess(`📊 تم تحديث مستوى ${u.full_name} إلى ${LEVEL_LABEL[level]?.label ?? level}`)
+    refresh()
+  }
+
+  const verifyUserKyc = async (u: AdminUserListRow) => {
+    const isVerified = u.kyc_status === "approved"
+    const newStatus = isVerified ? "not_submitted" : "approved"
+    const ok = window.confirm(
+      isVerified
+        ? `إلغاء توثيق ${u.full_name}؟`
+        : `توثيق ${u.full_name} مباشرةً (قبول KYC)؟`,
+    )
+    if (!ok) return
+    setSubmitting(true)
+    const r = await adminSetUserKyc(u.id, newStatus)
+    setSubmitting(false)
+    if (!r.success) {
+      const map: Record<string, string> = {
+        not_admin: "صلاحياتك لا تسمح",
+        invalid_status: "حالة غير صالحة",
+        missing_table: "طبّق Migration 10.98 أولاً",
+      }
+      return showError(map[r.reason ?? ""] ?? "فشل التحديث")
+    }
+    showSuccess(
+      isVerified
+        ? `✓ تم إلغاء توثيق ${u.full_name}`
+        : `✅ تم توثيق ${u.full_name}`,
+    )
+    refresh()
+  }
+
+  const banWithDays = async (u: AdminUserListRow, days: number | null) => {
+    setOpenMenu(null)
+    if (days !== null && days <= 0) return
+    const until = days !== null
+      ? new Date(Date.now() + days * 24 * 3600 * 1000)
+      : null  // null = permanent
+    const reason = window.prompt(
+      days === null
+        ? `حظر ${u.full_name} نهائياً — السبب (اختياري):`
+        : `حظر ${u.full_name} لمدة ${days} يوم — السبب (اختياري):`,
+      "",
+    )
+    if (reason === null) return  // user cancelled the prompt
+    setSubmitting(true)
+    const r = await adminBanUser(u.id, reason || null, until)
     setSubmitting(false)
     if (!r.success) {
       const map: Record<string, string> = {
@@ -173,24 +249,21 @@ export function UsersListPanel() {
     }
     showSuccess(
       until
-        ? `🔒 تم حظر ${banTarget.full_name} حتى ${until.toISOString().slice(0, 10)}`
-        : `🔒 تم حظر ${banTarget.full_name} نهائياً`,
+        ? `🔒 تم حظر ${u.full_name} حتى ${until.toISOString().slice(0, 10)}`
+        : `🔒 تم حظر ${u.full_name} نهائياً`,
     )
-    setBanTarget(null)
-    setBanReason("")
-    setBanDuration("7d")
     refresh()
   }
 
-  const unban = async (u: AdminUserListRow) => {
-    const ok = window.confirm(`رفع الحظر عن ${u.full_name}؟`)
-    if (!ok) return
-    setSubmitting(true)
-    const r = await adminUnbanUser(u.id)
-    setSubmitting(false)
-    if (!r.success) return showError("فشل رفع الحظر")
-    showSuccess(`✓ تم رفع الحظر عن ${u.full_name}`)
-    refresh()
+  const banWithCustomDays = (u: AdminUserListRow) => {
+    setOpenMenu(null)
+    const input = window.prompt(`عدد أيام الحظر المؤقت لـ ${u.full_name}:`, "7")
+    if (!input) return
+    const days = parseInt(input.trim(), 10)
+    if (isNaN(days) || days <= 0 || days > 3650) {
+      return showError("عدد أيام غير صالح (1 إلى 3650)")
+    }
+    void banWithDays(u, days)
   }
 
   return (
@@ -353,13 +426,56 @@ export function UsersListPanel() {
 
                   {/* Actions */}
                   <TD>
-                    <div className="flex gap-1.5 flex-wrap">
+                    <div className="flex gap-1.5 flex-wrap items-center">
                       <ActionBtn
                         label="تفاصيل"
                         color="blue"
                         sm
                         onClick={() => setDetailsUserId(u.id)}
                       />
+
+                      {/* Phase 10.98 — Verify (KYC) button */}
+                      <ActionBtn
+                        label={u.kyc_status === "approved" ? "✓ موثَّق" : "🛡️ توثيق"}
+                        color={u.kyc_status === "approved" ? "gray" : "green"}
+                        sm
+                        onClick={() => verifyUserKyc(u)}
+                      />
+
+                      {/* Phase 10.98 — Level dropdown (super_admin only) */}
+                      {isSuper && (
+                        <div className="relative inline-block" ref={openMenu === `level-${u.id}` ? menuRef : null}>
+                          <button
+                            onClick={() => setOpenMenu(openMenu === `level-${u.id}` ? null : `level-${u.id}`)}
+                            className="px-2 py-1 text-[11px] rounded-md bg-purple-500/[0.15] border border-purple-500/[0.3] text-purple-400 hover:bg-purple-500/[0.2] flex items-center gap-1"
+                          >
+                            📊 المستوى <ChevronDown className="w-3 h-3" />
+                          </button>
+                          {openMenu === `level-${u.id}` && (
+                            <div className="absolute z-50 mt-1 right-0 bg-[#0a0a0a] border border-white/[0.1] rounded-lg shadow-xl py-1 min-w-[140px]">
+                              {(["basic", "advanced", "pro", "elite"] as const).map((lvl) => {
+                                const info = LEVEL_LABEL[lvl]
+                                const isCurrent = u.level === lvl
+                                return (
+                                  <button
+                                    key={lvl}
+                                    onClick={() => setUserLevel(u, lvl)}
+                                    disabled={isCurrent}
+                                    className={cn(
+                                      "w-full text-right px-3 py-1.5 text-[11px] flex items-center justify-between gap-2 hover:bg-white/[0.05] transition-colors",
+                                      isCurrent && "opacity-50 cursor-default"
+                                    )}
+                                  >
+                                    <span className="text-white">{info.label}</span>
+                                    {isCurrent && <span className="text-green-400 text-[10px]">✓ حالي</span>}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {isSuper && (
                         <ActionBtn
                           label={u.is_ambassador ? "إلغاء سفير" : "🌟 سفير"}
@@ -368,6 +484,8 @@ export function UsersListPanel() {
                           onClick={() => toggleAmbassador(u)}
                         />
                       )}
+
+                      {/* Phase 10.98 — Ban dropdown (temp days / permanent) */}
                       {u.is_banned ? (
                         <ActionBtn
                           label="رفع الحظر"
@@ -376,12 +494,49 @@ export function UsersListPanel() {
                           onClick={() => unban(u)}
                         />
                       ) : (
-                        <ActionBtn
-                          label="🔒 حظر"
-                          color="red"
-                          sm
-                          onClick={() => { setBanTarget(u); setBanReason(""); setBanDuration("7d") }}
-                        />
+                        <div className="relative inline-block" ref={openMenu === `ban-${u.id}` ? menuRef : null}>
+                          <button
+                            onClick={() => setOpenMenu(openMenu === `ban-${u.id}` ? null : `ban-${u.id}`)}
+                            className="px-2 py-1 text-[11px] rounded-md bg-red-500/[0.15] border border-red-500/[0.3] text-red-400 hover:bg-red-500/[0.2] flex items-center gap-1"
+                          >
+                            🔒 حظر <ChevronDown className="w-3 h-3" />
+                          </button>
+                          {openMenu === `ban-${u.id}` && (
+                            <div className="absolute z-50 mt-1 right-0 bg-[#0a0a0a] border border-white/[0.1] rounded-lg shadow-xl py-1 min-w-[180px]">
+                              <div className="px-3 py-1 text-[10px] text-neutral-500 border-b border-white/[0.05]">
+                                حظر مؤقت
+                              </div>
+                              {[
+                                { days: 1,   label: "يوم واحد" },
+                                { days: 7,   label: "أسبوع" },
+                                { days: 14,  label: "أسبوعان" },
+                                { days: 30,  label: "شهر" },
+                                { days: 90,  label: "3 أشهر" },
+                              ].map((opt) => (
+                                <button
+                                  key={opt.days}
+                                  onClick={() => banWithDays(u, opt.days)}
+                                  className="w-full text-right px-3 py-1.5 text-[11px] text-white hover:bg-white/[0.05] transition-colors"
+                                >
+                                  {opt.label} <span className="text-neutral-500">({opt.days} يوم)</span>
+                                </button>
+                              ))}
+                              <button
+                                onClick={() => banWithCustomDays(u)}
+                                className="w-full text-right px-3 py-1.5 text-[11px] text-blue-400 hover:bg-white/[0.05] transition-colors border-t border-white/[0.05]"
+                              >
+                                ✏️ مدة مخصصة...
+                              </button>
+                              <div className="border-t border-white/[0.05]" />
+                              <button
+                                onClick={() => banWithDays(u, null)}
+                                className="w-full text-right px-3 py-1.5 text-[11px] text-red-400 hover:bg-red-400/[0.08] transition-colors font-bold"
+                              >
+                                🚫 حظر نهائي (دائم)
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   </TD>
@@ -400,98 +555,6 @@ export function UsersListPanel() {
         />
       )}
 
-      {/* ═══ Ban modal ═══ */}
-      {banTarget && (
-        <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          onClick={() => !submitting && setBanTarget(null)}
-        >
-          <div
-            className="bg-[#0a0a0a] border border-red-500/[0.3] rounded-2xl p-5 w-full max-w-md"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-red-500/[0.1] border border-red-500/[0.3] flex items-center justify-center flex-shrink-0">
-                <Ban className="w-5 h-5 text-red-400" />
-              </div>
-              <div className="flex-1">
-                <div className="text-base font-bold text-red-400 mb-1">
-                  حظر / إيقاف مؤقّت
-                </div>
-                <div className="text-xs text-neutral-400">
-                  {banTarget.full_name}
-                  <span className="text-neutral-600 mx-1">·</span>
-                  <span dir="ltr">{banTarget.email || banTarget.phone || "—"}</span>
-                </div>
-              </div>
-              <button
-                onClick={() => !submitting && setBanTarget(null)}
-                className="text-neutral-500 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Duration picker */}
-            <label className="text-xs text-neutral-400 mb-2 block font-bold">
-              مدة الحظر
-            </label>
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {BAN_DURATIONS.map((d) => (
-                <button
-                  key={d.key}
-                  onClick={() => setBanDuration(d.key)}
-                  className={cn(
-                    "px-3 py-2 rounded-xl border text-xs transition-colors flex items-center justify-center gap-1.5",
-                    banDuration === d.key
-                      ? "bg-red-500/[0.15] border-red-500/[0.4] text-red-300 font-bold"
-                      : "bg-white/[0.04] border-white/[0.06] text-neutral-400 hover:text-white",
-                  )}
-                >
-                  {d.key === "perm" ? <AlertTriangle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-                  {d.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Reason */}
-            <label className="text-xs text-neutral-400 mb-2 block font-bold">
-              السبب (اختياري — يظهر للمستخدم)
-            </label>
-            <textarea
-              value={banReason}
-              onChange={(e) => setBanReason(e.target.value)}
-              rows={3}
-              placeholder="مثلاً: مخالفة شروط الاستخدام..."
-              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white placeholder:text-neutral-600 outline-none resize-none mb-4"
-            />
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => !submitting && setBanTarget(null)}
-                disabled={submitting}
-                className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
-              >
-                إلغاء
-              </button>
-              <button
-                onClick={handleBanSubmit}
-                disabled={submitting}
-                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 disabled:opacity-50"
-              >
-                {submitting ? "جاري..." : "تأكيد الحظر"}
-              </button>
-            </div>
-
-            <div className="text-[10px] text-neutral-500 mt-3 leading-relaxed">
-              <Crown className="inline w-3 h-3 mr-1" />
-              الحظر يضع <span className="font-mono text-white">is_banned = TRUE</span> + يسجّل في
-              <span className="font-mono text-white"> audit_log</span>. للحظر المؤقّت يُسجَّل تاريخ الانتهاء في
-              <span className="font-mono text-white"> banned_until</span>.
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

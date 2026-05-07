@@ -572,6 +572,33 @@ export async function adminSetAmbassador(
   })
 }
 
+// ─── User level + KYC quick-toggle (Phase 10.98) ───────────────
+
+/** Set a user's level. Super-admin only. Stamps the override columns
+ *  so the auto-promoter doesn't undo a manual change. */
+export async function adminSetUserLevel(
+  userId: string,
+  level: "basic" | "advanced" | "pro" | "elite",
+): Promise<UtilityRpcResult> {
+  return callRpc("admin_set_user_level", {
+    p_user_id: userId,
+    p_level: level,
+  })
+}
+
+/** Quick KYC status flip on profiles. Admin or super_admin.
+ *  For full submission review (with rejection reason), use
+ *  approveKyc / rejectKyc in lib/data/kyc-admin.ts. */
+export async function adminSetUserKyc(
+  userId: string,
+  status: "approved" | "pending" | "rejected" | "not_submitted",
+): Promise<UtilityRpcResult> {
+  return callRpc("admin_set_user_kyc", {
+    p_user_id: userId,
+    p_status: status,
+  })
+}
+
 // ─── List all project wallets (Phase 10.51) ────────────────────
 
 export interface ProjectWalletAdminRow {
