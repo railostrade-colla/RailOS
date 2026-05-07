@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { ShoppingCart, Heart, X, Image as ImageIcon, Clock, TrendingUp, TrendingDown, AlertCircle, Building2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { CreateDealModal } from "@/components/deals/CreateDealModal"
 import { showSuccess, showError } from "@/lib/utils/toast"
@@ -211,7 +210,9 @@ export default function ProjectDetailPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
+        {/* Phase 10.95 — solid black background per founder spec
+            (was GridBackground, didn't match the rest of the app). */}
+        <div className="absolute inset-0 bg-black -z-0" />
 
         <div className="relative z-10 px-3 lg:px-8 py-6 max-w-3xl mx-auto">
 

@@ -15,6 +15,8 @@ type DBProject = {
   short_description?: string
   project_type?: string
   cover_image_url?: string
+  cover_url?: string
+  logo_url?: string
   total_shares: number
   share_price: number
   total_value?: number
@@ -26,6 +28,25 @@ type DBProject = {
   offering_end_date?: string
   created_at?: string
   published_at?: string
+  /** Phase 10.95 — all admin-form fields needed by /project/[id] details page. */
+  risk_level?: string
+  return_min?: number | string
+  return_max?: number | string
+  expected_return_min?: number | string
+  expected_return_max?: number | string
+  distribution_type?: string
+  profit_source?: string
+  symbol?: string
+  duration_open?: boolean
+  duration_months?: number
+  owner_name?: string
+  owner_phone?: string
+  owner_email?: string
+  detailed_address?: string
+  location_city?: string
+  location_address?: string
+  gallery_images?: string[] | unknown
+  documents?: unknown
 }
 
 /** Transform a DB project row into the Project interface used by UI cards. */
@@ -48,6 +69,32 @@ function dbToProject(row: DBProject): Project {
   const offeringShares = offeringPct > 0
     ? Math.round(totalShares * offeringPct / 100)
     : totalShares   // legacy fallback for rows without offering_percentage
+  // Phase 10.95 — read returns + classification straight off the row.
+  // DB stores ANNUAL %; the project details page divides by 12 for the
+  // monthly card.  Both `return_min/max` and `expected_return_min/max`
+  // exist (the create RPC writes both for backwards-compat); prefer
+  // the canonical `expected_return_*` and fall back to `return_*`.
+  const annualMin = Number(
+    row.expected_return_min ?? row.return_min ?? 0
+  ) || 0
+  const annualMax = Number(
+    row.expected_return_max ?? row.return_max ?? 0
+  ) || 0
+
+  // risk_level may be NULL/missing for older rows; default to "medium"
+  // so the UI badge still renders.
+  const dbRisk = row.risk_level
+  const riskLevel: "low" | "medium" | "high" =
+    dbRisk === "low" || dbRisk === "medium" || dbRisk === "high" ? dbRisk : "medium"
+
+  // distribution_type: only the 4 enum values are valid in the type.
+  const dbDist = row.distribution_type
+  const distributionType =
+    dbDist === "monthly" || dbDist === "quarterly" ||
+    dbDist === "semi_annual" || dbDist === "annual"
+      ? dbDist
+      : undefined
+
   return {
     id: row.id,
     name: row.name,
@@ -56,10 +103,18 @@ function dbToProject(row: DBProject): Project {
     total_shares: totalShares,
     offering_shares: offeringShares,
     available_shares: offeringShares,   // refined by wallet aggregate in admin panel
-    risk_level: "medium",
+    risk_level: riskLevel,
     project_value: row.total_value ? Number(row.total_value) : undefined,
     description: row.short_description ?? row.description ?? "",
     created_at: row.created_at,
+    // Phase 10.95 — extended admin-form fields surfaced on /project/[id]
+    return_min: annualMin > 0 ? annualMin : undefined,
+    return_max: annualMax > 0 ? annualMax : undefined,
+    expected_return_min: annualMin > 0 ? annualMin : undefined,
+    expected_return_max: annualMax > 0 ? annualMax : undefined,
+    distribution_type: distributionType,
+    profit_source: row.profit_source || undefined,
+    symbol: row.symbol || undefined,
   }
 }
 
