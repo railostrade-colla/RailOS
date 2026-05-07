@@ -232,7 +232,7 @@ function PortfolioContent() {
 
   // Fee units
   const feeBalance = data?.feeBalance.balance ?? 0
-  const pendingCount = feeRequests.filter((r) => r.status === "pending").length
+  const pendingFeeCount = feeRequests.filter((r) => r.status === "pending").length
 
   // Level (DB → InvestorLevel; supports basic/advanced/pro, downgrades elite → basic)
   const userLevel: InvestorLevel = safeInvestorLevel(data?.level)
@@ -252,6 +252,16 @@ function PortfolioContent() {
     created_at: string
   }
   const [extraHistory, setExtraHistory] = useState<HistoryEntry[]>([])
+
+  // Phase 10.96 — pendingCount = pending fee requests + pending shares
+  // (deals/transfers awaiting buyer/seller/admin action). The history feed
+  // populates extraHistory asynchronously, so until it loads we fall back
+  // to the fee-request count alone.
+  const pendingShareCount = extraHistory.filter(
+    (e) => e.statusBadge === "معلّقة" || e.statusBadge === "بانتظار"
+  ).length
+  const pendingCount = pendingFeeCount + pendingShareCount
+
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -444,33 +454,33 @@ function PortfolioContent() {
           {/* ═══ Personal view (only when on personal account) ═══ */}
           {active.kind === "personal" && (
           <>
-          {/* بطاقة الحدود الشهرية — Phase 10.82: قُلّص حجمها للنصف.
-              p-5 → p-3, mb-5 → mb-3, text-2xl → text-base. */}
-          <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-3 mb-3 backdrop-blur">
+          {/* بطاقة الحدود الشهرية — Phase 10.96: shrunk further per founder.
+              All on a single compact row: label + value + level + tiny progress bar. */}
+          <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-2.5 mb-3 backdrop-blur">
 
-            {/* الحد الفردي */}
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <div className="text-[10px] text-neutral-400 mb-0.5">حدّك الشهري الفردي</div>
-                <div className="text-base font-bold text-white font-mono">
+            {/* Single-row compact layout */}
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <span className="text-[9px] text-neutral-500 shrink-0">حدّك الشهري:</span>
+                <span className="text-xs font-bold text-white font-mono truncate">
                   {fmtLimit(LEVEL_LIMITS[userLevel])} د.ع
-                </div>
+                </span>
               </div>
-              <div className="flex items-center gap-1.5 bg-white/[0.04] border border-white/[0.08] rounded-lg px-2 py-1">
-                <span className="text-sm">{LEVEL_ICONS[userLevel]}</span>
-                <span className="text-[10px] font-bold text-white">{LEVEL_LABELS[userLevel]}</span>
+              <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] rounded-md px-1.5 py-0.5 shrink-0">
+                <span className="text-[10px]">{LEVEL_ICONS[userLevel]}</span>
+                <span className="text-[9px] font-bold text-white">{LEVEL_LABELS[userLevel]}</span>
               </div>
             </div>
 
-            {/* Progress bar */}
-            <div className="mb-4">
-              <div className="flex justify-between text-[10px] text-neutral-500 mb-1.5">
-                <span>المستخدم هذا الشهر</span>
+            {/* Tiny progress bar */}
+            <div>
+              <div className="flex justify-between text-[9px] text-neutral-500 mb-0.5">
+                <span>المستخدم</span>
                 <span className="font-mono">
                   {fmtLimit(CURRENT_USER_USED_THIS_MONTH)} / {fmtLimit(LEVEL_LIMITS[userLevel])}
                 </span>
               </div>
-              <div className="h-2 bg-white/[0.05] rounded-full overflow-hidden">
+              <div className="h-1 bg-white/[0.05] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-blue-400 to-blue-500 transition-all"
                   style={{

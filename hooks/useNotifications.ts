@@ -20,26 +20,54 @@ import {
  * keeps its own Supabase channel.
  */
 
-// Lazy-loaded singleton so we don't construct an Audio object on
-// every render. Browsers also block playback before any user gesture,
-// so first call may silently no-op.
-let _notifAudio: HTMLAudioElement | null = null
+// Phase 10.96 — Generate notification chime programmatically via Web
+// Audio API. This avoids shipping a binary mp3 in /public and works
+// offline. The two-tone "ding" sounds like a typical message alert.
+//
+// AudioContext can only be constructed/resumed in response to a user
+// gesture; we create it lazily on the first call to playNotifSound.
+let _audioCtx: AudioContext | null = null
+
+function getAudioCtx(): AudioContext | null {
+  if (typeof window === "undefined") return null
+  if (_audioCtx) return _audioCtx
+  try {
+    type WindowAC = Window & { webkitAudioContext?: typeof AudioContext }
+    const Ctx = window.AudioContext || (window as WindowAC).webkitAudioContext
+    if (!Ctx) return null
+    _audioCtx = new Ctx()
+    return _audioCtx
+  } catch {
+    return null
+  }
+}
 
 function playNotifSound() {
-  if (typeof window === "undefined") return
+  const ctx = getAudioCtx()
+  if (!ctx) return
   try {
-    if (!_notifAudio) {
-      _notifAudio = new Audio("/sounds/notification.mp3")
-      _notifAudio.volume = 0.5
-      _notifAudio.preload = "auto"
+    if (ctx.state === "suspended") {
+      void ctx.resume().catch(() => undefined)
     }
-    // Reset to start so rapid-fire notifications still play.
-    _notifAudio.currentTime = 0
-    void _notifAudio.play().catch(() => {
-      // Browser blocked autoplay (no user gesture yet) — silent no-op.
-    })
+    const now = ctx.currentTime
+    // Two-tone chime: 880Hz (A5) → 1320Hz (E6), each ~150ms with a
+    // soft attack-release envelope so it doesn't click.
+    const tone = (freq: number, start: number, dur: number) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = "sine"
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0, start)
+      gain.gain.linearRampToValueAtTime(0.25, start + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + dur)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(start)
+      osc.stop(start + dur + 0.05)
+    }
+    tone(880, now, 0.15)
+    tone(1320, now + 0.12, 0.20)
   } catch {
-    /* ignore */
+    /* ignore — audio playback is best-effort */
   }
 }
 

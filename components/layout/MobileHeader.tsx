@@ -22,8 +22,13 @@ export function MobileHeader() {
   return (
     <header className="lg:hidden sticky top-0 z-40 bg-[rgba(0,0,0,0.85)] backdrop-blur-xl">
       <div className="px-4 py-3 flex items-center justify-between">
-        {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity" aria-label="رايلوس">
+        {/* Logo — Phase 10.96: click reloads the app instead of navigating
+            (per founder spec: "ايقونة التطبيق الاجراء النقر يتم تحديث التطبيق") */}
+        <button
+          onClick={() => { if (typeof window !== "undefined") window.location.reload() }}
+          className="flex items-center gap-2.5 hover:opacity-80 transition-opacity"
+          aria-label="تحديث التطبيق"
+        >
           <div className="w-9 h-9 rounded-lg overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black flex-shrink-0">
             <Image src="/logo.png" alt="رايلوس" width={36} height={36} className="w-full h-full object-contain" />
           </div>
@@ -31,7 +36,7 @@ export function MobileHeader() {
             <div className="text-sm font-bold text-white">رايلوس</div>
             <div className="text-[9px] text-neutral-500 font-mono uppercase tracking-wider mt-0.5">RAILOS</div>
           </div>
-        </Link>
+        </button>
 
         {/* Action Icons */}
         <div className="flex items-center gap-2">
