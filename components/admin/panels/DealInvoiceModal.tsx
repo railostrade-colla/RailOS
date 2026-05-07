@@ -167,7 +167,7 @@ export function DealInvoiceModal({ open, onClose, deal }: Props) {
                 <div className="text-xs text-gray-600" dir="ltr">@{deal.buyer_username}</div>
               )}
               <div className="text-[10px] text-gray-500 mt-1 font-mono" dir="ltr">
-                ID: {deal.buyer_id.slice(0, 12)}
+                ID: {deal.buyer_id ? deal.buyer_id.slice(0, 12) : "—"}
               </div>
             </div>
             <div>
@@ -177,7 +177,7 @@ export function DealInvoiceModal({ open, onClose, deal }: Props) {
                 <div className="text-xs text-gray-600 mt-1" dir="ltr">@{deal.seller_username}</div>
               )}
               <div className="text-[10px] text-gray-500 mt-1 font-mono" dir="ltr">
-                ID: {deal.seller_id.slice(0, 12)}
+                ID: {deal.seller_id ? deal.seller_id.slice(0, 12) : "—"}
               </div>
             </div>
           </div>
@@ -195,7 +195,7 @@ export function DealInvoiceModal({ open, onClose, deal }: Props) {
                 </tr>
                 <tr className="border-b border-gray-300">
                   <td className="px-4 py-3 text-gray-600">رقم المشروع</td>
-                  <td className="px-4 py-3 font-mono text-xs" dir="ltr">{deal.project_id}</td>
+                  <td className="px-4 py-3 font-mono text-xs" dir="ltr">{deal.project_id ?? "—"}</td>
                 </tr>
                 <tr className="border-b border-gray-300">
                   <td className="px-4 py-3 text-gray-600">عدد الحصص</td>
