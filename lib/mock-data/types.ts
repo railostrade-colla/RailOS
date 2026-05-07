@@ -82,7 +82,11 @@ export interface Project {
 
   // ─── Admin form: financial ───
   project_value?: number              // قيمة المشروع الكلية
-  shares_offered?: number             // الحصص المطروحة
+  /** Total shares in the public offering bucket (offering_pct × total_shares).
+   *  Distinct from available_shares (which decreases as shares are sold).
+   *  Use this as the denominator for sold-% calculations. */
+  offering_shares?: number            // إجمالي حصص الطرح للجمهور
+  shares_offered?: number             // الحصص المطروحة (legacy alias)
   reserved_shares?: number            // الحصص المحجوزة
   listing_percent?: number            // نسبة الطرح
   capital_needed?: number             // رأس المال المطلوب

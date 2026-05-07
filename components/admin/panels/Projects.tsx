@@ -151,15 +151,12 @@ function ProjectsListPanel() {
     ]).then(([projects, companies, walletAggregates]) => {
       if (cancelled) return
 
-      // Build a map: project_id → offering wallet's available_shares.
-      // The aggregator returns one row per project with offering+
-      // ambassador+reserve combined, but we want offering specifically
-      // — fetch via the admin RPC layer in a follow-up if needed.
-      // For now, derive offering from the project's offering_percentage
-      // applied to total_shares.
-      const offeringMap = new Map<string, number>()
+      // Build a map: project_id → offering wallet's REAL available_shares.
+      // The Phase 10.57 RPC returns offering_available per project, so we
+      // use that directly instead of the old 90% hardcode.
+      const offeringAvailMap = new Map<string, number>()
       for (const w of walletAggregates) {
-        offeringMap.set(w.project_id, 0) // placeholder; computed per-row below
+        offeringAvailMap.set(w.project_id, w.offering_available)
       }
 
       const projectRows: EntityRow[] = (projects as Array<{
@@ -169,17 +166,26 @@ function ProjectsListPanel() {
         share_price?: number | string
         total_shares?: number | string
         available_shares?: number | string
+        offering_percentage?: number | string
         status?: string
       }>).map((p) => {
         const total = Number(p.total_shares ?? 0)
         const price = Number(p.share_price ?? 0)
-        // "available" reflects offering shares (what's actually for sale).
-        // We approximate as 90% of total when the wallet exists; falls
-        // back to project.available_shares as a safety net.
-        const offeringApprox = Math.floor(total * 0.9)
-        const available = offeringMap.has(p.id)
-          ? offeringApprox
-          : Number(p.available_shares ?? 0)
+        const offeringPct = Number(p.offering_percentage ?? 0)
+
+        // Priority order for "حصص متاحة":
+        //   1. Real offering_available from the wallet (most accurate — reflects sold shares)
+        //   2. offering_percentage × total_shares (correct for new projects without sales)
+        //   3. project.available_shares (legacy fallback)
+        let available: number
+        if (offeringAvailMap.has(p.id)) {
+          available = offeringAvailMap.get(p.id)!
+        } else if (offeringPct > 0) {
+          available = Math.round(total * offeringPct / 100)
+        } else {
+          available = Number(p.available_shares ?? 0)
+        }
+
         return {
           id: p.id,
           name: p.name,

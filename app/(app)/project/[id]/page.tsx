@@ -191,8 +191,13 @@ export default function ProjectDetailPage() {
     )
   }
 
-  const pct = project.total_shares > 0
-    ? Math.round(((project.total_shares - (project.available_shares ?? 0)) / project.total_shares) * 100)
+  // offering_shares = total public-offering bucket (never shrinks with sales)
+  // available_shares = unsold offering shares (decreases as shares are bought)
+  // sold% = (offering_shares - available_shares) / offering_shares
+  const offeringTotal = project.offering_shares ?? project.available_shares ?? 0
+  const soldFromOffering = Math.max(0, offeringTotal - (project.available_shares ?? 0))
+  const pct = offeringTotal > 0
+    ? Math.round((soldFromOffering / offeringTotal) * 100)
     : 0
   // Phase 10.82 — spec: "القيمة السوقية = share_price × total_shares
   // الإجمالي للمشروع". Was using (total - available) which is "sold

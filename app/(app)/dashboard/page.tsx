@@ -524,8 +524,8 @@ export default function DashboardPage() {
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
               {[
-                { label: "حجم تداول الحصة", value: fmtCompact((getProjectCurrentPrice(selectedProject.id) || selectedProject.share_price) * (selectedProject.total_shares - selectedProject.available_shares)), unit: "IQD" },
-                { label: "حصص الشركة", value: selectedProject.available_shares.toLocaleString("en-US"), unit: "SHR" },
+                { label: "حجم تداول الحصة", value: fmtCompact((getProjectCurrentPrice(selectedProject.id) || selectedProject.share_price) * Math.max(0, (selectedProject.offering_shares ?? selectedProject.available_shares ?? 0) - selectedProject.available_shares)), unit: "IQD" },
+                { label: "حصص الشركة", value: (selectedProject.total_shares - (selectedProject.offering_shares ?? selectedProject.available_shares ?? 0)).toLocaleString("en-US"), unit: "SHR" },
                 { label: "الحصص المتداولة", value: "0", unit: "SHR", highlight: true },
                 { label: "القيمة السوقية", value: fmtCompact(selectedProject.project_value ?? 0), unit: "IQD" },
               ].map((item, i) => (

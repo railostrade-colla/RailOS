@@ -19,6 +19,8 @@ type DBProject = {
   share_price: number
   total_value?: number
   current_market_price?: number
+  /** Percentage of total_shares offered to the public (0–100). */
+  offering_percentage?: number
   status?: string
   offering_start_date?: string
   offering_end_date?: string
@@ -37,13 +39,23 @@ function dbToProject(row: DBProject): Project {
     services: "خدمات",
     medical: "طبّي",
   }
+  const totalShares = Number(row.total_shares ?? 0)
+  const offeringPct = Number(row.offering_percentage ?? 0)
+  // offering_shares = the public offering bucket total (never shrinks with sales).
+  // available_shares = offering shares still available to buy (decreases with sales).
+  // For a fresh project: both equal Math.round(total × pct).
+  // The admin wallet RPC overrides available_shares with the real unsold count.
+  const offeringShares = offeringPct > 0
+    ? Math.round(totalShares * offeringPct / 100)
+    : totalShares   // legacy fallback for rows without offering_percentage
   return {
     id: row.id,
     name: row.name,
     sector: sectorMap[row.project_type ?? ""] ?? "أخرى",
     share_price: Number(row.current_market_price ?? row.share_price ?? 0),
-    total_shares: Number(row.total_shares ?? 0),
-    available_shares: Number(row.total_shares ?? 0),  // approximation
+    total_shares: totalShares,
+    offering_shares: offeringShares,
+    available_shares: offeringShares,   // refined by wallet aggregate in admin panel
     risk_level: "medium",
     project_value: row.total_value ? Number(row.total_value) : undefined,
     description: row.short_description ?? row.description ?? "",
