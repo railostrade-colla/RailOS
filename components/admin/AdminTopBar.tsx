@@ -227,12 +227,16 @@ async function markNotificationRead(id: string): Promise<void> {
 
 /** Best-effort fetch for the badge counts.
  *
- * Phase 11.09 — strategy:
- *   1. Try the canonical RPC `get_admin_notification_counts` first.
- *   2. Augment the bell `total` from the live notifications table so
- *      brand-new notification types (e.g. deal_request_received added
- *      in Phase 10.99e) increment the badge immediately even if the
- *      RPC's logic hasn't been updated to include them yet.
+ * Phase 11.09 / 11.29 — strategy:
+ *   1. Try the canonical RPC `get_admin_notification_counts` for the
+ *      per-icon buckets (kyc, fees, support, etc.) — those drive the
+ *      Shield / Orders / Chat icon badges.
+ *   2. The Bell badge `total` is derived STRICTLY from the live
+ *      `notifications` table count (admin-scoped), so it always matches
+ *      what the dropdown actually displays. Previously we took
+ *      max(rpc.total, live) which made the bell show "1" while the
+ *      dropdown was empty — the user has no way to clear that ghost
+ *      badge because the count is sourced from a different table.
  *   3. Falls back to all-zeros on any failure (best-effort).
  */
 async function fetchUnreadCounts(): Promise<NotificationCounts> {
@@ -252,19 +256,26 @@ async function fetchUnreadCounts(): Promise<NotificationCounts> {
         healthcare: Number(r.healthcare ?? 0),
         orphans: Number(r.orphans ?? 0),
         payment_proofs: Number(r.payment_proofs ?? 0),
-        total: Number(r.total ?? 0),
+        // Phase 11.29 — total starts at 0 and is OVERWRITTEN below by
+        // the live notifications-table count. The RPC's `total` is
+        // intentionally ignored for the bell badge to keep it in sync
+        // with the dropdown items.
+        total: 0,
       }
     }
   } catch {
     // ignore — fall through to direct table count below
   }
 
-  // ── Direct-table backstop for the bell ──
+  // ── Bell badge = live notifications table count ──
   // Phase 11.22 — count ONLY admin-targeted unread rows (link_url
   // starts with /admin). User-side notifications (deal_completed →
   // /portfolio etc.) must not bump the admin bell, otherwise an
   // admin who is also a user sees their own user notifications in
   // the admin shell and clicking them bounces them out.
+  // Phase 11.29 — this count is now AUTHORITATIVE for the bell badge
+  // (no max() with the RPC's total). When the table is empty, the
+  // badge disappears.
   try {
     const { data: auth } = await supabase.auth.getUser()
     if (auth?.user?.id) {
@@ -274,10 +285,7 @@ async function fetchUnreadCounts(): Promise<NotificationCounts> {
         .eq("user_id", auth.user.id)
         .eq("is_read", false)
         .like("link_url", "/admin%")
-      const live = Number(count ?? 0)
-      if (live > base.total) {
-        base = { ...base, total: live }
-      }
+      base = { ...base, total: Number(count ?? 0) }
     }
   } catch {
     // ignore — base is already populated from the RPC (or zeros)
@@ -402,11 +410,18 @@ export function AdminTopBar() {
   }, [])
 
   // Lazy-load the items list when ANY action dropdown opens.
+  // Phase 11.29 — also reconcile the bell badge with reality: if the
+  // live items list comes back empty, force counts.total = 0 so the
+  // badge doesn't linger at "1" while the dropdown shows "لا إشعارات".
   useEffect(() => {
     if (!open || open === "profile") return
     let cancelled = false
     fetchAdminNotifications(20).then((rows) => {
-      if (!cancelled) setAllNotifs(rows)
+      if (cancelled) return
+      setAllNotifs(rows)
+      if (rows.length === 0) {
+        setCounts((c) => ({ ...c, total: 0 }))
+      }
     })
     return () => { cancelled = true }
   }, [open])

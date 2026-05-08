@@ -29,8 +29,11 @@ interface Props {
  *    hover:bg-white/[0.08] transition-colors`
  *  with a `Bell w-4 h-4 text-neutral-300 strokeWidth=1.5` inside.
  *
- * Badge falls back to the legacy small red dot when unread count is 0
- * so the icon never appears completely "empty".
+ * Phase 11.29 — when unread count is 0, the badge / red dot is FULLY
+ * hidden. Previously a small "always-on" red dot rendered for unread=0
+ * so the bell never looked "empty"; the founder explicitly asked for
+ * the clean state because a permanent dot reads as "you have a new
+ * notification" and was driving false-alarm clicks.
  */
 export function NotificationBell({
   badgePosition = "right",
@@ -50,7 +53,7 @@ export function NotificationBell({
     >
       <Bell className="w-4 h-4 text-neutral-300" strokeWidth={1.5} />
 
-      {showBadge ? (
+      {showBadge && (
         <span
           className={cn(
             "absolute min-w-[16px] h-[16px] px-1 bg-red-400 text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-[0_0_4px_rgba(248,113,113,0.6)] leading-none",
@@ -60,14 +63,6 @@ export function NotificationBell({
         >
           {unreadCount > 99 ? "99+" : unreadCount}
         </span>
-      ) : (
-        <span
-          className={cn(
-            "absolute w-1.5 h-1.5 bg-red-400 rounded-full shadow-[0_0_4px_rgba(248,113,113,0.6)]",
-            badgePosition === "right" ? "top-2 right-2" : "top-2 left-2",
-          )}
-          aria-hidden="true"
-        />
       )}
     </Link>
   )
