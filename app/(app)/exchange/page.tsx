@@ -13,7 +13,6 @@ import {
 } from "@/lib/mock-data"
 import type { Listing, Project } from "@/lib/mock-data/types"
 import { canCreateDeal, createDeal } from "@/lib/escrow"
-import { CURRENT_FEE_BALANCE } from "@/lib/mock-data"
 import { HOLDINGS } from "@/lib/mock-data/holdings"
 import {
   getExchangeListings,
@@ -23,6 +22,9 @@ import {
 } from "@/lib/data/listings"
 // Phase 11.23 — real projects feed for the filter dropdown.
 import { getAllProjects } from "@/lib/data/projects"
+// Phase 11.24 — real fee-units balance for the QuantityModal cap.
+import { getCurrentFeeBalanceSimple } from "@/lib/data/wallet"
+import { dedupCache, readPersistedSync } from "@/lib/data/cache"
 import { useRealtimeListings } from "@/lib/realtime/useRealtimeListings"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils/cn"
@@ -332,10 +334,20 @@ function ExchangeContent() {
   const [paymentFilter, setPaymentFilter] = useState<string[]>([])
   // Phase 11.23 — real projects from DB (replaces MOCK_PROJECTS).
   const [dbProjects, setDbProjects] = useState<Project[]>([])
+  // Phase 11.24 — real fee-units balance (replaces mock CURRENT_FEE_BALANCE).
+  // Hydrate synchronously from the SWR cache to avoid a 0-flash on first paint.
+  const [feeBalance, setFeeBalance] = useState<number>(
+    () => readPersistedSync<number>("wallet:feeBalance") ?? 0,
+  )
   useEffect(() => {
     let cancelled = false
-    getAllProjects().then((rows) => {
-      if (!cancelled) setDbProjects(rows)
+    Promise.all([
+      getAllProjects(),
+      dedupCache("wallet:feeBalance", getCurrentFeeBalanceSimple, 30_000),
+    ]).then(([rows, fb]) => {
+      if (cancelled) return
+      setDbProjects(rows)
+      setFeeBalance(fb)
     })
     return () => { cancelled = true }
   }, [])
@@ -884,7 +896,7 @@ function ExchangeContent() {
           {/* Quantity Modal -- تحديد الكمية + Escrow */}
       <QuantityModal
         listing={modalListing}
-        userBalance={CURRENT_FEE_BALANCE}
+        userBalance={feeBalance}
         userShares={userSharesInProject}
         onClose={() => setSelectedListing(null)}
         onConfirm={handleConfirmDeal}

@@ -21,7 +21,6 @@ const sectorIcon = (s: string) =>
 // ─── Mock Data (centralized) ───
 import {
   MOCK_PREVIOUS_ADS,
-  CURRENT_FEE_BALANCE as MOCK_FEE_BALANCE,
   PAYMENT_METHODS_FULL as PAYMENT_METHODS,
 } from "@/lib/mock-data"
 import type { Project } from "@/lib/mock-data/types"
@@ -34,6 +33,9 @@ import { getPortfolioData, type PortfolioHolding } from "@/lib/data/portfolio"
 // Phase 11.23 — real projects feed for the "buy" picker (replaces
 // MOCK_PROJECTS) and for live current_market_price reads.
 import { getAllProjects } from "@/lib/data/projects"
+// Phase 11.24 — real fee-units balance (drops the mock CURRENT_FEE_BALANCE).
+import { getCurrentFeeBalanceSimple } from "@/lib/data/wallet"
+import { dedupCache, readPersistedSync } from "@/lib/data/cache"
 
 // إعدادات الرسوم
 const REPEAT_LISTING_FEE_PERCENT = 0.25 // 0.25% للإعلان المكرر
@@ -305,12 +307,23 @@ export default function CreateAdPage() {
   const [dbHoldings, setDbHoldings] = useState<PortfolioHolding[]>([])
   // Phase 11.23 — real projects feed for "buy" mode + live market price.
   const [dbAllProjects, setDbAllProjects] = useState<Project[]>([])
+  // Phase 11.24 — real fee-units balance (was hard-coded MOCK_FEE_BALANCE).
+  // Hydrate synchronously from the SWR cache so the badge doesn't flash
+  // "0 وحدة" before the network resolves.
+  const [feeBalance, setFeeBalance] = useState<number>(
+    () => readPersistedSync<number>("wallet:feeBalance") ?? 0,
+  )
   useEffect(() => {
     let cancelled = false
-    Promise.all([getPortfolioData(), getAllProjects()]).then(([d, ps]) => {
+    Promise.all([
+      getPortfolioData(),
+      getAllProjects(),
+      dedupCache("wallet:feeBalance", getCurrentFeeBalanceSimple, 30_000),
+    ]).then(([d, ps, fb]) => {
       if (cancelled) return
       if (d?.holdings) setDbHoldings(d.holdings.filter((h) => h.shares > 0))
       setDbAllProjects(ps)
+      setFeeBalance(fb)
     })
     return () => { cancelled = true }
   }, [])
@@ -399,7 +412,7 @@ export default function CreateAdPage() {
     return Math.ceil((total * REPEAT_LISTING_FEE_PERCENT) / 100)
   }, [isRepeatAd, total])
 
-  const hasEnoughFeeBalance = MOCK_FEE_BALANCE >= listingFee
+  const hasEnoughFeeBalance = feeBalance >= listingFee
 
   // ─── Validation Errors (per field) ───
   // ✦ القاعدة: لا توجد عمولة بالحصص — الإعلانات لا تخصم من الحصص نفسها.
@@ -571,7 +584,7 @@ export default function CreateAdPage() {
               <div>
                 <div className="text-[10px] text-neutral-500">رصيد وحدات الرسوم</div>
                 <div className="text-sm font-bold text-white font-mono">
-                  {MOCK_FEE_BALANCE.toLocaleString("en-US")} وحدة
+                  {feeBalance.toLocaleString("en-US")} وحدة
                 </div>
               </div>
             </div>
@@ -817,7 +830,7 @@ export default function CreateAdPage() {
                 <div className="text-[11px] leading-relaxed flex-1">
                   <div className="font-bold text-red-400 mb-1">رصيد وحدات الرسوم غير كافٍ</div>
                   <div className="text-neutral-300">
-                    تحتاج <span className="font-bold text-red-400 font-mono">{listingFee}</span> وحدة، رصيدك <span className="font-bold font-mono">{MOCK_FEE_BALANCE}</span>.
+                    تحتاج <span className="font-bold text-red-400 font-mono">{listingFee}</span> وحدة، رصيدك <span className="font-bold font-mono">{feeBalance}</span>.
                   </div>
                   <button
                     onClick={() => router.push("/wallet")}
@@ -932,7 +945,7 @@ export default function CreateAdPage() {
                   هذا الإعلان <span className="font-bold text-yellow-400">مكرّر</span> لنفس المشروع وعدد الحصص.
                   ستُخصم <span className="font-bold text-yellow-400 font-mono">{listingFee}</span> وحدة رسوم (0.25%).
                   <div className="text-[10px] text-neutral-500 mt-1.5 font-mono">
-                    رصيدك الحالي: {MOCK_FEE_BALANCE} → بعد الخصم: {MOCK_FEE_BALANCE - listingFee} وحدة
+                    رصيدك الحالي: {feeBalance} → بعد الخصم: {feeBalance - listingFee} وحدة
                   </div>
                 </div>
               ) : (
