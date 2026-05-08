@@ -34,6 +34,7 @@ import { createClient } from "@/lib/supabase/client"
 import { readPersistedSync } from "@/lib/data/cache"
 import type { Project } from "@/lib/mock-data/types"
 import { iqd, parseIqdInput } from "@/lib/utils/money"
+import { transliterate } from "@/lib/utils/symbol-generator"
 import { IntegerInput } from "@/components/ui/IntegerInput"
 import { useRealtimeListings } from "@/lib/realtime/useRealtimeListings"
 import { showInfo, showSuccess, showError } from "@/lib/utils/toast"
@@ -46,11 +47,32 @@ const fmt1 = (n: number) =>
 const fmt2 = (n: number) =>
   n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+/**
+ * Phase 11.38 — symbol = ALWAYS exactly 3 uppercase Latin letters.
+ *
+ *   1. If `project.symbol` is set, take its first 3 Latin letters
+ *      (in case the admin entered something longer / lowercase /
+ *      with punctuation).
+ *   2. Otherwise transliterate the (possibly Arabic) name with the
+ *      shared transliterate() helper and take the first 3 Latin
+ *      letters from the result.
+ *   3. If the name still doesn't yield 3 letters (rare — non-Latin
+ *      non-Arabic characters), fall back to "—".
+ *
+ * Examples: "رايلوس" → "RAY", "مزرعة الواحة" → "MZR", "Brj" → "BRJ".
+ */
 function symbolOf(p: Project | null | undefined): string {
   if (!p) return "—"
-  const sym = (p.symbol || "").trim()
-  if (sym) return sym.toUpperCase()
-  return p.name.replace(/\s+/g, "").slice(0, 4).toUpperCase()
+  const fromSymbol = (p.symbol || "")
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 3)
+  if (fromSymbol.length === 3) return fromSymbol
+  const fromName = transliterate(p.name)
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 3)
+  if (fromName.length === 3) return fromName
+  return fromName || fromSymbol || "—"
 }
 
 function seededRand(seed: number, i: number): number {
@@ -343,11 +365,11 @@ function MiniRow({
         </div>
       )}
 
-      {/* Symbol + name */}
-      <div className="min-w-0 flex-shrink">
-        <div className="text-[11px] font-bold text-white truncate" dir="ltr">{symbol}</div>
+      {/* Symbol + full Arabic name (no truncation per Phase 11.38) */}
+      <div className="flex-shrink-0">
+        <div className="text-[11px] font-bold text-white" dir="ltr">{symbol}</div>
         {name && (
-          <div className="text-[9px] text-neutral-500 truncate leading-tight">{name}</div>
+          <div className="text-[9px] text-neutral-400 leading-tight">{name}</div>
         )}
       </div>
 
@@ -636,13 +658,16 @@ function InvestmentPageInner() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPickerOpen((v) => !v)}
-                className="flex items-center gap-2 hover:bg-white/[0.04] rounded-lg px-2 py-1 transition-colors min-w-0"
+                className="flex items-center gap-2 hover:bg-white/[0.04] rounded-lg px-2 py-1 transition-colors"
               >
                 <ChevronDown className={cn("w-4 h-4 text-neutral-400 transition-transform flex-shrink-0", pickerOpen && "rotate-180")} />
-                <div className="flex items-baseline gap-1.5 min-w-0">
+                <div className="flex items-baseline gap-1.5 flex-wrap">
+                  {/* Phase 11.38 — symbol = strict 3 uppercase Latin letters
+                      (no slash/IQD suffix). Full Arabic name shown beside,
+                      no truncation so the founder can read it cleanly. */}
                   <span className="text-base font-bold text-white" dir="ltr">{sym}</span>
                   {selected && (
-                    <span className="text-[10px] text-neutral-400 truncate">{selected.name}</span>
+                    <span className="text-[11px] text-neutral-300">{selected.name}</span>
                   )}
                 </div>
               </button>
