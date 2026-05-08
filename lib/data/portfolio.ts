@@ -43,6 +43,8 @@ export interface PortfolioHoldingProject {
   symbol?: string | null
   /** Optional logo URL — falls back to a generated initial. */
   logo_url?: string | null
+  /** Phase 11.26 — cover image URL surfaced via get_my_holdings_full. */
+  cover_url?: string | null
 }
 
 export interface PortfolioHolding {
@@ -342,10 +344,13 @@ async function fetchHoldings(
       "get_my_holdings_full",
     )
     if (!rpcErr && Array.isArray(rpcData) && rpcData.length > 0) {
-      // RPC succeeded — but its `project_*` fields can be stale or
-      // missing. We still build the row from the RPC data, then
-      // overlay fresh project metadata via enrichHoldingsWithProjects
-      // before returning (see below).
+      // Phase 11.26 — RPC now bundles logo_url, cover_url, status,
+      // current_market_price, and available_shares so the holdings
+      // card has everything it needs in a single SECURITY DEFINER
+      // round-trip. The follow-up enrichHoldingsWithProjects pass is
+      // still run as defense-in-depth — it can update fields that
+      // moved since the RPC executed (e.g. brand assets uploaded
+      // mid-session).
       interface RpcRow {
         id: string
         project_id: string
@@ -356,6 +361,13 @@ async function fetchHoldings(
         project_name: string | null
         project_sector: string | null
         project_share_price: number | string | null
+        // Phase 11.26 additions ↓
+        project_logo_url: string | null
+        project_cover_url: string | null
+        project_status: string | null
+        project_current_market_price: number | string | null
+        project_available_shares: number | string | null
+        // ↑
         market_price: number | string | null
         project_total_shares: number | string | null
         project_symbol: string | null
@@ -385,6 +397,12 @@ async function fetchHoldings(
           (marketRaw > 0 ? marketRaw : 0) ||
           (sharePrice > 0 ? sharePrice : 0) ||
           (avgBuy > 0 ? avgBuy : 0)
+        // Phase 11.26 — surface the live current_market_price (set by
+        // the deal-completion trigger) directly in the project payload,
+        // and prefer it for the holding card's "سعر السوق" line.
+        const liveMarketPrice = r.project_current_market_price != null
+          ? iqd(r.project_current_market_price)
+          : null
         return {
           id: r.id,
           project_id: r.project_id,
@@ -401,11 +419,16 @@ async function fetchHoldings(
             name: r.project_name ?? "—",
             sector: r.project_sector ?? "",
             share_price: sharePrice,
-            current_market_price: marketRaw > 0 ? marketRaw : null,
+            current_market_price:
+              liveMarketPrice != null && liveMarketPrice > 0
+                ? liveMarketPrice
+                : (marketRaw > 0 ? marketRaw : null),
             total_shares: n(r.project_total_shares),
-            available_shares: 0,
+            available_shares: n(r.project_available_shares),
             symbol: r.project_symbol ?? null,
-            logo_url: null,
+            // Phase 11.26 — real brand assets from the RPC.
+            logo_url: r.project_logo_url ?? null,
+            cover_url: r.project_cover_url ?? null,
           },
           funded_pct: n(r.funded_pct),
           shares_bought: n(r.shares_bought_from_project),
@@ -468,6 +491,10 @@ async function fetchHoldings(
       current_market_price: number | string | null
       total_shares: number | string | null
       available_shares: number | string | null
+      // Phase 11.26 — surface brand assets in the legacy fallback too.
+      logo_url: string | null
+      cover_url: string | null
+      symbol: string | null
     }
 
     const projectMap = new Map<string, RawProject>()
@@ -476,7 +503,7 @@ async function fetchHoldings(
         const { data: projs } = await supabase
           .from("projects")
           .select(
-            "id, name, sector, share_price, current_market_price, total_shares, available_shares",
+            "id, name, sector, share_price, current_market_price, total_shares, available_shares, logo_url, cover_url, symbol",
           )
           .in("id", projectIds)
         for (const p of (projs ?? []) as RawProject[]) {
@@ -528,6 +555,10 @@ async function fetchHoldings(
           current_market_price: marketPriceRaw > 0 ? marketPriceRaw : null,
           total_shares: project ? n(project.total_shares) : 0,
           available_shares: project ? n(project.available_shares) : 0,
+          symbol: project?.symbol ?? null,
+          // Phase 11.26 — brand assets in the legacy fallback.
+          logo_url: project?.logo_url ?? null,
+          cover_url: project?.cover_url ?? null,
         },
       })
     }
