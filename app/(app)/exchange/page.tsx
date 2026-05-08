@@ -8,11 +8,10 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { QuantityModal, type QuantityModalListing } from "@/components/exchange/QuantityModal"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import {
-  MOCK_PROJECTS,
   MOCK_LISTINGS,
   PAYMENT_METHODS_PUBLIC as PAYMENT_METHODS,
 } from "@/lib/mock-data"
-import type { Listing } from "@/lib/mock-data/types"
+import type { Listing, Project } from "@/lib/mock-data/types"
 import { canCreateDeal, createDeal } from "@/lib/escrow"
 import { CURRENT_FEE_BALANCE } from "@/lib/mock-data"
 import { HOLDINGS } from "@/lib/mock-data/holdings"
@@ -22,6 +21,8 @@ import {
   acceptBuyListing,
   type ExchangeListingRow,
 } from "@/lib/data/listings"
+// Phase 11.23 — real projects feed for the filter dropdown.
+import { getAllProjects } from "@/lib/data/projects"
 import { useRealtimeListings } from "@/lib/realtime/useRealtimeListings"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils/cn"
@@ -99,9 +100,9 @@ function ProjectSelector({
   selectedProject,
   onSelect,
 }: {
-  projects: typeof MOCK_PROJECTS
-  selectedProject: typeof MOCK_PROJECTS[0] | null
-  onSelect: (p: typeof MOCK_PROJECTS[0] | null) => void
+  projects: Project[]
+  selectedProject: Project | null
+  onSelect: (p: Project | null) => void
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
@@ -119,17 +120,24 @@ function ProjectSelector({
           open ? "rounded-t-xl border-b-0" : "rounded-xl"
         )}
       >
-        <div className="flex items-center gap-3">
-          <span className="text-2xl flex-shrink-0">
-            {selectedProject ? sectorIcon(selectedProject.sector) : "🏢"}
-          </span>
-          <div>
-            <div className="text-sm font-bold text-white">
+        <div className="flex items-center gap-3 min-w-0">
+          {selectedProject?.logo_url ? (
+            <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/[0.1] bg-white/[0.04] flex-shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={selectedProject.logo_url} alt={selectedProject.name} className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <span className="text-2xl flex-shrink-0">
+              {selectedProject ? sectorIcon(selectedProject.sector) : "🏢"}
+            </span>
+          )}
+          <div className="min-w-0">
+            <div className="text-sm font-bold text-white truncate">
               {selectedProject ? selectedProject.name : "كل المشاريع"}
             </div>
             <div className="text-[10px] text-neutral-500 mt-0.5">
               {selectedProject
-                ? selectedProject.share_price.toLocaleString("en-US") + " د.ع/حصة"
+                ? (selectedProject.share_price ?? 0).toLocaleString("en-US") + " د.ع/حصة"
                 : "اختر مشروعاً للفلترة"}
             </div>
           </div>
@@ -185,11 +193,18 @@ function ProjectSelector({
                 }}
                 className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.04] transition-colors text-right"
               >
-                <span className="text-xl">{sectorIcon(p.sector)}</span>
+                {p.logo_url ? (
+                  <div className="w-9 h-9 rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.04] flex-shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.logo_url} alt={p.name} className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <span className="text-xl">{sectorIcon(p.sector)}</span>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-bold text-white truncate">{p.name}</div>
                   <div className="text-[10px] text-neutral-500">
-                    {p.sector} • {p.share_price.toLocaleString("en-US")} د.ع
+                    {p.sector} • {(p.share_price ?? 0).toLocaleString("en-US")} د.ع
                   </div>
                 </div>
                 {selectedProject?.id === p.id && (
@@ -313,8 +328,17 @@ function ExchangeContent() {
 
   const [mode, setMode] = useState<"buy" | "sell">("buy")
   const [sort, setSort] = useState<"price" | "trust" | "speed">("price")
-  const [selectedProject, setSelectedProject] = useState<typeof MOCK_PROJECTS[0] | null>(null)
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [paymentFilter, setPaymentFilter] = useState<string[]>([])
+  // Phase 11.23 — real projects from DB (replaces MOCK_PROJECTS).
+  const [dbProjects, setDbProjects] = useState<Project[]>([])
+  useEffect(() => {
+    let cancelled = false
+    getAllProjects().then((rows) => {
+      if (!cancelled) setDbProjects(rows)
+    })
+    return () => { cancelled = true }
+  }, [])
 
   // QuantityModal state (نافذة تحديد الكمية الموحَّدة)
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null)
@@ -326,13 +350,13 @@ function ExchangeContent() {
   const [currentUserId, setCurrentUserId] = useState<string>(CURRENT_USER_ID)
   const [loadingListings, setLoadingListings] = useState(true)
 
-  // Apply project filter from URL
+  // Apply project filter from URL — uses real projects.
   useEffect(() => {
-    if (projectFilter) {
-      const p = MOCK_PROJECTS.find((proj) => proj.id === projectFilter)
+    if (projectFilter && dbProjects.length > 0) {
+      const p = dbProjects.find((proj) => proj.id === projectFilter)
       if (p) setSelectedProject(p)
     }
-  }, [projectFilter])
+  }, [projectFilter, dbProjects])
 
   // Realtime tick — increments whenever any listing row changes
   const { tick: listingsTick } = useRealtimeListings()
@@ -543,7 +567,7 @@ function ExchangeContent() {
 
           {/* Project Selector */}
           <ProjectSelector
-            projects={MOCK_PROJECTS}
+            projects={dbProjects}
             selectedProject={selectedProject}
             onSelect={setSelectedProject}
           />

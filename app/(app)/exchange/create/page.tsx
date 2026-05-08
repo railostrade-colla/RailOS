@@ -21,29 +21,42 @@ const sectorIcon = (s: string) =>
 // ─── Mock Data (centralized) ───
 import {
   MOCK_HOLDINGS_EXCHANGE as MOCK_HOLDINGS,
-  MOCK_PROJECTS,
   MOCK_PREVIOUS_ADS,
   CURRENT_FEE_BALANCE as MOCK_FEE_BALANCE,
   PAYMENT_METHODS_FULL as PAYMENT_METHODS,
 } from "@/lib/mock-data"
+import type { Project } from "@/lib/mock-data/types"
 // Phase 10 — real DB listing creation (sell mode only; buy listings
 // will get their own schema in a follow-up).
 import { createListingDB } from "@/lib/data/portfolio-analytics"
 // Phase 10.81 (Task 19) — real holdings → "بيع" picker should only
 // show projects the user actually owns shares in.
 import { getPortfolioData, type PortfolioHolding } from "@/lib/data/portfolio"
+// Phase 11.23 — real projects feed for the "buy" picker (replaces
+// MOCK_PROJECTS) and for live current_market_price reads.
+import { getAllProjects } from "@/lib/data/projects"
 
 // إعدادات الرسوم
 const REPEAT_LISTING_FEE_PERCENT = 0.25 // 0.25% للإعلان المكرر
 
 // ─── Project Selector Dropdown ───
+interface ProjectListItem {
+  id: string
+  name: string
+  sector: string
+  share_price: number
+  current_market_price?: number | null
+  logo_url?: string | null
+  available?: number
+}
+
 function ProjectDropdown({
   projectList,
   selectedProjectId,
   onSelect,
   adType,
 }: {
-  projectList: Array<{ id: string; name: string; sector: string; share_price: number; available?: number }>
+  projectList: ProjectListItem[]
   selectedProjectId: string
   onSelect: (id: string) => void
   adType: "sell" | "buy"
@@ -67,9 +80,17 @@ function ProjectDropdown({
         )}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-2xl flex-shrink-0">
-            {selected ? sectorIcon(selected.sector) : "🏢"}
-          </span>
+          {/* Phase 11.23 — show real logo when available, else sector icon. */}
+          {selected?.logo_url ? (
+            <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/[0.1] bg-white/[0.04] flex-shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={selected.logo_url} alt={selected.name} className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <span className="text-2xl flex-shrink-0">
+              {selected ? sectorIcon(selected.sector) : "🏢"}
+            </span>
+          )}
           <div className="min-w-0 text-right">
             <div className="text-sm font-bold text-white truncate">
               {selected ? selected.name : "اختر الشركة أو المشروع..."}
@@ -77,7 +98,9 @@ function ProjectDropdown({
             <div className="text-[10px] text-neutral-500 mt-0.5">
               {selected ? (
                 <>
-                  <span className="font-mono">{selected.share_price.toLocaleString("en-US")}</span> د.ع/حصة
+                  <span className="font-mono">
+                    {(selected.current_market_price || selected.share_price).toLocaleString("en-US")}
+                  </span> د.ع/حصة (سعر السوق)
                   {adType === "sell" && selected.available !== undefined && (
                     <span className="mr-2">• متاح: <span className="font-mono text-yellow-400">{selected.available}</span></span>
                   )}
@@ -125,11 +148,20 @@ function ProjectDropdown({
                     }}
                     className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.04] transition-colors text-right"
                   >
-                    <span className="text-xl flex-shrink-0">{sectorIcon(p.sector)}</span>
+                    {p.logo_url ? (
+                      <div className="w-9 h-9 rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.04] flex-shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={p.logo_url} alt={p.name} className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <span className="text-xl flex-shrink-0">{sectorIcon(p.sector)}</span>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-bold text-white truncate">{p.name}</div>
                       <div className="text-[10px] text-neutral-500 mt-0.5">
-                        <span className="font-mono">{p.share_price.toLocaleString("en-US")}</span> د.ع
+                        <span className="font-mono">
+                          {(p.current_market_price || p.share_price).toLocaleString("en-US")}
+                        </span> د.ع
                         {adType === "sell" && p.available !== undefined && (
                           <span className="mr-1.5">• متاح: <span className="text-yellow-400 font-mono">{p.available}</span></span>
                         )}
@@ -271,11 +303,14 @@ export default function CreateAdPage() {
   // Falls back to MOCK_HOLDINGS until the fetch resolves so first
   // paint isn't empty.
   const [dbHoldings, setDbHoldings] = useState<PortfolioHolding[]>([])
+  // Phase 11.23 — real projects feed for "buy" mode + live market price.
+  const [dbAllProjects, setDbAllProjects] = useState<Project[]>([])
   useEffect(() => {
     let cancelled = false
-    getPortfolioData().then((d) => {
+    Promise.all([getPortfolioData(), getAllProjects()]).then(([d, ps]) => {
       if (cancelled) return
       if (d?.holdings) setDbHoldings(d.holdings.filter((h) => h.shares > 0))
+      setDbAllProjects(ps)
     })
     return () => { cancelled = true }
   }, [])
@@ -287,17 +322,25 @@ export default function CreateAdPage() {
   const total = sharesNum * priceNum
 
   // Use DB holdings if loaded; otherwise mock for first paint.
+  // Phase 11.23 — enrich each holding's project with the LIVE market
+  // price + logo from dbAllProjects so the picker shows real data.
   const effectiveHoldings = dbHoldings.length > 0
-    ? dbHoldings.map((h) => ({
-        project_id: h.project_id,
-        shares_owned: h.shares_owned,
-        project: {
-          id: h.project.id,
-          name: h.project.name,
-          sector: h.project.sector,
-          share_price: h.project.share_price,
-        },
-      }))
+    ? dbHoldings.map((h) => {
+        const live = dbAllProjects.find((p) => p.id === h.project_id)
+        return {
+          project_id: h.project_id,
+          shares_owned: h.shares_owned,
+          project: {
+            id: h.project.id,
+            name: live?.name ?? h.project.name,
+            sector: live?.sector ?? h.project.sector,
+            share_price: h.project.share_price,
+            current_market_price:
+              live?.current_market_price ?? h.project.current_market_price ?? null,
+            logo_url: live?.logo_url ?? h.project.logo_url ?? null,
+          },
+        }
+      })
     : MOCK_HOLDINGS
 
   const selectedHolding = effectiveHoldings.find((h) => h.project_id === selectedProjectId)
@@ -305,30 +348,43 @@ export default function CreateAdPage() {
 
   const selectedProject = useMemo(() => {
     if (adType === "sell") return effectiveHoldings.find((h) => h.project_id === selectedProjectId)?.project
-    return MOCK_PROJECTS.find((p) => p.id === selectedProjectId)
-  }, [adType, selectedProjectId, effectiveHoldings])
+    return dbAllProjects.find((p) => p.id === selectedProjectId)
+  }, [adType, selectedProjectId, effectiveHoldings, dbAllProjects])
 
-  const marketPrice = selectedProject?.share_price || 0
+  // Phase 11.23 — market price = live current_market_price (drifts
+  // with each completed deal via Phase 11.12 trigger), with launch
+  // share_price as the cold-start fallback. Used as the price-input
+  // ceiling so a seller can't list above what the market is willing
+  // to pay.
+  const marketPrice =
+    (selectedProject as { current_market_price?: number | null } | undefined)?.current_market_price
+    || selectedProject?.share_price
+    || 0
   const maxPrice = marketPrice
 
-  // Project list
-  const projectList = useMemo(() => {
+  // Project list — Phase 11.23 plumbs logo_url + current_market_price.
+  const projectList = useMemo<ProjectListItem[]>(() => {
     if (adType === "sell") {
       return effectiveHoldings.map((h) => ({
         id: h.project_id,
         name: h.project.name,
         sector: h.project.sector,
         share_price: h.project.share_price,
+        current_market_price:
+          (h.project as { current_market_price?: number | null }).current_market_price ?? null,
+        logo_url: (h.project as { logo_url?: string | null }).logo_url ?? null,
         available: h.shares_owned,
       }))
     }
-    return MOCK_PROJECTS.map((p) => ({
+    return dbAllProjects.map((p) => ({
       id: p.id,
       name: p.name,
       sector: p.sector,
       share_price: p.share_price,
+      current_market_price: p.current_market_price ?? null,
+      logo_url: p.logo_url ?? null,
     }))
-  }, [adType, effectiveHoldings])
+  }, [adType, effectiveHoldings, dbAllProjects])
 
   // ─── Repeat Ad Detection ───
   const isRepeatAd = useMemo(() => {
@@ -647,8 +703,9 @@ export default function CreateAdPage() {
                     <span className="leading-tight">{priceError}</span>
                   </div>
                 ) : marketPrice > 0 ? (
-                  <div className="text-[10px] text-neutral-500 mt-1.5">
-                    سعر السوق: <span className="text-yellow-400 font-mono font-bold">{marketPrice.toLocaleString("en-US")}</span> د.ع
+                  <div className="text-[10px] text-neutral-500 mt-1.5 leading-relaxed">
+                    سعر السوق الحالي: <span className="text-yellow-400 font-mono font-bold">{marketPrice.toLocaleString("en-US")}</span> د.ع
+                    <span className="text-neutral-600"> — لا يمكن تجاوزه كحد أقصى</span>
                   </div>
                 ) : null}
               </div>
