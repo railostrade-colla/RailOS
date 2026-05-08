@@ -68,13 +68,6 @@ function fmtCompact(n: number): string {
   return n.toLocaleString("en-US")
 }
 
-// Phase 11.14 — full-digit IQD formatter (e.g. 500,000) for places
-// where the founder wants the actual zeroes shown instead of the
-// compact "500 ألف" shorthand.
-function fmtIQD(n: number): string {
-  return Math.round(n).toLocaleString("en-US")
-}
-
 function getGreeting(): string {
   const h = new Date().getHours()
   if (h >= 5 && h < 12) return "صباح الخير"
@@ -430,16 +423,19 @@ export default function DashboardPage() {
                 <div className="flex items-baseline gap-2 mb-2">
                   {/* Phase 11.14 — show the full numeric value (with
                       thousand separators), not the compact "ألف/مليون"
-                      shorthand. Founder spec: 500,000 instead of "500 ألف". */}
+                      shorthand. Founder spec: 500,000 instead of "500 ألف".
+                      Inlined the formatter (was fmtIQD) to dodge a Railway
+                      build-cache hiccup that kept reporting the helper
+                      undefined even after it was defined at module scope. */}
                   <span className="text-3xl lg:text-4xl font-bold text-white tracking-tight font-mono">
-                    {fmtIQD(portfolio.totalValue)}
+                    {Math.round(portfolio.totalValue || 0).toLocaleString("en-US")}
                   </span>
                   <span className="text-xs text-neutral-500">IQD</span>
                 </div>
 
                 <div className={cn("text-xs font-bold flex items-center gap-1 mb-3", dailyUp ? "text-green-400" : "text-red-400")}>
                   {dailyUp ? <TrendingUp className="w-3 h-3" strokeWidth={2.5} /> : <TrendingDown className="w-3 h-3" strokeWidth={2.5} />}
-                  <span>{dailyUp ? "+" : ""}{fmtIQD(portfolio.dailyChange)} د.ع</span>
+                  <span>{dailyUp ? "+" : ""}{Math.round(portfolio.dailyChange || 0).toLocaleString("en-US")} د.ع</span>
                   <span className="text-neutral-600 font-normal">·</span>
                   <span>{dailyUp ? "+" : ""}{portfolio.dailyChangePercent}% اليوم</span>
                 </div>
