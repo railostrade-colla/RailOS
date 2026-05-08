@@ -421,15 +421,18 @@ export default function DashboardPage() {
 
                 <div className="text-[11px] text-neutral-500 mb-1">إجمالي محفظتك</div>
                 <div className="flex items-baseline gap-2 mb-2">
+                  {/* Phase 11.14 — show the full numeric value (with
+                      thousand separators), not the compact "ألف/مليون"
+                      shorthand. Founder spec: 500,000 instead of "500 ألف". */}
                   <span className="text-3xl lg:text-4xl font-bold text-white tracking-tight font-mono">
-                    {fmtCompact(portfolio.totalValue)}
+                    {fmtIQD(portfolio.totalValue)}
                   </span>
                   <span className="text-xs text-neutral-500">IQD</span>
                 </div>
 
                 <div className={cn("text-xs font-bold flex items-center gap-1 mb-3", dailyUp ? "text-green-400" : "text-red-400")}>
                   {dailyUp ? <TrendingUp className="w-3 h-3" strokeWidth={2.5} /> : <TrendingDown className="w-3 h-3" strokeWidth={2.5} />}
-                  <span>{dailyUp ? "+" : ""}{fmtCompact(portfolio.dailyChange)} د.ع</span>
+                  <span>{dailyUp ? "+" : ""}{fmtIQD(portfolio.dailyChange)} د.ع</span>
                   <span className="text-neutral-600 font-normal">·</span>
                   <span>{dailyUp ? "+" : ""}{portfolio.dailyChangePercent}% اليوم</span>
                 </div>
@@ -559,13 +562,26 @@ export default function DashboardPage() {
               )
             })()}
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
-              {[
-                { label: "حجم تداول الحصة", value: fmtCompact((getProjectCurrentPrice(selectedProject.id) || selectedProject.share_price) * Math.max(0, (selectedProject.offering_shares ?? selectedProject.available_shares ?? 0) - selectedProject.available_shares)), unit: "IQD" },
-                { label: "حصص الشركة", value: (selectedProject.total_shares - (selectedProject.offering_shares ?? selectedProject.available_shares ?? 0)).toLocaleString("en-US"), unit: "SHR" },
-                { label: "الحصص المتداولة", value: "0", unit: "SHR", highlight: true },
-                { label: "القيمة السوقية", value: fmtCompact(selectedProject.project_value ?? 0), unit: "IQD" },
-              ].map((item, i) => (
+            {/* Phase 11.14 — sold count + trading volume now reflect
+                real public-offering activity:
+                  soldCount  = offering_shares − available_shares
+                  volumeIQD  = soldCount × current_market_price */}
+            {(() => {
+              const livePrice =
+                getProjectCurrentPrice(selectedProject.id) || selectedProject.share_price
+              const offering =
+                selectedProject.offering_shares ?? selectedProject.available_shares ?? 0
+              const available = selectedProject.available_shares ?? 0
+              const soldCount = Math.max(0, offering - available)
+              const tradingVolume = soldCount * livePrice
+              return (
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
+                  {[
+                    { label: "حجم تداول الحصة", value: fmtCompact(tradingVolume), unit: "IQD" },
+                    { label: "حصص الشركة", value: (selectedProject.total_shares - offering).toLocaleString("en-US"), unit: "SHR" },
+                    { label: "الحصص المتداولة", value: soldCount.toLocaleString("en-US"), unit: "SHR", highlight: true },
+                    { label: "القيمة السوقية", value: fmtCompact(selectedProject.project_value ?? 0), unit: "IQD" },
+                  ].map((item, i) => (
                 <div
                   key={i}
                   onClick={() => item.highlight && router.push("/exchange")}
@@ -582,7 +598,9 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ))}
-            </div>
+                </div>
+              )
+            })()}
 
             <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2.5 mb-4">
               <div className="text-[10px] text-neutral-500 mb-1">آخر 7 أيام</div>
