@@ -100,6 +100,106 @@ function num(v: unknown, fallback = 0): number {
   return Number.isFinite(x) ? x : fallback
 }
 
+/**
+ * Phase 11.30 — fetch the SIGNED-IN user's own listings, regardless of
+ * status (active / cancelled / completed / paused). Drives the
+ * "السجل" (log) tab in /exchange so the founder can see what they've
+ * posted, what got fulfilled, and what got cancelled — with the
+ * timestamps + remaining-shares info needed to investigate any
+ * discrepancy.
+ *
+ * Returns rows with the same ExchangeListingRow shape as
+ * getExchangeListings so the UI can reuse the existing card formatter.
+ */
+export async function getMyExchangeListings(): Promise<ExchangeListingRow[]> {
+  try {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return []
+
+    const { data, error } = await supabase
+      .from("listings")
+      .select(
+        `id, seller_id, project_id, shares_offered, shares_sold,
+         price_per_share, notes, is_quick_sell, status, type, created_at,
+         expires_at,
+         seller:profiles!seller_id ( full_name, username ),
+         project:projects!project_id ( name, sector, share_price )`,
+      )
+      .eq("seller_id", user.id)
+      .order("created_at", { ascending: false })
+    if (error || !data) return []
+
+    interface Row {
+      id: string
+      seller_id: string
+      project_id: string
+      shares_offered: number | string
+      shares_sold: number | string | null
+      price_per_share: number | string
+      notes: string | null
+      is_quick_sell: boolean
+      status: string
+      type: string | null
+      created_at: string
+      expires_at: string | null
+      seller?: ProfileRef | ProfileRef[] | null
+      project?: ProjectRef | ProjectRef[] | null
+    }
+
+    return (data as Row[]).map((r): ExchangeListingRow => {
+      const seller = unwrap(r.seller)
+      const project = unwrap(r.project)
+      const offered = num(r.shares_offered)
+      const sold = num(r.shares_sold)
+      return {
+        id: r.id,
+        seller_id: r.seller_id,
+        seller_name:
+          seller?.full_name?.trim() ||
+          seller?.username?.trim() ||
+          "أنا",
+        project_id: r.project_id,
+        project_name: project?.name?.trim() || "—",
+        project_sector: project?.sector ?? null,
+        project_share_price: iqd(project?.share_price),
+        shares_offered: offered,
+        shares_sold: sold,
+        shares_remaining: Math.max(0, offered - sold),
+        price_per_share: iqd(r.price_per_share),
+        notes: r.notes,
+        is_quick_sell: r.is_quick_sell,
+        status: r.status,
+        type: r.type === "buy" ? "buy" : "sell",
+        created_at: r.created_at,
+        expires_at: r.expires_at,
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Phase 11.30 — cancel one of the signed-in user's own listings. RLS
+ * policy "Sellers can update own listings" allows this. Returns true
+ * on success, false on auth/db failure.
+ */
+export async function cancelMyListing(listingId: string): Promise<boolean> {
+  try {
+    const supabase = createClient()
+    const { error } = await supabase
+      .from("listings")
+      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .eq("id", listingId)
+    return !error
+  } catch {
+    return false
+  }
+}
+
 /** Active listings + JOIN seller name + project metadata in one shot. */
 export async function getExchangeListings(): Promise<ExchangeListingRow[]> {
   try {

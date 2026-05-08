@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ChevronDown, Search, Plus, X, AlertTriangle, ShoppingCart, Clock, Wallet, ChevronLeft, Lock } from "lucide-react"
+import { ChevronDown, Search, Plus, X, AlertTriangle, ShoppingCart, Clock, Wallet, ChevronLeft, Lock, History, Trash2, Loader2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { QuantityModal, type QuantityModalListing } from "@/components/exchange/QuantityModal"
@@ -16,6 +16,8 @@ import { canCreateDeal, createDeal } from "@/lib/escrow"
 import { HOLDINGS } from "@/lib/mock-data/holdings"
 import {
   getExchangeListings,
+  getMyExchangeListings,
+  cancelMyListing,
   placeDealFromListing,
   acceptBuyListing,
   type ExchangeListingRow,
@@ -322,6 +324,196 @@ function PaymentMethodFilter({
   )
 }
 
+// ─── My Listings panel (Phase 11.30 — السجل tab) ───
+function MyListingsPanel({
+  loading,
+  listings,
+  cancellingId,
+  onCancel,
+  onCreate,
+}: {
+  loading: boolean
+  listings: ExchangeListingRow[]
+  cancellingId: string | null
+  onCancel: (id: string) => void
+  onCreate: () => void
+}) {
+  // Status → Arabic label + color class.
+  const statusMeta = (status: string): { label: string; cls: string } => {
+    switch (status) {
+      case "active":
+        return { label: "نشط", cls: "bg-green-400/[0.12] border-green-400/25 text-green-400" }
+      case "paused":
+        return { label: "مُعلَّق", cls: "bg-yellow-400/[0.12] border-yellow-400/25 text-yellow-400" }
+      case "cancelled":
+        return { label: "مُلغى", cls: "bg-red-400/[0.10] border-red-400/25 text-red-400" }
+      case "sold":
+        return { label: "مكتمل (بيع)", cls: "bg-blue-400/[0.12] border-blue-400/25 text-blue-300" }
+      case "completed":
+        return { label: "مكتمل", cls: "bg-blue-400/[0.12] border-blue-400/25 text-blue-300" }
+      case "expired":
+        return { label: "منتهٍ", cls: "bg-neutral-500/[0.12] border-neutral-500/25 text-neutral-400" }
+      default:
+        return { label: status, cls: "bg-white/[0.06] border-white/[0.1] text-neutral-300" }
+    }
+  }
+
+  // Group counts so the user sees the breakdown at a glance.
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: listings.length }
+    for (const l of listings) c[l.status] = (c[l.status] ?? 0) + 1
+    return c
+  }, [listings])
+
+  if (loading && listings.length === 0) {
+    return (
+      <div className="space-y-2.5">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="bg-white/[0.04] border border-white/[0.06] rounded-2xl p-4 animate-pulse h-32" />
+        ))}
+      </div>
+    )
+  }
+
+  if (listings.length === 0) {
+    return (
+      <div className="text-center py-16 bg-white/[0.03] border border-white/[0.06] rounded-2xl">
+        <div className="text-5xl mb-3 opacity-50">📋</div>
+        <div className="text-sm text-neutral-400 mb-1">لم تنشر إعلاناً بعد</div>
+        <div className="text-[11px] text-neutral-600 mb-5">انشر أول إعلان لك في السوق</div>
+        <button
+          onClick={onCreate}
+          className="bg-neutral-100 text-black px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-neutral-200 transition-colors"
+        >
+          إنشاء إعلان
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2.5">
+      {/* Summary chips */}
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        <span className="bg-white/[0.06] border border-white/[0.1] text-neutral-300 text-[10px] px-2 py-1 rounded-full">
+          الإجمالي: <span className="font-mono font-bold text-white">{counts.all}</span>
+        </span>
+        {counts.active > 0 && (
+          <span className="bg-green-400/[0.08] border border-green-400/20 text-green-400 text-[10px] px-2 py-1 rounded-full">
+            نشط: <span className="font-mono font-bold">{counts.active}</span>
+          </span>
+        )}
+        {counts.sold > 0 && (
+          <span className="bg-blue-400/[0.08] border border-blue-400/20 text-blue-300 text-[10px] px-2 py-1 rounded-full">
+            مكتمل: <span className="font-mono font-bold">{counts.sold}</span>
+          </span>
+        )}
+        {counts.cancelled > 0 && (
+          <span className="bg-red-400/[0.06] border border-red-400/20 text-red-400 text-[10px] px-2 py-1 rounded-full">
+            مُلغى: <span className="font-mono font-bold">{counts.cancelled}</span>
+          </span>
+        )}
+        {counts.expired > 0 && (
+          <span className="bg-neutral-500/[0.06] border border-neutral-500/20 text-neutral-400 text-[10px] px-2 py-1 rounded-full">
+            منتهٍ: <span className="font-mono font-bold">{counts.expired}</span>
+          </span>
+        )}
+      </div>
+
+      {listings.map((l) => {
+        const meta = statusMeta(l.status)
+        const remaining = Math.max(0, Number(l.shares_offered) - Number(l.shares_sold ?? 0))
+        const total = Number(l.price_per_share) * Number(l.shares_offered)
+        const isActive = l.status === "active" || l.status === "paused"
+        const isCancelling = cancellingId === l.id
+        return (
+          <div
+            key={l.id}
+            className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4"
+          >
+            {/* Header — type + status */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className={cn(
+                    "text-[10px] font-bold px-2 py-0.5 rounded border",
+                    l.type === "sell"
+                      ? "bg-red-500/[0.12] border-red-500/25 text-red-400"
+                      : "bg-green-500/[0.12] border-green-500/25 text-green-400"
+                  )}
+                >
+                  {l.type === "sell" ? "🔴 بيع" : "🟢 شراء"}
+                </span>
+                <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded border", meta.cls)}>
+                  {meta.label}
+                </span>
+              </div>
+              <span className="text-[10px] text-neutral-500 flex items-center gap-1">
+                <Clock className="w-2.5 h-2.5" />
+                {timeSince(l.created_at)}
+              </span>
+            </div>
+
+            {/* Project + price */}
+            <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2.5 mb-3">
+              <div className="text-xs font-bold text-white truncate mb-1">{l.project_name}</div>
+              <div className="text-[10px] text-neutral-500">
+                <span className="font-mono">{Number(l.price_per_share).toLocaleString("en-US")}</span> د.ع/حصة
+              </div>
+            </div>
+
+            {/* Shares progress */}
+            <div className="flex items-center justify-between text-[11px] mb-2">
+              <span className="text-neutral-400">
+                مُباع: <span className="text-white font-mono font-bold">{Number(l.shares_sold ?? 0)}</span>
+                {" / "}
+                <span className="text-white font-mono">{Number(l.shares_offered)}</span>
+              </span>
+              <span className="text-neutral-400">
+                المتبقي: <span className="text-yellow-400 font-mono font-bold">{remaining}</span>
+              </span>
+            </div>
+            <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden mb-3">
+              <div
+                className="h-full bg-gradient-to-r from-blue-400 to-green-400 rounded-full transition-all duration-700"
+                style={{
+                  width: `${Math.min(100, (Number(l.shares_sold ?? 0) / Math.max(1, Number(l.shares_offered))) * 100)}%`,
+                }}
+              />
+            </div>
+
+            {/* Total + cancel */}
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] text-neutral-400">
+                الإجمالي: <span className="text-yellow-400 font-bold font-mono">{total.toLocaleString("en-US")}</span> د.ع
+              </span>
+              {isActive && (
+                <button
+                  onClick={() => onCancel(l.id)}
+                  disabled={isCancelling}
+                  className="bg-red-500/[0.10] border border-red-500/25 hover:bg-red-500/[0.18] text-red-400 text-[11px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isCancelling ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      جاري الإلغاء...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3 h-3" strokeWidth={2} />
+                      إلغاء الإعلان
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Main Page ───
 function ExchangeContent() {
   const router = useRouter()
@@ -362,6 +554,14 @@ function ExchangeContent() {
   const [currentUserId, setCurrentUserId] = useState<string>(CURRENT_USER_ID)
   const [loadingListings, setLoadingListings] = useState(true)
 
+  // Phase 11.30 — "السجل" tab state. Shows the user's own listings
+  // across all statuses (active / cancelled / completed / paused) so
+  // they can audit what they've posted and what got fulfilled.
+  const [view, setView] = useState<"market" | "my_listings">("market")
+  const [myListings, setMyListings] = useState<ExchangeListingRow[]>([])
+  const [loadingMine, setLoadingMine] = useState(false)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
+
   // Apply project filter from URL — uses real projects.
   useEffect(() => {
     if (projectFilter && dbProjects.length > 0) {
@@ -372,6 +572,41 @@ function ExchangeContent() {
 
   // Realtime tick — increments whenever any listing row changes
   const { tick: listingsTick } = useRealtimeListings()
+
+  // Phase 11.30 — fetch the user's own listings on initial mount
+  // (so the tab badge can show the count immediately) AND on every
+  // realtime tick so a freshly-posted listing shows up without a
+  // manual refresh. The skeleton-loading flag only fires when the
+  // log tab is the active view.
+  useEffect(() => {
+    let cancelled = false
+    if (view === "my_listings") setLoadingMine(true)
+    getMyExchangeListings()
+      .then((rows) => { if (!cancelled) setMyListings(rows) })
+      .finally(() => { if (!cancelled) setLoadingMine(false) })
+    return () => { cancelled = true }
+  }, [view, listingsTick])
+
+  // Phase 11.30 — cancel a still-active listing the user posted.
+  const handleCancelMyListing = async (listingId: string) => {
+    if (cancellingId) return
+    setCancellingId(listingId)
+    try {
+      const ok = await cancelMyListing(listingId)
+      if (ok) {
+        showSuccess("تم إلغاء الإعلان")
+        // Optimistic local update so the badge flips immediately even
+        // before realtime fires.
+        setMyListings((cur) =>
+          cur.map((l) => (l.id === listingId ? { ...l, status: "cancelled" } : l)),
+        )
+      } else {
+        showError("تعذّر إلغاء الإعلان")
+      }
+    } finally {
+      setCancellingId(null)
+    }
+  }
 
   // Load real listings + current user on mount, and re-fetch listings
   // whenever realtime fires.
@@ -577,6 +812,50 @@ function ExchangeContent() {
             }
           />
 
+          {/* Phase 11.30 — السوق / السجل tab toggle */}
+          <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-3">
+            <button
+              onClick={() => setView("market")}
+              className={cn(
+                "flex-1 py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5",
+                view === "market"
+                  ? "bg-white text-black font-bold"
+                  : "text-neutral-400 hover:text-white"
+              )}
+            >
+              <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} />
+              السوق
+            </button>
+            <button
+              onClick={() => setView("my_listings")}
+              className={cn(
+                "flex-1 py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5",
+                view === "my_listings"
+                  ? "bg-white text-black font-bold"
+                  : "text-neutral-400 hover:text-white"
+              )}
+            >
+              <History className="w-3.5 h-3.5" strokeWidth={2} />
+              سجلي
+              {myListings.length > 0 && view !== "my_listings" && (
+                <span className="bg-white/[0.12] text-white text-[10px] font-mono px-1.5 py-px rounded-full">
+                  {myListings.length}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {view === "my_listings" ? (
+            <MyListingsPanel
+              loading={loadingMine}
+              listings={myListings}
+              cancellingId={cancellingId}
+              onCancel={handleCancelMyListing}
+              onCreate={() => router.push("/exchange/create")}
+            />
+          ) : (
+          <>
+
           {/* Project Selector */}
           <ProjectSelector
             projects={dbProjects}
@@ -719,13 +998,21 @@ function ExchangeContent() {
               {filtered.map((l, idx) => {
                 const isBest = idx === 0
                 const verified = l.reputation_score >= 80
+                // Phase 11.30 — flag the user's own listings so they
+                // get a recognizable badge + a "view in log" CTA
+                // instead of the buy/sell button.
+                const isOwn = l.user_id === currentUserId
 
                 return (
                   <div
                     key={l.id}
                     className={cn(
                       "bg-white/[0.05] border rounded-2xl p-4 transition-colors hover:bg-white/[0.06]",
-                      isBest ? "border-yellow-400/25" : "border-white/[0.08]"
+                      isOwn
+                        ? "border-blue-400/25"
+                        : isBest
+                          ? "border-yellow-400/25"
+                          : "border-white/[0.08]"
                     )}
                   >
                     {/* Header: User info */}
@@ -736,8 +1023,15 @@ function ExchangeContent() {
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-bold text-white truncate">{l.user_name}</span>
-                            {verified && (
+                            <span className="text-sm font-bold text-white truncate">
+                              {isOwn ? "أنا" : l.user_name}
+                            </span>
+                            {isOwn && (
+                              <span className="bg-blue-400/[0.12] border border-blue-400/30 text-blue-300 px-1.5 py-px rounded text-[9px] font-bold">
+                                إعلانك
+                              </span>
+                            )}
+                            {!isOwn && verified && (
                               <span className="bg-green-400/[0.12] border border-green-400/25 text-green-400 px-1.5 py-px rounded text-[9px] font-bold flex items-center gap-0.5">
                                 ✓ موثق
                               </span>
@@ -749,7 +1043,7 @@ function ExchangeContent() {
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        {isBest && (
+                        {isBest && !isOwn && (
                           <span className="bg-yellow-400/[0.12] border border-yellow-400/25 text-yellow-400 px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5">
                             ⭐ الأفضل
                           </span>
@@ -818,24 +1112,38 @@ function ExchangeContent() {
                       </span>
                     </div>
 
-                    {/* Action button — يفتح QuantityModal لتحديد الكمية */}
-                    <button
-                      onClick={() => onClickListing(l)}
-                      className={cn(
-                        "w-full py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2",
-                        mode === "buy"
-                          ? "bg-neutral-100 text-black hover:bg-neutral-200"
-                          : "bg-red-500/15 border border-red-500/30 text-red-400 hover:bg-red-500/20"
-                      )}
-                    >
-                      <ShoppingCart className="w-4 h-4" strokeWidth={2} />
-                      {mode === "buy" ? "شراء — تحديد الكمية" : "بيع — تحديد الكمية"}
-                      <ChevronLeft className="w-3.5 h-3.5 opacity-70" strokeWidth={2.5} />
-                    </button>
+                    {/* Action button — own listing routes to log; others open QuantityModal. */}
+                    {isOwn ? (
+                      <button
+                        onClick={() => setView("my_listings")}
+                        className="w-full py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2 bg-blue-500/15 border border-blue-500/30 text-blue-300 hover:bg-blue-500/20"
+                      >
+                        <History className="w-4 h-4" strokeWidth={2} />
+                        إدارة الإعلان في السجل
+                        <ChevronLeft className="w-3.5 h-3.5 opacity-70" strokeWidth={2.5} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => onClickListing(l)}
+                        className={cn(
+                          "w-full py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2",
+                          mode === "buy"
+                            ? "bg-neutral-100 text-black hover:bg-neutral-200"
+                            : "bg-red-500/15 border border-red-500/30 text-red-400 hover:bg-red-500/20"
+                        )}
+                      >
+                        <ShoppingCart className="w-4 h-4" strokeWidth={2} />
+                        {mode === "buy" ? "شراء — تحديد الكمية" : "بيع — تحديد الكمية"}
+                        <ChevronLeft className="w-3.5 h-3.5 opacity-70" strokeWidth={2.5} />
+                      </button>
+                    )}
                   </div>
                 )
               })}
             </div>
+          )}
+
+          </>
           )}
 
         </div>
