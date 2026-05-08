@@ -89,11 +89,25 @@ export function ProjectCard({ project, variant = "full" }: ProjectCardProps) {
   // (offering_pct × total_shares); fundedShares = offering − available.
   // Falls back to the legacy total_shares math if offering_shares isn't
   // populated yet on this row (older API responses).
+  //
+  // Phase 11.19 — keep the percentage as a float (e.g. 0.22%) so a
+  // small sale like 35 of 16,000 doesn't round to 0 and disappear.
+  // The bar's visual width is also clamped to a minimum of 2% when
+  // the value is non-zero, so the user can see a green sliver even
+  // for tiny progress instead of an invisible bar.
   const offeringTotal = project.offering_shares ?? project.total_shares
   const fundedShares = Math.max(0, offeringTotal - project.available_shares)
-  const fundedPercent = offeringTotal > 0
-    ? Math.min(100, Math.round((fundedShares / offeringTotal) * 100))
+  const fundedPercentRaw = offeringTotal > 0
+    ? Math.min(100, (fundedShares / offeringTotal) * 100)
     : 0
+  // For the label: show 1 decimal when below 10%, integer above.
+  const fundedPercent =
+    fundedPercentRaw === 0 ? 0 :
+    fundedPercentRaw < 10 ? Number(fundedPercentRaw.toFixed(2)) :
+    Math.round(fundedPercentRaw)
+  // For the bar width: floor at 2% so any non-zero progress is visible.
+  const fundedBarWidth =
+    fundedPercentRaw === 0 ? 0 : Math.max(2, fundedPercentRaw)
 
   const progressColor =
     fundedPercent >= 75 ? "from-green-400 to-green-500" :
@@ -270,7 +284,7 @@ export function ProjectCard({ project, variant = "full" }: ProjectCardProps) {
         <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden mb-1.5">
           <div
             className={cn("h-full bg-gradient-to-r rounded-full transition-all", progressColor)}
-            style={{ width: fundedPercent + "%" }}
+            style={{ width: fundedBarWidth + "%" }}
           />
         </div>
         {/* Phase 11.06 — sub-line now shows sold/offering, not sold/total */}

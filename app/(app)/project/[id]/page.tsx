@@ -193,11 +193,21 @@ export default function ProjectDetailPage() {
   // offering_shares = total public-offering bucket (never shrinks with sales)
   // available_shares = unsold offering shares (decreases as shares are bought)
   // sold% = (offering_shares - available_shares) / offering_shares
+  //
+  // Phase 11.19 — keep the percentage as a float so a small sale
+  // (35 of 16,000 ≈ 0.22%) doesn't round to 0% and the green bar
+  // doesn't disappear. Bar width is also clamped to ≥2% when there
+  // is ANY progress so the user can see a visible sliver.
   const offeringTotal = project.offering_shares ?? project.available_shares ?? 0
   const soldFromOffering = Math.max(0, offeringTotal - (project.available_shares ?? 0))
-  const pct = offeringTotal > 0
-    ? Math.round((soldFromOffering / offeringTotal) * 100)
+  const pctRaw = offeringTotal > 0
+    ? Math.min(100, (soldFromOffering / offeringTotal) * 100)
     : 0
+  const pct =
+    pctRaw === 0 ? 0 :
+    pctRaw < 10 ? Number(pctRaw.toFixed(2)) :
+    Math.round(pctRaw)
+  const pctBarWidth = pctRaw === 0 ? 0 : Math.max(2, pctRaw)
   // Phase 10.82 — spec: "القيمة السوقية = share_price × total_shares
   // الإجمالي للمشروع". Was using (total - available) which is "sold
   // value" not "market cap".
@@ -300,7 +310,7 @@ export default function ProjectDetailPage() {
                     "h-full rounded-full transition-all duration-700",
                     pct > 70 ? "bg-green-400" : pct > 40 ? "bg-yellow-400" : "bg-red-400"
                   )}
-                  style={{ width: pct + "%" }}
+                  style={{ width: pctBarWidth + "%" }}
                 />
               </div>
             </div>
