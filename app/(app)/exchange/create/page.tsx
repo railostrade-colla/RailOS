@@ -39,7 +39,11 @@ import { dedupCache, readPersistedSync } from "@/lib/data/cache"
 // Phase 11.25 — single source of truth for IQD coercion + safe input
 // clamping. Replaces ad-hoc parseInt() that silently dropped a dinar
 // when the price ceiling carried any fractional drift.
-import { iqd, parseIqdInput, clampIqdInputToMax } from "@/lib/utils/money"
+import { iqd, parseIqdInput } from "@/lib/utils/money"
+// Phase 11.27 — IntegerInput replaces <input type="number"> so the
+// mouse wheel, up/down arrows, and native spinner can never mutate a
+// money value behind the user's back.
+import { IntegerInput } from "@/components/ui/IntegerInput"
 
 // إعدادات الرسوم
 const REPEAT_LISTING_FEE_PERCENT = 0.25 // 0.25% للإعلان المكرر
@@ -453,25 +457,10 @@ export default function CreateAdPage() {
     setPriceInput("")
   }
 
-  // Phase 11.25 — both handlers go through clampIqdInputToMax() so:
-  //   1. The clamp comparand is Math.floor(max), guaranteeing that a
-  //      fractional ceiling can never snap a clean integer entry down.
-  //   2. The stored value is always an integer string (no decimals,
-  //      no Arabic digits, no formatting noise).
-  //   3. parseInt-based comparisons that previously dropped a dinar
-  //      (25000 vs maxPrice=24999.9999) are eliminated at the source.
-  const handleSharesChange = (v: string) => {
-    setSharesInput(
-      clampIqdInputToMax(
-        v,
-        adType === "sell" && availableShares > 0 ? availableShares : null,
-      ),
-    )
-  }
-
-  const handlePriceChange = (v: string) => {
-    setPriceInput(clampIqdInputToMax(v, maxPrice > 0 ? maxPrice : null))
-  }
+  // Phase 11.27 — IntegerInput already returns a sanitized digit-only
+  // string and applies the optional `max` ceiling internally (with
+  // Math.floor() on the ceiling so fractional drift can't strip a
+  // dinar). These handlers are now thin pass-throughs.
 
   // فتح المودال للمراجعة النهائية
   const handleOpenReview = () => {
@@ -666,13 +655,11 @@ export default function CreateAdPage() {
                     </button>
                   )}
                 </div>
-                <input
-                  type="number"
+                <IntegerInput
                   value={sharesInput}
-                  onChange={(e) => handleSharesChange(e.target.value)}
+                  onValueChange={setSharesInput}
+                  max={adType === "sell" && availableShares > 0 ? availableShares : null}
                   placeholder="0"
-                  min="1"
-                  max={adType === "sell" && availableShares > 0 ? availableShares : undefined}
                   className={cn(
                     "w-full bg-white/[0.05] border rounded-xl px-4 py-3 text-base font-bold text-white outline-none text-center font-mono transition-colors",
                     sharesError
@@ -697,13 +684,11 @@ export default function CreateAdPage() {
               {/* Price */}
               <div>
                 <div className="text-[11px] text-neutral-400 mb-2 font-bold">سعر الحصة (د.ع)</div>
-                <input
-                  type="number"
+                <IntegerInput
                   value={priceInput}
-                  onChange={(e) => handlePriceChange(e.target.value)}
+                  onValueChange={setPriceInput}
+                  max={maxPrice > 0 ? maxPrice : null}
                   placeholder="0"
-                  min="1"
-                  max={maxPrice > 0 ? maxPrice : undefined}
                   className={cn(
                     "w-full bg-white/[0.05] border rounded-xl px-4 py-3 text-base font-bold text-white outline-none text-center font-mono transition-colors",
                     priceError
@@ -732,12 +717,10 @@ export default function CreateAdPage() {
                 الحد الأدنى لمبلغ المعاملة
                 <span className="text-[10px] text-neutral-600 font-normal">(اختياري)</span>
               </div>
-              <input
-                type="number"
+              <IntegerInput
                 value={minAmountInput}
-                onChange={(e) => setMinAmountInput(e.target.value)}
+                onValueChange={setMinAmountInput}
                 placeholder="0 — بدون حد أدنى"
-                min="0"
                 className="w-full bg-white/[0.05] border border-white/[0.08] focus:border-white/20 rounded-xl px-4 py-3 text-sm text-white outline-none transition-colors"
                 dir="ltr"
               />

@@ -8,6 +8,9 @@ import { submitDirectBuyRequest, submitPaymentProof, type PaymentMethod } from "
 import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 import { PaymentInstructionsBlock } from "@/components/payment/PaymentInstructionsBlock"
+// Phase 11.27 — IntegerInput prevents wheel/arrow-key/spinner from
+// silently mutating share-count inputs.
+import { IntegerInput } from "@/components/ui/IntegerInput"
 
 // Phase 10.99f — let the user pick the actual payment method used.
 // Stored on payment_proofs so admin sees it in the share-requests
@@ -230,11 +233,9 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
               الأقصى المتاح
             </button>
           </div>
-          <input
-            type="number"
+          <IntegerInput
             value={shares}
-            onChange={(e) => setShares(e.target.value)}
-            min="1"
+            onValueChange={setShares}
             max={project.available_shares}
             placeholder="0"
             dir="ltr"

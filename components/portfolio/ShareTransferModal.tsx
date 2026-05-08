@@ -15,6 +15,9 @@ import { UserPicker } from "@/components/admin/UserPicker"
 import { submitShareTransfer } from "@/lib/data/share-transfers"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
+// Phase 11.27 — IntegerInput prevents wheel/arrow-key/spinner from
+// silently mutating money/share inputs.
+import { IntegerInput } from "@/components/ui/IntegerInput"
 
 interface Props {
   open: boolean
@@ -134,11 +137,9 @@ export function ShareTransferModal({
           <label className="text-xs text-neutral-400 mb-1.5 block">
             عدد الحصص * (متاح: <span className="text-white font-mono">{fmtNum(availableShares)}</span>)
           </label>
-          <input
-            type="number"
+          <IntegerInput
             value={shares}
-            onChange={(e) => setShares(e.target.value)}
-            min={1}
+            onValueChange={setShares}
             max={availableShares}
             placeholder="0"
             className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20"

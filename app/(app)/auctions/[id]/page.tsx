@@ -27,6 +27,9 @@ import {
 } from "@/lib/data/auctions-real"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
+// Phase 11.27 — IntegerInput prevents wheel/arrow-key/spinner from
+// silently mutating bid/share inputs.
+import { IntegerInput } from "@/components/ui/IntegerInput"
 
 const fmt = (n: number) => n.toLocaleString("en-US")
 
@@ -443,11 +446,9 @@ export default function AuctionDetailsPage() {
             {/* Shares input */}
             <div>
               <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">عدد الحصص</div>
-              <input
-                type="number"
+              <IntegerInput
                 value={bidShares}
-                onChange={(e) => setBidShares(e.target.value)}
-                min="1"
+                onValueChange={setBidShares}
                 max={auction.shares_offered}
                 className="w-full bg-white/[0.05] border border-white/[0.08] focus:border-white/20 rounded-xl px-4 py-3 text-sm text-white outline-none font-mono text-center transition-colors"
                 dir="ltr"
@@ -460,11 +461,9 @@ export default function AuctionDetailsPage() {
             {/* Price input */}
             <div>
               <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">السعر للحصة (د.ع)</div>
-              <input
-                type="number"
+              <IntegerInput
                 value={bidPrice}
-                onChange={(e) => setBidPrice(e.target.value)}
-                min={minBidPrice}
+                onValueChange={setBidPrice}
                 placeholder={fmt(minBidPrice)}
                 className={cn(
                   "w-full bg-white/[0.05] border focus:border-white/20 rounded-xl px-4 py-3 text-sm text-white outline-none font-mono text-center transition-colors",

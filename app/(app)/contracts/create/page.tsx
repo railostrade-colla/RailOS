@@ -9,6 +9,10 @@ import { ContractLimitCard } from "@/components/contracts/ContractLimitCard"
 import { LEVEL_LABELS, LEVEL_ICONS, type InvestorLevel } from "@/lib/utils/contractLimits"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
+// Phase 11.27 — IntegerInput prevents wheel/arrow-key/spinner from
+// silently mutating IQD investment inputs. The share-percentage input
+// stays as type="number" because it's intentionally fractional.
+import { IntegerInput } from "@/components/ui/IntegerInput"
 
 const fmtIQD = (n: number) => n.toLocaleString("en-US")
 
@@ -263,10 +267,9 @@ export default function CreateContractPage() {
           {/* قيمة الاستثمار */}
           <div className="mb-4">
             <label className="text-xs text-neutral-400 mb-2 block font-bold">قيمة الاستثمار (IQD) *</label>
-            <input
-              type="number"
+            <IntegerInput
               value={investment}
-              onChange={(e) => setInvestment(e.target.value)}
+              onValueChange={setInvestment}
               placeholder="مثال: 1000000"
               dir="ltr"
               className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 font-mono"

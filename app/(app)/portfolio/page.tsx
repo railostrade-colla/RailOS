@@ -40,6 +40,10 @@ import { useActiveAccount } from "@/contexts/ActiveAccountContext"
 import { ShareTransferModal } from "@/components/portfolio/ShareTransferModal"
 import { ArrowRightLeft } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+// Phase 11.27 — IntegerInput prevents wheel/arrow-key/spinner from
+// silently mutating fee-unit / share inputs.
+import { IntegerInput } from "@/components/ui/IntegerInput"
+import { parseIqdInput } from "@/lib/utils/money"
 
 // TODO Phase 4.X — derive from this month's deals.total_amount sum.
 const CURRENT_USER_USED_THIS_MONTH = 0
@@ -1001,11 +1005,9 @@ function PortfolioContent() {
             {/* Amount */}
             <div className="mb-4">
               <label className="text-xs text-neutral-400 mb-2 block font-bold">عدد الوحدات المطلوبة *</label>
-              <input
-                type="number"
-                min="1"
-                value={feeAmount || ""}
-                onChange={(e) => setFeeAmount(parseInt(e.target.value) || 0)}
+              <IntegerInput
+                value={feeAmount ? String(feeAmount) : ""}
+                onValueChange={(v) => setFeeAmount(parseIqdInput(v))}
                 placeholder="مثلاً: 50000"
                 className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
               />

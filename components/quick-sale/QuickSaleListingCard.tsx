@@ -12,6 +12,9 @@ import {
 } from "@/lib/data/quick-sale"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { createClient } from "@/lib/supabase/client"
+// Phase 11.27 — IntegerInput prevents wheel/arrow-key/spinner from
+// silently mutating share-count inputs.
+import { IntegerInput } from "@/components/ui/IntegerInput"
 
 interface Props {
   listing: QuickSaleListing
@@ -313,14 +316,11 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
                     </button>
                   )}
                 </div>
-                <input
-                  type="number"
-                  inputMode="numeric"
+                <IntegerInput
                   value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
+                  onValueChange={setQuantity}
+                  max={listing.is_unlimited ? null : listing.available_shares}
                   placeholder="0"
-                  min="1"
-                  max={listing.is_unlimited ? undefined : listing.available_shares}
                   dir="ltr"
                   className="w-full bg-white/[0.05] border border-white/[0.08] focus:border-white/20 rounded-xl px-4 py-3 text-2xl font-bold font-mono text-white text-center outline-none"
                 />

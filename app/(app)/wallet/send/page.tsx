@@ -23,6 +23,9 @@ import {
 } from "@/lib/data/wallet"
 import { getCurrentUserProfile } from "@/lib/data/profile"
 import { cn } from "@/lib/utils/cn"
+// Phase 11.27 — IntegerInput prevents wheel/arrow-key/spinner from
+// silently mutating share-count inputs.
+import { IntegerInput } from "@/components/ui/IntegerInput"
 
 // TODO Phase 4.X — these stay hardcoded until:
 //   • profiles.level is migrated/standardized
@@ -488,13 +491,11 @@ export default function SendSharesPage() {
                   الكل ({selectedHolding.shares_owned})
                 </button>
               </div>
-              <input
-                type="number"
+              <IntegerInput
                 value={qty}
-                onChange={(e) => handleQtyChange(e.target.value)}
-                placeholder="0"
-                min="1"
+                onValueChange={setQty}
                 max={selectedHolding.shares_owned}
+                placeholder="0"
                 className={cn(
                   "w-full bg-white/[0.05] border rounded-xl px-4 py-3 text-base font-bold text-white outline-none text-center font-mono transition-colors",
                   qtyError
