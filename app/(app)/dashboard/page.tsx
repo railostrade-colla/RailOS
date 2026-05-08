@@ -68,6 +68,13 @@ function fmtCompact(n: number): string {
   return n.toLocaleString("en-US")
 }
 
+// Phase 11.14 — full-digit IQD formatter (e.g. 500,000) for places
+// where the founder wants the actual zeroes shown instead of the
+// compact "500 ألف" shorthand.
+function fmtIQD(n: number): string {
+  return Math.round(n).toLocaleString("en-US")
+}
+
 function getGreeting(): string {
   const h = new Date().getHours()
   if (h >= 5 && h < 12) return "صباح الخير"
