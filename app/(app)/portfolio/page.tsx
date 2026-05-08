@@ -255,6 +255,8 @@ function PortfolioContent() {
     created_at: string
   }
   const [extraHistory, setExtraHistory] = useState<HistoryEntry[]>([])
+  // Phase 11.08 — click-to-view-details modal for history rows
+  const [historyDetail, setHistoryDetail] = useState<HistoryEntry | null>(null)
 
   // Phase 10.96 — pendingCount = pending fee requests + pending shares
   // (deals/transfers awaiting buyer/seller/admin action). The history feed
@@ -854,7 +856,11 @@ function PortfolioContent() {
             ) : (
               <div className="space-y-2">
                 {unifiedHistory.map((entry) => (
-                  <div key={entry.id} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3 flex items-center gap-3">
+                  <button
+                    key={entry.id}
+                    onClick={() => setHistoryDetail(entry)}
+                    className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl p-3 flex items-center gap-3 hover:bg-white/[0.07] active:bg-white/[0.08] transition-colors text-right"
+                  >
                     <div className={cn(
                       "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 border",
                       entry.kind === "deal" ? "bg-blue-400/[0.1] border-blue-400/[0.25]" :
@@ -887,7 +893,7 @@ function PortfolioContent() {
                         </span>
                       )}
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )
@@ -1088,6 +1094,136 @@ function PortfolioContent() {
           availableShares={transferTarget.available_shares}
           pricePerShare={transferTarget.price_per_share}
         />
+      )}
+
+      {/* Phase 11.08 — History entry details modal */}
+      {historyDetail && (
+        <div
+          className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setHistoryDetail(null)}
+        >
+          <div
+            className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between sticky top-0 bg-[#0a0a0a]/95 backdrop-blur z-10">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={cn(
+                  "w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 border",
+                  historyDetail.kind === "deal" ? "bg-blue-400/[0.1] border-blue-400/[0.25]" :
+                  historyDetail.kind === "fee" ? "bg-yellow-400/[0.1] border-yellow-400/[0.25]" :
+                  historyDetail.kind === "request" ? "bg-purple-400/[0.1] border-purple-400/[0.25]" :
+                  "bg-green-400/[0.1] border-green-400/[0.25]",
+                )}>
+                  <span className="text-lg">{historyDetail.icon}</span>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-white">تفاصيل العملية</div>
+                  <div className="text-[10px] text-neutral-500 mt-0.5">
+                    {historyDetail.kind === "deal" ? "صفقة شراء/بيع" :
+                     historyDetail.kind === "fee" ? "حركة وحدات رسوم" :
+                     historyDetail.kind === "request" ? "طلب وحدات" :
+                     "تحويل حصص"}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setHistoryDetail(null)}
+                className="text-neutral-500 hover:text-white"
+                aria-label="إغلاق"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-3">
+              {/* Title */}
+              <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
+                <div className="text-[10px] text-neutral-500 mb-1">العنوان</div>
+                <div className="text-sm font-bold text-white">{historyDetail.title}</div>
+                {historyDetail.subtitle && (
+                  <div className="text-[11px] text-neutral-400 mt-1">{historyDetail.subtitle}</div>
+                )}
+              </div>
+
+              {/* Amount + status row */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
+                  <div className="text-[10px] text-neutral-500 mb-1">المبلغ</div>
+                  <div className={cn(
+                    "text-base font-bold font-mono",
+                    historyDetail.amount === undefined ? "text-neutral-500" :
+                    historyDetail.amount >= 0 ? "text-green-400" : "text-red-400",
+                  )}>
+                    {historyDetail.amount !== undefined ? (
+                      <>
+                        {historyDetail.amount >= 0 ? "+" : ""}
+                        {fmtIQD(historyDetail.amount)}
+                        <span className="text-[10px] text-neutral-500 mr-1">
+                          {historyDetail.kind === "fee" || historyDetail.kind === "request" ? "وحدة" : "د.ع"}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-neutral-500">—</span>
+                    )}
+                  </div>
+                </div>
+                <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
+                  <div className="text-[10px] text-neutral-500 mb-1">الحالة</div>
+                  <div className="text-sm font-bold text-white">
+                    {historyDetail.statusBadge ?? "مكتملة"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Timestamp */}
+              <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
+                <div className="text-[10px] text-neutral-500 mb-1">التاريخ والوقت</div>
+                <div className="text-sm text-white font-mono" dir="ltr">
+                  {historyDetail.created_at
+                    ? new Date(historyDetail.created_at).toLocaleString("en-US", {
+                        year: "numeric", month: "2-digit", day: "2-digit",
+                        hour: "2-digit", minute: "2-digit", second: "2-digit",
+                        hour12: false,
+                      })
+                    : "—"}
+                </div>
+              </div>
+
+              {/* Reference id */}
+              <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
+                <div className="text-[10px] text-neutral-500 mb-1">المعرّف</div>
+                <div className="text-[11px] text-neutral-300 font-mono break-all" dir="ltr">
+                  {historyDetail.id}
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="px-5 py-3 border-t border-white/[0.06] sticky bottom-0 bg-[#0a0a0a]/95 backdrop-blur flex gap-2">
+              {historyDetail.kind === "deal" && (
+                <button
+                  onClick={() => {
+                    const dealId = historyDetail.id.replace(/^deal-/, "")
+                    setHistoryDetail(null)
+                    router.push(`/deals/${dealId}`)
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-300 text-sm font-bold hover:bg-blue-500/[0.2]"
+                >
+                  📄 فتح تفاصيل الصفقة
+                </button>
+              )}
+              <button
+                onClick={() => setHistoryDetail(null)}
+                className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AppLayout>
   )
