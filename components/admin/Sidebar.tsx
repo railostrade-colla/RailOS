@@ -47,13 +47,17 @@ export function AdminSidebar({
         if (!auth?.user?.id || cancelled) return
         const uid = auth.user.id
 
-        // Count unread notifications for this admin (drives the
-        // requests_hub badge — most-clicked landing).
+        // Count unread ADMIN-targeted notifications for this admin
+        // (drives the requests_hub badge). Phase 11.22 filter:
+        // user-side notifications (deal_completed → /portfolio,
+        // gift_received → /gifts) must not appear in the admin
+        // sidebar even when the admin's user_id receives them.
         const { count: unread } = await supabase
           .from("notifications")
           .select("id", { count: "exact", head: true })
           .eq("user_id", uid)
           .eq("is_read", false)
+          .like("link_url", "/admin%")
 
         if (cancelled) return
         const next: Partial<Record<AdminTab, number>> = {}

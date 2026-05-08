@@ -122,6 +122,11 @@ async function fetchAdminNotifications(limit: number): Promise<AdminNotification
   const out = new Map<string, AdminNotification>()
 
   // 1. Direct unread fetch (canonical source).
+  // Phase 11.22 — only surface ADMIN-side notifications here. A
+  // notification is "admin" when its link_url starts with /admin
+  // (those are routed to admin pages — Order Center, KYC, etc.).
+  // User-individual notifications (deal_completed → /portfolio,
+  // gift_received → /gifts) are handled by the user app's bell.
   try {
     const { data: auth } = await supabase.auth.getUser()
     if (auth?.user?.id) {
@@ -130,6 +135,7 @@ async function fetchAdminNotifications(limit: number): Promise<AdminNotification
         .select("id, notification_type, title, message, link_url, created_at")
         .eq("user_id", auth.user.id)
         .eq("is_read", false)
+        .like("link_url", "/admin%")  // admin-targeted only
         .order("created_at", { ascending: false })
         .limit(limit)
       for (const n of (data ?? []) as Array<{
@@ -142,7 +148,7 @@ async function fetchAdminNotifications(limit: number): Promise<AdminNotification
       }>) {
         const t = String(n.notification_type ?? "other")
         const friendlyType =
-          t === "deal_request_received" || t === "deal_completed" ? "shares" :
+          t === "deal_request_received" ? "shares" :
           t === "fee_request" || t === "fee_request_received" ? "fee" :
           t === "kyc_submitted" ? "kyc" :
           t === "support_message" ? "support" :
@@ -162,7 +168,13 @@ async function fetchAdminNotifications(limit: number): Promise<AdminNotification
           title: n.title ?? "—",
           body: n.message ?? "",
           time: n.created_at ?? "",
-          href: n.link_url ?? "/admin?tab=requests_hub",
+          // Phase 11.22 — guarantee an admin-shell URL even if the
+          // RPC ever forgets to set it. Anything not starting with
+          // /admin gets rewritten to the orders hub so the click
+          // never bounces the admin out of the dashboard.
+          href: (n.link_url && n.link_url.startsWith("/admin"))
+            ? n.link_url
+            : "/admin?tab=requests_hub",
         })
       }
     }
@@ -248,9 +260,11 @@ async function fetchUnreadCounts(): Promise<NotificationCounts> {
   }
 
   // ── Direct-table backstop for the bell ──
-  // Even if the RPC under-reports, count this admin's unread rows
-  // directly so any new notification (regardless of type) lights up
-  // the bell within the first poll/realtime tick.
+  // Phase 11.22 — count ONLY admin-targeted unread rows (link_url
+  // starts with /admin). User-side notifications (deal_completed →
+  // /portfolio etc.) must not bump the admin bell, otherwise an
+  // admin who is also a user sees their own user notifications in
+  // the admin shell and clicking them bounces them out.
   try {
     const { data: auth } = await supabase.auth.getUser()
     if (auth?.user?.id) {
@@ -259,10 +273,8 @@ async function fetchUnreadCounts(): Promise<NotificationCounts> {
         .select("id", { count: "exact", head: true })
         .eq("user_id", auth.user.id)
         .eq("is_read", false)
+        .like("link_url", "/admin%")
       const live = Number(count ?? 0)
-      // The bell shows the larger of (RPC total, live unread count)
-      // so we never under-count, and the RPC's specialised buckets
-      // (kyc/fees/support…) keep working.
       if (live > base.total) {
         base = { ...base, total: live }
       }

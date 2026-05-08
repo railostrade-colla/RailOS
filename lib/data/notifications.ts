@@ -21,10 +21,14 @@ export interface DBNotification {
 export async function getMyNotifications(userId: string, limit = 30): Promise<DBNotification[]> {
   try {
     const supabase = createClient()
+    // Phase 11.22 — exclude admin-targeted notifications (link_url
+    // starts with /admin). The admin shell has its own bell that
+    // surfaces those; the user app should never show them.
     const { data, error } = await supabase
       .from("notifications")
       .select("*")
       .eq("user_id", userId)
+      .or("link_url.is.null,link_url.not.like./admin%")
       .order("created_at", { ascending: false })
       .limit(limit)
     if (error || !data) return []
@@ -37,11 +41,14 @@ export async function getMyNotifications(userId: string, limit = 30): Promise<DB
 export async function getUnreadCount(userId: string): Promise<number> {
   try {
     const supabase = createClient()
+    // Phase 11.22 — exclude admin-targeted notifications from the
+    // user app's unread counter (mirror of getMyNotifications).
     const { count } = await supabase
       .from("notifications")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
       .eq("is_read", false)
+      .or("link_url.is.null,link_url.not.like./admin%")
     return count ?? 0
   } catch {
     return 0
