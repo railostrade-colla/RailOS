@@ -104,25 +104,112 @@ const ROLE_LABEL: Record<string, string> = {
   user: "مستخدم",
 }
 
-/** Best-effort fetch for the recent items list. */
+/** Best-effort fetch for the recent items list.
+ *
+ * Phase 11.20 — strategy:
+ *   1. Read the admin's UNREAD notifications directly from the table
+ *      (this is the source of truth — captures every type including
+ *      deal_request_received which the legacy RPC doesn't index).
+ *   2. Merge with whatever the RPC returns (kyc / fees / support
+ *      buckets so the per-icon dropdowns stay populated).
+ *
+ * Items returned from #1 carry the real `notification_type` so the
+ * dropdown rendering can route to the right href + show the right
+ * icon. Items from #2 use the RPC's already-mapped shape.
+ */
 async function fetchAdminNotifications(limit: number): Promise<AdminNotification[]> {
+  const supabase = createClient()
+  const out = new Map<string, AdminNotification>()
+
+  // 1. Direct unread fetch (canonical source).
   try {
-    const supabase = createClient()
+    const { data: auth } = await supabase.auth.getUser()
+    if (auth?.user?.id) {
+      const { data } = await supabase
+        .from("notifications")
+        .select("id, notification_type, title, message, link_url, created_at")
+        .eq("user_id", auth.user.id)
+        .eq("is_read", false)
+        .order("created_at", { ascending: false })
+        .limit(limit)
+      for (const n of (data ?? []) as Array<{
+        id: string
+        notification_type: string | null
+        title: string | null
+        message: string | null
+        link_url: string | null
+        created_at: string | null
+      }>) {
+        const t = String(n.notification_type ?? "other")
+        const friendlyType =
+          t === "deal_request_received" || t === "deal_completed" ? "shares" :
+          t === "fee_request" || t === "fee_request_received" ? "fee" :
+          t === "kyc_submitted" ? "kyc" :
+          t === "support_message" ? "support" :
+          t.startsWith("dispute") ? "dispute" :
+          "other"
+        const icon =
+          friendlyType === "shares" ? "🛒" :
+          friendlyType === "fee" ? "💎" :
+          friendlyType === "kyc" ? "🛡" :
+          friendlyType === "support" ? "💬" :
+          friendlyType === "dispute" ? "⚖" :
+          "🔔"
+        out.set(n.id, {
+          id: n.id,
+          type: friendlyType,
+          icon,
+          title: n.title ?? "—",
+          body: n.message ?? "",
+          time: n.created_at ?? "",
+          href: n.link_url ?? "/admin?tab=requests_hub",
+        })
+      }
+    }
+  } catch { /* best-effort */ }
+
+  // 2. Merge with RPC items (for buckets the table read may miss).
+  try {
     const { data, error } = await supabase.rpc("get_admin_notification_items", {
       p_limit: limit,
     })
-    if (error || !Array.isArray(data)) return []
-    return (data as AdminNotification[]).map((n) => ({
-      id: n.id,
-      type: n.type ?? "other",
-      icon: n.icon ?? "🔔",
-      title: n.title ?? "—",
-      body: n.body ?? "",
-      time: n.time ?? "",
-      href: n.href ?? "/admin?tab=requests_hub",
-    }))
+    if (!error && Array.isArray(data)) {
+      for (const n of data as AdminNotification[]) {
+        if (!n.id) continue
+        if (!out.has(n.id)) {
+          out.set(n.id, {
+            id: n.id,
+            type: n.type ?? "other",
+            icon: n.icon ?? "🔔",
+            title: n.title ?? "—",
+            body: n.body ?? "",
+            time: n.time ?? "",
+            href: n.href ?? "/admin?tab=requests_hub",
+          })
+        }
+      }
+    }
+  } catch { /* best-effort */ }
+
+  // Newest first (the table query is already DESC, but RPC items
+  // may interleave with different timestamps).
+  return Array.from(out.values())
+    .sort((a, b) => (b.time || "").localeCompare(a.time || ""))
+    .slice(0, limit)
+}
+
+/** Phase 11.20 — mark a single notification as read so it disappears
+ *  from the bell dropdown after the admin clicks it. Best-effort —
+ *  the navigation always proceeds even if the update fails. */
+async function markNotificationRead(id: string): Promise<void> {
+  try {
+    const supabase = createClient()
+    await supabase
+      .from("notifications")
+      .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq("id", id)
   } catch {
-    return []
+    /* ignore — UI keeps moving */
   }
 }
 
@@ -421,7 +508,20 @@ export function AdminTopBar() {
               {allNotifs.map((n) => (
                 <button
                   key={n.id}
-                  onClick={() => handleNavigate(n.href)}
+                  onClick={async () => {
+                    // Phase 11.20 — mark this row read first so it
+                    // disappears from the dropdown + the bell badge
+                    // decrements. Optimistic UI: drop it from local
+                    // state immediately, then fire the DB update +
+                    // refresh counts (+ navigate) in parallel.
+                    setAllNotifs((cur) => cur.filter((x) => x.id !== n.id))
+                    setCounts((c) => ({
+                      ...c,
+                      total: Math.max(0, c.total - 1),
+                    }))
+                    void markNotificationRead(n.id)
+                    handleNavigate(n.href)
+                  }}
                   className="w-full text-right p-3 hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 transition-colors flex items-start gap-2.5"
                 >
                   <span className="text-base flex-shrink-0">{n.icon}</span>
