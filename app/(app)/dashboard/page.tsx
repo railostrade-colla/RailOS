@@ -50,22 +50,14 @@ import { LEVEL_LABELS, LEVEL_ICONS } from "@/lib/utils/contractLimits"
 import { cn } from "@/lib/utils/cn"
 
 // ─── Helpers ────────────────────────────────────────────────────
-// Arabic compact-number formatting per founder spec:
-//   1,500,000,000 → "1.5 مليار"
-//   5,000,000     → "5 مليون"
-//   12,500        → "12 ألف"
-// Drops trailing ".0" so round numbers read clean ("1 مليار" not "1.0 مليار").
+// Phase 11.17 — full-digit IQD formatter. Founder spec: no
+// "ألف / مليون / مليار" shorthand on the dashboard — render the
+// actual zeroes with thousand separators (875,000 / 1,000,000,000).
+// Name kept as fmtCompact only for grep continuity; behaviour is now
+// "always full digits". || 0 guards against undefined during the
+// initial loading state.
 function fmtCompact(n: number): string {
-  const abs = Math.abs(n)
-  const suffix = (val: number, label: string) => {
-    const rounded = val.toFixed(1)
-    const trimmed = rounded.endsWith(".0") ? rounded.slice(0, -2) : rounded
-    return `${trimmed} ${label}`
-  }
-  if (abs >= 1_000_000_000) return suffix(n / 1_000_000_000, "مليار")
-  if (abs >= 1_000_000)     return suffix(n / 1_000_000,     "مليون")
-  if (abs >= 1_000)         return suffix(n / 1_000,         "ألف")
-  return n.toLocaleString("en-US")
+  return Math.round(n || 0).toLocaleString("en-US")
 }
 
 function getGreeting(): string {
