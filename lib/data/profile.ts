@@ -25,6 +25,7 @@
  */
 
 import { createClient } from "@/lib/supabase/client"
+import { dedupCache } from "./cache"
 
 export type KycStatus = "not_submitted" | "pending" | "approved" | "rejected"
 
@@ -173,6 +174,14 @@ function formatYearMonth(iso: string): string {
  * inline computation for success_rate.
  */
 export async function getCurrentUserProfile(): Promise<CurrentUserProfile | null> {
+  // Phase 11.18 — wrap in dedupCache so the result is persisted to
+  // localStorage between page reloads. Components also call
+  // readPersistedSync("currentUser:profile") at mount to render
+  // immediately from the last-known values.
+  return dedupCache("currentUser:profile", () => fetchCurrentUserProfileInner(), 30_000)
+}
+
+async function fetchCurrentUserProfileInner(): Promise<CurrentUserProfile | null> {
   const supabase = createClient()
 
   // ── Step 1: auth user (REQUIRED) ──────────────────────────

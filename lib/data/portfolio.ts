@@ -26,6 +26,7 @@
 
 import { createClient } from "@/lib/supabase/client"
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { dedupCache } from "./cache"
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -685,6 +686,15 @@ async function fetchFeeTransactions(
  * for that section without affecting the rest.
  */
 export async function getPortfolioData(): Promise<PortfolioData | null> {
+  // Phase 11.18 — wrap in dedupCache so the result is persisted to
+  // localStorage between page reloads. Components also call
+  // readPersistedSync("portfolio:data") at mount to render
+  // immediately from the last-known values. 15s TTL keeps it fresh
+  // enough for real trading without spamming Supabase.
+  return dedupCache("portfolio:data", () => fetchPortfolioDataInner(), 15_000)
+}
+
+async function fetchPortfolioDataInner(): Promise<PortfolioData | null> {
   const supabase = createClient()
 
   let userId: string

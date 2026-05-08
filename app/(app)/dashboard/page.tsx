@@ -46,6 +46,7 @@ import { getActiveAds, type DBAd } from "@/lib/data/ads"
 import type { Ad } from "@/lib/mock-data/types"
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/data/profile"
 import { getPortfolioData, type PortfolioSummary as DBPortfolioSummary } from "@/lib/data/portfolio"
+import { readPersistedSync } from "@/lib/data/cache"
 import { LEVEL_LABELS, LEVEL_ICONS } from "@/lib/utils/contractLimits"
 import { cn } from "@/lib/utils/cn"
 
@@ -213,12 +214,52 @@ export default function DashboardPage() {
   }>>([])
   const [loading, setLoading] = useState(true)
 
-  // Phase B — DB-backed user/portfolio/projects (mock fallback per-field)
-  const [userProfile, setUserProfile] = useState<CurrentUserProfile | null>(null)
-  const [dbPortfolio, setDbPortfolio] = useState<DBPortfolioSummary | null>(null)
-  const [dbProjects, setDbProjects] = useState<Project[]>([])
+  // Phase 11.18 — stale-while-revalidate. Read last-known values
+  // from localStorage SYNCHRONOUSLY at mount so the page paints
+  // instantly with whatever the user saw last time, instead of an
+  // empty skeleton. Then fetch fresh in the background and update
+  // state when it resolves. localStorage hits are <1ms — no perceived
+  // delay. Cold-cache (first-ever visit) still shows skeletons but
+  // every subsequent visit feels instant.
+  const cachedTrending   = readPersistedSync<Project[]>("projects:trending:3") ?? []
+  const cachedNew        = readPersistedSync<Project[]>("projects:new:3") ?? []
+  const cachedAllProj    = readPersistedSync<Project[]>("projects:active:all") ?? []
+  const cachedProfile    = readPersistedSync<CurrentUserProfile>("currentUser:profile")
+  const cachedPortfolio  = readPersistedSync<{ summary: DBPortfolioSummary }>("portfolio:data")
+
+  const [userProfile, setUserProfile] = useState<CurrentUserProfile | null>(cachedProfile)
+  const [dbPortfolio, setDbPortfolio] = useState<DBPortfolioSummary | null>(
+    cachedPortfolio?.summary ?? null,
+  )
+  const [dbProjects, setDbProjects] = useState<Project[]>(cachedAllProj)
   // Phase N — real ads from the `ads` table (mock fallback when empty).
   const [dbAds, setDbAds] = useState<Ad[]>([])
+
+  // Seed trending/new from persisted cache too — same instant-paint trick.
+  useEffect(() => {
+    if (cachedTrending.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setTrending(cachedTrending as any as ProjectCardData[])
+    }
+    if (cachedNew.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setNewProjects(cachedNew as any as ProjectCardData[])
+    }
+    // If we already had ANY persisted state, hide the "loading" gate
+    // so the page renders the cached frame instead of the skeleton.
+    if (
+      cachedTrending.length > 0 ||
+      cachedNew.length > 0 ||
+      cachedAllProj.length > 0 ||
+      cachedPortfolio
+    ) {
+      setLoading(false)
+    }
+    if (cachedAllProj.length > 0) {
+      setSelectedProject((cur) => cur ?? cachedAllProj[0])
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -247,6 +288,9 @@ export default function DashboardPage() {
 
         if (prof) setUserProfile(prof)
         if (port) setDbPortfolio(port.summary)
+        // Persistence to localStorage happens automatically — both
+        // getCurrentUserProfile + getPortfolioData are wrapped in
+        // dedupCache (Phase 11.18) which writes through to storage.
         setDbProjects(allProj)
         // Auto-select first DB project if none chosen yet.
         if (allProj.length > 0) {

@@ -1,22 +1,41 @@
 /**
- * Tiny session-level dedup cache for read-only Supabase queries.
+ * Phase 11.18 — stale-while-revalidate cache for read-only Supabase
+ * queries.
  *
- * Why: pages re-mount on tab switches and each one re-runs its
- * `getX()` calls. For static-ish lookups (projects list, companies
- * list, current user profile) that's wasted round-trips. This wraps
- * any async function so concurrent calls share a single in-flight
- * promise, AND repeat calls within `ttlMs` reuse the cached result.
+ * Why this layer exists:
+ *   • Pages re-mount on tab switches and each one re-runs its
+ *     getX() calls. For static-ish lookups (projects, companies,
+ *     profile) that's wasted round-trips.
+ *   • Worse — every full page reload starts with EMPTY memory and
+ *     the user stares at a loading spinner for 300ms-1s while
+ *     Supabase round-trips finish. Hence the founder's complaint
+ *     about "تأخير كبير في جلب البيانات".
  *
- * Notes:
- *  - This is a CLIENT-side cache. It lives in the browser tab only.
- *  - Use ONLY for queries that are safe to cache for a few seconds.
- *  - Skip caching for user-mutated data (deals, listings, holdings).
- *  - The cache survives soft navigation but resets on full reload.
+ * Layers:
+ *   1. In-flight Map — concurrent calls share one promise.
+ *   2. In-memory Map — repeat calls within ttlMs return instantly.
+ *   3. localStorage — survives full page reloads, so the user gets
+ *      the LAST KNOWN data on first paint, then a fresh fetch
+ *      updates the page in place.
+ *
+ * Components can call readPersistedSync(key) at mount time to grab
+ * cached data SYNCHRONOUSLY (no await) and render immediately,
+ * then run the async fetcher in the background and update state
+ * when it resolves.
+ *
+ * Cache only safe-to-cache reads:
+ *   • Project lists / companies / news / current user profile
+ *   • Dashboard analytics
+ * Skip for live writes (deals, listings, holdings) — those need
+ * realtime subscriptions instead.
  */
 
 interface CacheEntry<T> {
   value: T
   expiresAt: number
+  /** When the entry was originally written. Used as the "stale-but-
+   *  acceptable" timestamp. */
+  writtenAt: number
 }
 
 const cache = new Map<string, CacheEntry<unknown>>()
@@ -25,13 +44,70 @@ const inFlight = new Map<string, Promise<unknown>>()
 /** Default cache lifetime — 30 seconds. Tune per call if needed. */
 const DEFAULT_TTL_MS = 30_000
 
+/** localStorage key prefix so we can clear our entries without
+ *  nuking unrelated app state. */
+const LS_PREFIX = "railos:cache:"
+
+/** Write an entry to BOTH memory and localStorage. Best-effort —
+ *  storage quota errors are swallowed. */
+function writeEntry<T>(key: string, value: T, ttlMs: number): void {
+  const now = Date.now()
+  const entry: CacheEntry<T> = {
+    value,
+    writtenAt: now,
+    expiresAt: now + ttlMs,
+  }
+  cache.set(key, entry)
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(LS_PREFIX + key, JSON.stringify(entry))
+    } catch {
+      // Quota exceeded or storage disabled — keep going with memory only.
+    }
+  }
+}
+
+/** Read from memory first; if cold, hydrate from localStorage. */
+function readEntry<T>(key: string): CacheEntry<T> | null {
+  const mem = cache.get(key) as CacheEntry<T> | undefined
+  if (mem) return mem
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(LS_PREFIX + key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as CacheEntry<T>
+    // Sanity check.
+    if (typeof parsed?.expiresAt !== "number") return null
+    cache.set(key, parsed)  // promote to memory
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Synchronous read for the SWR pattern. Returns the last-known value
+ * for `key` (even if expired) so a component can render immediately
+ * and then update once the background fetch resolves.
+ *
+ * Returns null on a cold cache.
+ */
+export function readPersistedSync<T>(key: string): T | null {
+  const entry = readEntry<T>(key)
+  return entry ? entry.value : null
+}
+
 /**
  * Wraps an async fetcher so:
  *   1. Concurrent calls with the same key share one in-flight promise.
- *   2. Subsequent calls within `ttlMs` reuse the cached result.
+ *   2. Subsequent calls within `ttlMs` reuse the cached result
+ *      (instant — no network hit).
+ *   3. After ttlMs the entry is refreshed from network.
  *
- * Example:
- *   getAllProjects = () => dedupCache("projects:all", () => realFetch(), 60_000)
+ * Pair this with readPersistedSync(key) for true stale-while-revalidate:
+ *   const initial = readPersistedSync<Foo>("foo:list")
+ *   const [data, setData] = useState(initial ?? [])
+ *   useEffect(() => { dedupCache("foo:list", fetchFoo).then(setData) }, [])
  */
 export async function dedupCache<T>(
   key: string,
@@ -40,8 +116,8 @@ export async function dedupCache<T>(
 ): Promise<T> {
   const now = Date.now()
 
-  // 1. Hot cache hit
-  const cached = cache.get(key) as CacheEntry<T> | undefined
+  // 1. Hot cache hit (memory or persisted, not yet expired)
+  const cached = readEntry<T>(key)
   if (cached && cached.expiresAt > now) {
     return cached.value
   }
@@ -56,7 +132,7 @@ export async function dedupCache<T>(
   const promise = (async () => {
     try {
       const value = await fetcher()
-      cache.set(key, { value, expiresAt: Date.now() + ttlMs })
+      writeEntry(key, value, ttlMs)
       return value
     } finally {
       inFlight.delete(key)
@@ -67,14 +143,29 @@ export async function dedupCache<T>(
   return promise
 }
 
-/** Manually invalidate a cache key (e.g. after a write). */
+/** Manually invalidate a cache key (e.g. after a write). Removes
+ *  the entry from both memory AND localStorage so the next read
+ *  hits the network. */
 export function invalidateCache(key: string): void {
   cache.delete(key)
   inFlight.delete(key)
+  if (typeof window !== "undefined") {
+    try { window.localStorage.removeItem(LS_PREFIX + key) } catch { /* ignore */ }
+  }
 }
 
-/** Clear everything — typically on sign-out. */
+/** Clear everything — typically on sign-out. Wipes both layers. */
 export function clearAllCache(): void {
   cache.clear()
   inFlight.clear()
+  if (typeof window !== "undefined") {
+    try {
+      const keys: string[] = []
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const k = window.localStorage.key(i)
+        if (k && k.startsWith(LS_PREFIX)) keys.push(k)
+      }
+      for (const k of keys) window.localStorage.removeItem(k)
+    } catch { /* ignore */ }
+  }
 }
