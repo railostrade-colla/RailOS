@@ -223,9 +223,13 @@ export function AdminTopBar() {
     } catch {
       // ignore — we still navigate
     }
-    router.push("/admin-login")
-    router.refresh()
-  }, [router])
+    // Phase 11.03 — hard navigation to fully clear React state, dedup
+    // caches, realtime channels, and prevent the back button from
+    // returning into the admin shell with a stale session.
+    if (typeof window !== "undefined") {
+      window.location.replace("/admin-login")
+    }
+  }, [])
 
   return (
     <div ref={ref} className="sticky top-0 z-30 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/[0.06] px-5 py-2.5 flex items-center justify-between" dir="rtl">

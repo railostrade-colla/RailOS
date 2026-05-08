@@ -120,9 +120,20 @@ export default function ProfilePage() {
 
   const handleLogout = async () => {
     setLoggingOut(true)
-    await signOut()
+    try {
+      await signOut()
+    } catch {
+      // best-effort — we navigate either way so a stale session
+      // can't trap the user inside the (app) shell.
+    }
     showSuccess("تم تسجيل الخروج بنجاح")
-    setTimeout(() => router.push("/login"), 600)
+    // Phase 11.03 — HARD navigation. window.location.replace clears all
+    // React state, dedup caches, realtime channels, and prevents the
+    // back button from returning into a logged-out session. Replaces
+    // the older router.push("/login") + 600ms setTimeout.
+    if (typeof window !== "undefined") {
+      window.location.replace("/login")
+    }
   }
 
   // ─── Settings menu config ────────────────────────────────────

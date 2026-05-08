@@ -9,6 +9,8 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils/cn"
 import { NotificationBell } from "@/components/notifications/NotificationBell"
+import { signOut } from "@/lib/supabase/auth-helpers"
+import { showSuccess } from "@/lib/utils/toast"
 
 const navItems = [
   { id: "home", label: "الرئيسية", href: "/dashboard" },
@@ -26,6 +28,22 @@ const profileMenuItems = [
 export function DesktopHeader() {
   const pathname = usePathname()
   const [profileOpen, setProfileOpen] = useState(false)
+
+  // Phase 11.03 — wire the dropdown logout button (was a no-op).
+  // Hard navigation via window.location.replace clears all React
+  // state, dedup caches, and realtime channels.
+  const handleLogout = async () => {
+    setProfileOpen(false)
+    try {
+      await signOut()
+    } catch {
+      // best-effort — navigate either way
+    }
+    showSuccess("تم تسجيل الخروج")
+    if (typeof window !== "undefined") {
+      window.location.replace("/login")
+    }
+  }
 
   return (
     <header className="hidden lg:block sticky top-0 z-40 bg-black/60 backdrop-blur-xl">
@@ -158,7 +176,7 @@ export function DesktopHeader() {
                   <div className="border-t border-white/[0.05] py-1">
                     <button
                       className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-400 hover:bg-red-500/[0.06] transition-colors text-right"
-                      onClick={() => setProfileOpen(false)}
+                      onClick={handleLogout}
                     >
                       <LogOut className="w-3.5 h-3.5" strokeWidth={1.5} />
                       <span>تسجيل الخروج</span>
