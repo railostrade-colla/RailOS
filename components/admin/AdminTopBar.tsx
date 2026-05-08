@@ -54,6 +54,41 @@ const ZERO_COUNTS: NotificationCounts = {
   ambassadors: 0, healthcare: 0, orphans: 0, payment_proofs: 0, total: 0,
 }
 
+// Phase 11.09 — Web Audio chime for new admin notifications.
+// Same two-tone pattern used by the user notification hook so the
+// app has a consistent sound across surfaces.
+let _adminAudioCtx: AudioContext | null = null
+function playAdminNotifSound(): void {
+  if (typeof window === "undefined") return
+  try {
+    type WindowAC = Window & { webkitAudioContext?: typeof AudioContext }
+    if (!_adminAudioCtx) {
+      const Ctx = window.AudioContext || (window as WindowAC).webkitAudioContext
+      if (!Ctx) return
+      _adminAudioCtx = new Ctx()
+    }
+    const ctx = _adminAudioCtx
+    if (ctx.state === "suspended") void ctx.resume().catch(() => undefined)
+    const now = ctx.currentTime
+    const tone = (freq: number, start: number, dur: number) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = "sine"
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0, start)
+      gain.gain.linearRampToValueAtTime(0.25, start + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + dur)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(start)
+      osc.stop(start + dur + 0.05)
+    }
+    tone(880, now, 0.15)
+    tone(1320, now + 0.12, 0.20)
+  } catch {
+    /* best-effort */
+  }
+}
+
 interface AdminProfile {
   id: string
   full_name: string
@@ -91,27 +126,65 @@ async function fetchAdminNotifications(limit: number): Promise<AdminNotification
   }
 }
 
-/** Best-effort fetch for the badge counts. */
+/** Best-effort fetch for the badge counts.
+ *
+ * Phase 11.09 — strategy:
+ *   1. Try the canonical RPC `get_admin_notification_counts` first.
+ *   2. Augment the bell `total` from the live notifications table so
+ *      brand-new notification types (e.g. deal_request_received added
+ *      in Phase 10.99e) increment the badge immediately even if the
+ *      RPC's logic hasn't been updated to include them yet.
+ *   3. Falls back to all-zeros on any failure (best-effort).
+ */
 async function fetchUnreadCounts(): Promise<NotificationCounts> {
+  const supabase = createClient()
+  let base: NotificationCounts = ZERO_COUNTS
+
   try {
-    const supabase = createClient()
     const { data, error } = await supabase.rpc("get_admin_notification_counts")
-    if (error || !data) return ZERO_COUNTS
-    const r = data as Partial<NotificationCounts>
-    return {
-      kyc: Number(r.kyc ?? 0),
-      disputes: Number(r.disputes ?? 0),
-      fees: Number(r.fees ?? 0),
-      support: Number(r.support ?? 0),
-      ambassadors: Number(r.ambassadors ?? 0),
-      healthcare: Number(r.healthcare ?? 0),
-      orphans: Number(r.orphans ?? 0),
-      payment_proofs: Number(r.payment_proofs ?? 0),
-      total: Number(r.total ?? 0),
+    if (!error && data) {
+      const r = data as Partial<NotificationCounts>
+      base = {
+        kyc: Number(r.kyc ?? 0),
+        disputes: Number(r.disputes ?? 0),
+        fees: Number(r.fees ?? 0),
+        support: Number(r.support ?? 0),
+        ambassadors: Number(r.ambassadors ?? 0),
+        healthcare: Number(r.healthcare ?? 0),
+        orphans: Number(r.orphans ?? 0),
+        payment_proofs: Number(r.payment_proofs ?? 0),
+        total: Number(r.total ?? 0),
+      }
     }
   } catch {
-    return ZERO_COUNTS
+    // ignore — fall through to direct table count below
   }
+
+  // ── Direct-table backstop for the bell ──
+  // Even if the RPC under-reports, count this admin's unread rows
+  // directly so any new notification (regardless of type) lights up
+  // the bell within the first poll/realtime tick.
+  try {
+    const { data: auth } = await supabase.auth.getUser()
+    if (auth?.user?.id) {
+      const { count } = await supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", auth.user.id)
+        .eq("is_read", false)
+      const live = Number(count ?? 0)
+      // The bell shows the larger of (RPC total, live unread count)
+      // so we never under-count, and the RPC's specialised buckets
+      // (kyc/fees/support…) keep working.
+      if (live > base.total) {
+        base = { ...base, total: live }
+      }
+    }
+  } catch {
+    // ignore — base is already populated from the RPC (or zeros)
+  }
+
+  return base
 }
 
 // Phase 11.01 — fetchSharesPendingCount() and the share_modification_requests
@@ -168,15 +241,58 @@ export function AdminTopBar() {
   // inside the Order Center "طلبات الحصص" tab.
   const ordersCount = counts.fees
 
-  // Initial fetch + polling every 30 s.
+  // Phase 11.09 — counts now combine three triggers for instant UX:
+  //   1. Initial fetch on mount.
+  //   2. Polling fallback every 30 s (if realtime is not available).
+  //   3. Realtime INSERT subscription on `notifications` for THIS admin
+  //      → refreshes counts + lazy-reloads dropdown items + plays a
+  //         short chime so the admin notices a new request without
+  //         having to refresh the page.
   useEffect(() => {
     let cancelled = false
+    const supabase = createClient()
     const refresh = () => {
       fetchUnreadCounts().then((c) => { if (!cancelled) setCounts(c) })
     }
     refresh()
-    const id = setInterval(refresh, 30_000)
-    return () => { cancelled = true; clearInterval(id) }
+    const pollId = setInterval(refresh, 30_000)
+
+    // Realtime channel — only subscribes once we know the user id.
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    ;(async () => {
+      try {
+        const { data: auth } = await supabase.auth.getUser()
+        const uid = auth?.user?.id
+        if (!uid || cancelled) return
+        channel = supabase
+          .channel(`admin-notifs-${uid}`)
+          .on(
+            "postgres_changes",
+            { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${uid}` },
+            () => {
+              // New notification just landed — refresh counts + items.
+              refresh()
+              // Refresh the items list if any dropdown is open.
+              fetchAdminNotifications(20).then((rows) => {
+                if (!cancelled) setAllNotifs(rows)
+              })
+              // Play the same Web Audio chime used elsewhere in the app.
+              playAdminNotifSound()
+            }
+          )
+          .subscribe()
+      } catch {
+        // Realtime is best-effort — polling above will pick it up in ≤30 s.
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      clearInterval(pollId)
+      if (channel) {
+        try { supabase.removeChannel(channel) } catch { /* ignore */ }
+      }
+    }
   }, [])
 
   // Fetch admin profile once on mount.
