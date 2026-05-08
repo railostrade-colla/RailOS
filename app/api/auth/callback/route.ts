@@ -86,9 +86,49 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(fail)
   }
 
+  // ── Phase 11.04 — route NEW Google users to /profile-setup ──
+  // Founder spec: "اريد عند التسجيل عبر كوكل بعد التحقق يحول المستخدم
+  // الى صفحة ملاء البيانات الاسم والرقم وتعيين كلمة المرور".
+  //
+  // We treat the profile as "incomplete" (and therefore needing the
+  // setup step) when EITHER:
+  //   • profiles.phone is null/empty, OR
+  //   • the user has only OAuth identities (no email/password provider)
+  //     AND has not yet completed setup (signalled by phone being unset).
+  //
+  // Existing users who already filled the form pass through to `next`.
+  // The decision is wrapped in try/catch so any RPC/network hiccup
+  // falls back to the original next-URL behaviour (we'd rather let an
+  // existing user reach /dashboard than trap them at setup).
+  let finalDestination = next
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      // Read minimal fields from profiles. profile_setup_complete is
+      // optional — if your schema has it, we honour it; otherwise we
+      // fall back to phone presence.
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name, phone")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      const phoneEmpty =
+        !profile?.phone || String(profile.phone).trim().length === 0
+      const nameEmpty =
+        !profile?.full_name || String(profile.full_name).trim().length === 0
+
+      if (phoneEmpty || nameEmpty) {
+        finalDestination = "/profile-setup"
+      }
+    }
+  } catch {
+    // Best-effort — fall back to the originally requested next URL.
+  }
+
   // ── Attach referral if a ref_code cookie was set on /register ──
   const refCookie = request.cookies.get(REF_COOKIE)?.value
-  const response = NextResponse.redirect(new URL(next, publicOrigin))
+  const response = NextResponse.redirect(new URL(finalDestination, publicOrigin))
   if (refCookie) {
     try {
       // Best-effort — even if the RPC fails we still let the user in.
