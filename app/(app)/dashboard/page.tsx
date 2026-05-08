@@ -700,13 +700,15 @@ export default function DashboardPage() {
                 action={{ label: "كل المشاريع", href: "/market" }}
               />
 
-              {/* Tabs (uses Tabs primitive) */}
+              {/* Tabs — Phase 11.06: name-only, no icons / no counts.
+                  Matches the standardized tab styling used elsewhere in
+                  the app (founder spec: تبويبات موحدة في كل التطبيق). */}
               <div className="mb-3">
                 <Tabs
                   tabs={[
-                    { id: "trending", icon: "🔥", label: "رائج", count: trending.length },
-                    { id: "closing", icon: "⏰", label: "قريباً", count: closing.length },
-                    { id: "new", icon: "🆕", label: "جديد", count: newProjects.length },
+                    { id: "trending", label: "رائج" },
+                    { id: "closing",  label: "قريباً" },
+                    { id: "new",      label: "جديد" },
                   ]}
                   activeTab={discoverTab}
                   onChange={(id) => setDiscoverTab(id as typeof discoverTab)}

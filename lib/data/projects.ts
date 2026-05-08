@@ -122,6 +122,10 @@ function dbToProject(row: DBProject): Project {
     logo: row.logo_url || undefined,           // legacy alias
     cover_url: row.cover_url || row.cover_image_url || undefined,
     cover_image: row.cover_url || row.cover_image_url || undefined,  // legacy alias
+    // Phase 11.06 — surface duration so the discover card can hide the
+    // "المدة" stat when the project is open-ended (founder spec).
+    duration_open: row.duration_open ?? undefined,
+    duration_months: row.duration_months ?? undefined,
   }
 }
 

@@ -134,6 +134,9 @@ export interface Project {
   expected_return_max?: number
   investors_count?: number
   duration_months?: number
+  /** Phase 11.06 — open-ended duration flag from the admin form.
+   *  When true the المدة stat is hidden on cards. */
+  duration_open?: boolean
   closes_in_days?: number
   status?: "open" | "closing_soon" | "closed"
   is_trending?: boolean

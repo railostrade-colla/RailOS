@@ -60,6 +60,15 @@ export interface ProjectCardData {
    *  card renders the real logo image instead of the sector emoji. */
   logo_url?: string
   logo?: string
+  /** Phase 11.06 — public offering total (offering_pct × total_shares).
+   *  Used as the denominator of the funding-progress bar so the
+   *  percentage tracks "sold of what was OFFERED to the public" rather
+   *  than "sold of all project shares including the owner bucket". */
+  offering_shares?: number
+  /** Phase 11.06 — open-ended duration flag from the admin form. When
+   *  true (or duration_months is null/0) the المدة stat is hidden on
+   *  the card per founder spec. */
+  duration_open?: boolean
 }
 
 interface ProjectCardProps {
@@ -74,8 +83,17 @@ export function ProjectCard({ project, variant = "full" }: ProjectCardProps) {
   const c = sectorColor(project.sector)
   const r = riskColor(project.risk_level)
 
-  const fundedShares = project.total_shares - project.available_shares
-  const fundedPercent = Math.round((fundedShares / project.total_shares) * 100)
+  // Phase 11.06 — funding bar reflects sales OUT OF the public offering
+  // bucket, not out of total project shares (which includes the owner
+  // slice that's never for sale). The denominator is offering_shares
+  // (offering_pct × total_shares); fundedShares = offering − available.
+  // Falls back to the legacy total_shares math if offering_shares isn't
+  // populated yet on this row (older API responses).
+  const offeringTotal = project.offering_shares ?? project.total_shares
+  const fundedShares = Math.max(0, offeringTotal - project.available_shares)
+  const fundedPercent = offeringTotal > 0
+    ? Math.min(100, Math.round((fundedShares / offeringTotal) * 100))
+    : 0
 
   const progressColor =
     fundedPercent >= 75 ? "from-green-400 to-green-500" :
@@ -255,31 +273,45 @@ export function ProjectCard({ project, variant = "full" }: ProjectCardProps) {
             style={{ width: fundedPercent + "%" }}
           />
         </div>
+        {/* Phase 11.06 — sub-line now shows sold/offering, not sold/total */}
         <div className="flex justify-between text-[9px] text-neutral-600 font-mono">
-          <span>{fundedShares.toLocaleString("en-US")} / {project.total_shares.toLocaleString("en-US")} SHR</span>
+          <span>{fundedShares.toLocaleString("en-US")} / {offeringTotal.toLocaleString("en-US")} SHR</span>
           <span>{project.available_shares.toLocaleString("en-US")} متبقية</span>
         </div>
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-4 gap-1.5 mb-3">
-        <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2 text-center">
-          <div className="text-[9px] text-neutral-500 mb-1">المستثمرون</div>
-          <div className="text-xs font-bold text-white font-mono">{project.investors_count}</div>
-        </div>
-        <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2 text-center">
-          <div className="text-[9px] text-neutral-500 mb-1">المدة</div>
-          <div className="text-xs font-bold text-white font-mono">{project.duration_months} ش</div>
-        </div>
-        <div className={cn("rounded-lg p-2 text-center border", r.bg, r.border)}>
-          <div className={cn("text-[9px] mb-1 opacity-70", r.text)}>المخاطر</div>
-          <div className={cn("text-[11px] font-bold", r.text)}>{project.risk_level}</div>
-        </div>
-        <div className="bg-blue-400/[0.06] border border-blue-400/15 rounded-lg p-2 text-center">
-          <div className="text-[9px] text-blue-400/70 mb-1">يغلق خلال</div>
-          <div className="text-[11px] text-blue-400 font-bold font-mono">{project.closes_in_days} يوم</div>
-        </div>
-      </div>
+      {/* Stats grid — Phase 11.06: المدة box hidden when duration is
+          open-ended or unset (founder spec). Grid columns adapt: 4 with
+          duration, 3 without — investors / risk / closes-in. */}
+      {(() => {
+        const showDuration =
+          !project.duration_open &&
+          typeof project.duration_months === "number" &&
+          project.duration_months > 0
+        const cols = showDuration ? "grid-cols-4" : "grid-cols-3"
+        return (
+          <div className={cn("grid gap-1.5 mb-3", cols)}>
+            <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2 text-center">
+              <div className="text-[9px] text-neutral-500 mb-1">المستثمرون</div>
+              <div className="text-xs font-bold text-white font-mono">{project.investors_count}</div>
+            </div>
+            {showDuration && (
+              <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2 text-center">
+                <div className="text-[9px] text-neutral-500 mb-1">المدة</div>
+                <div className="text-xs font-bold text-white font-mono">{project.duration_months} ش</div>
+              </div>
+            )}
+            <div className={cn("rounded-lg p-2 text-center border", r.bg, r.border)}>
+              <div className={cn("text-[9px] mb-1 opacity-70", r.text)}>المخاطر</div>
+              <div className={cn("text-[11px] font-bold", r.text)}>{project.risk_level}</div>
+            </div>
+            <div className="bg-blue-400/[0.06] border border-blue-400/15 rounded-lg p-2 text-center">
+              <div className="text-[9px] text-blue-400/70 mb-1">يغلق خلال</div>
+              <div className="text-[11px] text-blue-400 font-bold font-mono">{project.closes_in_days} يوم</div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* CTA buttons */}
       <div className="flex gap-1.5">
