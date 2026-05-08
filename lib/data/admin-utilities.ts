@@ -277,6 +277,35 @@ export async function adminUnfreezeProject(
   }) as Promise<UtilityRpcResult & { wallets_unfrozen?: number }>
 }
 
+// ─── Auction settlement (Phase 11.10) ────────────────────────
+
+/** Atomically settle an auction: find the highest bid, transfer
+ *  shares from the offering wallet to the winner (or contract), and
+ *  close the auction. Admin-only. */
+export async function adminSettleAuction(
+  auctionId: string,
+): Promise<UtilityRpcResult & {
+  winner_id?: string
+  shares?: number
+  total?: number
+  contract_id?: string | null
+  routed_to?: "user" | "contract"
+  no_bids?: boolean
+  already_settled?: boolean
+}> {
+  return callRpc("admin_settle_auction", { p_auction_id: auctionId }) as Promise<
+    UtilityRpcResult & {
+      winner_id?: string
+      shares?: number
+      total?: number
+      contract_id?: string | null
+      routed_to?: "user" | "contract"
+      no_bids?: boolean
+      already_settled?: boolean
+    }
+  >
+}
+
 // ─── Trading & Offering Suspension (Phase 10.93) ──────────────
 
 /** Suspends ALL trading (buy + sell) for a project. Super-admin only. */
