@@ -1,934 +1,575 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
-import { useRouter } from "next/navigation"
+/**
+ * Phase 11.07 — /investment redesigned as a project-monitoring dashboard.
+ *
+ * Founder spec: trading-view-style page that shows project performance,
+ * order book, and recent trades. The "BTC/USDT" pair selector at the
+ * top of the reference screenshot is replaced with the platform's
+ * project/company selector. All data is real (projects table + listings
+ * table + deals table); price history falls back to a deterministic
+ * synthesised series when fewer than 6 deals exist (so a brand-new
+ * project still gets a chart instead of an empty box).
+ *
+ * Design respects the app identity: black background, white/[0.05]
+ * cards, monospace numbers, no third-party trading-view widget.
+ */
+
+import { useEffect, useMemo, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
-  TrendingUp,
-  TrendingDown,
-  ArrowUpRight,
-  ArrowDownRight,
-  Search,
-  ChevronLeft,
-  ChevronDown,
-  AlertTriangle,
-  Calculator,
+  ChevronDown, Search, ArrowUpRight, ArrowDownRight, TrendingUp, BarChart3, Clock, Wallet,
 } from "lucide-react"
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  CartesianGrid,
 } from "recharts"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
-import { SectionHeader, Tabs, EmptyState } from "@/components/ui"
-import {
-  getInvestmentAnalytics,
-  getProjectCurrentPrice,
-  getPriceHistoryForChart,
-  HOLDINGS,
-  getDistributionsByUser,
-  getTotalDistributions,
-  type PerformanceRow,
-} from "@/lib/mock-data"
-import {
-  getMyPortfolioAnalytics,
-  getMyPortfolioHistory,
-  type PortfolioAnalytics,
-  type PortfolioHistoryPoint,
-} from "@/lib/data/portfolio-analytics"
-import { getMyDistributions, type Distribution } from "@/lib/data/distributions"
-import { fmtLimit } from "@/lib/utils/contractLimits"
+import { getAllProjects } from "@/lib/data/projects"
+import { getExchangeListings, type ExchangeListingRow } from "@/lib/data/listings"
+import { createClient } from "@/lib/supabase/client"
+import type { Project } from "@/lib/mock-data/types"
 import { cn } from "@/lib/utils/cn"
 
-// ─── Helpers ──────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────
 const fmtIQD = (n: number) => n.toLocaleString("en-US")
+const fmtCompact = (n: number) =>
+  n >= 1_000_000_000 ? (n / 1_000_000_000).toFixed(2) + "B"
+  : n >= 1_000_000   ? (n / 1_000_000).toFixed(2) + "M"
+  : n >= 1_000       ? (n / 1_000).toFixed(2) + "K"
+  : n.toFixed(0)
 
-const sectorIcon = (s: string) => {
-  if (s.includes("طب")) return "🏥"
-  if (s.includes("تقن")) return "💻"
-  if (s.includes("زراع")) return "🌾"
-  if (s.includes("تجار")) return "🏪"
-  if (s.includes("صناع")) return "🏭"
-  if (s.includes("عقار")) return "🏢"
-  return "🏢"
+/** Deterministic pseudo-random ∈ [0,1) seeded from the project id. */
+function seededRand(seed: number, i: number): number {
+  const x = Math.sin(seed * 9301 + i * 49297) * 233280
+  return x - Math.floor(x)
 }
 
-// Sector → color mapping (matches design tokens)
-const SECTOR_COLORS: Record<string, string> = {
-  "زراعة": "#4ADE80",
-  "عقارات": "#60A5FA",
-  "صناعة": "#FB923C",
-  "تجارة": "#FBBF24",
-  "تقنية": "#C084FC",
-  "طب": "#F87171",
-  "أخرى": "#737373",
+/** Build a synthesised OHLC-like series for the chart when no real
+ *  trade history is available yet. */
+function buildSyntheticSeries(
+  basePrice: number,
+  points: number,
+  seed: number,
+): Array<{ t: string; price: number; volume: number }> {
+  const out: Array<{ t: string; price: number; volume: number }> = []
+  let p = basePrice * 0.85
+  const now = Date.now()
+  const step = (24 * 3600 * 1000)  // 1 day per point for the default
+  for (let i = 0; i < points; i++) {
+    const drift = (seededRand(seed, i) - 0.45) * 0.04
+    p = Math.max(basePrice * 0.6, p * (1 + drift))
+    const ts = new Date(now - (points - i) * step)
+    out.push({
+      t: ts.toISOString().slice(0, 10),
+      price: Math.round(p),
+      volume: Math.round(seededRand(seed + 7, i) * 5000 + 200),
+    })
+  }
+  // Anchor the last point exactly at the current price.
+  out[out.length - 1] = { ...out[out.length - 1], price: basePrice }
+  return out
 }
 
-const RANGES = [
-  { id: "1m" as const, label: "1ش", months: 1 },
-  { id: "3m" as const, label: "3ش", months: 3 },
-  { id: "6m" as const, label: "6ش", months: 6 },
-  { id: "12m" as const, label: "سنة", months: 12 },
-]
+// ─── Period tabs ────────────────────────────────────────────────
+type Period = "1D" | "7D" | "30D" | "90D" | "ALL"
+const PERIOD_POINTS: Record<Period, number> = {
+  "1D": 24,
+  "7D": 14,
+  "30D": 30,
+  "90D": 60,
+  "ALL": 120,
+}
+const PERIOD_LABELS: Record<Period, string> = {
+  "1D": "يوم",
+  "7D": "أسبوع",
+  "30D": "شهر",
+  "90D": "ربع",
+  "ALL": "كل",
+}
 
-const SORT_OPTIONS = [
-  { id: "newest" as const, label: "الأحدث" },
-  { id: "profit" as const, label: "أعلى ربح" },
-  { id: "value" as const, label: "أعلى قيمة" },
-  { id: "sector" as const, label: "حسب القطاع" },
-]
-
-const CALC_PERIODS = [
-  { id: "6m" as const, label: "6 أشهر", months: 6 },
-  { id: "1y" as const, label: "سنة", months: 12 },
-  { id: "3y" as const, label: "3 سنوات", months: 36 },
-]
-
-type RangeId = (typeof RANGES)[number]["id"]
-type SortId = (typeof SORT_OPTIONS)[number]["id"]
-type PeriodId = (typeof CALC_PERIODS)[number]["id"]
-
-// ════════════════════════════════════════════════════════════════
-// Main page
-// ════════════════════════════════════════════════════════════════
+// ─── Page ───────────────────────────────────────────────────────
 export default function InvestmentPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const initialProjectId = searchParams?.get("project")
 
-  // ─── Phase 10: real DB analytics with mock fallback ─────
-  const [dbAnalytics, setDbAnalytics] = useState<PortfolioAnalytics | null>(null)
-  const [dbHistory, setDbHistory] = useState<PortfolioHistoryPoint[] | null>(null)
+  // Projects list + selector
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selected, setSelected] = useState<Project | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const [period, setPeriod] = useState<Period>("30D")
+
+  // Live data
+  const [listings, setListings] = useState<ExchangeListingRow[]>([])
+  const [recentTrades, setRecentTrades] = useState<Array<{
+    id: string; shares: number; total_amount: number; price: number; created_at: string
+  }>>([])
+  const [loading, setLoading] = useState(true)
+
+  // ─── Initial load ───
   useEffect(() => {
     let cancelled = false
-    getMyPortfolioAnalytics().then((a) => {
-      if (!cancelled) setDbAnalytics(a)
-    })
-    // Fetch up to 12 months for the chart; the range selector slices.
-    getMyPortfolioHistory(12).then((h) => {
-      if (!cancelled) setDbHistory(h)
+    getAllProjects().then((rows) => {
+      if (cancelled) return
+      setProjects(rows)
+      const initial =
+        (initialProjectId && rows.find((p) => p.id === initialProjectId)) ??
+        rows[0] ?? null
+      setSelected(initial)
+      setLoading(false)
     })
     return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const analytics = useMemo(() => {
-    const base = getInvestmentAnalytics("me")
-    // Override per-row current_value with live market price
-    const performance = base.performance.map((r) => {
-      const livePrice = getProjectCurrentPrice(r.project_id)
-      if (!livePrice) return r
-      const newValue = r.shares_owned * livePrice
-      const profit = newValue - r.cost
-      const profitPercent = r.cost > 0 ? (profit / r.cost) * 100 : 0
-      return { ...r, current_value: newValue, profit, profitPercent }
-    })
-    const totalValue = performance.reduce((s, r) => s + (r.current_value ?? 0), 0)
-    const totalProfit = totalValue - base.totalCost
-    const totalProfitPercent = base.totalCost > 0 ? (totalProfit / base.totalCost) * 100 : 0
-
-    // Aggregate price_history across user holdings into 12 monthly buckets
-    const userHoldings = HOLDINGS.filter((h) => (h.user_id ?? "me") === "me")
-    const months: Record<string, number> = {}
-    userHoldings.forEach((h) => {
-      const points = getPriceHistoryForChart(h.project_id, 90)
-      points.forEach((pt) => {
-        const monthKey = pt.date.slice(0, 7)
-        months[monthKey] = (months[monthKey] ?? 0) + pt.price * h.shares_owned
-      })
-    })
-    const aggregated = Object.entries(months)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, val]) => ({ month: key.slice(5), value: Math.round(val) }))
-    const historicalData = aggregated.length >= 2 ? aggregated : base.historicalData
-
-    const bestPerformers = [...performance].sort((a, b) => b.profitPercent - a.profitPercent).slice(0, 3)
-    const worstPerformers = [...performance].sort((a, b) => a.profitPercent - b.profitPercent).slice(0, 3)
-
-    return {
-      ...base,
-      performance,
-      bestPerformers,
-      worstPerformers,
-      totalValue,
-      totalProfit,
-      totalProfitPercent: parseFloat(totalProfitPercent.toFixed(2)),
-      historicalData,
-    }
-  }, [])
-
-  // Production mode: when the user has zero real holdings, ALL views
-  // collapse to empty/zero — no mock fallback. As soon as the user
-  // has at least one real holding, the page populates from DB analytics.
-  const merged = useMemo(() => {
-    const haveAnalytics = dbAnalytics && dbAnalytics.holdings_count > 0
-    const haveHistory = dbHistory && dbHistory.length >= 2
-
-    // Map the DB history shape ({ month: 'YYYY-MM', value }) to the
-    // mock shape ({ month: 'MM', value }) so the chart renderers
-    // don't change.
-    const realHistorical = haveHistory
-      ? dbHistory!.map((p) => ({
-          month: p.month.slice(5),
-          value: p.value,
-        }))
-      : []
-
-    if (!haveAnalytics) {
-      // Hard-zero everything for true blank state.
-      return {
-        ...analytics,
-        totalValue: 0,
-        totalProfit: 0,
-        totalProfitPercent: 0,
-        totalCost: 0,
-        totalShares: 0,
-        holdingsCount: 0,
-        sectorsCount: 0,
-        performance: [],
-        bestPerformers: [],
-        worstPerformers: [],
-        sectorDistribution: [],
-        historicalData: realHistorical,
+  // ─── Per-project data load (listings + recent trades) ───
+  useEffect(() => {
+    if (!selected) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const all = await getExchangeListings()
+        if (cancelled) return
+        setListings(all.filter((l) => l.project_id === selected.id))
+      } catch {
+        if (!cancelled) setListings([])
       }
-    }
-
-    // Map DB per-holding performance → mock PerformanceRow shape.
-    const dbPerformance: PerformanceRow[] = dbAnalytics!.performance.map((p) => ({
-      id: p.holding_id,
-      project_id: p.project_id,
-      project: {
-        id: p.project_id,
-        name: p.project_name,
-        sector: p.project_sector,
-        share_price: p.live_price,
-      },
-      shares_owned: p.shares,
-      user_id: "me",
-      buy_price: p.buy_price,
-      current_value: p.current_value,
-      cost: p.cost,
-      profit: p.profit,
-      profitPercent: p.profit_percent,
-    }))
-
-    const dbBest = [...dbPerformance]
-      .sort((a, b) => b.profitPercent - a.profitPercent)
-      .slice(0, 3)
-    const dbWorst = [...dbPerformance]
-      .sort((a, b) => a.profitPercent - b.profitPercent)
-      .slice(0, 3)
-
-    // Sector distribution from DB breakdown (already pre-aggregated)
-    const dbSectors =
-      dbAnalytics!.sector_breakdown.length > 0
-        ? dbAnalytics!.sector_breakdown.map((s) => ({
-            name: s.sector,
-            value: s.value,
-            percent: s.percent,
-          }))
-        : analytics.sectorDistribution
-
-    return {
-      ...analytics,
-      totalValue: dbAnalytics!.total_value,
-      totalProfit: dbAnalytics!.total_profit,
-      totalProfitPercent: dbAnalytics!.total_profit_percent,
-      totalCost: dbAnalytics!.total_cost,
-      totalShares: dbAnalytics!.total_shares,
-      holdingsCount: dbAnalytics!.holdings_count,
-      sectorsCount: dbAnalytics!.sector_breakdown.length || analytics.sectorsCount,
-      performance: dbPerformance.length > 0 ? dbPerformance : analytics.performance,
-      bestPerformers: dbBest.length > 0 ? dbBest : analytics.bestPerformers,
-      worstPerformers: dbWorst.length > 0 ? dbWorst : analytics.worstPerformers,
-      sectorDistribution: dbSectors,
-      historicalData: realHistorical,
-    }
-  }, [analytics, dbAnalytics, dbHistory])
-
-  // Phase 10.80 (Task 21) — distributions now from real DB. Falls
-  // back to the legacy mock when the table/RPC isn't available
-  // (preserves the "تاريخ التوزيعات" UI on a fresh deploy).
-  const [dbDistributions, setDbDistributions] = useState<Distribution[]>([])
-  useEffect(() => {
-    let cancelled = false
-    getMyDistributions().then((rows) => { if (!cancelled) setDbDistributions(rows) })
+      try {
+        const supabase = createClient()
+        const { data } = await supabase
+          .from("deals")
+          .select("id, shares, total_amount, price_per_share, status, created_at")
+          .eq("project_id", selected.id)
+          .eq("status", "completed")
+          .order("created_at", { ascending: false })
+          .limit(20)
+        if (cancelled) return
+        const rows = (data ?? []) as Array<{
+          id: string; shares: number; total_amount: number;
+          price_per_share: number; status: string; created_at: string
+        }>
+        setRecentTrades(rows.map((d) => ({
+          id: d.id,
+          shares: Number(d.shares ?? 0),
+          total_amount: Number(d.total_amount ?? 0),
+          price: Number(d.price_per_share ?? 0),
+          created_at: d.created_at,
+        })))
+      } catch {
+        if (!cancelled) setRecentTrades([])
+      }
+    })()
     return () => { cancelled = true }
-  }, [])
-  const distributions = useMemo(() => {
-    if (dbDistributions.length > 0) {
-      return dbDistributions.map((d) => ({
-        id: String(d.id ?? ""),
-        user_id: String(d.user_id ?? ""),
-        project_id: String(d.project_id ?? ""),
-        project_name: String((d as { project_name?: string }).project_name ?? "—"),
-        amount: Number(d.amount ?? 0),
-        date: String(d.recorded_at ?? (d as { date?: string }).date ?? ""),
-        type: String((d as { type?: string }).type ?? "distribution"),
+  }, [selected])
+
+  // ─── Derived data ───
+  const filteredProjects = useMemo(() => {
+    if (!search) return projects
+    const q = search.toLowerCase()
+    return projects.filter((p) =>
+      p.name.toLowerCase().includes(q) ||
+      (p.symbol?.toLowerCase() ?? "").includes(q) ||
+      p.sector.toLowerCase().includes(q),
+    )
+  }, [projects, search])
+
+  const chartData = useMemo(() => {
+    if (!selected) return []
+    // Use real trade prices when available, else synthesise.
+    const trades = recentTrades.slice().reverse()  // oldest first
+    const points = PERIOD_POINTS[period]
+    if (trades.length >= 6) {
+      return trades.slice(-points).map((t) => ({
+        t: t.created_at.slice(0, 10),
+        price: t.price,
+        volume: t.shares,
       }))
     }
-    return getDistributionsByUser("me")
-  }, [dbDistributions])
-  const totalDistributions = useMemo(() => {
-    if (dbDistributions.length > 0) {
-      return dbDistributions.reduce((s, d) => s + Number(d.amount ?? 0), 0)
+    const seed = selected.id?.charCodeAt(0) ?? 1
+    return buildSyntheticSeries(selected.share_price, points, seed)
+  }, [selected, recentTrades, period])
+
+  const stats = useMemo(() => {
+    if (!selected) {
+      return { current: 0, prev: 0, changePct: 0, isUp: true, marketCap: 0, sold: 0, available: 0 }
     }
-    return getTotalDistributions("me")
-  }, [dbDistributions])
-
-  const [range, setRange] = useState<RangeId>("12m")
-  const [search, setSearch] = useState("")
-  const [sortBy, setSortBy] = useState<SortId>("newest")
-  const [showSort, setShowSort] = useState(false)
-  const [calcPeriod, setCalcPeriod] = useState<PeriodId>("1y")
-
-  // ─── Derived ────────────────────────────────────────────────────
-  const profitUp = merged.totalProfit >= 0
-  const dailyChangePercent = useMemo(() => Math.sin(Date.now() / 86_400_000) * 2 + 0.5, [])
-  const dailyUp = dailyChangePercent >= 0
-
-  // Sliced historical data based on range
-  const chartData = useMemo(() => {
-    const months = RANGES.find((r) => r.id === range)?.months ?? 12
-    return merged.historicalData.slice(-months)
-  }, [merged.historicalData, range])
-
-  const chartHigh = chartData.length ? Math.max(...chartData.map((d) => d.value)) : 0
-  const chartLow = chartData.length ? Math.min(...chartData.map((d) => d.value)) : 0
-  const chartGrowth = chartData.length > 1
-    ? ((chartData[chartData.length - 1].value - chartData[0].value) / chartData[0].value) * 100
-    : 0
-
-  // Filtered + sorted performance table — sourced from `merged` so it
-  // reflects DB rows when available, mock rows otherwise.
-  const filteredPerformance = useMemo(() => {
-    let rows = merged.performance.slice()
-    if (search.trim()) {
-      const q = search.toLowerCase()
-      rows = rows.filter((r) => r.project.name.toLowerCase().includes(q) || r.project.sector.toLowerCase().includes(q))
+    const current = selected.share_price
+    const prev = chartData.length > 1 ? chartData[0].price : current
+    const changePct = prev > 0 ? ((current - prev) / prev) * 100 : 0
+    const offering = selected.offering_shares ?? selected.available_shares ?? 0
+    const sold = Math.max(0, offering - (selected.available_shares ?? 0))
+    return {
+      current,
+      prev,
+      changePct,
+      isUp: changePct >= 0,
+      marketCap: current * (selected.total_shares ?? 0),
+      sold,
+      available: selected.available_shares ?? 0,
+      offering,
     }
-    switch (sortBy) {
-      case "profit":
-        rows.sort((a, b) => b.profitPercent - a.profitPercent)
-        break
-      case "value":
-        rows.sort((a, b) => (b.current_value ?? 0) - (a.current_value ?? 0))
-        break
-      case "sector":
-        rows.sort((a, b) => a.project.sector.localeCompare(b.project.sector))
-        break
-      default:
-        // newest — keep original order
-        break
-    }
-    return rows
-  }, [merged.performance, search, sortBy])
+  }, [selected, chartData])
 
-  // Best/worst by absolute profit (single number)
-  const highestProfit = useMemo(
-    () => merged.performance.reduce((max, r) => (r.profit > max ? r.profit : max), 0),
-    [merged.performance],
-  )
-  const lowestProfit = useMemo(
-    () => merged.performance.reduce((min, r) => (r.profit < min ? r.profit : min), highestProfit),
-    [merged.performance, highestProfit],
-  )
+  const sellListings = listings.filter((l) => l.type === "sell")
+    .sort((a, b) => b.price_per_share - a.price_per_share).slice(0, 6)
+  const buyListings = listings.filter((l) => l.type === "buy")
+    .sort((a, b) => b.price_per_share - a.price_per_share).slice(0, 6)
 
-  // Calculator
-  const calcMonths = CALC_PERIODS.find((p) => p.id === calcPeriod)?.months ?? 12
-  const expectedReturn = Math.round(merged.totalValue * (analytics.avgReturnPerYear / 100) * (calcMonths / 12))
-  const expectedFutureValue = merged.totalValue + expectedReturn
-  const totalGrowth = merged.totalValue > 0 ? (expectedReturn / merged.totalValue) * 100 : 0
-
+  // ─── Render ───
   return (
     <AppLayout>
-      <div className="relative">
-<div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-6xl mx-auto pb-20">
-
+      <div className="relative min-h-screen bg-black">
+        <div className="px-3 lg:px-8 py-4 max-w-6xl mx-auto">
           <PageHeader
-            title="لوحة استثماراتي"
-            subtitle="تحليل شامل لأداء محفظتك الاستثمارية"
-            showBack={false}
+            title="📊 الاستثمار"
+            subtitle="مراقبة أداء المشاريع · حركة الأسعار · سجل التداول"
           />
 
-          {/* ═══════════ § 1: HERO — Portfolio summary ═══════════ */}
-          <div className="bg-gradient-to-br from-purple-400/[0.06] via-blue-400/[0.04] to-transparent border border-white/[0.08] rounded-2xl p-6 mb-6 backdrop-blur">
-            <div className="flex justify-between items-start mb-3 gap-2">
-              <div className="text-[11px] text-neutral-500">إجمالي قيمة محفظتك</div>
-              <span
-                className={cn(
-                  "flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-bold",
-                  dailyUp
-                    ? "bg-green-400/[0.08] border-green-400/25 text-green-400"
-                    : "bg-red-400/[0.08] border-red-400/25 text-red-400",
-                )}
-              >
-                {dailyUp ? <TrendingUp className="w-3 h-3" strokeWidth={2.5} /> : <TrendingDown className="w-3 h-3" strokeWidth={2.5} />}
-                {dailyUp ? "+" : ""}{dailyChangePercent.toFixed(1)}% اليوم
-              </span>
+          {loading ? (
+            <div className="text-center text-xs text-neutral-500 py-20">
+              جارٍ التحميل...
             </div>
-
-            <div className="flex items-baseline gap-2 mb-5">
-              <span className="text-4xl lg:text-5xl font-bold text-white tracking-tight font-mono">
-                {fmtIQD(merged.totalValue)}
-              </span>
-              <span className="text-sm text-neutral-500">IQD</span>
+          ) : !selected ? (
+            <div className="text-center text-xs text-neutral-500 py-20">
+              لا توجد مشاريع متاحة بعد.
             </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-              {/* Card 1 — Profit/Loss */}
-              <div
-                className={cn(
-                  "rounded-xl p-3 border",
-                  profitUp
-                    ? "bg-green-400/[0.06] border-green-400/20"
-                    : "bg-red-400/[0.06] border-red-400/20",
-                )}
-              >
-                <div className="text-[10px] text-neutral-500 mb-1">إجمالي الربح/الخسارة</div>
-                <div className={cn("text-base font-bold font-mono", profitUp ? "text-green-400" : "text-red-400")}>
-                  {profitUp ? "+" : ""}{fmtIQD(merged.totalProfit)}
-                </div>
-                <div className={cn("text-[10px] font-bold mt-0.5", profitUp ? "text-green-400/80" : "text-red-400/80")}>
-                  {profitUp ? "+" : ""}{merged.totalProfitPercent}%
-                </div>
-              </div>
-
-              {/* Card 2 — Investments count */}
-              <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3">
-                <div className="text-[10px] text-neutral-500 mb-1">عدد الاستثمارات</div>
-                <div className="text-base font-bold text-white font-mono">{dbAnalytics?.holdings_count ?? analytics.holdingsCount}</div>
-                <span className="text-[9px] text-green-400 bg-green-400/[0.1] border border-green-400/25 rounded px-1.5 py-0.5 mt-0.5 inline-block">
-                  ● نشط
-                </span>
-              </div>
-
-              {/* Card 3 — Sectors */}
-              <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3">
-                <div className="text-[10px] text-neutral-500 mb-1">القطاعات</div>
-                <div className="text-base font-bold text-white font-mono">{merged.sectorsCount}</div>
-                <div className="text-[10px] text-neutral-500 mt-0.5">متنوّعة</div>
-              </div>
-
-              {/* Card 4 — Annual return */}
-              <div className="bg-blue-400/[0.06] border border-blue-400/20 rounded-xl p-3">
-                <div className="text-[10px] text-blue-400/80 mb-1">العائد السنوي المتوقع</div>
-                <div className="text-base font-bold text-blue-400 font-mono">{analytics.avgReturnPerYear}%</div>
-                <div className="text-[10px] text-blue-400/70 mt-0.5">تقديري</div>
-              </div>
-            </div>
-          </div>
-
-          {/* ═══════════ § 2: Historical Performance ═══════════ */}
-          <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-6 backdrop-blur">
-            <div className="flex justify-between items-end mb-4 gap-2 flex-wrap">
-              <div>
-                <h2 className="text-base font-bold text-white">📈 أداء محفظتي</h2>
-                <p className="text-[11px] text-neutral-500 mt-0.5">
-                  آخر {RANGES.find((r) => r.id === range)?.label}
-                </p>
-              </div>
-              <div className="flex gap-1 bg-white/[0.04] border border-white/[0.08] rounded-lg p-1">
-                {RANGES.map((r) => (
-                  <button
-                    key={r.id}
-                    onClick={() => setRange(r.id)}
-                    className={cn(
-                      "px-3 py-1 rounded text-[11px] transition-colors",
-                      range === r.id
-                        ? "bg-white text-black font-bold"
-                        : "text-neutral-400 hover:text-white",
-                    )}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Mini stats */}
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5">
-                <div className="text-[10px] text-neutral-500 mb-0.5">أعلى قيمة</div>
-                <div className="text-xs font-bold text-white font-mono">{fmtIQD(chartHigh)}</div>
-              </div>
-              <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5">
-                <div className="text-[10px] text-neutral-500 mb-0.5">أدنى قيمة</div>
-                <div className="text-xs font-bold text-white font-mono">{fmtIQD(chartLow)}</div>
-              </div>
-              <div className={cn(
-                "rounded-lg p-2.5 border",
-                chartGrowth >= 0 ? "bg-green-400/[0.06] border-green-400/20" : "bg-red-400/[0.06] border-red-400/20",
-              )}>
-                <div className="text-[10px] text-neutral-500 mb-0.5">نمو الفترة</div>
-                <div className={cn("text-xs font-bold font-mono", chartGrowth >= 0 ? "text-green-400" : "text-red-400")}>
-                  {chartGrowth >= 0 ? "+" : ""}{chartGrowth.toFixed(1)}%
-                </div>
-              </div>
-            </div>
-
-            {/* Area Chart */}
-            <div className="h-64 -mx-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 10, right: 8, bottom: 5, left: 8 }}>
-                  <defs>
-                    <linearGradient id="perf-gradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={profitUp ? "#4ADE80" : "#F87171"} stopOpacity={0.45} />
-                      <stop offset="100%" stopColor={profitUp ? "#4ADE80" : "#F87171"} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis
-                    dataKey="month"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: "#737373", fontSize: 10 }}
-                  />
-                  <YAxis hide />
-                  <Tooltip
-                    cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }}
-                    contentStyle={{
-                      backgroundColor: "rgba(15,15,15,0.95)",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      borderRadius: "8px",
-                      fontSize: "11px",
-                    }}
-                    labelStyle={{ color: "#a3a3a3", fontSize: "10px" }}
-                    formatter={(value) => [`${fmtIQD(Number(value))} د.ع`, "القيمة"]}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="value"
-                    stroke={profitUp ? "#4ADE80" : "#F87171"}
-                    strokeWidth={2.5}
-                    fill="url(#perf-gradient)"
-                    fillOpacity={1}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* ═══════════ § 3: Sector Distribution + KPIs (2 cols) ═══════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-
-            {/* Sector Distribution */}
-            <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 backdrop-blur">
-              <SectionHeader title="🥧 توزيع القطاعات" subtitle="كيف توزّعت استثماراتك" />
-
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={merged.sectorDistribution}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={80}
-                      paddingAngle={2}
-                      dataKey="value"
+          ) : (
+            <>
+              {/* ═══ Top bar — project selector + period tabs ═══ */}
+              <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 mb-3">
+                <div className="flex items-center gap-2 mb-3">
+                  {/* Project selector — replaces "BTC/USDT" */}
+                  <div className="relative flex-1">
+                    <button
+                      onClick={() => setPickerOpen((v) => !v)}
+                      className="w-full px-3 py-2.5 bg-white/[0.05] border border-white/[0.08] rounded-xl flex items-center gap-2 hover:bg-white/[0.07] transition-colors"
                     >
-                      {merged.sectorDistribution.map((s) => (
-                        <Cell
-                          key={s.name}
-                          fill={SECTOR_COLORS[s.name] ?? SECTOR_COLORS["أخرى"]}
-                          stroke="rgba(15,15,15,0.6)"
-                          strokeWidth={1}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "rgba(15,15,15,0.95)",
-                        border: "1px solid rgba(255,255,255,0.1)",
-                        borderRadius: "8px",
-                        fontSize: "11px",
-                      }}
-                      formatter={(value) => [`${fmtIQD(Number(value))} د.ع`, "القيمة"]}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Legend */}
-              <div className="space-y-1.5 mt-3">
-                {merged.sectorDistribution.map((s) => (
-                  <div key={s.name} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: SECTOR_COLORS[s.name] ?? SECTOR_COLORS["أخرى"] }}
-                      />
-                      <span className="text-neutral-300">{s.name}</span>
-                    </div>
-                    <span className="text-white font-bold font-mono">{s.percent.toFixed(1)}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* KPIs */}
-            <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 backdrop-blur">
-              <SectionHeader title="📊 مؤشرات الأداء" subtitle="نظرة شاملة على استثماراتك" />
-
-              <div className="space-y-2">
-                {[
-                  { icon: "💰", label: "متوسط العائد السنوي", value: `${analytics.avgReturnPerYear}%`, color: "text-blue-400" },
-                  { icon: "🏆", label: "أعلى ربح فردي", value: `+${fmtIQD(highestProfit)} د.ع`, color: "text-green-400" },
-                  { icon: "📉", label: "أقل ربح فردي", value: `${lowestProfit >= 0 ? "+" : ""}${fmtIQD(lowestProfit)} د.ع`, color: lowestProfit >= 0 ? "text-yellow-400" : "text-red-400" },
-                  { icon: "⏱️", label: "متوسط مدة الاحتفاظ", value: `${analytics.avgHoldingMonths} أشهر`, color: "text-white" },
-                  { icon: "📈", label: "معدل النمو الشهري", value: "+1.8%", color: "text-green-400" },
-                ].map((kpi, i) => (
-                  <div key={i} className="bg-white/[0.04] border border-white/[0.06] rounded-lg px-3 py-2.5 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">{kpi.icon}</span>
-                      <span className="text-[11px] text-neutral-300">{kpi.label}</span>
-                    </div>
-                    <span className={cn("text-xs font-bold font-mono", kpi.color)}>{kpi.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* ═══════════ § 4: All Investments Table ═══════════ */}
-          <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-6 backdrop-blur">
-            <div className="flex justify-between items-end mb-4 gap-2 flex-wrap">
-              <div>
-                <h2 className="text-base font-bold text-white">📊 كل استثماراتي</h2>
-                <p className="text-[11px] text-neutral-500 mt-0.5">{filteredPerformance.length} استثمار</p>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="ابحث..."
-                    className="bg-white/[0.04] border border-white/[0.08] focus:border-white/20 rounded-lg pr-9 pl-3 py-1.5 text-xs text-white outline-none w-32 lg:w-40"
-                  />
-                </div>
-                <div className="relative">
-                  <button
-                    onClick={() => setShowSort(!showSort)}
-                    className="bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.06] rounded-lg px-3 py-1.5 text-xs text-white flex items-center gap-1.5 transition-colors"
-                  >
-                    <span>{SORT_OPTIONS.find((s) => s.id === sortBy)?.label}</span>
-                    <ChevronDown className={cn("w-3 h-3 transition-transform", showSort && "rotate-180")} />
-                  </button>
-                  {showSort && (
-                    <div className="absolute top-full left-0 mt-1 w-36 bg-[rgba(15,15,15,0.98)] border border-white/[0.08] rounded-lg shadow-2xl z-20 overflow-hidden">
-                      {SORT_OPTIONS.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => { setSortBy(s.id); setShowSort(false) }}
-                          className={cn(
-                            "w-full px-3 py-2 text-xs text-right hover:bg-white/[0.06] transition-colors",
-                            sortBy === s.id ? "bg-white/[0.04] text-white" : "text-neutral-400",
-                          )}
-                        >
-                          {s.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {filteredPerformance.length === 0 ? (
-              <EmptyState
-                icon="📦"
-                title={search ? "لا توجد نتائج" : "لا توجد استثمارات بعد"}
-                description={search ? "جرّب كلمة بحث أخرى" : "ابدأ رحلتك الاستثمارية الآن"}
-                action={!search ? { label: "اكتشف الفرص", href: "/market" } : undefined}
-                size="md"
-              />
-            ) : (
-              <div className="space-y-2">
-                {filteredPerformance.map((row) => (
-                  <PerformanceRowItem key={row.id} row={row} onClick={() => router.push(`/project/${row.project_id}`)} />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* ═══════════ § 5: Best / Worst performers (2 cols) ═══════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-
-            {/* Best */}
-            <div className="bg-green-400/[0.04] border border-green-400/20 rounded-2xl p-5 backdrop-blur">
-              <SectionHeader title="🏆 أفضل أداء" subtitle="أكثر استثماراتك ربحاً" />
-              <div className="space-y-2">
-                {merged.bestPerformers.map((r) => (
-                  <PerformerCard
-                    key={"best-" + r.id}
-                    row={r}
-                    variant="best"
-                    onClick={() => router.push(`/project/${r.project_id}`)}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Worst */}
-            <div className="bg-orange-400/[0.04] border border-orange-400/20 rounded-2xl p-5 backdrop-blur">
-              <SectionHeader title="📉 يحتاج اهتمامك" subtitle="استثمارات أقل ربحاً" />
-              <div className="space-y-2">
-                {merged.worstPerformers.map((r) => (
-                  <PerformerCard
-                    key={"worst-" + r.id}
-                    row={r}
-                    variant="worst"
-                    onClick={() => router.push(`/project/${r.project_id}`)}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* ═══════════ § 6: Distributions Timeline + Calculator (2 cols) ═══════════ */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-
-            {/* Distributions Timeline */}
-            <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 backdrop-blur">
-              <div className="flex justify-between items-end mb-4 gap-2">
-                <div>
-                  <h2 className="text-base font-bold text-white">💰 تاريخ التوزيعات</h2>
-                  <p className="text-[11px] text-neutral-500 mt-0.5">أرباحك المستلمة</p>
-                </div>
-                <span className="bg-green-400/[0.08] border border-green-400/25 text-green-400 text-[10px] font-bold px-2.5 py-1 rounded-full font-mono">
-                  إجمالي: +{fmtLimit(totalDistributions)} د.ع
-                </span>
-              </div>
-
-              <div className="relative">
-                <div className="absolute right-2 top-2 bottom-2 w-0.5 bg-white/[0.08] z-0" />
-                <div className="space-y-2 relative z-10">
-                  {distributions.map((d) => (
-                    <div key={d.id} className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5 flex items-start gap-3 mr-1">
-                      <div className="w-3 h-3 rounded-full bg-green-400 border-2 border-black flex-shrink-0 mt-1 shadow-[0_0_6px_rgba(74,222,158,0.6)]" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1 gap-2">
-                          <span className="text-xs font-bold text-white truncate">{d.project_name}</span>
-                          <span className="text-sm font-bold text-green-400 font-mono flex-shrink-0">
-                            +{fmtIQD(d.amount)}
-                          </span>
+                      {(selected.logo_url || selected.logo) ? (
+                        <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.04] flex-shrink-0">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={selected.logo_url || selected.logo} alt={selected.name} className="w-full h-full object-cover" />
                         </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[9px] text-neutral-500 font-mono" dir="ltr">{d.date}</span>
-                          <span className="text-[9px] text-neutral-700">·</span>
-                          <span className="text-[9px] bg-white/[0.06] border border-white/[0.08] text-neutral-300 px-1.5 py-0.5 rounded">
-                            {d.type}
-                          </span>
+                      ) : (
+                        <div className="w-8 h-8 rounded-lg bg-blue-400/[0.1] border border-blue-400/[0.2] flex items-center justify-center text-base">📊</div>
+                      )}
+                      <div className="text-right flex-1 min-w-0">
+                        <div className="text-sm font-bold text-white truncate flex items-center gap-1.5 justify-end">
+                          {selected.name}
+                          {selected.symbol && (
+                            <span className="text-[10px] font-mono text-blue-400 bg-blue-400/[0.1] border border-blue-400/[0.2] rounded px-1.5 py-0.5" dir="ltr">
+                              {selected.symbol}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-neutral-500 truncate">{selected.sector}</div>
+                      </div>
+                      <ChevronDown className={cn("w-4 h-4 text-neutral-400 transition-transform", pickerOpen && "rotate-180")} />
+                    </button>
+
+                    {pickerOpen && (
+                      <div className="absolute top-full right-0 left-0 mt-1 z-40 bg-[#0a0a0a] border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
+                        <div className="p-2 border-b border-white/[0.05]">
+                          <div className="relative">
+                            <Search className="w-3.5 h-3.5 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2" />
+                            <input
+                              type="text"
+                              placeholder="ابحث عن مشروع..."
+                              value={search}
+                              onChange={(e) => setSearch(e.target.value)}
+                              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg pr-8 pl-3 py-1.5 text-xs text-white outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-64 overflow-y-auto divide-y divide-white/[0.04]">
+                          {filteredProjects.length === 0 ? (
+                            <div className="text-center text-[11px] text-neutral-500 py-6">لا توجد نتائج</div>
+                          ) : (
+                            filteredProjects.map((p) => (
+                              <button
+                                key={p.id}
+                                onClick={() => { setSelected(p); setPickerOpen(false); setSearch("") }}
+                                className={cn(
+                                  "w-full px-3 py-2.5 flex items-center gap-2.5 hover:bg-white/[0.06] transition-colors text-right",
+                                  selected.id === p.id && "bg-white/[0.05]",
+                                )}
+                              >
+                                {(p.logo_url || p.logo) ? (
+                                  <div className="w-7 h-7 rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.04] flex-shrink-0">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={p.logo_url || p.logo} alt={p.name} className="w-full h-full object-cover" />
+                                  </div>
+                                ) : (
+                                  <div className="w-7 h-7 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-xs">📊</div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-xs text-white font-bold truncate">{p.name}</div>
+                                  <div className="text-[10px] text-neutral-500 truncate">{p.sector} · {fmtIQD(p.share_price)} د.ع</div>
+                                </div>
+                                {selected.id === p.id && <span className="text-green-400 text-xs">✓</span>}
+                              </button>
+                            ))
+                          )}
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    )}
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Profit Calculator */}
-            <div className="bg-gradient-to-br from-purple-400/[0.06] to-transparent border border-purple-400/20 rounded-2xl p-5 backdrop-blur">
-              <div className="flex items-center gap-2 mb-1">
-                <Calculator className="w-4 h-4 text-purple-400" strokeWidth={2} />
-                <h2 className="text-base font-bold text-white">توقّع أرباحك المستقبلية</h2>
-              </div>
-              <p className="text-[11px] text-neutral-500 mb-4">إذا استمر الأداء بنفس النسبة</p>
-
-              {/* Period selector */}
-              <div className="mb-4">
-                <div className="text-[11px] text-neutral-400 mb-2 font-bold">مدة الاستثمار</div>
-                <div className="grid grid-cols-3 gap-2">
-                  {CALC_PERIODS.map((p) => (
+                {/* Period tabs — name only, matching Phase 11.06 style */}
+                <div className="flex gap-1 bg-white/[0.04] border border-white/[0.06] rounded-xl p-1">
+                  {(Object.keys(PERIOD_LABELS) as Period[]).map((k) => (
                     <button
-                      key={p.id}
-                      onClick={() => setCalcPeriod(p.id)}
+                      key={k}
+                      onClick={() => setPeriod(k)}
                       className={cn(
-                        "py-2 rounded-lg text-xs transition-colors border",
-                        calcPeriod === p.id
-                          ? "bg-white text-black border-transparent font-bold"
-                          : "bg-white/[0.04] border-white/[0.08] text-neutral-300 hover:bg-white/[0.06]",
+                        "flex-1 py-1.5 text-[11px] rounded-lg transition-colors",
+                        period === k
+                          ? "bg-white/[0.08] text-white font-bold"
+                          : "text-neutral-400 hover:text-white",
                       )}
                     >
-                      {p.label}
+                      {PERIOD_LABELS[k]}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Results */}
-              <div className="space-y-2 mb-4">
-                <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3 flex items-center justify-between">
-                  <span className="text-xs text-neutral-300">📈 العائد المتوقع</span>
-                  <span className="text-sm font-bold text-green-400 font-mono">
-                    +{fmtIQD(expectedReturn)} د.ع
-                  </span>
+              {/* ═══ Price card + chart ═══ */}
+              <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4 mb-3">
+                <div className="flex items-end justify-between mb-3">
+                  <div>
+                    <div className="text-[10px] text-neutral-500 mb-1">السعر الحالي</div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl lg:text-4xl font-bold text-white font-mono">
+                        {fmtIQD(stats.current)}
+                      </span>
+                      <span className="text-xs text-neutral-500 font-mono">د.ع</span>
+                    </div>
+                  </div>
+                  <div className="text-left">
+                    <div className={cn(
+                      "inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold border",
+                      stats.isUp
+                        ? "bg-green-400/[0.06] border-green-400/[0.2] text-green-400"
+                        : "bg-red-400/[0.06] border-red-400/[0.2] text-red-400"
+                    )}>
+                      {stats.isUp ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                      <span className="font-mono">{stats.changePct >= 0 ? "+" : ""}{stats.changePct.toFixed(2)}%</span>
+                    </div>
+                    <div className="text-[10px] text-neutral-500 mt-1">آخر {PERIOD_LABELS[period]}</div>
+                  </div>
                 </div>
-                <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3 flex items-center justify-between">
-                  <span className="text-xs text-neutral-300">💎 القيمة المتوقعة</span>
-                  <span className="text-sm font-bold text-white font-mono">
-                    {fmtIQD(expectedFutureValue)} د.ع
-                  </span>
-                </div>
-                <div className="bg-purple-400/[0.06] border border-purple-400/20 rounded-lg p-3 flex items-center justify-between">
-                  <span className="text-xs text-neutral-300">📊 النمو الإجمالي</span>
-                  <span className="text-sm font-bold text-purple-400 font-mono">
-                    +{totalGrowth.toFixed(1)}%
-                  </span>
+
+                {/* Chart */}
+                <div className="h-64 -mx-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={stats.isUp ? "#4ADE80" : "#F87171"} stopOpacity={0.35} />
+                          <stop offset="100%" stopColor={stats.isUp ? "#4ADE80" : "#F87171"} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+                      <XAxis
+                        dataKey="t"
+                        tick={{ fill: "#737373", fontSize: 9 }}
+                        axisLine={false}
+                        tickLine={false}
+                        minTickGap={20}
+                      />
+                      <YAxis
+                        domain={["auto", "auto"]}
+                        orientation="right"
+                        tick={{ fill: "#737373", fontSize: 9 }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) => fmtCompact(Number(v))}
+                        width={48}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "#0a0a0a",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          borderRadius: 8,
+                          fontSize: 11,
+                        }}
+                        labelStyle={{ color: "#a3a3a3", fontSize: 10 }}
+                        formatter={(value: number | string) => [
+                          fmtIQD(Number(value)) + " د.ع",
+                          "السعر",
+                        ]}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="price"
+                        stroke={stats.isUp ? "#4ADE80" : "#F87171"}
+                        strokeWidth={2}
+                        fill="url(#priceGrad)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
 
-              {/* Disclaimer */}
-              <div className="bg-yellow-400/[0.06] border border-yellow-400/20 rounded-lg p-2.5 flex gap-2 items-start">
-                <AlertTriangle className="w-3 h-3 text-yellow-400 flex-shrink-0 mt-0.5" strokeWidth={2} />
-                <div className="text-[10px] text-yellow-300/90 leading-relaxed">
-                  تقديرات تقريبية بناءً على الأداء التاريخي
+              {/* ═══ Stats grid ═══ */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+                <StatCard
+                  icon={<Wallet className="w-3.5 h-3.5 text-yellow-400" strokeWidth={1.5} />}
+                  label="القيمة السوقية"
+                  value={fmtCompact(stats.marketCap) + " د.ع"}
+                />
+                <StatCard
+                  icon={<BarChart3 className="w-3.5 h-3.5 text-blue-400" strokeWidth={1.5} />}
+                  label="الحصص المتاحة"
+                  value={fmtIQD(stats.available)}
+                  unit="SHR"
+                />
+                <StatCard
+                  icon={<TrendingUp className="w-3.5 h-3.5 text-green-400" strokeWidth={1.5} />}
+                  label="مباع من الطرح"
+                  value={fmtIQD(stats.sold)}
+                  unit="SHR"
+                />
+                <StatCard
+                  icon={<Clock className="w-3.5 h-3.5 text-purple-400" strokeWidth={1.5} />}
+                  label="إجمالي الحصص"
+                  value={fmtIQD(selected.total_shares ?? 0)}
+                  unit="SHR"
+                />
+              </div>
+
+              {/* ═══ Order book + Recent trades ═══ */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+                {/* Order book */}
+                <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-sm font-bold text-white">📒 دفتر الأوامر</div>
+                    <span className="text-[10px] text-neutral-500">{listings.length} إعلان</span>
+                  </div>
+                  <div className="grid grid-cols-2 text-[10px] text-neutral-500 mb-1.5 px-2">
+                    <span className="text-right">السعر (د.ع)</span>
+                    <span className="text-left">الحصص</span>
+                  </div>
+
+                  {/* Asks (sell) — top, red */}
+                  <div className="space-y-0.5 mb-2">
+                    {sellListings.length === 0 ? (
+                      <div className="text-center text-[10px] text-neutral-600 py-3">لا توجد عروض بيع</div>
+                    ) : (
+                      sellListings.map((l) => (
+                        <div key={l.id} className="grid grid-cols-2 px-2 py-1 rounded text-xs font-mono bg-red-400/[0.04] hover:bg-red-400/[0.08] transition-colors">
+                          <span className="text-right text-red-400">{fmtIQD(l.price_per_share)}</span>
+                          <span className="text-left text-neutral-300">{fmtIQD(l.shares_remaining)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Current price divider */}
+                  <div className="px-2 py-1.5 rounded bg-white/[0.04] border-y border-white/[0.06] my-1 flex items-center justify-between">
+                    <span className="text-[10px] text-neutral-500">سعر السوق</span>
+                    <span className={cn("text-sm font-bold font-mono", stats.isUp ? "text-green-400" : "text-red-400")}>
+                      {fmtIQD(stats.current)}
+                    </span>
+                  </div>
+
+                  {/* Bids (buy) — bottom, green */}
+                  <div className="space-y-0.5 mt-2">
+                    {buyListings.length === 0 ? (
+                      <div className="text-center text-[10px] text-neutral-600 py-3">لا توجد عروض شراء</div>
+                    ) : (
+                      buyListings.map((l) => (
+                        <div key={l.id} className="grid grid-cols-2 px-2 py-1 rounded text-xs font-mono bg-green-400/[0.04] hover:bg-green-400/[0.08] transition-colors">
+                          <span className="text-right text-green-400">{fmtIQD(l.price_per_share)}</span>
+                          <span className="text-left text-neutral-300">{fmtIQD(l.shares_remaining)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Recent trades */}
+                <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-sm font-bold text-white">⚡ آخر الصفقات</div>
+                    <span className="text-[10px] text-neutral-500">{recentTrades.length} صفقة</span>
+                  </div>
+                  <div className="grid grid-cols-3 text-[10px] text-neutral-500 mb-1.5 px-2">
+                    <span className="text-right">السعر (د.ع)</span>
+                    <span className="text-center">الحصص</span>
+                    <span className="text-left">الوقت</span>
+                  </div>
+                  {recentTrades.length === 0 ? (
+                    <div className="text-center text-[11px] text-neutral-600 py-8">
+                      لم تتم أي صفقة كاملة بعد
+                    </div>
+                  ) : (
+                    <div className="space-y-0.5 max-h-72 overflow-y-auto">
+                      {recentTrades.map((t) => {
+                        const time = new Date(t.created_at).toLocaleTimeString("en-US", {
+                          hour: "2-digit", minute: "2-digit", hour12: false,
+                        })
+                        return (
+                          <div key={t.id} className="grid grid-cols-3 px-2 py-1 rounded text-xs font-mono hover:bg-white/[0.04] transition-colors">
+                            <span className="text-right text-green-400">{fmtIQD(t.price)}</span>
+                            <span className="text-center text-neutral-300">{fmtIQD(t.shares)}</span>
+                            <span className="text-left text-neutral-500 text-[10px]" dir="ltr">{time}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-          </div>
 
+              {/* ═══ CTA buttons ═══ */}
+              <div className="grid grid-cols-2 gap-2 mb-6">
+                <button
+                  onClick={() => router.push(`/project/${selected.id}?action=invest`)}
+                  className="py-3.5 rounded-xl bg-green-500/[0.15] border border-green-500/[0.3] text-green-400 text-sm font-bold hover:bg-green-500/[0.2] transition-colors flex items-center justify-center gap-2"
+                >
+                  <ArrowUpRight className="w-4 h-4" />
+                  استثمر الآن
+                </button>
+                <button
+                  onClick={() => router.push(`/exchange?project=${selected.id}`)}
+                  className="py-3.5 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-400 text-sm font-bold hover:bg-blue-500/[0.2] transition-colors flex items-center justify-center gap-2"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  افتح السوق
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </AppLayout>
   )
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Sub-components
-// ──────────────────────────────────────────────────────────────────────
-
-function PerformanceRowItem({
-  row,
-  onClick,
+// ─── Sub-components ──────────────────────────────────────────────
+function StatCard({
+  icon, label, value, unit,
 }: {
-  row: PerformanceRow
-  onClick: () => void
+  icon: React.ReactNode
+  label: string
+  value: string
+  unit?: string
 }) {
-  const profitUp = row.profitPercent >= 0
   return (
-    <button
-      onClick={onClick}
-      className="w-full bg-white/[0.04] hover:bg-white/[0.06] border border-white/[0.06] rounded-lg p-3 transition-colors text-right"
-    >
-      {/* Mobile: stacked */}
-      <div className="lg:hidden">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-base flex-shrink-0">
-              {sectorIcon(row.project.sector)}
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-white truncate">{row.project.name}</div>
-              <div className="text-[10px] text-neutral-500">{row.project.sector}</div>
-            </div>
-          </div>
-          <span
-            className={cn(
-              "text-[10px] font-bold px-2 py-0.5 rounded-full border font-mono",
-              profitUp
-                ? "bg-green-400/[0.1] border-green-400/25 text-green-400"
-                : "bg-red-400/[0.1] border-red-400/25 text-red-400",
-            )}
-          >
-            {profitUp ? "+" : ""}{row.profitPercent.toFixed(1)}%
-          </span>
-        </div>
-        <div className="grid grid-cols-3 gap-2 text-[10px]">
-          <div>
-            <div className="text-neutral-500">الحصص</div>
-            <div className="text-white font-mono font-bold">{row.shares_owned}</div>
-          </div>
-          <div>
-            <div className="text-neutral-500">القيمة الحالية</div>
-            <div className="text-white font-mono font-bold">{fmtIQD(row.current_value ?? 0)}</div>
-          </div>
-          <div>
-            <div className="text-neutral-500">الربح/الخسارة</div>
-            <div className={cn("font-mono font-bold", profitUp ? "text-green-400" : "text-red-400")}>
-              {profitUp ? "+" : ""}{fmtIQD(row.profit)}
-            </div>
-          </div>
-        </div>
+    <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        {icon}
+        <span className="text-[10px] text-neutral-500">{label}</span>
       </div>
-
-      {/* Desktop: row */}
-      <div className="hidden lg:grid lg:grid-cols-[1fr_80px_120px_120px_140px_70px_24px] lg:gap-3 lg:items-center">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-base flex-shrink-0">
-            {sectorIcon(row.project.sector)}
-          </div>
-          <div className="min-w-0">
-            <div className="text-xs font-bold text-white truncate">{row.project.name}</div>
-            <div className="text-[10px] text-neutral-500">{row.project.sector}</div>
-          </div>
-        </div>
-        <div className="text-xs text-white font-mono text-center">{row.shares_owned}</div>
-        <div className="text-xs text-neutral-300 font-mono text-center">{fmtIQD(row.cost)}</div>
-        <div className="text-xs text-white font-mono text-center font-bold">{fmtIQD(row.current_value ?? 0)}</div>
-        <div className={cn("text-xs font-mono font-bold text-center", profitUp ? "text-green-400" : "text-red-400")}>
-          {profitUp ? "+" : ""}{fmtIQD(row.profit)}
-        </div>
-        <div>
-          <span
-            className={cn(
-              "text-[10px] font-bold px-2 py-0.5 rounded-full border font-mono inline-block",
-              profitUp
-                ? "bg-green-400/[0.1] border-green-400/25 text-green-400"
-                : "bg-red-400/[0.1] border-red-400/25 text-red-400",
-            )}
-          >
-            {profitUp ? "+" : ""}{row.profitPercent.toFixed(1)}%
-          </span>
-        </div>
-        <ChevronLeft className="w-4 h-4 text-neutral-500" strokeWidth={2} />
+      <div className="flex items-baseline gap-1">
+        <span className="text-base font-bold text-white font-mono">{value}</span>
+        {unit && <span className="text-[9px] text-neutral-500 font-mono">{unit}</span>}
       </div>
-    </button>
-  )
-}
-
-function PerformerCard({
-  row,
-  variant,
-  onClick,
-}: {
-  row: PerformanceRow
-  variant: "best" | "worst"
-  onClick: () => void
-}) {
-  const profitUp = row.profitPercent >= 0
-  const negativeColor = !profitUp
-  return (
-    <button
-      onClick={onClick}
-      className="w-full bg-white/[0.04] hover:bg-white/[0.06] border border-white/[0.06] rounded-lg p-3 transition-colors flex items-center justify-between gap-3 text-right"
-    >
-      <div className="flex items-center gap-2.5 min-w-0">
-        <div className="w-10 h-10 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-lg flex-shrink-0">
-          {sectorIcon(row.project.sector)}
-        </div>
-        <div className="min-w-0">
-          <div className="text-xs font-bold text-white truncate">{row.project.name}</div>
-          <div className="text-[10px] text-neutral-500 mt-0.5">
-            <span className="font-mono text-yellow-400">{row.shares_owned}</span> حصة · {row.project.sector}
-          </div>
-        </div>
-      </div>
-      <div className="text-left flex-shrink-0">
-        <div className="text-xs font-bold text-white font-mono mb-0.5">{fmtIQD(row.current_value ?? 0)}</div>
-        <div className={cn(
-          "text-[10px] font-bold flex items-center gap-0.5 justify-end",
-          variant === "best" ? "text-green-400" :
-          negativeColor ? "text-red-400" : "text-orange-400",
-        )}>
-          {variant === "best" ? <ArrowUpRight className="w-2.5 h-2.5" strokeWidth={2.5} /> : <ArrowDownRight className="w-2.5 h-2.5" strokeWidth={2.5} />}
-          {profitUp ? "+" : ""}{row.profitPercent.toFixed(1)}%
-        </div>
-      </div>
-    </button>
+    </div>
   )
 }
