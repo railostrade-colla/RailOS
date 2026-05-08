@@ -27,6 +27,7 @@
 import { createClient } from "@/lib/supabase/client"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { dedupCache } from "./cache"
+import { iqd } from "@/lib/utils/money"
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -295,12 +296,14 @@ async function enrichHoldingsWithProjects(
     return rows.map((r) => {
       const p = map.get(r.project_id)
       if (!p) return r
-      const sharePrice = n(p.share_price ?? r.project?.share_price ?? 0)
-      const marketRaw = p.current_market_price != null ? n(p.current_market_price) : 0
+      // Phase 11.25 — iqd() for all dinar amounts (see fetchHoldings).
+      const sharePrice = iqd(p.share_price ?? r.project?.share_price ?? 0)
+      const marketRaw = p.current_market_price != null ? iqd(p.current_market_price) : 0
+      const avgBuy = iqd(r.average_buy_price)
       const livePrice =
         (marketRaw > 0 ? marketRaw : 0) ||
         (sharePrice > 0 ? sharePrice : 0) ||
-        (n(r.average_buy_price) > 0 ? n(r.average_buy_price) : 0)
+        (avgBuy > 0 ? avgBuy : 0)
 
       return {
         ...r,
@@ -364,16 +367,22 @@ async function fetchHoldings(
       }
       const mapped = (rpcData as RpcRow[]).map((r): PortfolioHolding => {
         const shares = n(r.shares)
-        const sharePrice = n(r.project_share_price)
+        // Phase 11.25 — every dinar amount goes through iqd() so a
+        // fractional value in the DB (legacy / float-drift) can never
+        // bleed into the price-cap input handler downstream. n() is
+        // still used for non-dinar counts (shares, frozen_shares,
+        // funded_pct).
+        const sharePrice = iqd(r.project_share_price)
         // Phase 11.11 — cascading fallback so the portfolio total never
         // reads zero when market_price + share_price are both missing
         // (e.g. project join under RLS, brand-new market state). The
         // average buy price is the user's actual cost basis and is
         // always populated when shares > 0, so it's the safest
         // last-resort price for the calculation.
-        const avgBuy = n(r.average_buy_price)
+        const avgBuy = iqd(r.average_buy_price)
+        const marketRaw = r.market_price != null ? iqd(r.market_price) : 0
         const marketPrice =
-          (r.market_price != null && n(r.market_price) > 0 ? n(r.market_price) : 0) ||
+          (marketRaw > 0 ? marketRaw : 0) ||
           (sharePrice > 0 ? sharePrice : 0) ||
           (avgBuy > 0 ? avgBuy : 0)
         return {
@@ -383,16 +392,16 @@ async function fetchHoldings(
           shares,
           shares_owned: shares,
           frozen_shares: n(r.frozen_shares),
-          average_buy_price: n(r.average_buy_price),
-          buy_price: n(r.average_buy_price),
-          total_invested: n(r.total_invested),
+          average_buy_price: avgBuy,
+          buy_price: avgBuy,
+          total_invested: iqd(r.total_invested),
           current_value: shares * marketPrice,
           project: {
             id: r.project_id,
             name: r.project_name ?? "—",
             sector: r.project_sector ?? "",
             share_price: sharePrice,
-            current_market_price: r.market_price != null ? n(r.market_price) : null,
+            current_market_price: marketRaw > 0 ? marketRaw : null,
             total_shares: n(r.project_total_shares),
             available_shares: 0,
             symbol: r.project_symbol ?? null,
@@ -401,8 +410,8 @@ async function fetchHoldings(
           funded_pct: n(r.funded_pct),
           shares_bought: n(r.shares_bought_from_project),
           shares_sold: n(r.shares_sold_from_project),
-          total_sold_amount: n(r.total_sold_amount),
-          total_bought_amount: n(r.total_bought_amount),
+          total_sold_amount: iqd(r.total_sold_amount),
+          total_bought_amount: iqd(r.total_bought_amount),
         }
       })
       // Phase 11.13 — overlay fresh project metadata (name, logo,
@@ -482,13 +491,14 @@ async function fetchHoldings(
     for (const row of rows) {
       const project = projectMap.get(row.project_id)
       const shares = n(row.shares)
-      const sharePrice = project ? n(project.share_price) : 0
+      // Phase 11.25 — iqd() for all dinar amounts (see RPC branch).
+      const sharePrice = project ? iqd(project.share_price) : 0
+      const avgBuy = iqd(row.average_buy_price)
       // Phase 11.11 — same cascading fallback as the RPC branch above:
       // current_market_price → share_price → user's avg_buy_price.
-      const avgBuy = n(row.average_buy_price)
       const marketPriceRaw =
         project && project.current_market_price != null
-          ? n(project.current_market_price)
+          ? iqd(project.current_market_price)
           : 0
       const marketPrice =
         (marketPriceRaw > 0 ? marketPriceRaw : 0) ||
@@ -503,9 +513,9 @@ async function fetchHoldings(
         shares,
         shares_owned: shares,
         frozen_shares: n(row.frozen_shares),
-        average_buy_price: n(row.average_buy_price),
-        buy_price: n(row.average_buy_price),
-        total_invested: n(row.total_invested),
+        average_buy_price: avgBuy,
+        buy_price: avgBuy,
+        total_invested: iqd(row.total_invested),
         current_value: currentValue,
         // If the project lookup failed (RLS / deleted), still surface
         // the holding with placeholders so the founder sees the row
@@ -515,10 +525,7 @@ async function fetchHoldings(
           name: project?.name ?? "— مشروع غير معروف —",
           sector: project?.sector ?? "",
           share_price: sharePrice,
-          current_market_price:
-            project && project.current_market_price != null
-              ? n(project.current_market_price)
-              : null,
+          current_market_price: marketPriceRaw > 0 ? marketPriceRaw : null,
           total_shares: project ? n(project.total_shares) : 0,
           available_shares: project ? n(project.available_shares) : 0,
         },

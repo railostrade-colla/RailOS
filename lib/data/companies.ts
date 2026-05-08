@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client"
 import type { Company } from "@/lib/mock-data/types"
 import { dedupCache } from "./cache"
+import { iqd } from "@/lib/utils/money"
 
 type DBCompany = {
   id: string
@@ -32,7 +33,8 @@ function dbToCompany(row: DBCompany): Company {
     name: row.name,
     sector: row.sector,
     city: row.city,
-    share_price: Number(row.share_price ?? 0),
+    // Phase 11.25 — iqd() ensures integer dinars (no fractional drift).
+    share_price: iqd(row.share_price),
     risk_level: riskMap[row.risk_level ?? ""] ?? "متوسط",
     projects_count: row.projects_count,
     shareholders_count: row.shareholders_count,

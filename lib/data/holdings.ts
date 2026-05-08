@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client"
 import type { Holding } from "@/lib/mock-data/types"
+import { iqd } from "@/lib/utils/money"
 
 export async function getMyHoldings(userId: string): Promise<Holding[]> {
   try {
@@ -14,12 +15,13 @@ export async function getMyHoldings(userId: string): Promise<Holding[]> {
       id: h.id,
       project_id: h.project_id,
       shares_owned: Number(h.shares ?? 0),
-      buy_price: Number(h.average_buy_price ?? 0),
+      // Phase 11.25 — iqd() for dinar amounts.
+      buy_price: iqd(h.average_buy_price),
       project: {
         id: h.projects?.id,
         name: h.projects?.name ?? "—",
         sector: h.projects?.project_type ?? "—",
-        share_price: Number(h.projects?.share_price ?? 0),
+        share_price: iqd(h.projects?.share_price),
         total_shares: Number(h.projects?.total_shares ?? 0),
       },
       user_id: h.user_id,

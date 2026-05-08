@@ -14,6 +14,7 @@
 
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/types/database"
+import { iqd } from "@/lib/utils/money"
 
 // ════════════════════════════════════════════════════════════════════
 // Legacy tier
@@ -214,9 +215,11 @@ export async function getMyDealsEnriched(): Promise<MyDealEnriched[]> {
         seller_name: seller?.full_name ?? seller?.username ?? "مستخدم",
         deal_type: row.deal_type ?? "secondary",
         shares: n(row.shares),
-        price_per_share: n(row.price_per_share),
-        total_amount: n(row.total_amount),
-        fee_amount: n(row.fee_amount),
+        // Phase 11.25 — iqd() for all dinar amounts so fractional drift
+        // never reaches downstream input handlers / totals.
+        price_per_share: iqd(row.price_per_share),
+        total_amount: iqd(row.total_amount),
+        fee_amount: iqd(row.fee_amount),
         status: (row.status ?? "pending_seller_approval") as DBDealStatus,
         created_at: row.created_at,
         updated_at: row.updated_at ?? row.created_at,

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/types/database"
+import { iqd } from "@/lib/utils/money"
 
 /**
  * DBListing is now a type alias on the Supabase-generated Row shape.
@@ -149,11 +150,13 @@ export async function getExchangeListings(): Promise<ExchangeListingRow[]> {
         project_id: r.project_id,
         project_name: project?.name?.trim() || "—",
         project_sector: project?.sector ?? null,
-        project_share_price: num(project?.share_price),
+        // Phase 11.25 — iqd() rounds dinar values to integer so
+        // fractional drift can never reach the price-cap UI.
+        project_share_price: iqd(project?.share_price),
         shares_offered: offered,
         shares_sold: sold,
         shares_remaining: Math.max(0, offered - sold),
-        price_per_share: num(r.price_per_share),
+        price_per_share: iqd(r.price_per_share),
         notes: r.notes,
         is_quick_sell: r.is_quick_sell,
         status: r.status,

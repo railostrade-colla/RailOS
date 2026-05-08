@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/types/database"
 import type { EscrowDeal, EscrowDealStatus } from "@/lib/escrow/types"
+import { iqd } from "@/lib/utils/money"
 
 /**
  * Hybrid /deals/[id] loader.
@@ -85,8 +86,11 @@ export async function getDealDetailDB(dealId: string): Promise<EscrowDeal | null
     const buyer = unwrap(row.buyer)
     const seller = unwrap(row.seller)
 
-    const total =
-      Number(row.total_amount ?? row.shares * row.price_per_share) || 0
+    // Phase 11.25 — iqd() so dinar amounts are always integers; the
+    // fallback computes shares * price exactly when total_amount is null.
+    const total = row.total_amount != null
+      ? iqd(row.total_amount)
+      : iqd(Number(row.shares ?? 0) * iqd(row.price_per_share))
 
     return {
       // Identifiers
@@ -103,7 +107,7 @@ export async function getDealDetailDB(dealId: string): Promise<EscrowDeal | null
 
       // Quantity / price
       shares_amount: Number(row.shares) || 0,
-      price_per_share: Number(row.price_per_share) || 0,
+      price_per_share: iqd(row.price_per_share),
       total_amount: total,
 
       // Status — mapped from DB enum

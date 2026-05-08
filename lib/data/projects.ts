@@ -6,6 +6,7 @@
 import { createClient } from "@/lib/supabase/client"
 import type { Project } from "@/lib/mock-data/types"
 import { dedupCache } from "./cache"
+import { iqd } from "@/lib/utils/money"
 
 type DBProject = {
   id: string
@@ -100,9 +101,12 @@ function dbToProject(row: DBProject): Project {
   // When DB hasn't populated current_market_price yet (no deals), the
   // launch share_price is still surfaced under share_price; downstream
   // code falls back via `current_market_price ?? share_price`.
-  const launchPrice = Number(row.share_price ?? 0)
+  // Phase 11.25 — iqd() rounds to integer so any fractional drift in
+  // the DB (e.g. 24999.9999 from old float arithmetic) can't bleed
+  // into the price-cap input handler and silently strip a dinar.
+  const launchPrice = iqd(row.share_price)
   const livePrice = row.current_market_price != null
-    ? Number(row.current_market_price)
+    ? iqd(row.current_market_price)
     : null
 
   return {
@@ -115,7 +119,7 @@ function dbToProject(row: DBProject): Project {
     offering_shares: offeringShares,
     available_shares: offeringShares,   // refined by wallet aggregate in admin panel
     risk_level: riskLevel,
-    project_value: row.total_value ? Number(row.total_value) : undefined,
+    project_value: row.total_value != null ? iqd(row.total_value) : undefined,
     description: row.short_description ?? row.description ?? "",
     created_at: row.created_at,
     // Phase 10.95 — extended admin-form fields surfaced on /project/[id]

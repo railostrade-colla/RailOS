@@ -36,6 +36,10 @@ import { getAllProjects } from "@/lib/data/projects"
 // Phase 11.24 — real fee-units balance (drops the mock CURRENT_FEE_BALANCE).
 import { getCurrentFeeBalanceSimple } from "@/lib/data/wallet"
 import { dedupCache, readPersistedSync } from "@/lib/data/cache"
+// Phase 11.25 — single source of truth for IQD coercion + safe input
+// clamping. Replaces ad-hoc parseInt() that silently dropped a dinar
+// when the price ceiling carried any fractional drift.
+import { iqd, parseIqdInput, clampIqdInputToMax } from "@/lib/utils/money"
 
 // إعدادات الرسوم
 const REPEAT_LISTING_FEE_PERCENT = 0.25 // 0.25% للإعلان المكرر
@@ -100,7 +104,7 @@ function ProjectDropdown({
               {selected ? (
                 <>
                   <span className="font-mono">
-                    {(selected.current_market_price || selected.share_price).toLocaleString("en-US")}
+                    {iqd(selected.current_market_price || selected.share_price).toLocaleString("en-US")}
                   </span> د.ع/حصة (سعر السوق)
                   {adType === "sell" && selected.available !== undefined && (
                     <span className="mr-2">• متاح: <span className="font-mono text-yellow-400">{selected.available}</span></span>
@@ -161,7 +165,7 @@ function ProjectDropdown({
                       <div className="text-xs font-bold text-white truncate">{p.name}</div>
                       <div className="text-[10px] text-neutral-500 mt-0.5">
                         <span className="font-mono">
-                          {(p.current_market_price || p.share_price).toLocaleString("en-US")}
+                          {iqd(p.current_market_price || p.share_price).toLocaleString("en-US")}
                         </span> د.ع
                         {adType === "sell" && p.available !== undefined && (
                           <span className="mr-1.5">• متاح: <span className="text-yellow-400 font-mono">{p.available}</span></span>
@@ -328,10 +332,12 @@ export default function CreateAdPage() {
     return () => { cancelled = true }
   }, [])
 
-  // Calculations
-  const sharesNum = parseInt(sharesInput) || 0
-  const priceNum = parseInt(priceInput) || 0
-  const minAmountNum = parseInt(minAmountInput) || 0
+  // Calculations — Phase 11.25: parseIqdInput strips formatting + Arabic
+  // digits and returns a clean integer. parseInt was unsafe because it
+  // truncated fractional ceiling values (see lib/utils/money.ts).
+  const sharesNum = parseIqdInput(sharesInput)
+  const priceNum = parseIqdInput(priceInput)
+  const minAmountNum = parseIqdInput(minAmountInput)
   const total = sharesNum * priceNum
 
   // Phase 11.23 — enrich each holding's project with the LIVE market
@@ -369,10 +375,14 @@ export default function CreateAdPage() {
   // share_price as the cold-start fallback. Used as the price-input
   // ceiling so a seller can't list above what the market is willing
   // to pay.
-  const marketPrice =
+  // Phase 11.25 — iqd() coerces to integer dinars so a fractional
+  // ceiling (e.g. 24999.9999 from old float arithmetic) can never
+  // make the cap snap a clean 25000 entry down to 24999.
+  const marketPrice = iqd(
     selectedProject?.current_market_price
     || selectedProject?.share_price
-    || 0
+    || 0,
+  )
   const maxPrice = marketPrice
 
   // Project list — Phase 11.23 plumbs logo_url + current_market_price.
@@ -443,31 +453,24 @@ export default function CreateAdPage() {
     setPriceInput("")
   }
 
-  // Handle shares input - منع تجاوز الرصيد
+  // Phase 11.25 — both handlers go through clampIqdInputToMax() so:
+  //   1. The clamp comparand is Math.floor(max), guaranteeing that a
+  //      fractional ceiling can never snap a clean integer entry down.
+  //   2. The stored value is always an integer string (no decimals,
+  //      no Arabic digits, no formatting noise).
+  //   3. parseInt-based comparisons that previously dropped a dinar
+  //      (25000 vs maxPrice=24999.9999) are eliminated at the source.
   const handleSharesChange = (v: string) => {
-    if (v === "") {
-      setSharesInput("")
-      return
-    }
-    const num = parseInt(v) || 0
-    if (adType === "sell" && availableShares > 0 && num > availableShares) {
-      setSharesInput(String(availableShares))
-      return
-    }
-    setSharesInput(v)
+    setSharesInput(
+      clampIqdInputToMax(
+        v,
+        adType === "sell" && availableShares > 0 ? availableShares : null,
+      ),
+    )
   }
 
-  // Handle price input - منع تجاوز سعر السوق
   const handlePriceChange = (v: string) => {
-    if (v === "") {
-      setPriceInput("")
-      return
-    }
-    if (maxPrice > 0 && parseInt(v) > maxPrice) {
-      setPriceInput(String(maxPrice))
-    } else {
-      setPriceInput(v)
-    }
+    setPriceInput(clampIqdInputToMax(v, maxPrice > 0 ? maxPrice : null))
   }
 
   // فتح المودال للمراجعة النهائية
