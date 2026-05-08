@@ -139,11 +139,86 @@ export async function getAllProjects(): Promise<Project[]> {
         .eq("status", "active")
         .order("created_at", { ascending: false })
       if (error || !data) return []
-      return data.map(dbToProject)
+      const mapped = data.map(dbToProject)
+      return await enrichProjectsWithSales(mapped)
     } catch {
       return []
     }
   }, 30_000)
+}
+
+/**
+ * Phase 11.16 — overlay live sales data onto a list of projects.
+ *
+ * Discover cards + dashboard need each project's REAL:
+ *   • available_shares  = offering wallet's available_shares (decreases
+ *                         as buyers' deals are confirmed)
+ *   • investors_count   = COUNT(DISTINCT user_id) from holdings of
+ *                         this project where shares > 0
+ *
+ * dbToProject seeds available_shares with the FULL offering count
+ * (offering_pct × total_shares) which is fine until any sale happens.
+ * After the first sale the discover card needs the real remaining
+ * count so the funding bar moves.
+ *
+ * Two cheap batched queries (one on project_wallets, one on holdings).
+ * Failures are non-fatal — projects pass through unchanged.
+ */
+export async function enrichProjectsWithSales(
+  projects: Project[],
+): Promise<Project[]> {
+  if (projects.length === 0) return projects
+  const ids = Array.from(new Set(projects.map((p) => p.id).filter(Boolean)))
+  if (ids.length === 0) return projects
+
+  const supabase = createClient()
+  const availableMap = new Map<string, number>()
+  const investorsMap = new Map<string, number>()
+
+  // 1. Offering wallet's actual available_shares per project
+  try {
+    const { data } = await supabase
+      .from("project_wallets")
+      .select("project_id, available_shares, total_shares")
+      .in("project_id", ids)
+      .eq("wallet_type", "offering")
+    for (const w of (data ?? []) as Array<{
+      project_id: string
+      available_shares: number | string | null
+      total_shares: number | string | null
+    }>) {
+      availableMap.set(w.project_id, Number(w.available_shares ?? 0))
+    }
+  } catch { /* best-effort */ }
+
+  // 2. Distinct investor count per project
+  try {
+    const { data } = await supabase
+      .from("holdings")
+      .select("project_id, user_id")
+      .in("project_id", ids)
+      .gt("shares", 0)
+    const seen = new Map<string, Set<string>>()
+    for (const h of (data ?? []) as Array<{ project_id: string; user_id: string }>) {
+      if (!seen.has(h.project_id)) seen.set(h.project_id, new Set())
+      seen.get(h.project_id)!.add(h.user_id)
+    }
+    for (const [pid, set] of seen) {
+      investorsMap.set(pid, set.size)
+    }
+  } catch { /* best-effort */ }
+
+  return projects.map((p) => {
+    const liveAvail = availableMap.get(p.id)
+    const liveInvestors = investorsMap.get(p.id)
+    return {
+      ...p,
+      available_shares:
+        liveAvail !== undefined ? liveAvail : p.available_shares,
+      investors_count:
+        liveInvestors !== undefined ? liveInvestors : (p.investors_count ?? 0),
+    }
+  })
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -465,7 +540,8 @@ export async function getNewProjects(limit = 6): Promise<Project[]> {
         .select("*")
         .order("created_at", { ascending: false })
         .limit(limit)
-      return (data ?? []).map(dbToProject)
+      const mapped = (data ?? []).map(dbToProject)
+      return await enrichProjectsWithSales(mapped)
     } catch {
       return []
     }
@@ -481,7 +557,8 @@ export async function getTrendingProjects(limit = 6): Promise<Project[]> {
         .select("*")
         .order("share_price", { ascending: false })
         .limit(limit)
-      return (data ?? []).map(dbToProject)
+      const mapped = (data ?? []).map(dbToProject)
+      return await enrichProjectsWithSales(mapped)
     } catch {
       return []
     }
