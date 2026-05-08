@@ -321,9 +321,23 @@ export default function DashboardPage() {
               )}
             >
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-sm">
-                  {sectorIcon(selectedProject.sector)}
-                </div>
+                {/* Phase 11.05 — uploaded project logo (logo_url from
+                    admin form), with sector-emoji fallback. */}
+                {(selectedProject.logo_url || selectedProject.logo) ? (
+                  <div className="w-7 h-7 rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.04] flex-shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={selectedProject.logo_url || selectedProject.logo}
+                      alt={selectedProject.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
+                    />
+                  </div>
+                ) : (
+                  <div className="w-7 h-7 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-sm">
+                    {sectorIcon(selectedProject.sector)}
+                  </div>
+                )}
                 <div className="text-right">
                   <div className="text-sm text-white font-medium">{selectedProject.name}</div>
                   <div className="text-[10px] text-neutral-500">{selectedProject.sector}</div>
@@ -359,7 +373,20 @@ export default function DashboardPage() {
                           selectedProject.id === p.id && "bg-white/[0.05]",
                         )}
                       >
-                        <div className="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-sm">{sectorIcon(p.sector)}</div>
+                        {/* Phase 11.05 — logo in dropdown rows */}
+                        {(p.logo_url || p.logo) ? (
+                          <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.04] flex-shrink-0">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={p.logo_url || p.logo}
+                              alt={p.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-sm">{sectorIcon(p.sector)}</div>
+                        )}
                         <div className="flex-1 text-right">
                           <div className="text-xs text-white font-medium">{p.name}</div>
                           <div className="text-[10px] text-neutral-500">{p.share_price.toLocaleString("en-US")} د.ع</div>
