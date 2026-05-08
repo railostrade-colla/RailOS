@@ -257,6 +257,75 @@ async function fetchUserLevel(
   }
 }
 
+/** Phase 11.13 — enrich holdings with fresh project metadata.
+ *
+ * Both the RPC and legacy join paths sometimes return holdings with
+ * missing project_name / null logo_url / null current_market_price
+ * (RLS edge cases, schema drift, RPC version skew). We do a single
+ * batched fetch on the projects table after the fact and overlay any
+ * missing fields. This guarantees the portfolio "الحصص" tab always
+ * shows the real project name, logo, and live market price. */
+async function enrichHoldingsWithProjects(
+  supabase: SupabaseClient,
+  rows: PortfolioHolding[],
+): Promise<PortfolioHolding[]> {
+  if (rows.length === 0) return rows
+  const ids = Array.from(new Set(rows.map((r) => r.project_id).filter(Boolean)))
+  if (ids.length === 0) return rows
+
+  try {
+    const { data, error } = await supabase
+      .from("projects")
+      .select("id, name, sector, share_price, current_market_price, total_shares, symbol, logo_url, cover_url, offering_percentage")
+      .in("id", ids)
+    if (error || !data) return rows
+
+    const map = new Map<string, {
+      id: string; name: string | null; sector: string | null
+      share_price: number | string | null; current_market_price: number | string | null
+      total_shares: number | string | null; symbol: string | null
+      logo_url: string | null; cover_url: string | null
+      offering_percentage: number | string | null
+    }>()
+    for (const p of data as Array<typeof map extends Map<string, infer V> ? V : never>) {
+      map.set(p.id, p)
+    }
+
+    return rows.map((r) => {
+      const p = map.get(r.project_id)
+      if (!p) return r
+      const sharePrice = n(p.share_price ?? r.project?.share_price ?? 0)
+      const marketRaw = p.current_market_price != null ? n(p.current_market_price) : 0
+      const livePrice =
+        (marketRaw > 0 ? marketRaw : 0) ||
+        (sharePrice > 0 ? sharePrice : 0) ||
+        (n(r.average_buy_price) > 0 ? n(r.average_buy_price) : 0)
+
+      return {
+        ...r,
+        // Recalculate value with the LIVE market price now that we
+        // know it for sure.
+        current_value: r.shares * livePrice,
+        project: {
+          ...r.project,
+          id: p.id,
+          name: p.name ?? r.project?.name ?? "—",
+          sector: p.sector ?? r.project?.sector ?? "",
+          share_price: sharePrice,
+          current_market_price: marketRaw > 0 ? marketRaw : null,
+          total_shares: n(p.total_shares ?? r.project?.total_shares ?? 0),
+          available_shares: r.project?.available_shares ?? 0,
+          symbol: p.symbol ?? r.project?.symbol ?? null,
+          logo_url: p.logo_url ?? null,
+          cover_url: p.cover_url ?? null,
+        },
+      }
+    })
+  } catch {
+    return rows
+  }
+}
+
 async function fetchHoldings(
   supabase: SupabaseClient,
   userId: string,
@@ -269,6 +338,10 @@ async function fetchHoldings(
       "get_my_holdings_full",
     )
     if (!rpcErr && Array.isArray(rpcData) && rpcData.length > 0) {
+      // RPC succeeded — but its `project_*` fields can be stale or
+      // missing. We still build the row from the RPC data, then
+      // overlay fresh project metadata via enrichHoldingsWithProjects
+      // before returning (see below).
       interface RpcRow {
         id: string
         project_id: string
@@ -288,7 +361,7 @@ async function fetchHoldings(
         total_sold_amount: number | string | null
         total_bought_amount: number | string | null
       }
-      return (rpcData as RpcRow[]).map((r): PortfolioHolding => {
+      const mapped = (rpcData as RpcRow[]).map((r): PortfolioHolding => {
         const shares = n(r.shares)
         const sharePrice = n(r.project_share_price)
         // Phase 11.11 — cascading fallback so the portfolio total never
@@ -331,6 +404,10 @@ async function fetchHoldings(
           total_bought_amount: n(r.total_bought_amount),
         }
       })
+      // Phase 11.13 — overlay fresh project metadata (name, logo,
+      // current_market_price) so the holdings tab never reads
+      // "مشروع غير معروف" with a 0 IQD market price.
+      return await enrichHoldingsWithProjects(supabase, mapped)
     }
     if (rpcErr) {
       // eslint-disable-next-line no-console
@@ -446,7 +523,8 @@ async function fetchHoldings(
         },
       })
     }
-    return out
+    // Phase 11.13 — same enrichment pass for the legacy join path.
+    return await enrichHoldingsWithProjects(supabase, out)
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[portfolio] holdings query threw:", err)
