@@ -20,7 +20,6 @@ const sectorIcon = (s: string) =>
 
 // ─── Mock Data (centralized) ───
 import {
-  MOCK_HOLDINGS_EXCHANGE as MOCK_HOLDINGS,
   MOCK_PREVIOUS_ADS,
   CURRENT_FEE_BALANCE as MOCK_FEE_BALANCE,
   PAYMENT_METHODS_FULL as PAYMENT_METHODS,
@@ -300,8 +299,9 @@ export default function CreateAdPage() {
 
   // Phase 10.81 — real holdings from DB. Used to drive the "بيع"
   // project picker so users can only list shares they actually own.
-  // Falls back to MOCK_HOLDINGS until the fetch resolves so first
-  // paint isn't empty.
+  // Phase 11.23 — picker stays empty until DB resolves rather than
+  // showing mock holdings (the union narrowing dropped logo_url +
+  // current_market_price).
   const [dbHoldings, setDbHoldings] = useState<PortfolioHolding[]>([])
   // Phase 11.23 — real projects feed for "buy" mode + live market price.
   const [dbAllProjects, setDbAllProjects] = useState<Project[]>([])
@@ -321,27 +321,27 @@ export default function CreateAdPage() {
   const minAmountNum = parseInt(minAmountInput) || 0
   const total = sharesNum * priceNum
 
-  // Use DB holdings if loaded; otherwise mock for first paint.
   // Phase 11.23 — enrich each holding's project with the LIVE market
   // price + logo from dbAllProjects so the picker shows real data.
-  const effectiveHoldings = dbHoldings.length > 0
-    ? dbHoldings.map((h) => {
-        const live = dbAllProjects.find((p) => p.id === h.project_id)
-        return {
-          project_id: h.project_id,
-          shares_owned: h.shares_owned,
-          project: {
-            id: h.project.id,
-            name: live?.name ?? h.project.name,
-            sector: live?.sector ?? h.project.sector,
-            share_price: h.project.share_price,
-            current_market_price:
-              live?.current_market_price ?? h.project.current_market_price ?? null,
-            logo_url: live?.logo_url ?? h.project.logo_url ?? null,
-          },
-        }
-      })
-    : MOCK_HOLDINGS
+  // Note: we no longer fall back to MOCK_HOLDINGS — that would narrow
+  // the inferred union and strip `current_market_price` + `logo_url`.
+  // The picker simply stays empty until DB resolves (sub-second SWR).
+  const effectiveHoldings = dbHoldings.map((h) => {
+    const live = dbAllProjects.find((p) => p.id === h.project_id)
+    return {
+      project_id: h.project_id,
+      shares_owned: h.shares_owned,
+      project: {
+        id: h.project.id,
+        name: live?.name ?? h.project.name,
+        sector: live?.sector ?? h.project.sector,
+        share_price: h.project.share_price,
+        current_market_price:
+          live?.current_market_price ?? h.project.current_market_price ?? null,
+        logo_url: live?.logo_url ?? h.project.logo_url ?? null,
+      },
+    }
+  })
 
   const selectedHolding = effectiveHoldings.find((h) => h.project_id === selectedProjectId)
   const availableShares = selectedHolding?.shares_owned || 0
