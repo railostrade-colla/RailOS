@@ -122,6 +122,109 @@ export async function getMyAdminRole(): Promise<AdminRoleInfo> {
   }
 }
 
+// Phase 11.34 — direct-source fetchers for the AdminTopBar dropdowns.
+// The header used to filter `allNotifs` (the notifications table) for
+// kyc / fee / support items, but the badges came from a different RPC
+// that counts the SOURCE tables. So a pending KYC submission with no
+// matching notifications row showed "1" on the shield badge while the
+// dropdown rendered "لا طلبات معلّقة". The fetchers below read the
+// actual queue tables directly so badge ↔ dropdown always agree.
+
+export interface PendingKycSubmission {
+  id: string
+  user_id: string
+  user_name: string
+  document_type: string
+  city: string | null
+  submitted_at: string
+}
+
+export async function getPendingKycSubmissions(
+  limit: number = 20,
+): Promise<PendingKycSubmission[]> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("kyc_submissions")
+      .select(
+        `id, user_id, document_type, city, status, submitted_at,
+         user:profiles!user_id ( full_name, username )`,
+      )
+      .eq("status", "pending")
+      .order("submitted_at", { ascending: false })
+      .limit(limit)
+    if (error || !data) return []
+
+    interface Row {
+      id: string
+      user_id: string
+      document_type: string | null
+      city: string | null
+      submitted_at: string
+      user?: ProfileRef | ProfileRef[] | null
+    }
+    return (data as Row[]).map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      user_name: profileName(unwrap(r.user)),
+      document_type: String(r.document_type ?? "—"),
+      city: r.city,
+      submitted_at: r.submitted_at,
+    }))
+  } catch {
+    return []
+  }
+}
+
+export interface OpenSupportTicket {
+  id: string
+  user_id: string
+  user_name: string
+  subject: string
+  status: string
+  priority: string | null
+  created_at: string
+}
+
+export async function getOpenSupportTickets(
+  limit: number = 20,
+): Promise<OpenSupportTicket[]> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("support_tickets")
+      .select(
+        `id, user_id, subject, status, priority, created_at,
+         user:profiles!user_id ( full_name, username )`,
+      )
+      .in("status", ["open", "in_progress", "pending"])
+      .order("created_at", { ascending: false })
+      .limit(limit)
+    if (error || !data) return []
+
+    interface Row {
+      id: string
+      user_id: string
+      subject: string | null
+      status: string
+      priority: string | null
+      created_at: string
+      user?: ProfileRef | ProfileRef[] | null
+    }
+    return (data as Row[]).map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      user_name: profileName(unwrap(r.user)),
+      subject: r.subject?.trim() || "—",
+      status: r.status,
+      priority: r.priority,
+      created_at: r.created_at,
+    }))
+  } catch {
+    return []
+  }
+}
+
 export async function getPendingFeeRequests(): Promise<PendingFeeRequest[]> {
   try {
     const supabase = createClient()

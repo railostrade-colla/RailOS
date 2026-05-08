@@ -26,6 +26,17 @@ import { cn } from "@/lib/utils/cn"
 import { createClient } from "@/lib/supabase/client"
 import { signOut } from "@/lib/supabase/auth-helpers"
 import { showSuccess } from "@/lib/utils/toast"
+// Phase 11.34 — direct-source fetchers so each dropdown renders real
+// items from its queue table, not a filtered slice of the notifications
+// table that may be missing rows for items the badge already counts.
+import {
+  getPendingKycSubmissions,
+  getOpenSupportTickets,
+  getPendingFeeRequests,
+  type PendingKycSubmission,
+  type OpenSupportTicket,
+  type PendingFeeRequest,
+} from "@/lib/data/admin-requests"
 
 interface AdminNotification {
   id: string
@@ -95,6 +106,22 @@ interface AdminProfile {
   email: string
   role: string
   initial: string
+}
+
+/**
+ * Phase 11.34 — short Arabic relative time for the dropdown items.
+ * Returns "منذ Xد" / "منذ Xس" / "منذ Xي" for a recent timestamp.
+ */
+function relTime(iso: string | null | undefined): string {
+  if (!iso) return ""
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return ""
+  const mins = Math.max(0, Math.floor((Date.now() - t) / 60000))
+  if (mins < 1) return "الآن"
+  if (mins < 60) return `منذ ${mins} د`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `منذ ${hrs} س`
+  return `منذ ${Math.floor(hrs / 24)} ي`
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -342,6 +369,14 @@ export function AdminTopBar() {
   const [allNotifs, setAllNotifs] = useState<AdminNotification[]>([])
   const [profile, setProfile] = useState<AdminProfile | null>(null)
 
+  // Phase 11.34 — direct-source items per dropdown. Each list is
+  // populated when its dropdown opens (and its badge is non-zero).
+  // The bell still uses allNotifs since those ARE notifications-table
+  // rows; the other three icons read their actual queue tables.
+  const [pendingKyc, setPendingKyc] = useState<PendingKycSubmission[]>([])
+  const [openTickets, setOpenTickets] = useState<OpenSupportTicket[]>([])
+  const [pendingFees, setPendingFees] = useState<PendingFeeRequest[]>([])
+
   const totalNotifs = counts.total
   // Phase 11.01 — Orders badge now = pending fee requests only.
   // Share-modification was removed; share-purchase pending count lives
@@ -410,19 +445,46 @@ export function AdminTopBar() {
   }, [])
 
   // Lazy-load the items list when ANY action dropdown opens.
-  // Phase 11.29 — also reconcile the bell badge with reality: if the
-  // live items list comes back empty, force counts.total = 0 so the
-  // badge doesn't linger at "1" while the dropdown shows "لا إشعارات".
+  // Phase 11.29 — reconcile the bell badge with reality: if the live
+  // items list comes back empty, force counts.total = 0 so the badge
+  // doesn't linger at "1" while the dropdown shows "لا إشعارات".
+  // Phase 11.34 — for the kyc / messages / orders dropdowns we also
+  // fetch from the SOURCE table (kyc_submissions / support_tickets /
+  // fee_unit_requests) and reconcile their counts the same way, so
+  // the badge always matches what the dropdown displays.
   useEffect(() => {
     if (!open || open === "profile") return
     let cancelled = false
-    fetchAdminNotifications(20).then((rows) => {
-      if (cancelled) return
-      setAllNotifs(rows)
-      if (rows.length === 0) {
-        setCounts((c) => ({ ...c, total: 0 }))
-      }
-    })
+
+    if (open === "notifications") {
+      fetchAdminNotifications(20).then((rows) => {
+        if (cancelled) return
+        setAllNotifs(rows)
+        if (rows.length === 0) {
+          setCounts((c) => ({ ...c, total: 0 }))
+        }
+      })
+    } else if (open === "kyc") {
+      getPendingKycSubmissions(10).then((rows) => {
+        if (cancelled) return
+        setPendingKyc(rows)
+        // Reconcile badge with the real source.
+        setCounts((c) => ({ ...c, kyc: rows.length }))
+      })
+    } else if (open === "messages") {
+      getOpenSupportTickets(10).then((rows) => {
+        if (cancelled) return
+        setOpenTickets(rows)
+        setCounts((c) => ({ ...c, support: rows.length }))
+      })
+    } else if (open === "orders") {
+      getPendingFeeRequests().then((rows) => {
+        if (cancelled) return
+        setPendingFees(rows)
+        setCounts((c) => ({ ...c, fees: rows.length }))
+      })
+    }
+
     return () => { cancelled = true }
   }, [open])
 
@@ -435,10 +497,9 @@ export function AdminTopBar() {
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
-  // Filtered subsets (only computed on dropdown render).
-  const recentSupport = allNotifs.filter((n) => n.type === "support").slice(0, 5)
-  const recentOrders = allNotifs.filter((n) => n.type === "fee" || n.type === "shares").slice(0, 8)
-  const recentKyc = allNotifs.filter((n) => n.type === "kyc").slice(0, 5)
+  // Phase 11.34 — recentSupport/recentOrders/recentKyc filtered slices
+  // were removed; each dropdown now reads its own SOURCE table (see
+  // pendingKyc / openTickets / pendingFees state above).
 
   const handleNavigate = (href: string) => {
     setOpen(null)
@@ -564,50 +625,27 @@ export function AdminTopBar() {
         </Dropdown>
       )}
 
-      {/* ═══ Messages dropdown (support tickets) ═══ */}
+      {/* ═══ Messages dropdown — Phase 11.34 reads support_tickets directly ═══ */}
       {open === "messages" && (
-        <Dropdown title={`💬 الرسائل (${counts.support})`} onSeeAll={() => handleNavigate("/admin?tab=support_inbox")} ctaLabel="📥 صندوق الدعم" side="right" rightOffset="ml-32 lg:ml-44">
-          {recentSupport.length === 0 ? (
-            <div className="text-xs text-neutral-500 text-center py-6">لا تذاكر جديدة</div>
-          ) : (
-            <div>
-              {recentSupport.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => handleNavigate(t.href)}
-                  className="w-full text-right p-3 hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 transition-colors"
-                >
-                  <div className="text-xs text-white font-bold truncate">{t.title}</div>
-                  {t.body && <div className="text-[11px] text-neutral-400 truncate mt-0.5">{t.body}</div>}
-                  <div className="text-[9px] text-neutral-600 mt-0.5 font-mono" dir="ltr">{t.time}</div>
-                </button>
-              ))}
-            </div>
-          )}
-        </Dropdown>
-      )}
-
-      {/* ═══ Orders dropdown — Phase 11.01: fees-only (share_mod removed) ═══ */}
-      {open === "orders" && (
-        <Dropdown title={`📦 الطلبات (${ordersCount})`} onSeeAll={() => handleNavigate("/admin?tab=requests_hub")} ctaLabel="مركز الطلبات ←" side="right" rightOffset="ml-20 lg:ml-32">
-          <div className="px-3 pt-2 pb-1 text-[9px] text-neutral-600 flex items-center gap-2">
-            <span>💎 رسوم معلّقة: <span className="text-yellow-400 font-mono">{counts.fees}</span></span>
-          </div>
-          {recentOrders.length === 0 ? (
-            <div className="text-xs text-neutral-500 text-center py-6">لا طلبات معلّقة</div>
+        <Dropdown title={`💬 الرسائل (${openTickets.length || counts.support})`} onSeeAll={() => handleNavigate("/admin?tab=support_inbox")} ctaLabel="📥 صندوق الدعم" side="right" rightOffset="ml-32 lg:ml-44">
+          {openTickets.length === 0 ? (
+            <div className="text-xs text-neutral-500 text-center py-6">لا تذاكر مفتوحة</div>
           ) : (
             <div className="max-h-80 overflow-y-auto">
-              {recentOrders.map((o) => (
+              {openTickets.map((t) => (
                 <button
-                  key={o.id}
-                  onClick={() => handleNavigate(o.href)}
+                  key={t.id}
+                  onClick={() => handleNavigate(`/admin?tab=support_inbox&ticket=${t.id}`)}
                   className="w-full text-right p-3 hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 transition-colors flex items-start gap-2.5"
                 >
-                  <span className="text-base flex-shrink-0">{o.icon}</span>
+                  <span className="text-base flex-shrink-0">💬</span>
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs text-white font-bold truncate">{o.title}</div>
-                    {o.body && <div className="text-[11px] text-neutral-400 truncate mt-0.5">{o.body}</div>}
-                    <div className="text-[9px] text-neutral-600 mt-0.5 font-mono" dir="ltr">{o.time}</div>
+                    <div className="text-xs text-white font-bold truncate">{t.subject}</div>
+                    <div className="text-[10px] text-neutral-500 truncate mt-0.5">من: {t.user_name}</div>
+                    <div className="text-[9px] text-neutral-600 mt-0.5 flex items-center gap-2">
+                      <span className="font-mono" dir="ltr">{relTime(t.created_at)}</span>
+                      <span className="bg-white/[0.06] border border-white/[0.1] text-neutral-300 px-1.5 py-px rounded">{t.status}</span>
+                    </div>
                   </div>
                 </button>
               ))}
@@ -616,22 +654,58 @@ export function AdminTopBar() {
         </Dropdown>
       )}
 
-      {/* ═══ KYC dropdown ═══ */}
-      {open === "kyc" && (
-        <Dropdown title={`🛡️ طلبات KYC (${counts.kyc})`} onSeeAll={() => handleNavigate("/admin?tab=users")} side="right" rightOffset="ml-8 lg:ml-20">
-          {recentKyc.length === 0 ? (
+      {/* ═══ Orders dropdown — Phase 11.34 reads fee_unit_requests directly ═══ */}
+      {open === "orders" && (
+        <Dropdown title={`📦 الطلبات (${pendingFees.length || ordersCount})`} onSeeAll={() => handleNavigate("/admin?tab=requests_hub")} ctaLabel="مركز الطلبات ←" side="right" rightOffset="ml-20 lg:ml-32">
+          <div className="px-3 pt-2 pb-1 text-[9px] text-neutral-600 flex items-center gap-2">
+            <span>💎 رسوم معلّقة: <span className="text-yellow-400 font-mono">{pendingFees.length}</span></span>
+          </div>
+          {pendingFees.length === 0 ? (
             <div className="text-xs text-neutral-500 text-center py-6">لا طلبات معلّقة</div>
           ) : (
-            <div>
-              {recentKyc.map((k) => (
+            <div className="max-h-80 overflow-y-auto">
+              {pendingFees.map((o) => (
+                <button
+                  key={o.id}
+                  onClick={() => handleNavigate(`/admin?tab=requests_hub&request=${o.id}`)}
+                  className="w-full text-right p-3 hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 transition-colors flex items-start gap-2.5"
+                >
+                  <span className="text-base flex-shrink-0">💎</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-white font-bold truncate">
+                      {o.user_name} · <span className="text-yellow-400 font-mono">{o.amount_requested.toLocaleString("en-US")}</span> وحدة
+                    </div>
+                    <div className="text-[10px] text-neutral-500 truncate mt-0.5">طريقة الدفع: {o.payment_method}</div>
+                    <div className="text-[9px] text-neutral-600 mt-0.5 font-mono" dir="ltr">{relTime(o.submitted_at)}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </Dropdown>
+      )}
+
+      {/* ═══ KYC dropdown — Phase 11.34 reads kyc_submissions directly ═══ */}
+      {open === "kyc" && (
+        <Dropdown title={`🛡️ طلبات التوثيق (${pendingKyc.length || counts.kyc})`} onSeeAll={() => handleNavigate("/admin?tab=users")} side="right" rightOffset="ml-8 lg:ml-20">
+          {pendingKyc.length === 0 ? (
+            <div className="text-xs text-neutral-500 text-center py-6">لا طلبات معلّقة</div>
+          ) : (
+            <div className="max-h-80 overflow-y-auto">
+              {pendingKyc.map((k) => (
                 <button
                   key={k.id}
-                  onClick={() => handleNavigate(k.href)}
-                  className="w-full text-right p-3 hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 transition-colors"
+                  onClick={() => handleNavigate(`/admin?tab=users&user=${k.user_id}`)}
+                  className="w-full text-right p-3 hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 transition-colors flex items-start gap-2.5"
                 >
-                  <div className="text-xs text-white font-bold truncate">{k.title}</div>
-                  {k.body && <div className="text-[11px] text-neutral-400 mt-0.5">{k.body}</div>}
-                  <div className="text-[9px] text-neutral-600 mt-0.5 font-mono" dir="ltr">{k.time}</div>
+                  <span className="text-base flex-shrink-0">🛡️</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-white font-bold truncate">{k.user_name}</div>
+                    <div className="text-[10px] text-neutral-500 truncate mt-0.5">
+                      {k.document_type}{k.city ? ` · ${k.city}` : ""}
+                    </div>
+                    <div className="text-[9px] text-neutral-600 mt-0.5 font-mono" dir="ltr">{relTime(k.submitted_at)}</div>
+                  </div>
                 </button>
               ))}
             </div>
