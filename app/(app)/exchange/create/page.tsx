@@ -357,7 +357,7 @@ export default function CreateAdPage() {
   // ceiling so a seller can't list above what the market is willing
   // to pay.
   const marketPrice =
-    (selectedProject as { current_market_price?: number | null } | undefined)?.current_market_price
+    selectedProject?.current_market_price
     || selectedProject?.share_price
     || 0
   const maxPrice = marketPrice
@@ -370,9 +370,8 @@ export default function CreateAdPage() {
         name: h.project.name,
         sector: h.project.sector,
         share_price: h.project.share_price,
-        current_market_price:
-          (h.project as { current_market_price?: number | null }).current_market_price ?? null,
-        logo_url: (h.project as { logo_url?: string | null }).logo_url ?? null,
+        current_market_price: h.project.current_market_price ?? null,
+        logo_url: h.project.logo_url ?? null,
         available: h.shares_owned,
       }))
     }

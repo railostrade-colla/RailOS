@@ -95,11 +95,22 @@ function dbToProject(row: DBProject): Project {
       ? dbDist
       : undefined
 
+  // Phase 11.23 — keep share_price (launch) and current_market_price
+  // (live) as TWO separate fields so consumers can pick the right one.
+  // When DB hasn't populated current_market_price yet (no deals), the
+  // launch share_price is still surfaced under share_price; downstream
+  // code falls back via `current_market_price ?? share_price`.
+  const launchPrice = Number(row.share_price ?? 0)
+  const livePrice = row.current_market_price != null
+    ? Number(row.current_market_price)
+    : null
+
   return {
     id: row.id,
     name: row.name,
     sector: sectorMap[row.project_type ?? ""] ?? "أخرى",
-    share_price: Number(row.current_market_price ?? row.share_price ?? 0),
+    share_price: launchPrice || (livePrice ?? 0),
+    current_market_price: livePrice,
     total_shares: totalShares,
     offering_shares: offeringShares,
     available_shares: offeringShares,   // refined by wallet aggregate in admin panel

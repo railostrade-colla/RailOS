@@ -67,7 +67,12 @@ export interface Project {
   id: string
   name: string
   sector: string
+  /** Immutable launch price — set at project creation, never changes. */
   share_price: number
+  /** Phase 11.12 — live market price. Drifts with each completed deal
+   *  (trigger _on_deal_completed_update_market_price). Falls back to
+   *  share_price when null. */
+  current_market_price?: number | null
   total_shares: number
   available_shares: number
   /** English form — used by dashboard / investment / project / company helpers */
