@@ -291,7 +291,17 @@ async function fetchHoldings(
       return (rpcData as RpcRow[]).map((r): PortfolioHolding => {
         const shares = n(r.shares)
         const sharePrice = n(r.project_share_price)
-        const marketPrice = r.market_price != null ? n(r.market_price) : sharePrice
+        // Phase 11.11 — cascading fallback so the portfolio total never
+        // reads zero when market_price + share_price are both missing
+        // (e.g. project join under RLS, brand-new market state). The
+        // average buy price is the user's actual cost basis and is
+        // always populated when shares > 0, so it's the safest
+        // last-resort price for the calculation.
+        const avgBuy = n(r.average_buy_price)
+        const marketPrice =
+          (r.market_price != null && n(r.market_price) > 0 ? n(r.market_price) : 0) ||
+          (sharePrice > 0 ? sharePrice : 0) ||
+          (avgBuy > 0 ? avgBuy : 0)
         return {
           id: r.id,
           project_id: r.project_id,
@@ -395,10 +405,17 @@ async function fetchHoldings(
       const project = projectMap.get(row.project_id)
       const shares = n(row.shares)
       const sharePrice = project ? n(project.share_price) : 0
-      const marketPrice =
+      // Phase 11.11 — same cascading fallback as the RPC branch above:
+      // current_market_price → share_price → user's avg_buy_price.
+      const avgBuy = n(row.average_buy_price)
+      const marketPriceRaw =
         project && project.current_market_price != null
           ? n(project.current_market_price)
-          : sharePrice
+          : 0
+      const marketPrice =
+        (marketPriceRaw > 0 ? marketPriceRaw : 0) ||
+        (sharePrice > 0 ? sharePrice : 0) ||
+        (avgBuy > 0 ? avgBuy : 0)
       const currentValue = shares * marketPrice
 
       out.push({
