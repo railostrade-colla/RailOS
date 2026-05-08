@@ -33,6 +33,24 @@
 --      can also see the row instead of getting a cryptic empty result.
 -- ═══════════════════════════════════════════════════════════════════
 
+-- ─── 0. Defensively ensure every column referenced below exists ──
+-- DBs that predate Phase 10.88 don't have logo_url / cover_url; older
+-- DBs may also lack `symbol`. CREATE OR REPLACE FUNCTION fails at
+-- definition time if any column reference is unknown, so we add them
+-- as NULLable columns first. Idempotent.
+DO $$
+BEGIN
+  BEGIN ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS logo_url TEXT;
+  EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS cover_url TEXT;
+  EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS cover_image_url TEXT;
+  EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS symbol TEXT;
+  EXCEPTION WHEN OTHERS THEN NULL; END;
+END $$;
+
+
 -- ─── 1. Replace get_my_holdings_full with a richer payload ────────
 DROP FUNCTION IF EXISTS public.get_my_holdings_full();
 
@@ -64,12 +82,22 @@ BEGIN
       h.first_acquired_at,
       h.last_acquired_at,
       proj.name           AS project_name,
-      proj.sector::TEXT   AS project_sector,
+      -- Phase 11.28 — older DB schemas don't have `proj.sector`; only
+      -- `project_type` (enum) is guaranteed. Cast to TEXT and let the
+      -- client map the enum value → Arabic label.
+      proj.project_type::TEXT AS project_sector,
       proj.share_price    AS project_share_price,
       -- Phase 11.26 — full brand assets so the portfolio card can
       -- render the real logo / cover instead of the sector emoji.
-      proj.logo_url       AS project_logo_url,
-      proj.cover_url      AS project_cover_url,
+      -- Phase 11.28 — fall back to the legacy `cover_image_url`
+      -- column for DBs that predate the Phase 10.88 brand-cols
+      -- migration. NULLIF/COALESCE so an empty string also falls back.
+      COALESCE(NULLIF(BTRIM(proj.logo_url), ''), NULL) AS project_logo_url,
+      COALESCE(
+        NULLIF(BTRIM(proj.cover_url), ''),
+        NULLIF(BTRIM(proj.cover_image_url), ''),
+        NULL
+      ) AS project_cover_url,
       proj.status         AS project_status,
       proj.current_market_price AS project_current_market_price,
       -- Live market price preference: market_state.current_price (if

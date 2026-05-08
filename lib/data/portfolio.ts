@@ -278,20 +278,48 @@ async function enrichHoldingsWithProjects(
   if (ids.length === 0) return rows
 
   try {
+    // Phase 11.28 — SELECT * for column-tolerance (see fetchHoldings
+    // for the same reasoning). The previous explicit list named
+    // `sector` (not a real column) and would 400 on any DB schema,
+    // dropping enrichment entirely.
     const { data, error } = await supabase
       .from("projects")
-      .select("id, name, sector, share_price, current_market_price, total_shares, symbol, logo_url, cover_url, offering_percentage")
+      .select("*")
       .in("id", ids)
-    if (error || !data) return rows
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn("[portfolio] enrich projects error:", error.message)
+      return rows
+    }
+    if (!data) return rows
 
-    const map = new Map<string, {
-      id: string; name: string | null; sector: string | null
-      share_price: number | string | null; current_market_price: number | string | null
-      total_shares: number | string | null; symbol: string | null
-      logo_url: string | null; cover_url: string | null
-      offering_percentage: number | string | null
-    }>()
-    for (const p of data as Array<typeof map extends Map<string, infer V> ? V : never>) {
+    interface ProjectRow {
+      id: string
+      name?: string | null
+      project_type?: string | null
+      sector?: string | null
+      share_price?: number | string | null
+      current_market_price?: number | string | null
+      total_shares?: number | string | null
+      symbol?: string | null
+      logo_url?: string | null
+      cover_url?: string | null
+      cover_image_url?: string | null
+      offering_percentage?: number | string | null
+      [key: string]: unknown
+    }
+
+    const sectorMap: Record<string, string> = {
+      agriculture: "زراعة",
+      real_estate: "عقارات",
+      industrial: "صناعة",
+      commercial: "تجارة",
+      services: "خدمات",
+      medical: "طبّي",
+    }
+
+    const map = new Map<string, ProjectRow>()
+    for (const p of data as ProjectRow[]) {
       map.set(p.id, p)
     }
 
@@ -306,6 +334,11 @@ async function enrichHoldingsWithProjects(
         (marketRaw > 0 ? marketRaw : 0) ||
         (sharePrice > 0 ? sharePrice : 0) ||
         (avgBuy > 0 ? avgBuy : 0)
+      const sector =
+        sectorMap[String(p.project_type ?? "")] ??
+        p.sector ??
+        r.project?.sector ??
+        ""
 
       return {
         ...r,
@@ -316,18 +349,20 @@ async function enrichHoldingsWithProjects(
           ...r.project,
           id: p.id,
           name: p.name ?? r.project?.name ?? "—",
-          sector: p.sector ?? r.project?.sector ?? "",
+          sector,
           share_price: sharePrice,
           current_market_price: marketRaw > 0 ? marketRaw : null,
           total_shares: n(p.total_shares ?? r.project?.total_shares ?? 0),
           available_shares: r.project?.available_shares ?? 0,
           symbol: p.symbol ?? r.project?.symbol ?? null,
           logo_url: p.logo_url ?? null,
-          cover_url: p.cover_url ?? null,
+          cover_url: p.cover_url ?? p.cover_image_url ?? null,
         },
       }
     })
-  } catch {
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("[portfolio] enrich threw:", err)
     return rows
   }
 }
@@ -403,6 +438,19 @@ async function fetchHoldings(
         const liveMarketPrice = r.project_current_market_price != null
           ? iqd(r.project_current_market_price)
           : null
+        // Phase 11.28 — Phase 11.26 RPC returns project_type (enum) as
+        // project_sector since older DB schemas have no `sector`
+        // column. Map to the Arabic label here, mirroring dbToProject.
+        const sectorMap: Record<string, string> = {
+          agriculture: "زراعة",
+          real_estate: "عقارات",
+          industrial: "صناعة",
+          commercial: "تجارة",
+          services: "خدمات",
+          medical: "طبّي",
+        }
+        const sectorLabel =
+          sectorMap[String(r.project_sector ?? "")] ?? r.project_sector ?? ""
         return {
           id: r.id,
           project_id: r.project_id,
@@ -416,8 +464,8 @@ async function fetchHoldings(
           current_value: shares * marketPrice,
           project: {
             id: r.project_id,
-            name: r.project_name ?? "—",
-            sector: r.project_sector ?? "",
+            name: r.project_name ?? `مشروع ${String(r.project_id).slice(0, 8)}`,
+            sector: sectorLabel,
             share_price: sharePrice,
             current_market_price:
               liveMarketPrice != null && liveMarketPrice > 0
@@ -483,36 +531,86 @@ async function fetchHoldings(
       new Set(rows.map((r) => r.project_id).filter(Boolean)),
     )
 
+    // Phase 11.28 — the legacy SELECT used to enumerate columns
+    // explicitly ("id, name, sector, share_price, current_market_price,
+    // total_shares, available_shares, logo_url, cover_url, symbol")
+    // which silently failed because:
+    //   • `sector` is NOT a real column — the Project type derives it
+    //     from `project_type` via a sectorMap.
+    //   • `available_shares` is on `project_wallets`, not `projects`.
+    //   • `logo_url`, `cover_url`, `symbol` only exist in DBs that ran
+    //     the Phase 10.88 brand-columns migration.
+    // PostgREST returned "column does not exist", the catch swallowed
+    // it, projectMap stayed empty, and every holding rendered as
+    // "— مشروع غير معروف —". Switching to SELECT * makes the query
+    // tolerant of any column subset the DB happens to have.
     interface RawProject {
       id: string
-      name: string | null
-      sector: string | null
-      share_price: number | string | null
-      current_market_price: number | string | null
-      total_shares: number | string | null
-      available_shares: number | string | null
-      // Phase 11.26 — surface brand assets in the legacy fallback too.
-      logo_url: string | null
-      cover_url: string | null
-      symbol: string | null
+      name?: string | null
+      project_type?: string | null
+      sector?: string | null
+      share_price?: number | string | null
+      current_market_price?: number | string | null
+      total_shares?: number | string | null
+      logo_url?: string | null
+      cover_url?: string | null
+      cover_image_url?: string | null
+      symbol?: string | null
+      // Tolerate any other columns the DB might have.
+      [key: string]: unknown
     }
 
     const projectMap = new Map<string, RawProject>()
     if (projectIds.length > 0) {
       try {
-        const { data: projs } = await supabase
+        const { data: projs, error: projErr } = await supabase
           .from("projects")
-          .select(
-            "id, name, sector, share_price, current_market_price, total_shares, available_shares, logo_url, cover_url, symbol",
-          )
+          .select("*")
           .in("id", projectIds)
+        if (projErr) {
+          // eslint-disable-next-line no-console
+          console.warn("[portfolio] projects lookup error:", projErr.message)
+        }
         for (const p of (projs ?? []) as RawProject[]) {
           projectMap.set(p.id, p)
         }
-      } catch {
-        // Non-fatal — render the holdings with placeholder project info.
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[portfolio] projects lookup threw:", err)
       }
     }
+
+    // Phase 11.28 — overlay the offering wallet's available_shares per
+    // project (the field doesn't live on the projects table). One round
+    // trip; failures are non-fatal.
+    const availableMap = new Map<string, number>()
+    if (projectIds.length > 0) {
+      try {
+        const { data: wallets } = await supabase
+          .from("project_wallets")
+          .select("project_id, available_shares")
+          .in("project_id", projectIds)
+          .eq("wallet_type", "offering")
+        for (const w of (wallets ?? []) as Array<{
+          project_id: string
+          available_shares: number | string | null
+        }>) {
+          availableMap.set(w.project_id, n(w.available_shares))
+        }
+      } catch { /* best-effort */ }
+    }
+
+    // Map raw project_type → human Arabic sector. Mirror of dbToProject.
+    const sectorMap: Record<string, string> = {
+      agriculture: "زراعة",
+      real_estate: "عقارات",
+      industrial: "صناعة",
+      commercial: "تجارة",
+      services: "خدمات",
+      medical: "طبّي",
+    }
+    const resolveSector = (p: RawProject): string =>
+      sectorMap[String(p.project_type ?? "")] ?? p.sector ?? ""
 
     const out: PortfolioHolding[] = []
     for (const row of rows) {
@@ -544,21 +642,25 @@ async function fetchHoldings(
         buy_price: avgBuy,
         total_invested: iqd(row.total_invested),
         current_value: currentValue,
-        // If the project lookup failed (RLS / deleted), still surface
-        // the holding with placeholders so the founder sees the row
-        // and can investigate, instead of silently dropping it.
+        // Phase 11.28 — even if the project row truly couldn't be
+        // resolved (deleted / RLS), surface the project_id suffix so
+        // the founder can identify the row instead of "غير معروف".
         project: {
           id: project?.id ?? row.project_id,
-          name: project?.name ?? "— مشروع غير معروف —",
-          sector: project?.sector ?? "",
+          name:
+            project?.name ??
+            `مشروع ${String(row.project_id).slice(0, 8)}`,
+          sector: project ? resolveSector(project) : "",
           share_price: sharePrice,
           current_market_price: marketPriceRaw > 0 ? marketPriceRaw : null,
           total_shares: project ? n(project.total_shares) : 0,
-          available_shares: project ? n(project.available_shares) : 0,
+          available_shares: availableMap.get(row.project_id) ?? 0,
           symbol: project?.symbol ?? null,
-          // Phase 11.26 — brand assets in the legacy fallback.
+          // Phase 11.26/28 — brand assets in the legacy fallback.
+          // Falls back to the legacy `cover_image_url` column for older
+          // schemas that predate Phase 10.88.
           logo_url: project?.logo_url ?? null,
-          cover_url: project?.cover_url ?? null,
+          cover_url: project?.cover_url ?? project?.cover_image_url ?? null,
         },
       })
     }
@@ -726,10 +828,13 @@ async function fetchFeeTransactions(
 export async function getPortfolioData(): Promise<PortfolioData | null> {
   // Phase 11.18 — wrap in dedupCache so the result is persisted to
   // localStorage between page reloads. Components also call
-  // readPersistedSync("portfolio:data") at mount to render
+  // readPersistedSync("portfolio:data:v2") at mount to render
   // immediately from the last-known values. 15s TTL keeps it fresh
   // enough for real trading without spamming Supabase.
-  return dedupCache("portfolio:data", () => fetchPortfolioDataInner(), 15_000)
+  // Phase 11.28 — bumped cache key to :v2 so any user with stale
+  // "— مشروع غير معروف —" data in localStorage from before the
+  // legacy-projects-query fix gets a fresh fetch on first mount.
+  return dedupCache("portfolio:data:v2", () => fetchPortfolioDataInner(), 15_000)
 }
 
 async function fetchPortfolioDataInner(): Promise<PortfolioData | null> {
