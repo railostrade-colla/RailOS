@@ -16,6 +16,7 @@ import {
   type NewsType,
 } from "@/lib/mock-data"
 import { getAllProjects, getAllCompanies, getLatestNews } from "@/lib/data"
+import { readPersistedSync } from "@/lib/data/cache"
 import { cn } from "@/lib/utils/cn"
 
 // ─── News type → label/color ───────────────────────────────
@@ -44,10 +45,22 @@ function MarketContent() {
   const [openNews, setOpenNews] = useState<PlatformNews | null>(null)
 
   // ─── Live data (DB-only — production mode) ────────────────
-  const [projects, setProjects] = useState<typeof ALL_PROJECTS>([])
-  const [companies, setCompanies] = useState<typeof ALL_COMPANIES>([])
-  const [news, setNews] = useState<PlatformNews[]>([])
-  const [loading, setLoading] = useState(true)
+  // Phase 11.31 — hydrate synchronously from the SWR cache (warmed by
+  // AppLayout) so the market page paints with REAL projects on first
+  // visit instead of an empty skeleton. The background fetch below
+  // silently swaps in fresh data 1-2s later.
+  const cachedProjects = readPersistedSync<typeof ALL_PROJECTS>("projects:active:all") ?? []
+  const cachedCompanies = readPersistedSync<typeof ALL_COMPANIES>("companies:all") ?? []
+  const cachedNews = readPersistedSync<PlatformNews[]>("news:latest:12") ?? []
+
+  const [projects, setProjects] = useState<typeof ALL_PROJECTS>(cachedProjects)
+  const [companies, setCompanies] = useState<typeof ALL_COMPANIES>(cachedCompanies)
+  const [news, setNews] = useState<PlatformNews[]>(cachedNews)
+  // Loading flag is OFF the moment we have any cached data — skeletons
+  // only flash on a true cold start (first ever visit).
+  const [loading, setLoading] = useState<boolean>(
+    cachedProjects.length === 0 && cachedCompanies.length === 0 && cachedNews.length === 0,
+  )
 
   useEffect(() => {
     let cancelled = false

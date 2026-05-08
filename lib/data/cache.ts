@@ -143,6 +143,62 @@ export async function dedupCache<T>(
   return promise
 }
 
+/**
+ * Phase 11.31 — true SWR (stale-while-revalidate) helper.
+ *
+ * Use case: a component mounts and wants to render IMMEDIATELY with
+ * whatever cached data exists, even if expired. The fetcher then
+ * runs in the background and the new value is delivered via the
+ * onUpdate callback.
+ *
+ * This differs from `dedupCache`:
+ *   • dedupCache awaits the network when the cache is expired.
+ *   • swrCache returns expired data instantly and triggers the fetch
+ *     to a callback, never blocking.
+ *
+ * Returns:
+ *   { initial }  — last-known value (or null), available SYNCHRONOUSLY.
+ *
+ * Usage:
+ *   const { initial } = swrCache<Foo>("foo:list")
+ *   const [data, setData] = useState(initial ?? [])
+ *   useEffect(() => {
+ *     swrRevalidate("foo:list", fetchFoo, 30_000).then(setData)
+ *   }, [])
+ */
+export function swrCache<T>(key: string): { initial: T | null } {
+  return { initial: readPersistedSync<T>(key) }
+}
+
+/**
+ * Phase 11.31 — background refresh side of swrCache. Runs the fetcher,
+ * writes to cache, returns the fresh value. Concurrent calls with the
+ * same key still share one in-flight promise (dedupCache semantics).
+ */
+export async function swrRevalidate<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  ttlMs: number = DEFAULT_TTL_MS,
+): Promise<T> {
+  // Reuse dedup logic — but we don't care about the cached value here,
+  // we always want the fresh one.
+  const pending = inFlight.get(key) as Promise<T> | undefined
+  if (pending) return pending
+
+  const promise = (async () => {
+    try {
+      const value = await fetcher()
+      writeEntry(key, value, ttlMs)
+      return value
+    } finally {
+      inFlight.delete(key)
+    }
+  })()
+
+  inFlight.set(key, promise)
+  return promise
+}
+
 /** Manually invalidate a cache key (e.g. after a write). Removes
  *  the entry from both memory AND localStorage so the next read
  *  hits the network. */

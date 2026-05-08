@@ -1,6 +1,15 @@
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/types/database"
 import { iqd } from "@/lib/utils/money"
+import { dedupCache, invalidateCache } from "./cache"
+
+// Phase 11.31 — drop the cached exchange feed + my-listings list after
+// any write so the next read hits the network and the UI reflects the
+// new state immediately. Called by cancelMyListing.
+function invalidateListingCaches(): void {
+  invalidateCache("listings:exchange:active")
+  invalidateCache("listings:mine:all")
+}
 
 /**
  * DBListing is now a type alias on the Supabase-generated Row shape.
@@ -112,6 +121,7 @@ function num(v: unknown, fallback = 0): number {
  * getExchangeListings so the UI can reuse the existing card formatter.
  */
 export async function getMyExchangeListings(): Promise<ExchangeListingRow[]> {
+  return dedupCache("listings:mine:all", async () => {
   try {
     const supabase = createClient()
     const {
@@ -180,6 +190,7 @@ export async function getMyExchangeListings(): Promise<ExchangeListingRow[]> {
   } catch {
     return []
   }
+  }, 15_000)
 }
 
 /**
@@ -194,6 +205,7 @@ export async function cancelMyListing(listingId: string): Promise<boolean> {
       .from("listings")
       .update({ status: "cancelled", updated_at: new Date().toISOString() })
       .eq("id", listingId)
+    if (!error) invalidateListingCaches()
     return !error
   } catch {
     return false
@@ -202,6 +214,7 @@ export async function cancelMyListing(listingId: string): Promise<boolean> {
 
 /** Active listings + JOIN seller name + project metadata in one shot. */
 export async function getExchangeListings(): Promise<ExchangeListingRow[]> {
+  return dedupCache("listings:exchange:active", async () => {
   try {
     const supabase = createClient()
     const { data, error } = await supabase
@@ -268,6 +281,7 @@ export async function getExchangeListings(): Promise<ExchangeListingRow[]> {
   } catch {
     return []
   }
+  }, 10_000)
 }
 
 /** Accept a buy-listing. Symmetric to placeDealFromListing for sell-side. */
@@ -310,6 +324,8 @@ export async function acceptBuyListing(
         current_status: result.current_status,
       }
     }
+    invalidateListingCaches()
+    invalidateCache("deals:my:enriched")
     return result
   } catch (err) {
     return {
@@ -372,6 +388,8 @@ export async function placeDealFromListing(
         current_status: result.current_status,
       }
     }
+    invalidateListingCaches()
+    invalidateCache("deals:my:enriched")
     return result
   } catch (err) {
     return {

@@ -9,6 +9,12 @@ import { Footer } from "./Footer"
 import { OfflineBanner } from "./OfflineBanner"
 import { PushPermissionPrompt } from "@/components/notifications/PushPermissionPrompt"
 import { cn } from "@/lib/utils/cn"
+// Phase 11.31 — global SWR preloader. Warms the dedupCache for every
+// commonly-read endpoint (projects, portfolio, fee balance, profile,
+// notifications) the moment the user enters the authenticated shell,
+// so any subsequent page navigation renders from cache instantly
+// while a silent background refresh brings the data up to date.
+import { usePreloadAppData } from "@/lib/data/preload"
 
 interface AppLayoutProps {
   children: ReactNode
@@ -62,6 +68,11 @@ function shouldShowFooter(pathname: string | null): boolean {
 export function AppLayout({ children, hideBottomNav = false, hideFooter = false }: AppLayoutProps) {
   const pathname = usePathname()
   const showFooter = !hideFooter && shouldShowFooter(pathname)
+
+  // Phase 11.31 — fire all common reads in parallel on shell mount,
+  // then refresh every 60 s in the background. Pages read the same
+  // cache keys with readPersistedSync for synchronous first paint.
+  usePreloadAppData()
 
   return (
     <div className="min-h-screen flex flex-col bg-black">

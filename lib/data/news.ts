@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client"
+import { dedupCache } from "./cache"
 
 export interface DBNews {
   id: string
@@ -18,21 +19,25 @@ export interface DBNews {
   created_at?: string
 }
 
+// Phase 11.31 — wrap in dedupCache so the global preloader can warm
+// it and pages can render synchronously from readPersistedSync.
 export async function getAllNews(limit = 20): Promise<DBNews[]> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from("news")
-      .select("*")
-      .eq("is_published", true)
-      .order("is_pinned", { ascending: false })
-      .order("published_at", { ascending: false })
-      .limit(limit)
-    if (error || !data) return []
-    return data
-  } catch {
-    return []
-  }
+  return dedupCache(`news:latest:${limit}`, async () => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("news")
+        .select("*")
+        .eq("is_published", true)
+        .order("is_pinned", { ascending: false })
+        .order("published_at", { ascending: false })
+        .limit(limit)
+      if (error || !data) return []
+      return data
+    } catch {
+      return []
+    }
+  }, 30_000)
 }
 
 export async function getLatestNews(limit = 4): Promise<DBNews[]> {

@@ -7,6 +7,11 @@ import {
   getUnreadCountForCurrentUser,
   type DBNotification,
 } from "@/lib/data/notifications"
+// Phase 11.31 — SWR cache for synchronous first-paint of bell count
+// + notification list. Same cache keys the global preloader warms on
+// AppLayout mount, so this hook serves cached values instantly while
+// the background fetch refreshes silently.
+import { readPersistedSync } from "@/lib/data/cache"
 
 /**
  * useNotifications
@@ -72,9 +77,21 @@ function playNotifSound() {
 }
 
 export function useNotifications(limit: number = 20) {
-  const [notifications, setNotifications] = useState<DBNotification[]>([])
-  const [unreadCount, setUnreadCount] = useState<number>(0)
-  const [loading, setLoading] = useState<boolean>(true)
+  // Phase 11.31 — hydrate synchronously from the SWR cache so the
+  // bell badge number AND the notifications list render REAL values
+  // on first paint instead of "0" / empty placeholder.
+  const [notifications, setNotifications] = useState<DBNotification[]>(
+    () => readPersistedSync<DBNotification[]>(`notif:list:${limit}`) ?? [],
+  )
+  const [unreadCount, setUnreadCount] = useState<number>(
+    () => readPersistedSync<number>("notif:unreadCount") ?? 0,
+  )
+  // Loading is OFF if we have any cached values — skeletons only flash
+  // for true cold-start (first ever visit).
+  const [loading, setLoading] = useState<boolean>(
+    () =>
+      (readPersistedSync<DBNotification[]>(`notif:list:${limit}`)?.length ?? 0) === 0,
+  )
   const mountedRef = useRef(true)
   // Track whether we've completed the initial fetch — we only want to
   // play the sound for INSERTs that happen after that, not for the

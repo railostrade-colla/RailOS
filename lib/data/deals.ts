@@ -15,6 +15,7 @@
 import { createClient } from "@/lib/supabase/client"
 import type { Database } from "@/types/database"
 import { iqd } from "@/lib/utils/money"
+import { dedupCache } from "./cache"
 
 // ════════════════════════════════════════════════════════════════════
 // Legacy tier
@@ -165,74 +166,80 @@ function n(v: unknown, fallback = 0): number {
  * with the project's name and both counterparties' display names.
  *
  * Returns `[]` on any auth/query failure (logs to console). Never throws.
+ *
+ * Phase 11.31 — wrapped in dedupCache so the /deals list page can
+ * hydrate synchronously via readPersistedSync("deals:my:enriched") and
+ * the global preloader can warm it on shell mount.
  */
 export async function getMyDealsEnriched(): Promise<MyDealEnriched[]> {
-  try {
-    const supabase = createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return []
+  return dedupCache("deals:my:enriched", async () => {
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return []
 
-    // PostgREST disambiguates the two FKs to `profiles` via the explicit
-    // FK constraint name. Default Postgres name is `<table>_<col>_fkey`.
-    const { data, error } = await supabase
-      .from("deals")
-      .select(
-        `
-        id, project_id, buyer_id, seller_id,
-        deal_type, shares, price_per_share, total_amount, fee_amount,
-        status, created_at, updated_at, expires_at,
-        accepted_at, payment_submitted_at, completed_at,
-        project:projects(name),
-        buyer:profiles!deals_buyer_id_fkey(full_name, username),
-        seller:profiles!deals_seller_id_fkey(full_name, username)
-      `,
-      )
-      .or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
-      .order("created_at", { ascending: false })
+      // PostgREST disambiguates the two FKs to `profiles` via the explicit
+      // FK constraint name. Default Postgres name is `<table>_<col>_fkey`.
+      const { data, error } = await supabase
+        .from("deals")
+        .select(
+          `
+          id, project_id, buyer_id, seller_id,
+          deal_type, shares, price_per_share, total_amount, fee_amount,
+          status, created_at, updated_at, expires_at,
+          accepted_at, payment_submitted_at, completed_at,
+          project:projects(name),
+          buyer:profiles!deals_buyer_id_fkey(full_name, username),
+          seller:profiles!deals_seller_id_fkey(full_name, username)
+        `,
+        )
+        .or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
+        .order("created_at", { ascending: false })
 
-    if (error) {
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.error("[deals] getMyDealsEnriched error:", error.message)
+        return []
+      }
+      if (!data) return []
+
+      const out: MyDealEnriched[] = []
+      for (const row of data as DealRowEnriched[]) {
+        const project = unwrapJoined(row.project)
+        const buyer = unwrapJoined(row.buyer)
+        const seller = unwrapJoined(row.seller)
+
+        out.push({
+          id: row.id,
+          project_id: row.project_id,
+          project_name: project?.name ?? "—",
+          buyer_id: row.buyer_id,
+          buyer_name: buyer?.full_name ?? buyer?.username ?? "مستخدم",
+          seller_id: row.seller_id,
+          seller_name: seller?.full_name ?? seller?.username ?? "مستخدم",
+          deal_type: row.deal_type ?? "secondary",
+          shares: n(row.shares),
+          // Phase 11.25 — iqd() for all dinar amounts so fractional drift
+          // never reaches downstream input handlers / totals.
+          price_per_share: iqd(row.price_per_share),
+          total_amount: iqd(row.total_amount),
+          fee_amount: iqd(row.fee_amount),
+          status: (row.status ?? "pending_seller_approval") as DBDealStatus,
+          created_at: row.created_at,
+          updated_at: row.updated_at ?? row.created_at,
+          expires_at: row.expires_at,
+          accepted_at: row.accepted_at,
+          payment_submitted_at: row.payment_submitted_at,
+          completed_at: row.completed_at,
+        })
+      }
+      return out
+    } catch (err) {
       // eslint-disable-next-line no-console
-      console.error("[deals] getMyDealsEnriched error:", error.message)
+      console.error("[deals] getMyDealsEnriched threw:", err)
       return []
     }
-    if (!data) return []
-
-    const out: MyDealEnriched[] = []
-    for (const row of data as DealRowEnriched[]) {
-      const project = unwrapJoined(row.project)
-      const buyer = unwrapJoined(row.buyer)
-      const seller = unwrapJoined(row.seller)
-
-      out.push({
-        id: row.id,
-        project_id: row.project_id,
-        project_name: project?.name ?? "—",
-        buyer_id: row.buyer_id,
-        buyer_name: buyer?.full_name ?? buyer?.username ?? "مستخدم",
-        seller_id: row.seller_id,
-        seller_name: seller?.full_name ?? seller?.username ?? "مستخدم",
-        deal_type: row.deal_type ?? "secondary",
-        shares: n(row.shares),
-        // Phase 11.25 — iqd() for all dinar amounts so fractional drift
-        // never reaches downstream input handlers / totals.
-        price_per_share: iqd(row.price_per_share),
-        total_amount: iqd(row.total_amount),
-        fee_amount: iqd(row.fee_amount),
-        status: (row.status ?? "pending_seller_approval") as DBDealStatus,
-        created_at: row.created_at,
-        updated_at: row.updated_at ?? row.created_at,
-        expires_at: row.expires_at,
-        accepted_at: row.accepted_at,
-        payment_submitted_at: row.payment_submitted_at,
-        completed_at: row.completed_at,
-      })
-    }
-    return out
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error("[deals] getMyDealsEnriched threw:", err)
-    return []
-  }
+  }, 15_000)
 }

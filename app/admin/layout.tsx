@@ -5,6 +5,9 @@ import { usePathname } from "next/navigation"
 import { AdminSidebar } from "@/components/admin/Sidebar"
 import { AdminTopBar } from "@/components/admin/AdminTopBar"
 import { AdminDiagnosticBanner } from "@/components/admin/AdminDiagnosticBanner"
+// Phase 11.31 — also warm the cache for admins. Common reads share
+// keys with the user shell, so the same hook benefits both.
+import { usePreloadAppData } from "@/lib/data/preload"
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(true)
@@ -13,6 +16,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   // Hide topbar on admin-login (if matched here)
   const showTopBar = pathname?.startsWith("/admin") && pathname !== "/admin-login"
+
+  // Phase 11.31 — preload globally on admin shell mount.
+  usePreloadAppData()
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white" dir="rtl">

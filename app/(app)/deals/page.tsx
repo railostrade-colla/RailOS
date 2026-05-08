@@ -18,6 +18,7 @@ import {
   type DBDealStatus,
 } from "@/lib/data/deals"
 import { useRealtimeMyDeals } from "@/lib/realtime/useRealtimeMyDeals"
+import { readPersistedSync } from "@/lib/data/cache"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -58,9 +59,15 @@ export default function DealsPage() {
   const [tab, setTab] = useState<DealsTab>("active")
 
   // Real DB-backed state (Phase 4.4)
+  // Phase 11.31 — hydrate synchronously from the SWR cache so the
+  // tabs render real deals on first paint, not an empty skeleton.
   const [currentUserId, setCurrentUserId] = useState<string>("")
-  const [allDeals, setAllDeals] = useState<MyDealEnriched[]>([])
-  const [loading, setLoading] = useState(true)
+  const [allDeals, setAllDeals] = useState<MyDealEnriched[]>(
+    () => readPersistedSync<MyDealEnriched[]>("deals:my:enriched") ?? [],
+  )
+  const [loading, setLoading] = useState<boolean>(
+    () => (readPersistedSync<MyDealEnriched[]>("deals:my:enriched")?.length ?? 0) === 0,
+  )
 
   // Tick — يحدّث الـ timer كل دقيقة
   const [, setTick] = useState(0)

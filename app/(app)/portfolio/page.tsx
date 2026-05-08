@@ -44,6 +44,9 @@ import { createClient } from "@/lib/supabase/client"
 // silently mutating fee-unit / share inputs.
 import { IntegerInput } from "@/components/ui/IntegerInput"
 import { parseIqdInput } from "@/lib/utils/money"
+// Phase 11.31 — read last-known portfolio data synchronously on mount
+// so the page paints with real numbers instead of a loading skeleton.
+import { readPersistedSync } from "@/lib/data/cache"
 
 // TODO Phase 4.X — derive from this month's deals.total_amount sum.
 const CURRENT_USER_USED_THIS_MONTH = 0
@@ -118,8 +121,18 @@ function PortfolioContent() {
   const [feeProofDataUrl, setFeeProofDataUrl] = useState<string | null>(null)
 
   // Phase 4.2 — Real DB-backed portfolio data.
-  const [data, setData] = useState<PortfolioData | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Phase 11.31 — hydrate synchronously from the SWR cache (warmed by
+  // AppLayout's usePreloadAppData) so the page renders REAL numbers on
+  // first paint, not a 0/empty skeleton. The background fetch in the
+  // useEffect below silently overwrites with fresh data 1-2s later.
+  const [data, setData] = useState<PortfolioData | null>(
+    () => readPersistedSync<PortfolioData>("portfolio:data:v2"),
+  )
+  // Loading flag flips to false the moment we have ANY data (cached
+  // or fresh) so the skeleton doesn't even flash for returning users.
+  const [loading, setLoading] = useState<boolean>(
+    () => readPersistedSync<PortfolioData>("portfolio:data:v2") == null,
+  )
   const [submittingFee, setSubmittingFee] = useState(false)
 
   // Phase 9.3a — multi-account state.
