@@ -115,9 +115,12 @@ export default function InvestmentPage() {
     getAllProjects().then((rows) => {
       if (cancelled) return
       setProjects(rows)
-      const initial =
-        (initialProjectId && rows.find((p) => p.id === initialProjectId)) ??
-        rows[0] ?? null
+      // Strict null typing: "" || undefined && find(...) leaks the
+      // empty string through ??, so we branch explicitly.
+      const found = initialProjectId
+        ? rows.find((p) => p.id === initialProjectId)
+        : undefined
+      const initial: Project | null = found ?? rows[0] ?? null
       setSelected(initial)
       setLoading(false)
     })
