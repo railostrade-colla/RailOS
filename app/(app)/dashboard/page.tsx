@@ -633,23 +633,43 @@ export default function DashboardPage() {
               action={{ label: "تفاصيل أكثر", href: "/market" }}
             />
 
-            {/* Mini stats — derived from real data when available, else 0 */}
-            <div className="grid grid-cols-3 gap-2 mb-4">
-              <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
-                <div className="text-[10px] text-neutral-500 mb-1">القيمة الإجمالية</div>
-                <div className="text-base font-bold text-white font-mono">
-                  {fmtCompact(0)} <span className="text-[10px] text-neutral-500 font-sans">IQD</span>
+            {/* Mini stats — Phase 11.15: real platform-wide totals.
+                  • totalSoldShares  = Σ (offering_shares − available_shares)
+                                       across every active project.
+                  • totalVolumeIQD   = Σ (sold × current_market_price).
+                مثال: مشروع A باع 20 (×25,000=500,000)، مشروع B باع 60
+                (×8,000≈480,000) → الحصص المتداولة = 80، القيمة = 980,000. */}
+            {(() => {
+              let totalSold = 0
+              let totalVolume = 0
+              for (const p of dbProjects) {
+                const offering = p.offering_shares ?? p.available_shares ?? 0
+                const sold = Math.max(0, offering - (p.available_shares ?? 0))
+                const price = getProjectCurrentPrice(p.id) || p.share_price || 0
+                totalSold   += sold
+                totalVolume += sold * price
+              }
+              return (
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
+                    <div className="text-[10px] text-neutral-500 mb-1">القيمة الإجمالية</div>
+                    <div className="text-base font-bold text-white font-mono">
+                      {fmtCompact(totalVolume)} <span className="text-[10px] text-neutral-500 font-sans">IQD</span>
+                    </div>
+                  </div>
+                  <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
+                    <div className="text-[10px] text-neutral-500 mb-1">مشاريع نشطة</div>
+                    <div className="text-base font-bold text-white font-mono">{dbProjects.length}</div>
+                  </div>
+                  <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
+                    <div className="text-[10px] text-neutral-500 mb-1">حصص متداولة</div>
+                    <div className="text-base font-bold text-white font-mono">
+                      {totalSold.toLocaleString("en-US")}
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
-                <div className="text-[10px] text-neutral-500 mb-1">مشاريع نشطة</div>
-                <div className="text-base font-bold text-white font-mono">{dbProjects.length}</div>
-              </div>
-              <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
-                <div className="text-[10px] text-neutral-500 mb-1">حصص متداولة</div>
-                <div className="text-base font-bold text-white font-mono">0</div>
-              </div>
-            </div>
+              )
+            })()}
 
             {/* Recharts AreaChart */}
             <div className="h-40 -mx-2">
