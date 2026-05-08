@@ -401,8 +401,8 @@ export default function InvestmentPage() {
                           fontSize: 11,
                         }}
                         labelStyle={{ color: "#a3a3a3", fontSize: 10 }}
-                        formatter={(value: number | string) => [
-                          fmtIQD(Number(value)) + " د.ع",
+                        formatter={(value) => [
+                          fmtIQD(Number(value ?? 0)) + " د.ع",
                           "السعر",
                         ]}
                       />
