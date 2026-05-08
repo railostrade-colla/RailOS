@@ -29,6 +29,7 @@ import { getCurrentFeeBalanceSimple } from "@/lib/data/wallet"
 import { dedupCache, readPersistedSync } from "@/lib/data/cache"
 import { useRealtimeListings } from "@/lib/realtime/useRealtimeListings"
 import { createClient } from "@/lib/supabase/client"
+import { invalidateCache } from "@/lib/data/cache"
 import { cn } from "@/lib/utils/cn"
 
 /**
@@ -331,12 +332,14 @@ function MyListingsPanel({
   cancellingId,
   onCancel,
   onCreate,
+  onBackToMarket,
 }: {
   loading: boolean
   listings: ExchangeListingRow[]
   cancellingId: string | null
   onCancel: (id: string) => void
   onCreate: () => void
+  onBackToMarket: () => void
 }) {
   // Status → Arabic label + color class.
   const statusMeta = (status: string): { label: string; cls: string } => {
@@ -393,6 +396,16 @@ function MyListingsPanel({
 
   return (
     <div className="space-y-2.5">
+      {/* Phase 11.32 — back-to-market link so the user can return to
+          the feed without hunting for the toggle button up top. */}
+      <button
+        onClick={onBackToMarket}
+        className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1 mb-1"
+      >
+        <ChevronLeft className="w-3 h-3 rotate-180" />
+        ← العودة إلى السوق
+      </button>
+
       {/* Summary chips */}
       <div className="flex flex-wrap gap-1.5 mb-2">
         <span className="bg-white/[0.06] border border-white/[0.1] text-neutral-300 text-[10px] px-2 py-1 rounded-full">
@@ -574,13 +587,13 @@ function ExchangeContent() {
   const { tick: listingsTick } = useRealtimeListings()
 
   // Phase 11.30 — fetch the user's own listings on initial mount
-  // (so the tab badge can show the count immediately) AND on every
-  // realtime tick so a freshly-posted listing shows up without a
-  // manual refresh. The skeleton-loading flag only fires when the
-  // log tab is the active view.
+  // (so the badge count shows immediately) AND on every realtime tick.
+  // Phase 11.32 — always invalidate before refetching so a freshly
+  // posted/cancelled listing appears without waiting for the TTL.
   useEffect(() => {
     let cancelled = false
     if (view === "my_listings") setLoadingMine(true)
+    invalidateCache("listings:mine:all")
     getMyExchangeListings()
       .then((rows) => { if (!cancelled) setMyListings(rows) })
       .finally(() => { if (!cancelled) setLoadingMine(false) })
@@ -610,6 +623,11 @@ function ExchangeContent() {
 
   // Load real listings + current user on mount, and re-fetch listings
   // whenever realtime fires.
+  // Phase 11.32 — always invalidate the listings cache before fetching
+  // so a listing the user just posted (or cancelled) on a different
+  // page shows up the moment they land on /exchange. The cost is one
+  // DB roundtrip per page visit; the benefit is a freshness guarantee
+  // that overrides the 10s TTL of the SWR cache.
   useEffect(() => {
     let cancelled = false
     const supabase = createClient()
@@ -619,6 +637,8 @@ function ExchangeContent() {
       if (cancelled) return
       if (data?.user?.id) setCurrentUserId(data.user.id)
     })
+
+    invalidateCache("listings:exchange:active")
 
     // active listings from DB (both sell and buy in one round-trip)
     getExchangeListings()
@@ -802,48 +822,42 @@ function ExchangeContent() {
             title="التبادل"
             subtitle="سوق التبادل بين المستثمرين"
             rightAction={
-              <button
-                onClick={() => router.push("/exchange/create")}
-                className="bg-neutral-100 text-black px-3.5 py-2 rounded-lg text-xs font-bold hover:bg-neutral-200 flex items-center gap-1.5 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                إنشاء إعلان
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Phase 11.32 — log button mirrors the create button's
+                    visual weight, sits next to it in the header. The
+                    market view is now the default with no extra tab bar. */}
+                <button
+                  onClick={() => setView(view === "my_listings" ? "market" : "my_listings")}
+                  className={cn(
+                    "px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors border",
+                    view === "my_listings"
+                      ? "bg-blue-500/15 border-blue-500/30 text-blue-300 hover:bg-blue-500/20"
+                      : "bg-white/[0.05] border-white/[0.1] text-neutral-200 hover:bg-white/[0.08]"
+                  )}
+                >
+                  <History className="w-3.5 h-3.5" />
+                  سجلي
+                  {myListings.length > 0 && (
+                    <span className={cn(
+                      "text-[10px] font-mono px-1.5 py-px rounded-full",
+                      view === "my_listings"
+                        ? "bg-blue-300/20 text-blue-200"
+                        : "bg-white/[0.12] text-white"
+                    )}>
+                      {myListings.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => router.push("/exchange/create")}
+                  className="bg-neutral-100 text-black px-3.5 py-2 rounded-lg text-xs font-bold hover:bg-neutral-200 flex items-center gap-1.5 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  إنشاء إعلان
+                </button>
+              </div>
             }
           />
-
-          {/* Phase 11.30 — السوق / السجل tab toggle */}
-          <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-3">
-            <button
-              onClick={() => setView("market")}
-              className={cn(
-                "flex-1 py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5",
-                view === "market"
-                  ? "bg-white text-black font-bold"
-                  : "text-neutral-400 hover:text-white"
-              )}
-            >
-              <ShoppingCart className="w-3.5 h-3.5" strokeWidth={2} />
-              السوق
-            </button>
-            <button
-              onClick={() => setView("my_listings")}
-              className={cn(
-                "flex-1 py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5",
-                view === "my_listings"
-                  ? "bg-white text-black font-bold"
-                  : "text-neutral-400 hover:text-white"
-              )}
-            >
-              <History className="w-3.5 h-3.5" strokeWidth={2} />
-              سجلي
-              {myListings.length > 0 && view !== "my_listings" && (
-                <span className="bg-white/[0.12] text-white text-[10px] font-mono px-1.5 py-px rounded-full">
-                  {myListings.length}
-                </span>
-              )}
-            </button>
-          </div>
 
           {view === "my_listings" ? (
             <MyListingsPanel
@@ -852,6 +866,7 @@ function ExchangeContent() {
               cancellingId={cancellingId}
               onCancel={handleCancelMyListing}
               onCreate={() => router.push("/exchange/create")}
+              onBackToMarket={() => setView("market")}
             />
           ) : (
           <>

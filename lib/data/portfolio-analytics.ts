@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client"
+import { invalidateCache } from "./cache"
 
 export interface HoldingPerformance {
   holding_id: string
@@ -182,6 +183,13 @@ export async function createListingDB(
         available: result.available,
       }
     }
+    // Phase 11.32 — invalidate listing caches so the user's brand-new
+    // listing appears immediately on /exchange (both market feed and
+    // their own log). Realtime subscription also fires but this is a
+    // belt-and-suspenders.
+    invalidateCache("listings:exchange:active")
+    invalidateCache("listings:mine:all")
+    invalidateCache("portfolio:data:v2")
     return result
   } catch (err) {
     return {
