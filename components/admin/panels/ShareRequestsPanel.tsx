@@ -66,7 +66,19 @@ const PAYMENT_METHOD_LABELS: Record<string, { label: string; icon: string }> = {
 
 type ActionMode = null | "confirm" | "cancel"
 
-export function ShareRequestsPanel() {
+/**
+ * Phase 11.21 — `compact` prop strips the title block + KPI grid for
+ * the embedded Order-Center usage. The full version (Shares & Trading
+ * page) keeps both. Founder spec: "اضهر فقط الطلبات فقط جدول الطلبات
+ * الموشر داخل المربع الاحمر ... اما باقي البيانات تضهر في صفحة الحصص
+ * والتداول لاتغير هذه الصفحة".
+ */
+export interface ShareRequestsPanelProps {
+  /** When true, hides the page title + 6-card KPI grid. Default false. */
+  compact?: boolean
+}
+
+export function ShareRequestsPanel({ compact = false }: ShareRequestsPanelProps = {}) {
   const [rows, setRows] = useState<SharePurchaseRequestRow[]>([])
   const [loading, setLoading] = useState(true)
   // Phase 10.99f — default filter is now "pending" (بانتظار الدفع) so
@@ -184,35 +196,41 @@ export function ShareRequestsPanel() {
   }
 
   return (
-    <div className="p-6 max-w-screen-2xl">
-      <div className="flex justify-between items-start mb-4 gap-3">
-        <div>
-          <div className="text-lg font-bold text-white">📥 طلبات شراء الحصص</div>
-          <div className="text-xs text-neutral-500 mt-0.5">
-            استقبال طلبات المستخدمين + مراجعة إثباتات الدفع + تأكيد/إلغاء
+    <div className={cn("max-w-screen-2xl", compact ? "p-4" : "p-6")}>
+      {/* Phase 11.21 — title + KPI grid hidden in compact mode (Order Center).
+          Full version (Shares & Trading page) keeps them. */}
+      {!compact && (
+        <>
+          <div className="flex justify-between items-start mb-4 gap-3">
+            <div>
+              <div className="text-lg font-bold text-white">📥 طلبات شراء الحصص</div>
+              <div className="text-xs text-neutral-500 mt-0.5">
+                استقبال طلبات المستخدمين + مراجعة إثباتات الدفع + تأكيد/إلغاء
+              </div>
+            </div>
+            <ActionBtn label="🔄 تحديث" color="gray" sm onClick={refresh} />
           </div>
-        </div>
-        <ActionBtn label="🔄 تحديث" color="gray" sm onClick={refresh} />
-      </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-5">
-        <KPI label="الإجمالي" val={fmtNum(stats.total)} color="#fff" />
-        <KPI label="بانتظار الدفع" val={fmtNum(stats.pending)} color="#a3a3a3" />
-        <KPI
-          label="إثباتات معلّقة"
-          val={fmtNum(stats.submitted)}
-          color="#FBBF24"
-          accent={stats.submitted > 0 ? "rgba(251,191,36,0.05)" : undefined}
-        />
-        <KPI
-          label="نزاعات"
-          val={fmtNum(stats.disputed)}
-          color="#F87171"
-          accent={stats.disputed > 0 ? "rgba(248,113,113,0.05)" : undefined}
-        />
-        <KPI label="مكتملة" val={fmtNum(stats.completed)} color="#4ADE80" />
-        <KPI label="حجم التداول" val={fmtMoney(stats.total_volume)} color="#FBBF24" />
-      </div>
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-5">
+            <KPI label="الإجمالي" val={fmtNum(stats.total)} color="#fff" />
+            <KPI label="بانتظار الدفع" val={fmtNum(stats.pending)} color="#a3a3a3" />
+            <KPI
+              label="إثباتات معلّقة"
+              val={fmtNum(stats.submitted)}
+              color="#FBBF24"
+              accent={stats.submitted > 0 ? "rgba(251,191,36,0.05)" : undefined}
+            />
+            <KPI
+              label="نزاعات"
+              val={fmtNum(stats.disputed)}
+              color="#F87171"
+              accent={stats.disputed > 0 ? "rgba(248,113,113,0.05)" : undefined}
+            />
+            <KPI label="مكتملة" val={fmtNum(stats.completed)} color="#4ADE80" />
+            <KPI label="حجم التداول" val={fmtMoney(stats.total_volume)} color="#FBBF24" />
+          </div>
+        </>
+      )}
 
       <div className="relative mb-3">
         <Search className="w-4 h-4 text-neutral-500 absolute right-3.5 top-1/2 -translate-y-1/2" />

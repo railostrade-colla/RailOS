@@ -351,7 +351,7 @@ export function AdminRequestsHubPanel() {
           entirely and don't belong in the buyer-facing requests hub. */}
       {tab === "shares" && (
         <div className="-mx-6 -my-2">
-          <ShareRequestsPanel />
+          <ShareRequestsPanel compact />
         </div>
       )}
 
