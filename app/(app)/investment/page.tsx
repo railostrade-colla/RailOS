@@ -15,7 +15,7 @@
  * cards, monospace numbers, no third-party trading-view widget.
  */
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   ChevronDown, Search, ArrowUpRight, ArrowDownRight, TrendingUp, BarChart3, Clock, Wallet,
@@ -90,7 +90,27 @@ const PERIOD_LABELS: Record<Period, string> = {
 }
 
 // ─── Page ───────────────────────────────────────────────────────
+// Next.js 16 requires components that read useSearchParams() to be
+// wrapped in a Suspense boundary so the prerender step doesn't bail
+// out. We export a thin outer component that provides the boundary
+// and renders the real page inside.
 export default function InvestmentPage() {
+  return (
+    <Suspense
+      fallback={
+        <AppLayout>
+          <div className="text-center text-xs text-neutral-500 py-20">
+            جارٍ التحميل...
+          </div>
+        </AppLayout>
+      }
+    >
+      <InvestmentPageInner />
+    </Suspense>
+  )
+}
+
+function InvestmentPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialProjectId = searchParams?.get("project")
