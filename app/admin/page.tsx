@@ -35,6 +35,8 @@ import { SupportInboxPanel } from "@/components/admin/panels/SupportInboxPanel"
 import { HealthcareAdminPanel } from "@/components/admin/panels/HealthcareAdminPanel"
 import { OrphansAdminPanel } from "@/components/admin/panels/OrphansAdminPanel"
 import { DiscountsAdminPanel } from "@/components/admin/panels/DiscountsAdminPanel"
+// Phase 13.2 — consolidated social-programs hub
+import { SocialProgramsPanel } from "@/components/admin/panels/SocialPrograms"
 // Phase Admin-Plus
 import { CreateProjectPanel } from "@/components/admin/panels/CreateProjectPanel"
 import { CreateCompanyPanel } from "@/components/admin/panels/CreateCompanyPanel"
@@ -93,6 +95,8 @@ export default function AdminPage() {
     healthcare_admin: <HealthcareAdminPanel />,
     orphans_admin: <OrphansAdminPanel />,
     discounts_admin: <DiscountsAdminPanel />,
+    // Phase 13.2 — consolidated social-programs hub (replaces 4 sidebar entries)
+    social_programs: <SocialProgramsPanel />,
     // Phase Admin-Plus
     create_project: <CreateProjectPanel />,
     create_company: <CreateCompanyPanel />,

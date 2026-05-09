@@ -49,6 +49,8 @@ export type AdminTab =
   // Phase 9.5 (share_modification) was removed in Phase 11.01.
   // Phase 9.6 — user gifts (admin grants, user redeems)
   | "gifts_admin"
+  // Phase 13.2 — consolidated social-programs hub
+  | "social_programs"
 
 /** Capability vocabulary kept in sync with lib/data/admin-permissions.ts. */
 export type AdminPermission =
@@ -75,12 +77,15 @@ export interface AdminNavItem {
   requiredPermission?: AdminPermission
 }
 
-// ─── Phase 13.0 — reorganized into 5 logical sections ─────────────
-// • نظرة عامة         — landing + everything that needs a quick decision
-// • العمليات والمالية   — projects, shares, fees, market engine
-// • الحوكمة والمستخدمون  — users, council, ambassadors
-// • البرامج الاجتماعية  — orphans, healthcare, discounts, gifts
-// • المحتوى والنظام      — content, system settings
+// ─── Phase 13.2 — reorganized into 4 logical sections ─────────────
+// • نظرة عامة                — landing + everything that needs a quick decision
+// • العمليات والمالية         — projects, shares, fees, market engine
+// • الحوكمة والمستخدمون       — users, council, ambassadors, social programs
+// • المحتوى والنظام            — content, system settings
+//
+// Phase 13.2 collapsed the former "البرامج الاجتماعية" section
+// (4 standalone entries) into a single hub under "الحوكمة" so the
+// sidebar fits in one screen without scrolling.
 //
 // Anything pending an admin action that already lives as a sub-tab
 // inside a hub (KYC, fee_units_requests, payment_proofs, disputes,
@@ -106,10 +111,10 @@ export const ADMIN_NAV: AdminNavItem[] = [
   { key: "ambassadors_admin",label: "السفراء",     icon: "🌟", section: "الحوكمة والمستخدمون", requiredPermission: "manage_users" },
 
   // ─── 4. البرامج الاجتماعية ──────────────────────────────────
-  { key: "healthcare_admin", label: "الرعاية الصحية", icon: "🏥", section: "البرامج الاجتماعية", requiredPermission: "manage_content" },
-  { key: "orphans_admin",    label: "رعاية الأيتام",  icon: "👶", section: "البرامج الاجتماعية", requiredPermission: "manage_content" },
-  { key: "discounts_admin",  label: "الخصومات",       icon: "🏷️", section: "البرامج الاجتماعية", requiredPermission: "manage_content" },
-  { key: "gifts_admin",      label: "الهدايا",        icon: "🎁", section: "البرامج الاجتماعية", requiredPermission: "manage_content" },
+  // Phase 13.2 — collapsed 4 entries (healthcare / orphans / discounts /
+  // gifts) into a single hub. Each former panel is now a tab inside it.
+  // Direct deep-links (?tab=healthcare_admin etc.) still resolve.
+  { key: "social_programs",  label: "البرامج الاجتماعية", icon: "🤝", section: "الحوكمة والمستخدمون", requiredPermission: "manage_content" },
 
   // ─── 5. المحتوى والنظام ─────────────────────────────────────
   { key: "content_mgmt", label: "المحتوى", icon: "📝", section: "المحتوى والنظام", requiredPermission: "manage_content" },

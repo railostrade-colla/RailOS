@@ -15,7 +15,9 @@ import { AdminRealtimeNotifier } from "@/components/admin/AdminRealtimeNotifier"
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(true)
-  const sidebarWidth = open ? 220 : 60
+  // Phase 13.2 — sidebar widths trimmed (220 → 200, 60 → 56) for a
+  // less heavy chrome and a wider main panel.
+  const sidebarWidth = open ? 200 : 56
   const pathname = usePathname()
 
   // Hide topbar on admin-login (if matched here)

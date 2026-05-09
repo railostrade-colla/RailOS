@@ -523,10 +523,14 @@ export function AdminTopBar() {
   }, [])
 
   return (
-    <div ref={ref} className="sticky top-0 z-30 bg-[#0a0a0a]/95 backdrop-blur border-b border-white/[0.06] px-5 py-2.5 flex items-center justify-between" dir="rtl">
+    <div
+      ref={ref}
+      className="sticky top-0 z-30 bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/[0.05] px-5 py-2 flex items-center justify-between"
+      dir="rtl"
+    >
 
-      {/* Right side (RTL): icons */}
-      <div className="flex items-center gap-1">
+      {/* Right side (RTL): icon group — Phase 13.2 visual polish */}
+      <div className="flex items-center gap-0.5 bg-white/[0.02] border border-white/[0.04] rounded-xl p-0.5">
         {/* 1. Notifications */}
         <IconBtn
           icon={<Bell className="w-4 h-4" strokeWidth={1.5} />}
@@ -564,26 +568,33 @@ export function AdminTopBar() {
         />
       </div>
 
-      {/* Left side (RTL): admin profile — Phase 10.73 real binding */}
+      {/* Left side (RTL): admin profile — Phase 13.2 polished pill */}
       <button
         onClick={() => setOpen(open === "profile" ? null : "profile")}
         className={cn(
-          "flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-colors",
-          open === "profile" ? "bg-white/[0.08] border-white/[0.15]" : "bg-white/[0.04] border-white/[0.06] hover:bg-white/[0.06]"
+          "flex items-center gap-2 px-2.5 py-1.5 rounded-xl border transition-all",
+          open === "profile"
+            ? "bg-white/[0.08] border-white/[0.15]"
+            : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.05] hover:border-white/[0.1]"
         )}
       >
-        <div className="w-7 h-7 rounded-full bg-purple-400/[0.15] border border-purple-400/[0.3] flex items-center justify-center text-xs font-bold text-purple-300">
+        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-purple-500/40 to-purple-700/20 border border-purple-400/[0.3] flex items-center justify-center text-xs font-bold text-white shadow-inner">
           {profile?.initial ?? "A"}
         </div>
         <div className="text-right hidden lg:block">
-          <div className="text-xs text-white font-bold leading-none">
+          <div className="text-xs text-white font-bold leading-none truncate max-w-[120px]">
             {profile?.full_name ?? "..."}
           </div>
-          <div className="text-[10px] text-neutral-500 mt-0.5">
+          <div className="text-[10px] text-purple-300/80 mt-0.5">
             {profile ? (ROLE_LABEL[profile.role] ?? profile.role) : "..."}
           </div>
         </div>
-        <ChevronDown className="w-3 h-3 text-neutral-500" />
+        <ChevronDown
+          className={cn(
+            "w-3 h-3 text-neutral-500 transition-transform",
+            open === "profile" && "rotate-180 text-white"
+          )}
+        />
       </button>
 
       {/* ═══ Notifications dropdown ═══ */}
@@ -774,13 +785,17 @@ function IconBtn({
       onClick={onClick}
       aria-label={ariaLabel}
       className={cn(
-        "relative w-9 h-9 rounded-lg border flex items-center justify-center transition-colors",
-        active ? "bg-white/[0.08] border-white/[0.15] text-white" : "bg-white/[0.04] border-white/[0.06] text-neutral-300 hover:bg-white/[0.06]"
+        // Phase 13.2 — borderless inside the grouped pill, subtle hover
+        // background, active state lifts to a clear contrasting tile.
+        "relative w-8 h-8 rounded-lg flex items-center justify-center transition-all",
+        active
+          ? "bg-white/[0.1] text-white shadow-inner"
+          : "text-neutral-300 hover:bg-white/[0.05] hover:text-white"
       )}
     >
       {icon}
       {badge > 0 && (
-        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center font-mono">
+        <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center font-mono shadow-[0_0_0_2px_rgba(10,10,10,0.95)]">
           {badge > 99 ? "99+" : badge}
         </span>
       )}

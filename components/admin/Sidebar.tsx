@@ -151,92 +151,130 @@ export function AdminSidebar({
   return (
     <aside
       className={cn(
-        "fixed top-0 right-0 bottom-0 z-40 bg-[#0a0a0a] border-l border-white/[0.06] transition-all duration-200 flex flex-col",
-        open ? "w-[220px]" : "w-[60px]"
+        // Phase 13.2 — slightly narrower (200 vs 220) so more horizontal
+        // space is left for the main panel; subtle gradient bg + softer
+        // left border for a more polished look.
+        "fixed top-0 right-0 bottom-0 z-40 bg-gradient-to-b from-[#0a0a0a] to-[#070707] border-l border-white/[0.05] transition-all duration-200 flex flex-col",
+        open ? "w-[200px]" : "w-[56px]"
       )}
     >
       {/* Header */}
-      <div className="p-3 border-b border-white/[0.06] flex items-center justify-between">
+      <div className="px-3 py-3 border-b border-white/[0.05] flex items-center justify-between">
         {open ? (
           <div
-            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity min-w-0"
             onClick={() => router.push("/admin?tab=dashboard")}
             role="button"
           >
-            <div className="w-9 h-9 rounded-lg overflow-hidden border border-white/[0.1] bg-white/[0.04] flex-shrink-0">
+            <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/[0.1] bg-white/[0.04] flex-shrink-0">
               <Image
                 src="/logo.png"
                 alt="RailOS"
-                width={36}
-                height={36}
+                width={32}
+                height={32}
                 className="w-full h-full object-contain"
               />
             </div>
-            <div>
-              <div className="text-sm font-bold text-white leading-none">RaiLOS</div>
-              <div className="text-[9px] text-neutral-500 mt-1">لوحة الإدارة</div>
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-white leading-none truncate">RaiLOS</div>
+              <div className="text-[9px] text-neutral-500 mt-1 truncate">لوحة الإدارة</div>
             </div>
           </div>
         ) : (
           <button
             onClick={() => router.push("/admin?tab=dashboard")}
-            className="w-9 h-9 rounded-lg overflow-hidden border border-white/[0.1] bg-white/[0.04] hover:opacity-80 transition-opacity"
+            className="w-8 h-8 rounded-lg overflow-hidden border border-white/[0.1] bg-white/[0.04] hover:opacity-80 transition-opacity mx-auto"
             aria-label="RailOS Home"
           >
             <Image
               src="/logo.png"
               alt="RailOS"
-              width={36}
-              height={36}
+              width={32}
+              height={32}
               className="w-full h-full object-contain"
             />
           </button>
         )}
-        <button
-          onClick={onToggle}
-          className="w-8 h-8 rounded-lg bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] flex items-center justify-center transition-colors text-neutral-400"
-          aria-label="toggle"
-        >
-          {open ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
-        </button>
+        {open && (
+          <button
+            onClick={onToggle}
+            className="w-7 h-7 rounded-lg bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] hover:border-white/[0.12] flex items-center justify-center transition-colors text-neutral-400"
+            aria-label="toggle"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
+      {/* Collapsed-mode toggle button (own row when sidebar is closed) */}
+      {!open && (
+        <button
+          onClick={onToggle}
+          className="mx-auto my-2 w-7 h-7 rounded-lg bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] hover:border-white/[0.12] flex items-center justify-center transition-colors text-neutral-400"
+          aria-label="toggle"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+      )}
+
       {/* Nav */}
-      <div className="flex-1 overflow-y-auto py-2">
-        {visibleSections.map((section) => (
-          <div key={section} className="mb-2">
-            {open && (
-              <div className="px-3 py-1.5 text-[9px] text-neutral-600 font-bold tracking-wider uppercase">
-                {section}
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden py-1.5">
+        {visibleSections.map((section, sIdx) => (
+          <div key={section} className={cn("mb-1.5", sIdx > 0 && "mt-2")}>
+            {open ? (
+              <div className="px-3 py-1 text-[9px] text-neutral-600 font-bold tracking-[0.12em] uppercase flex items-center gap-2">
+                <span className="truncate">{section}</span>
+                <span className="flex-1 h-px bg-white/[0.05]" />
               </div>
+            ) : (
+              // Collapsed: a thin divider between sections (skip before
+              // the first section for a cleaner top edge).
+              sIdx > 0 && <div className="mx-2 h-px bg-white/[0.05] mb-1" />
             )}
             {visibleNav.filter((n) => n.section === section).map((item) => {
               const badge = badges[item.key] ?? 0
+              const active = currentTab === item.key
               return (
                 <button
                   key={item.key}
                   onClick={() => goTo(item.key)}
                   title={!open ? item.label : undefined}
                   className={cn(
-                    "relative w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-right",
-                    currentTab === item.key
-                      ? "bg-white/[0.08] text-white border-r-2 border-white"
-                      : "text-neutral-400 hover:bg-white/[0.04] hover:text-white border-r-2 border-transparent"
+                    "group relative w-full flex items-center gap-2.5 px-3 py-2 transition-all text-right",
+                    active
+                      ? "text-white"
+                      : "text-neutral-400 hover:text-white"
                   )}
                 >
-                  <span className="relative text-base flex-shrink-0">
+                  {/* Active-state pill background — Phase 13.2: a soft
+                      rounded panel instead of the hard right-border bar
+                      so the active item feels integrated with the panel
+                      edge but doesn't draw a sharp 2-px line. */}
+                  {active && (
+                    <span className="absolute inset-y-0.5 inset-x-1.5 rounded-lg bg-white/[0.08] border border-white/[0.08]" />
+                  )}
+                  {/* Active accent dot on the right (RTL) */}
+                  {active && (
+                    <span className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-l-full bg-white" />
+                  )}
+                  <span className="relative text-base flex-shrink-0 leading-none">
                     {item.icon}
-                    {/* Phase 11.21 — collapsed-sidebar dot indicator
-                        (no room for a number when only the icon shows). */}
                     {!open && badge > 0 && (
                       <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-[#0a0a0a]" />
                     )}
                   </span>
                   {open && (
                     <>
-                      <span className="text-xs font-medium truncate flex-1">{item.label}</span>
+                      <span
+                        className={cn(
+                          "relative text-[12px] font-medium truncate flex-1",
+                          active ? "font-semibold" : ""
+                        )}
+                      >
+                        {item.label}
+                      </span>
                       {badge > 0 && (
-                        <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1.5 flex items-center justify-center flex-shrink-0">
+                        <span className="relative bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1.5 flex items-center justify-center flex-shrink-0 shadow-[0_0_0_2px_rgba(10,10,10,0.6)]">
                           {badge > 99 ? "99+" : badge}
                         </span>
                       )}
@@ -247,14 +285,17 @@ export function AdminSidebar({
             })}
           </div>
         ))}
-      </div>
+      </nav>
 
       {/* Logout */}
-      <div className="p-2 border-t border-white/[0.06]">
+      <div className="p-2 border-t border-white/[0.05]">
         <button
           onClick={logout}
           title={!open ? "تسجيل الخروج" : undefined}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-400 hover:bg-red-500/[0.08] transition-colors"
+          className={cn(
+            "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-red-400 hover:bg-red-500/[0.08] hover:text-red-300 transition-colors",
+            !open && "justify-center"
+          )}
         >
           <LogOut className="w-4 h-4 flex-shrink-0" strokeWidth={1.5} />
           {open && <span className="text-xs">تسجيل الخروج</span>}
