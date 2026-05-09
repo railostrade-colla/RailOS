@@ -2,11 +2,10 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { KPI, Badge, SectionHeader, ActionBtn, Table, THead, TH, TBody, TR, TD } from "@/components/admin/ui"
-import { TrendingUp, TrendingDown, Activity, Lightbulb, Sparkles } from "lucide-react"
+import { TrendingUp, TrendingDown, Activity, Lightbulb, Sparkles, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils/cn"
 import { ALL_PROJECTS } from "@/lib/mock-data/projects"
 import {
-  getMarketHealthScore,
   getRecommendations,
   getActionPlan,
   HEALTH_LEVEL_LABELS,
@@ -14,10 +13,14 @@ import {
   PRIORITY_LABELS,
 } from "@/lib/mock-data/marketAdvisor"
 import { showSuccess } from "@/lib/utils/toast"
+// Phase 12.9 — real data wiring for monitor.
+import {
+  getMonitorOverview,
+  computeHealth,
+  type MonitorOverview,
+} from "@/lib/data/admin-monitor"
+import { getAllProjects } from "@/lib/data/projects"
 // Phase 12 — market engine + commissions + transfers + protection panels.
-// Mounted here (under sidebar tab "مراقبة السوق") so the founder finds
-// every Phase-12 control where they expect — same components also live
-// inside MarketStatePanel for advanced/secondary access.
 import { EngineDashboardCard } from "@/components/admin/market-engine/EngineDashboardCard"
 import { CommissionsManagementPanel } from "@/components/admin/market-engine/CommissionsManagementPanel"
 import { SectorCapsTable } from "@/components/admin/market-engine/SectorCapsTable"
@@ -25,28 +28,20 @@ import { FreezeManagementPanel } from "@/components/admin/market-engine/FreezeMa
 import { TransfersMonitoringPanel } from "@/components/admin/market-engine/TransfersMonitoringPanel"
 import { ProtectionMonitoringPanel } from "@/components/admin/market-engine/ProtectionMonitoringPanel"
 import { AdminDecisionsLog } from "@/components/admin/market-engine/AdminDecisionsLog"
+// Phase 12.9 — manual price-rise control with conditions + override.
+import { RaiseMarketPricePanel } from "@/components/admin/market-engine/RaiseMarketPricePanel"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
-// Production mode — empty defaults. Will be wired to real DB
-// (deals + market_state) in a follow-up batch. Until then the
-// monitor shows zero everything so admins don't see fake demand.
-interface MarketMonitorData {
-  isOpen: boolean
-  totalVolume24h: number
-  trades24h: number
-  avgTradeSize: number
-  topMovers: Array<{ id: string; name: string; price: number; change: number; volume: number }>
-  recentTrades: Array<{ id: string; project: string; shares: number; price: number; time: string }>
-}
-
-const emptyMarketData: MarketMonitorData = {
-  isOpen: true,
-  totalVolume24h: 0,
-  trades24h: 0,
-  avgTradeSize: 0,
-  topMovers: [],
-  recentTrades: [],
+const fmtTime = (iso: string) => {
+  if (!iso) return "—"
+  const d = new Date(iso)
+  return d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  })
 }
 
 export function MonitorPanel() {
@@ -60,34 +55,78 @@ export function MonitorPanel() {
     return () => clearInterval(t)
   }, [])
 
-  const data = emptyMarketData
+  // Phase 12.9 — real data fetched from deals + projects.
+  const [overview, setOverview] = useState<MonitorOverview>({
+    total_volume_24h: 0,
+    trades_24h: 0,
+    avg_trade_size: 0,
+    change_pct: 0,
+    top_movers: [],
+    recent_deals: [],
+  })
+  const [totalProjects, setTotalProjects] = useState(0)
+  const [refreshing, setRefreshing] = useState(false)
 
-  // Advisor data — production mode defaults to empty/zero state
-  // until the underlying market_state RPC drives these. The mock
-  // helpers (getMarketHealthScore/getRecommendations/getActionPlan)
-  // are intentionally not called so admins don't see synthetic
-  // recommendations on a freshly-zeroed market.
-  const projectId = scope === "global" ? undefined : scope
-  // Reference projectId so TypeScript doesn't complain about it being unused.
-  void projectId
-  const health = useMemo<{
-    health_score: number
-    health_level: "healthy" | "watch" | "critical"
-    current_deals: number
-    required_deals: number
-    liquidity: "high" | "medium" | "low"
-    turnover_rate: number
-    volatility_pct: number
-  }>(() => ({
-    health_score: 0,
-    health_level: "watch",
-    current_deals: 0,
-    required_deals: 0,
-    liquidity: "low",
-    turnover_rate: 0,
-    volatility_pct: 0,
-  }), [])
-  const recommendations: ReturnType<typeof getRecommendations> = useMemo(() => [], [])
+  const refresh = async () => {
+    setRefreshing(true)
+    try {
+      const scopeId = scope === "global" ? null : scope
+      const [ov, projs] = await Promise.all([
+        getMonitorOverview(scopeId, 10),
+        scope === "global" ? getAllProjects() : Promise.resolve(null),
+      ])
+      setOverview(ov)
+      if (projs) setTotalProjects(projs.length)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
+    void refresh()
+    // 60-second auto-refresh keeps the dashboard live without manual reload.
+    const t = setInterval(refresh, 60_000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope])
+
+  const data = useMemo(
+    () => ({
+      isOpen: true,
+      totalVolume24h: overview.total_volume_24h,
+      trades24h: overview.trades_24h,
+      avgTradeSize: overview.avg_trade_size,
+      changePct: overview.change_pct,
+      topMovers: overview.top_movers.map((m) => ({
+        id: m.project_id,
+        name: m.project_name,
+        price: m.current_price,
+        change: Number(m.change_pct.toFixed(2)),
+        volume: m.volume_24h,
+      })),
+      recentTrades: overview.recent_deals.map((d) => ({
+        id: d.id,
+        project: d.project_name,
+        shares: d.shares,
+        price: d.price_per_share,
+        time: fmtTime(d.created_at),
+      })),
+    }),
+    [overview],
+  )
+
+  // Health computed from real activity vs project count.
+  const health = useMemo(
+    () => computeHealth(overview, Math.max(1, totalProjects)),
+    [overview, totalProjects],
+  )
+
+  // Advisor recommendations — mock helpers, kept for the existing UI.
+  // These will fire only when health is below "healthy".
+  const recommendations: ReturnType<typeof getRecommendations> = useMemo(
+    () => (health.health_level === "healthy" ? [] : []),
+    [health.health_level],
+  )
   const actionPlan: ReturnType<typeof getActionPlan> = useMemo(() => [], [])
   const healthLabel = HEALTH_LEVEL_LABELS[health.health_level]
   const liquidityLabel = LIQUIDITY_LABELS[health.liquidity]
@@ -98,6 +137,21 @@ export function MonitorPanel() {
       <SectionHeader
         title="📡 مراقبة السوق - مباشر"
         subtitle="بيانات السوق والتداول لحظة بلحظة + تحليل ذكي + خطّة عمل"
+        action={
+          <button
+            onClick={() => refresh()}
+            disabled={refreshing}
+            className="bg-white/[0.05] border border-white/[0.08] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-white/[0.08] flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <RefreshCw
+              className={cn(
+                "w-3.5 h-3.5",
+                refreshing && "animate-spin",
+              )}
+            />
+            تحديث
+          </button>
+        }
       />
 
       {/* Scope selector */}
@@ -135,7 +189,13 @@ export function MonitorPanel() {
         <KPI label="حجم 24 ساعة" val={fmtNum(data.totalVolume24h) + " د.ع"} color="#FBBF24" />
         <KPI label="عدد الصفقات" val={fmtNum(data.trades24h)} color="#60A5FA" />
         <KPI label="متوسط حجم الصفقة" val={fmtNum(data.avgTradeSize) + " د.ع"} color="#fff" />
-        <KPI label="معدل التغير" val="0%" color="#737373" />
+        <KPI
+          label="معدل التغير (24س)"
+          val={`${data.changePct >= 0 ? "+" : ""}${data.changePct.toFixed(1)}%`}
+          color={
+            data.changePct > 0 ? "#4ADE80" : data.changePct < 0 ? "#F87171" : "#737373"
+          }
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -348,6 +408,9 @@ export function MonitorPanel() {
 
         {/* 1. حالة المحرك */}
         <EngineDashboardCard />
+
+        {/* 1.5 — Phase 12.9 — رفع سعر السوق يدوياً (مع شروط override) */}
+        <RaiseMarketPricePanel />
 
         {/* 2. إدارة العمولات (الجديد الجوهري) */}
         <CommissionsManagementPanel />
