@@ -1,19 +1,38 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { X, ShoppingCart, TrendingUp, AlertCircle, Lock } from "lucide-react"
+import { X, ShoppingCart, TrendingUp, AlertCircle, Lock, Clock } from "lucide-react"
 import { cn } from "@/lib/utils/cn"
 
 /**
  * QuantityModal — نافذة تحديد الكمية قبل فتح صفقة من إعلان.
  *
- * - أرقام صحيحة فقط (بدون كسور)
- * - أزرار سريعة: 25% / 50% / 75% / الكل
- * - يحسب الإجمالي لحظياً
- * - يتحقّق من الرصيد (للشراء) أو الحصص المملوكة (للبيع)
- * - يمنع تجاوز الكمية المتاحة في الإعلان
- * - مُتكامل مع نظام الـ Escrow (يعلّق الحصص فور التأكيد)
+ * ───────── النموذج المالي (هام) ─────────
+ * RailOS لا يتعامل بالمال الحقيقي داخل التطبيق:
+ *   • سعر الحصة × الكمية = مبلغ الصفقة الإجمالي بالدينار العراقي
+ *     يتمّ دفعه/استلامه **خارج التطبيق** بين الطرفين.
+ *   • التطبيق يخصم فقط عمولة بنسبة 2% من **رصيد وحدات الرسوم**
+ *     لكلا الطرفَين بعد إتمام الصفقة.
+ *   • كل وحدة رسوم = 1 دينار. لذلك العمولة المطلوبة بالوحدات
+ *     = Math.ceil(الكمية × سعر الحصة × 0.02).
+ *   • بمجرد التأكيد تُعلَّق الحصص في Escrow وتفتح دردشة مدّتها 15 دقيقة
+ *     بين البائع والمشتري لإكمال التحويل خارجياً.
+ *
+ * ────────────── السلوك ──────────────
+ * - أرقام صحيحة فقط (بدون كسور).
+ * - أزرار سريعة: 25% / 50% / 75% / الكل (مبنية على الحد الأقصى الفعلي).
+ * - التحقق من توفّر **وحدات الرسوم الكافية** للعمولة، لا من رصيد دنانير.
+ * - يمنع تجاوز الكمية المتاحة في الإعلان أو الحصص المملوكة (للبيع).
+ * - النافذة تُعرض **في وسط الشاشة** على كل المقاسات.
  */
+
+// ─── ثوابت العمولة ───────────────────────────────────
+/** نسبة العمولة الثابتة على الطرفَين (2%). */
+const COMMISSION_RATE = 0.02
+/** قيمة وحدة الرسوم الواحدة بالدينار (1:1). */
+const FEE_UNIT_VALUE_IQD = 1
+/** مدّة الدردشة لإكمال الصفقة بعد التأكيد (دقائق). */
+const DEAL_CHAT_DURATION_MINUTES = 15
 
 export interface QuantityModalListing {
   id: string
@@ -31,11 +50,15 @@ export interface QuantityModalListing {
 
 interface Props {
   listing: QuantityModalListing | null
-  /** رصيد المستخدم بالد.ع (للشراء). */
+  /** رصيد وحدات الرسوم للمستخدم (1 وحدة = 1 د.ع). يُستخدم للتحقق من العمولة. */
   userBalance?: number
   /** عدد حصص المستخدم في هذا المشروع (للبيع). */
   userShares?: number
-  /** مدّة الصفقة بالساعات — يستخدمها onConfirm. اختياري. */
+  /**
+   * مدّة الصفقة بالساعات — يُمرَّر إلى onConfirm للحفاظ على توافق الواجهة
+   * مع الـ backend. لم يعد قابلاً للاختيار من المستخدم — الصفقة تفتح
+   * دردشة 15 دقيقة دائماً (انظر DEAL_CHAT_DURATION_MINUTES).
+   */
   defaultDurationHours?: 24 | 48 | 72
   onClose: () => void
   onConfirm: (quantity: number, durationHours: 24 | 48 | 72) => Promise<void> | void
@@ -49,16 +72,12 @@ export function QuantityModal({
   onClose,
   onConfirm,
 }: Props) {
-  // ⚠ ALL hooks must run unconditionally on every render — moving the
-  // `if (!listing) return null` early-return ABOVE the useMemos was a
-  // hooks-order violation that triggered React error #310 the moment
-  // the parent passed in a non-null listing (the hook count went from
-  // 5 useState → 5 useState + 2 useMemo).
-  // The hooks now read from `listing` defensively so they're safe to
-  // call when listing is null. The early return happens AFTER the
-  // hooks, just before render.
+  // ⚠ ALL hooks must run unconditionally on every render — moving an
+  // `if (!listing) return null` early-return ABOVE the useMemos was the
+  // hooks-order violation that triggered React error #310. The hooks
+  // now read from `listing` defensively so they're safe to call when
+  // listing is null. The early return happens AFTER the hooks.
   const [quantityInput, setQuantityInput] = useState("")
-  const [duration, setDuration] = useState<24 | 48 | 72>(defaultDurationHours)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
   const [agreed, setAgreed] = useState(false)
@@ -71,14 +90,26 @@ export function QuantityModal({
   const availableShares = listing?.available_shares ?? 0
   const maxShares = listing?.max_shares ?? Infinity
 
+  // ─── الحد الأقصى الفعلي ───
+  // مقيَّد بعدة عوامل:
+  //   1) المتاح في الإعلان (available_shares)
+  //   2) سقف الإعلان (max_shares)
+  //   3) للبيع فقط: ما يملكه المستخدم (userShares)
+  //   4) **وحدات الرسوم**: المستخدم يدفع 2% عمولة من قيمة الصفقة
+  //      كوحدات رسوم. لذلك:
+  //        max_qty_by_fees = floor(userBalance / (pricePerShare × 0.02))
   const maxAllowed = useMemo(() => {
-    if (userAction === "buy") {
-      const byBalance = pricePerShare > 0
-        ? Math.floor(userBalance / pricePerShare)
-        : Infinity
-      return Math.min(byBalance, availableShares, maxShares)
+    const feeCostPerShare = pricePerShare * COMMISSION_RATE
+    const byFeeUnits = feeCostPerShare > 0
+      ? Math.floor(userBalance / feeCostPerShare)
+      : Infinity
+
+    const baseCap = Math.min(byFeeUnits, availableShares, maxShares)
+
+    if (userAction === "sell") {
+      return Math.min(baseCap, userShares)
     }
-    return Math.min(userShares, availableShares, maxShares)
+    return baseCap
   }, [userAction, userBalance, userShares, pricePerShare, availableShares, maxShares])
 
   // ─── معالجة الإدخال (أرقام صحيحة فقط) ───
@@ -90,7 +121,12 @@ export function QuantityModal({
   }
 
   const quantity = parseInt(quantityInput) || 0
-  const totalPrice = quantity * pricePerShare
+
+  // ─── الحسابات المعروضة ───
+  // مبلغ الصفقة الإجمالي بالدينار (يُدفع خارج التطبيق).
+  const totalSharesValue = quantity * pricePerShare
+  // العمولة المطلوبة بوحدات الرسوم (مُقرَّبة لأعلى لتجنّب الفقد على الكسور).
+  const requiredFeeUnits = Math.ceil(totalSharesValue * COMMISSION_RATE)
 
   // ─── التحقّق ───
   const validationError = useMemo((): string => {
@@ -99,14 +135,15 @@ export function QuantityModal({
     if (quantity > availableShares) {
       return `المتوفّر فقط ${availableShares.toLocaleString("en-US")} حصة`
     }
-    if (userAction === "buy" && totalPrice > userBalance) {
-      return `الرصيد غير كافٍ (تحتاج ${totalPrice.toLocaleString("en-US")} د.ع)`
-    }
     if (userAction === "sell" && quantity > userShares) {
       return `لا تملك سوى ${userShares.toLocaleString("en-US")} حصة`
     }
+    if (requiredFeeUnits > userBalance) {
+      const shortBy = requiredFeeUnits - userBalance
+      return `وحدات الرسوم غير كافية — تحتاج ${requiredFeeUnits.toLocaleString("en-US")} وحدة (ينقصك ${shortBy.toLocaleString("en-US")})`
+    }
     return ""
-  }, [quantity, minAllowed, availableShares, userAction, totalPrice, userBalance, userShares])
+  }, [quantity, minAllowed, availableShares, userAction, userShares, requiredFeeUnits, userBalance])
 
   // Now safe to bail out — every hook above ran unconditionally.
   if (!listing) return null
@@ -121,7 +158,10 @@ export function QuantityModal({
 
     setSubmitting(true)
     try {
-      await onConfirm(quantity, duration)
+      // نمرّر defaultDurationHours للحفاظ على توافق توقيع onConfirm مع
+      // الـ backend الحالي. الـ UX الجديد لا يعرض المدّة للمستخدم —
+      // الصفقة تفتح دردشة 15 دقيقة بعد التأكيد.
+      await onConfirm(quantity, defaultDurationHours)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "فشل فتح الصفقة"
       setError(msg)
@@ -139,11 +179,12 @@ export function QuantityModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/85 backdrop-blur-md"
+      // ✅ النافذة في **وسط الشاشة** على كل المقاسات (لا bottom-sheet).
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-[#0f0f0f] border border-white/[0.08] sm:rounded-2xl rounded-t-3xl overflow-hidden max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-md bg-[#0f0f0f] border border-white/[0.08] rounded-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ─── Header ─── */}
@@ -237,7 +278,7 @@ export function QuantityModal({
             </p>
           </div>
 
-          {/* الحساب التلقائي */}
+          {/* الحساب التلقائي — يعرض مبلغ الصفقة (خارجي) + وحدات الرسوم (داخلية) */}
           {quantity > 0 && !validationError && (
             <div className="bg-gradient-to-br from-green-400/[0.05] to-blue-400/[0.05] border border-green-400/20 rounded-xl p-4 space-y-2.5">
               <Row label="الكمية" value={`${quantity.toLocaleString("en-US")} حصة`} mono />
@@ -248,36 +289,43 @@ export function QuantityModal({
                 valueColor="text-neutral-300"
               />
               <div className="h-px bg-white/[0.06]" />
+
+              {/* مبلغ الصفقة الإجمالي — يُدفع خارج التطبيق */}
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-white">
-                  {userAction === "buy" ? "الإجمالي للدفع" : "الإجمالي للاستلام"}
-                </span>
-                <span className="text-lg font-bold font-mono text-green-400">
-                  {totalPrice.toLocaleString("en-US")} د.ع
+                <span className="text-sm font-bold text-white">مبلغ الحصص</span>
+                <span className="text-base font-bold font-mono text-green-400">
+                  {totalSharesValue.toLocaleString("en-US")} د.ع
                 </span>
               </div>
+              <p className="text-[10px] text-neutral-500 leading-relaxed">
+                يُدفع/يُستلم بين الطرفَين خارج التطبيق خلال نافذة الدردشة (15 دقيقة).
+              </p>
+
+              <div className="h-px bg-white/[0.06]" />
+
+              {/* العمولة بوحدات الرسوم — تُخصم من رصيدك */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-white">
+                  وحدات الرسوم للعمولة
+                  <span className="text-[10px] font-normal text-neutral-500 mr-1.5">(2%)</span>
+                </span>
+                <span className="text-base font-bold font-mono text-blue-400">
+                  {requiredFeeUnits.toLocaleString("en-US")} وحدة
+                </span>
+              </div>
+              <p className="text-[10px] text-neutral-500 leading-relaxed">
+                تُخصم من رصيد وحدات الرسوم بعد إتمام الصفقة. كل وحدة = 1 د.ع.
+              </p>
             </div>
           )}
 
-          {/* اختيار المدّة */}
-          <div>
-            <label className="block text-xs text-neutral-400 mb-2">مدّة إكمال الصفقة</label>
-            <div className="grid grid-cols-3 gap-2">
-              {([24, 48, 72] as const).map((h) => (
-                <button
-                  key={h}
-                  onClick={() => setDuration(h)}
-                  className={cn(
-                    "py-2.5 rounded-lg text-xs font-bold border transition-colors",
-                    duration === h
-                      ? "bg-blue-400/15 border-blue-400/40 text-blue-400"
-                      : "bg-white/[0.04] border-white/[0.08] text-neutral-400 hover:text-white"
-                  )}
-                >
-                  {h} ساعة
-                </button>
-              ))}
-            </div>
+          {/* لافتة الدردشة 15 دقيقة (تستبدل أزرار اختيار المدّة المحذوفة) */}
+          <div className="flex items-center gap-2.5 px-3 py-2.5 bg-blue-400/[0.06] border border-blue-400/20 rounded-lg">
+            <Clock size={14} className="text-blue-400 shrink-0" />
+            <p className="text-[11px] text-blue-300 leading-relaxed">
+              بعد التأكيد تُعلَّق الحصص وتفتح دردشة <strong>{DEAL_CHAT_DURATION_MINUTES} دقيقة</strong>{" "}
+              بين الطرفَين لإكمال التحويل خارجياً.
+            </p>
           </div>
 
           {/* رسالة الخطأ */}
@@ -288,22 +336,19 @@ export function QuantityModal({
             </div>
           )}
 
-          {/* رصيد المستخدم */}
+          {/* رصيد المستخدم — وحدات الرسوم لا دنانير */}
           <div className="text-center text-xs text-neutral-500">
-            {userAction === "buy" ? (
-              <>
-                رصيدك:{" "}
-                <span className="font-mono text-neutral-300">
-                  {userBalance.toLocaleString("en-US")} د.ع
-                </span>
-              </>
-            ) : (
-              <>
+            <span>رصيد وحدات الرسوم: </span>
+            <span className="font-mono text-neutral-300">
+              {userBalance.toLocaleString("en-US")} وحدة
+            </span>
+            {userAction === "sell" && (
+              <span className="block mt-1 text-[11px]">
                 حصصك في {listing.project_name}:{" "}
                 <span className="font-mono text-neutral-300">
                   {userShares.toLocaleString("en-US")} حصة
                 </span>
-              </>
+              </span>
             )}
           </div>
 
@@ -326,8 +371,8 @@ export function QuantityModal({
               {agreed && <span className="text-black text-[9px] font-bold">✓</span>}
             </div>
             <span className={cn("text-[11px] leading-relaxed", agreed ? "text-green-400" : "text-neutral-400")}>
-              أوافق على تعليق الحصص (Escrow) لحماية الطرفين، وأتعهّد بإكمال {actionLabel}/الدفع خلال{" "}
-              {duration} ساعة.
+              أوافق على تعليق الحصص في Escrow وخصم {requiredFeeUnits > 0 ? requiredFeeUnits.toLocaleString("en-US") : "ما يقابل 2%"}{" "}
+              وحدة رسوم كعمولة. الدفع يتمّ خارج التطبيق خلال {DEAL_CHAT_DURATION_MINUTES} دقيقة من فتح الصفقة.
             </span>
           </button>
         </div>
