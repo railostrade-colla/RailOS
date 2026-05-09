@@ -758,7 +758,18 @@ function ExchangeContent() {
           missing_table: "الميزة غير مفعّلة بعد على الخادم",
           rls: "ليس لديك صلاحية لإجراء هذه الصفقة",
         }
-        const msg = reasonMap[res.reason ?? ""] ?? "تعذّر فتح الصفقة"
+        // Log the full payload so we can diagnose unmapped reasons.
+        // eslint-disable-next-line no-console
+        console.error("[exchange] place/accept failed:", res)
+        const reasonKey = res.reason ?? ""
+        let msg = reasonMap[reasonKey]
+        if (!msg) {
+          // Surface the real DB error / reason instead of a generic
+          // "تعذّر فتح الصفقة". This is what unblocks debugging when
+          // the RPC raises an unexpected SQLSTATE.
+          const detail = res.error || reasonKey || "خطأ غير معروف"
+          msg = `تعذّر فتح الصفقة: ${detail}`
+        }
         throw new Error(msg)
       }
       showSuccess(
