@@ -20,6 +20,16 @@ export interface PendingDealRequest {
   buyer_name: string
   /** profiles.username if no full_name. */
   buyer_handle: string | null
+  /** Phase 12.8 v3 — full classification surface for the popup. */
+  buyer_avatar_url: string | null
+  buyer_kyc_status: "verified" | "pending" | "rejected" | "not_submitted"
+  buyer_rating_average: number   // 0..5
+  buyer_rating_count: number
+  buyer_trades_completed: number
+  /** "آخر اتصال" / "متّصل الآن" — handled by realtime presence; this
+      is just the timestamp for offline calculations. */
+  buyer_last_seen_at: string | null
+  buyer_is_ambassador: boolean
   project_id: string
   project_name: string
   project_symbol: string | null
@@ -48,6 +58,21 @@ interface ProfileRef {
   id: string
   full_name: string | null
   username: string | null
+  avatar_url: string | null
+  kyc_status: string | null
+  rating_average: number | string | null
+  rating_count: number | string | null
+  trades_completed: number | string | null
+  last_seen_at: string | null
+  is_ambassador: boolean | null
+}
+
+const PROFILE_COLS =
+  "id, full_name, username, avatar_url, kyc_status, rating_average, rating_count, trades_completed, last_seen_at, is_ambassador"
+
+function mapKyc(s: string | null | undefined): PendingDealRequest["buyer_kyc_status"] {
+  if (s === "verified" || s === "pending" || s === "rejected") return s
+  return "not_submitted"
 }
 
 interface ProjectRef {
@@ -114,7 +139,7 @@ export async function listPendingDealRequestsForMe(): Promise<
       try {
         const { data } = await supabase
           .from("profiles")
-          .select("id, full_name, username")
+          .select(PROFILE_COLS)
           .in("id", buyerIds)
         for (const p of (data ?? []) as ProfileRef[]) {
           profileMap.set(p.id, p)
@@ -151,6 +176,13 @@ export async function listPendingDealRequestsForMe(): Promise<
         buyer_id: d.buyer_id ?? "",
         buyer_name: name,
         buyer_handle: profile?.username?.trim() ?? null,
+        buyer_avatar_url: profile?.avatar_url ?? null,
+        buyer_kyc_status: mapKyc(profile?.kyc_status),
+        buyer_rating_average: num(profile?.rating_average),
+        buyer_rating_count: Math.floor(num(profile?.rating_count)),
+        buyer_trades_completed: Math.floor(num(profile?.trades_completed)),
+        buyer_last_seen_at: profile?.last_seen_at ?? null,
+        buyer_is_ambassador: !!profile?.is_ambassador,
         project_id: d.project_id ?? "",
         project_name: project?.name?.trim() || "—",
         project_symbol: project?.symbol?.trim() ?? null,
@@ -193,17 +225,33 @@ export async function getPendingDealRequest(
 
     let buyerName = "مستخدم"
     let buyerHandle: string | null = null
+    let buyerAvatarUrl: string | null = null
+    let buyerKyc: PendingDealRequest["buyer_kyc_status"] = "not_submitted"
+    let buyerRatingAvg = 0
+    let buyerRatingCnt = 0
+    let buyerTradesCompleted = 0
+    let buyerLastSeenAt: string | null = null
+    let buyerIsAmbassador = false
+
     if (deal.buyer_id) {
       try {
         const { data: prof } = await supabase
           .from("profiles")
-          .select("full_name, username")
+          .select(PROFILE_COLS)
           .eq("id", deal.buyer_id)
           .maybeSingle()
         if (prof) {
+          const p = prof as ProfileRef
           buyerName =
-            prof.full_name?.trim() || prof.username?.trim() || "مستخدم"
-          buyerHandle = prof.username?.trim() ?? null
+            p.full_name?.trim() || p.username?.trim() || "مستخدم"
+          buyerHandle = p.username?.trim() ?? null
+          buyerAvatarUrl = p.avatar_url ?? null
+          buyerKyc = mapKyc(p.kyc_status)
+          buyerRatingAvg = num(p.rating_average)
+          buyerRatingCnt = Math.floor(num(p.rating_count))
+          buyerTradesCompleted = Math.floor(num(p.trades_completed))
+          buyerLastSeenAt = p.last_seen_at ?? null
+          buyerIsAmbassador = !!p.is_ambassador
         }
       } catch {
         /* ignore */
@@ -233,6 +281,13 @@ export async function getPendingDealRequest(
       buyer_id: deal.buyer_id ?? "",
       buyer_name: buyerName,
       buyer_handle: buyerHandle,
+      buyer_avatar_url: buyerAvatarUrl,
+      buyer_kyc_status: buyerKyc,
+      buyer_rating_average: buyerRatingAvg,
+      buyer_rating_count: buyerRatingCnt,
+      buyer_trades_completed: buyerTradesCompleted,
+      buyer_last_seen_at: buyerLastSeenAt,
+      buyer_is_ambassador: buyerIsAmbassador,
       project_id: deal.project_id ?? "",
       project_name: projectName,
       project_symbol: projectSymbol,

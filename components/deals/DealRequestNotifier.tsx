@@ -1,25 +1,24 @@
 "use client"
 
 /**
- * DealRequestNotifier — Phase 12.8.
+ * DealRequestNotifier — Phase 12.8 v3 (rich buyer classification).
  *
- * Lives at the AppLayout level so any signed-in seller sees a popup
- * **on whatever page they happen to be on** when a buyer initiates a
- * deal request. They can accept/reject without leaving their flow.
+ * Lives at the AppLayout level so any signed-in seller sees the popup
+ * **on whatever page they happen to be on** when a buyer opens a deal
+ * request. Now shows the buyer's full profile classification so the
+ * seller can decide before approving:
  *
- * Internals:
- *   • On mount: fetch every existing pending_seller_approval deal where
- *     I'm the seller. Queue them.
- *   • Subscribe to realtime INSERT on `deals` filtered by seller_id=me.
- *     New rows get pushed onto the queue.
- *   • Also listen for UPDATE so that if a deal flips out of
- *     pending_seller_approval (cancelled by buyer, expired, etc.) we
- *     drop it from the queue silently.
- *   • The popup shows the head of the queue. Accept/Reject mutates
- *     the DB; on success the head is removed and the next one shows.
+ *   • avatar (with realtime online dot anchored to it)
+ *   • name + @handle
+ *   • KYC badge (verified / pending / rejected / not submitted)
+ *   • star rating (X.X · N تقييم)
+ *   • trades completed
+ *   • ambassador badge
+ *   • presence: "متّصل الآن" / "قبل ٥ د"
+ *   • new-buyer warning when trades_completed = 0
  *
- * The popup is intentionally non-dismissable without a decision —
- * closing routes you to /deals/<id> so you have a parking spot.
+ * Internals unchanged: realtime INSERT/UPDATE on deals (filter
+ * seller_id=me), queue, accept/reject mutations.
  */
 
 import { useEffect, useState, useCallback, useRef } from "react"
@@ -32,6 +31,11 @@ import {
   Coins,
   ArrowLeft,
   Loader2,
+  ShieldCheck,
+  ShieldAlert,
+  Star,
+  AlertTriangle,
+  Sparkles,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -42,7 +46,7 @@ import {
   type PendingDealRequest,
 } from "@/lib/data/seller-deal-actions"
 import { showSuccess, showError } from "@/lib/utils/toast"
-import { UserPresenceLabel } from "@/components/presence/UserPresence"
+import { UserPresenceDot, UserPresenceText } from "@/components/presence/UserPresence"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -56,7 +60,6 @@ export function DealRequestNotifier() {
   const [mode, setMode] = useState<ActionMode>("view")
   const [reason, setReason] = useState("")
   const [uid, setUid] = useState<string | null>(null)
-  // Avoid double-prompts when realtime fires + initial fetch overlap.
   const seenIds = useRef<Set<string>>(new Set())
 
   const head = queue[0] ?? null
@@ -72,15 +75,13 @@ export function DealRequestNotifier() {
     return () => { cancelled = true }
   }, [])
 
-  // ── Initial fetch ──
+  // Initial fetch
   const refresh = useCallback(async () => {
     const items = await listPendingDealRequestsForMe()
     setQueue((prev) => {
-      // Merge: keep ordering, dedupe by id, prefer freshly fetched data.
       const map = new Map<string, PendingDealRequest>()
       for (const p of prev) map.set(p.id, p)
       for (const it of items) map.set(it.id, it)
-      // Preserve newest-first order from `items`.
       const ordered: PendingDealRequest[] = []
       for (const it of items) {
         const x = map.get(it.id)
@@ -89,10 +90,7 @@ export function DealRequestNotifier() {
           map.delete(it.id)
         }
       }
-      // Append leftovers (items in prev but not in fresh — likely
-      // cancelled, but err on the side of showing them once more).
       for (const v of map.values()) ordered.push(v)
-      // Track seen so realtime doesn't re-add.
       for (const it of ordered) seenIds.current.add(it.id)
       return ordered
     })
@@ -103,7 +101,7 @@ export function DealRequestNotifier() {
     void refresh()
   }, [uid, refresh])
 
-  // ── Realtime subscription ──
+  // Realtime
   useEffect(() => {
     if (!uid) return
     const supabase = createClient()
@@ -122,13 +120,10 @@ export function DealRequestNotifier() {
           if (newRow.status !== "pending_seller_approval") return
           if (seenIds.current.has(newRow.id)) return
           seenIds.current.add(newRow.id)
-
-          // Hydrate the row (we need names/totals the INSERT payload doesn't carry).
           const hydrated = await getPendingDealRequest(newRow.id)
           if (!hydrated) return
           setQueue((prev) => {
             if (prev.some((p) => p.id === hydrated.id)) return prev
-            // Push to FRONT so the seller sees the freshest request first.
             return [hydrated, ...prev]
           })
         },
@@ -143,8 +138,6 @@ export function DealRequestNotifier() {
         },
         (payload) => {
           const updated = payload.new as { id: string; status: string }
-          // If the deal moved out of pending (buyer cancelled, expired, etc.),
-          // drop it silently.
           if (updated.status !== "pending_seller_approval") {
             setQueue((prev) => prev.filter((p) => p.id !== updated.id))
           }
@@ -204,7 +197,6 @@ export function DealRequestNotifier() {
 
   if (!head) return null
 
-  // ─── UI ───────────────────────────────────────────────────────
   return (
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md"
@@ -213,102 +205,103 @@ export function DealRequestNotifier() {
       aria-label="طلب فتح صفقة"
     >
       <div className="w-full max-w-md bg-[#0f0f0f] border border-blue-400/30 rounded-2xl shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="bg-gradient-to-l from-blue-400/[0.12] to-transparent border-b border-blue-400/20 px-5 py-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-400/[0.15] border border-blue-400/30 flex items-center justify-center text-blue-400">
-            <Bell className="w-5 h-5" strokeWidth={2} />
+        {/* Header strip */}
+        <div className="bg-gradient-to-l from-blue-400/[0.12] to-transparent border-b border-blue-400/20 px-5 py-3.5 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-blue-400/[0.15] border border-blue-400/30 flex items-center justify-center text-blue-400">
+            <Bell className="w-4.5 h-4.5" strokeWidth={2} />
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold text-white">🛒 طلب فتح صفقة</div>
-            <div className="mt-0.5">
-              <span className="text-[11px] text-blue-300">من </span>
-              <UserPresenceLabel
-                userId={head.buyer_id}
-                name={head.buyer_name}
-                showText
-              />
+          <div className="flex-1">
+            <div className="text-sm font-bold text-white">🛒 طلب فتح صفقة جديد</div>
+            <div className="text-[10px] text-blue-300 mt-0.5">
+              يطلب منك مشترٍ إكمال صفقة على إعلانك
             </div>
           </div>
           {queue.length > 1 && (
             <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-400/[0.12] border border-blue-400/30 text-blue-300">
-              +{queue.length - 1} في الانتظار
+              +{queue.length - 1}
             </span>
           )}
         </div>
 
-        {/* Body */}
         <div className="p-5 space-y-3">
           {mode === "view" && (
             <>
-              {/* Project */}
+              {/* Buyer identity card */}
+              <BuyerCard request={head} />
+
+              {/* Project + numbers */}
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3.5">
-                <div className="flex items-center gap-2 mb-2">
-                  <ShoppingCart
-                    className="w-4 h-4 text-green-400"
+                <div className="flex items-center gap-2 mb-2.5">
+                  <ShoppingCart className="w-4 h-4 text-green-400" strokeWidth={2} />
+                  <span className="text-xs font-bold text-white">
+                    {head.project_name}
+                  </span>
+                  {head.project_symbol && (
+                    <span
+                      className="text-[10px] text-blue-400 font-mono"
+                      dir="ltr"
+                    >
+                      ({head.project_symbol})
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <Stat label="الكمية" value={`${fmtNum(head.shares)}`} unit="حصة" />
+                  <Stat
+                    label="السعر/الحصة"
+                    value={fmtNum(head.price_per_share)}
+                    unit="د.ع"
+                  />
+                  <Stat
+                    label="الإجمالي"
+                    value={fmtNum(head.total_amount)}
+                    unit="د.ع"
+                    highlight="green"
+                  />
+                </div>
+              </div>
+
+              {/* Commission */}
+              <div className="flex items-center justify-between gap-3 px-3 py-2.5 bg-blue-400/[0.05] border border-blue-400/20 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <Coins
+                    className="w-3.5 h-3.5 text-blue-400 shrink-0"
                     strokeWidth={2}
                   />
-                  <span className="text-xs text-neutral-400">المشروع</span>
+                  <span className="text-[10px] text-blue-300">
+                    عمولة المشتري (٢٪) — وحدات رسوم
+                  </span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-bold text-white">
-                      {head.project_name}
-                    </div>
-                    {head.project_symbol && (
-                      <div
-                        className="text-[10px] text-blue-400 font-mono mt-0.5"
-                        dir="ltr"
-                      >
-                        ({head.project_symbol})
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-left">
-                    <div className="text-xs text-neutral-500">الكمية</div>
-                    <div className="text-base font-bold text-white font-mono">
-                      {fmtNum(head.shares)}{" "}
-                      <span className="text-[10px] text-neutral-500">حصة</span>
-                    </div>
-                  </div>
-                </div>
+                <span className="text-sm font-bold font-mono text-blue-400">
+                  {fmtNum(head.buyer_commission)}
+                </span>
               </div>
 
-              {/* Numbers */}
-              <div className="bg-gradient-to-br from-green-400/[0.04] to-blue-400/[0.04] border border-green-400/15 rounded-xl p-3.5 space-y-2">
-                <Row
-                  label="السعر للحصة"
-                  value={`${fmtNum(head.price_per_share)} د.ع`}
-                />
-                <Row
-                  label="مبلغ الصفقة (يُدفع خارج التطبيق)"
-                  value={`${fmtNum(head.total_amount)} د.ع`}
-                  bold
-                  color="text-green-400"
-                />
-                <div className="h-px bg-white/[0.05]" />
-                <Row
-                  label="عمولة المشتري (٢٪) — وحدات رسوم"
-                  value={`${fmtNum(head.buyer_commission)} وحدة`}
-                  color="text-blue-400"
-                />
-              </div>
-
-              {/* Hint */}
-              <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-400/[0.06] border border-blue-400/20 rounded-lg">
-                <Coins
-                  className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5"
-                  strokeWidth={2}
-                />
-                <p className="text-[10px] text-blue-300 leading-relaxed">
-                  بعد الموافقة تُفتح غرفة دردشة بينك والمشتري ١٥ دقيقة لإكمال
-                  التحويل خارج التطبيق ثم رفع الإثبات.
-                </p>
-              </div>
+              {/* New-buyer warning */}
+              {head.buyer_trades_completed === 0 && (
+                <div className="flex items-start gap-2 px-3 py-2 bg-yellow-400/[0.08] border border-yellow-400/30 rounded-lg">
+                  <AlertTriangle
+                    className="w-3.5 h-3.5 text-yellow-400 shrink-0 mt-0.5"
+                    strokeWidth={2}
+                  />
+                  <p className="text-[10px] text-yellow-200 leading-relaxed">
+                    <strong>مشترٍ جديد</strong> — لم يكمل أي صفقة من قبل. تأكّد من
+                    التحقّق منه عبر الدردشة قبل تحرير الحصص.
+                  </p>
+                </div>
+              )}
             </>
           )}
 
           {mode === "rejecting" && (
             <div>
+              <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 mb-3">
+                <div className="text-[10px] text-neutral-500 mb-0.5">رفض طلب من</div>
+                <div className="text-sm font-bold text-white">
+                  {head.buyer_name}
+                </div>
+              </div>
               <label className="block text-xs text-neutral-400 mb-2">
                 سبب الرفض <span className="text-red-400">*</span>
               </label>
@@ -351,7 +344,7 @@ export function DealRequestNotifier() {
                   ) : (
                     <Check className="w-4 h-4" strokeWidth={2.5} />
                   )}
-                  {submitting ? "جاري الموافقة..." : "موافقة + فتح الصفقة"}
+                  {submitting ? "جاري..." : "موافقة + فتح"}
                 </button>
               </div>
               <button
@@ -395,29 +388,161 @@ export function DealRequestNotifier() {
   )
 }
 
-function Row({
+// ─────────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────────
+
+function BuyerCard({ request }: { request: PendingDealRequest }) {
+  const stars = Math.max(0, Math.min(5, Math.round(request.buyer_rating_average)))
+
+  return (
+    <div className="bg-gradient-to-br from-white/[0.04] to-white/[0.02] border border-white/[0.08] rounded-xl p-3.5">
+      <div className="flex items-start gap-3">
+        {/* Avatar with online dot */}
+        <div className="relative flex-shrink-0">
+          {request.buyer_avatar_url ? (
+            <img
+              src={request.buyer_avatar_url}
+              alt=""
+              className="w-12 h-12 rounded-full object-cover border border-white/[0.1]"
+            />
+          ) : (
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-neutral-700 to-neutral-900 border border-white/[0.1] flex items-center justify-center text-base font-bold text-white">
+              {request.buyer_name.charAt(0)}
+            </div>
+          )}
+          <UserPresenceDot
+            userId={request.buyer_id}
+            size="md"
+            className="absolute -bottom-0.5 -left-0.5"
+          />
+        </div>
+
+        {/* Identity + classification */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-sm font-bold text-white truncate">
+              {request.buyer_name}
+            </span>
+            <KycBadge status={request.buyer_kyc_status} />
+            {request.buyer_is_ambassador && (
+              <span className="bg-purple-400/[0.12] border border-purple-400/30 text-purple-300 px-1.5 py-px rounded text-[9px] font-bold flex items-center gap-0.5">
+                <Sparkles className="w-2.5 h-2.5" strokeWidth={2} />
+                سفير
+              </span>
+            )}
+          </div>
+
+          {request.buyer_handle && (
+            <div className="text-[10px] text-neutral-500 font-mono mt-0.5" dir="ltr">
+              @{request.buyer_handle}
+            </div>
+          )}
+
+          {/* Stats line */}
+          <div className="mt-2 flex items-center gap-3 flex-wrap">
+            {/* Rating */}
+            <div className="flex items-center gap-0.5" title={`متوسّط التقييم: ${request.buyer_rating_average.toFixed(1)}/5`}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Star
+                  key={i}
+                  className={cn(
+                    "w-3 h-3",
+                    i < stars ? "text-yellow-400" : "text-neutral-700",
+                  )}
+                  strokeWidth={2}
+                  fill={i < stars ? "currentColor" : "none"}
+                />
+              ))}
+              <span className="text-[10px] text-neutral-500 mr-1">
+                {request.buyer_rating_average > 0
+                  ? `${request.buyer_rating_average.toFixed(1)}`
+                  : "—"}
+                {request.buyer_rating_count > 0 && (
+                  <span className="text-neutral-600">
+                    {" "}({request.buyer_rating_count})
+                  </span>
+                )}
+              </span>
+            </div>
+
+            {/* Trades */}
+            <span className="text-[10px] text-neutral-400">
+              <span className="text-white font-bold font-mono">
+                {fmtNum(request.buyer_trades_completed)}
+              </span>{" "}
+              صفقة
+            </span>
+          </div>
+
+          {/* Presence text */}
+          <div className="mt-1.5">
+            <UserPresenceText userId={request.buyer_id} />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function KycBadge({
+  status,
+}: {
+  status: PendingDealRequest["buyer_kyc_status"]
+}) {
+  if (status === "verified") {
+    return (
+      <span className="bg-green-400/[0.12] border border-green-400/30 text-green-400 px-1.5 py-px rounded text-[9px] font-bold flex items-center gap-0.5">
+        <ShieldCheck className="w-2.5 h-2.5" strokeWidth={2.5} />
+        موثّق
+      </span>
+    )
+  }
+  if (status === "pending") {
+    return (
+      <span className="bg-yellow-400/[0.10] border border-yellow-400/30 text-yellow-400 px-1.5 py-px rounded text-[9px] font-bold">
+        قيد التوثيق
+      </span>
+    )
+  }
+  if (status === "rejected") {
+    return (
+      <span className="bg-red-400/[0.10] border border-red-400/30 text-red-400 px-1.5 py-px rounded text-[9px] font-bold flex items-center gap-0.5">
+        <ShieldAlert className="w-2.5 h-2.5" strokeWidth={2.5} />
+        توثيق مرفوض
+      </span>
+    )
+  }
+  return (
+    <span className="bg-neutral-500/[0.10] border border-neutral-500/30 text-neutral-400 px-1.5 py-px rounded text-[9px] font-bold">
+      غير موثّق
+    </span>
+  )
+}
+
+function Stat({
   label,
   value,
-  bold,
-  color = "text-white",
+  unit,
+  highlight,
 }: {
   label: string
   value: string
-  bold?: boolean
-  color?: string
+  unit?: string
+  highlight?: "green"
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-[11px] text-neutral-500">{label}</span>
-      <span
+    <div className="bg-black/30 border border-white/[0.05] rounded-lg p-2">
+      <div className="text-[9px] text-neutral-500 mb-1">{label}</div>
+      <div
         className={cn(
-          "font-mono",
-          bold ? "text-base font-bold" : "text-sm font-bold",
-          color,
+          "text-sm font-bold font-mono",
+          highlight === "green" ? "text-green-400" : "text-white",
         )}
       >
         {value}
-      </span>
+      </div>
+      {unit && <div className="text-[9px] text-neutral-600 mt-0.5">{unit}</div>}
     </div>
   )
 }
