@@ -152,15 +152,23 @@ BEGIN
       updated_at = NOW()
   WHERE id = p_listing_id;
 
+  -- ⚠ FIX (Phase 12.6b): match the real deals schema
+  --   • shares (not shares_amount)
+  --   • total_amount + fee_amount are GENERATED ALWAYS — omit from INSERT
+  --   • deal_type is NOT NULL — set to 'secondary' (between users via listing)
+  --   • fee_percentage = 0 so the legacy auto-computed fee_amount is 0;
+  --     the new commission lives in buyer_commission + seller_commission
+  --   • status enum has 'pending_seller_approval' (not 'pending')
   INSERT INTO public.deals (
-    project_id, buyer_id, seller_id, shares_amount, price_per_share,
-    total_amount, status, source, listing_id,
+    project_id, buyer_id, seller_id,
+    deal_type, shares, price_per_share, fee_percentage,
+    status, source, listing_id,
     buyer_commission, seller_commission,
     expires_at
   ) VALUES (
     v_listing.project_id, v_uid, v_listing.seller_id,
-    p_quantity, v_listing.price_per_share,
-    v_total_amount, 'pending', 'exchange', p_listing_id,
+    'secondary', p_quantity, v_listing.price_per_share, 0,
+    'pending_seller_approval', 'exchange', p_listing_id,
     v_commission, 0,
     NOW() + (p_duration_hours || ' hours')::INTERVAL
   )
@@ -307,15 +315,17 @@ BEGIN
       updated_at = NOW()
   WHERE id = p_listing_id;
 
+  -- ⚠ FIX (Phase 12.6b): match the real deals schema (see place_deal_from_listing).
   INSERT INTO public.deals (
-    project_id, buyer_id, seller_id, shares_amount, price_per_share,
-    total_amount, status, source, listing_id,
+    project_id, buyer_id, seller_id,
+    deal_type, shares, price_per_share, fee_percentage,
+    status, source, listing_id,
     buyer_commission, seller_commission,
     expires_at
   ) VALUES (
     v_listing.project_id, v_listing.seller_id, v_uid,
-    p_quantity, v_listing.price_per_share,
-    v_total_amount, 'pending', 'exchange', p_listing_id,
+    'secondary', p_quantity, v_listing.price_per_share, 0,
+    'pending_seller_approval', 'exchange', p_listing_id,
     v_commission, 0,
     NOW() + (p_duration_hours || ' hours')::INTERVAL
   )
@@ -527,10 +537,13 @@ BEGIN
   RAISE NOTICE '  ✓ respond_deal_cancellation (compare "sold")';
   RAISE NOTICE '  ✓ expire_pending_deals     (compare "sold")';
   RAISE NOTICE '';
-  RAISE NOTICE 'Three bugs squashed in one migration:';
+  RAISE NOTICE 'Five bugs squashed in one migration:';
   RAISE NOTICE '  • enum value mismatch ("completed" → "sold")';
   RAISE NOTICE '  • text→enum cast required on CASE expression';
-  RAISE NOTICE '  • buyer_set_if_sold CHECK constraint needs';
-  RAISE NOTICE '    buyer_id IS NOT NULL when status=''sold''';
+  RAISE NOTICE '  • buyer_set_if_sold CHECK needs buyer_id when sold';
+  RAISE NOTICE '  • deals column is "shares" not "shares_amount"';
+  RAISE NOTICE '  • deals.total_amount + fee_amount are GENERATED';
+  RAISE NOTICE '    (omitted from INSERT); deal_type and';
+  RAISE NOTICE '    "pending_seller_approval" added correctly';
   RAISE NOTICE '═══════════════════════════════════════';
 END $$;
