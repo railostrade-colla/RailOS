@@ -94,7 +94,7 @@ interface HoldingRow {
 interface HoldingProjectRow {
   id?: string
   name?: string | null
-  sector?: string | null
+  project_type?: string | null
   share_price?: number | null
 }
 
@@ -161,12 +161,14 @@ export async function getMyHoldingsForSend(): Promise<WalletHolding[]> {
     } = await supabase.auth.getUser()
     if (!user) return []
 
+    // Phase 12 — projects table has `project_type` (enum), not `sector`.
+    // Mirror the same Arabic mapping used elsewhere.
     const { data, error } = await supabase
       .from("holdings")
       .select(
         `
         id, project_id, shares,
-        project:projects(id, name, sector, share_price)
+        project:projects(id, name, project_type, share_price)
       `,
       )
       .eq("user_id", user.id)
@@ -174,6 +176,17 @@ export async function getMyHoldingsForSend(): Promise<WalletHolding[]> {
       .order("last_acquired_at", { ascending: false })
 
     if (error || !data) return []
+
+    const sectorMap: Record<string, string> = {
+      agriculture: "زراعة",
+      agricultural: "زراعة",
+      real_estate: "عقارات",
+      industrial: "صناعة",
+      commercial: "تجارة",
+      services: "خدمات",
+      medical: "طبّي",
+      tech: "تقني",
+    }
 
     const out: WalletHolding[] = []
     for (const row of data as HoldingRow[]) {
@@ -188,7 +201,7 @@ export async function getMyHoldingsForSend(): Promise<WalletHolding[]> {
         project: {
           id: project.id,
           name: project.name ?? "",
-          sector: project.sector ?? "",
+          sector: sectorMap[String(project.project_type ?? "")] ?? "",
           share_price: n(project.share_price),
         },
       })

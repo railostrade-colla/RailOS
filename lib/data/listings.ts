@@ -94,8 +94,25 @@ interface ProfileRef {
 
 interface ProjectRef {
   name?: string | null
-  sector?: string | null
+  project_type?: string | null
   share_price?: number | string | null
+}
+
+// Phase 12 — projects table only has `project_type` (enum), not
+// `sector`. Map to the Arabic label used elsewhere in the app.
+const SECTOR_MAP: Record<string, string> = {
+  agriculture: "زراعة",
+  agricultural: "زراعة",
+  real_estate: "عقارات",
+  industrial: "صناعة",
+  commercial: "تجارة",
+  services: "خدمات",
+  medical: "طبّي",
+  tech: "تقني",
+}
+function mapSector(t: string | null | undefined): string {
+  if (!t) return ""
+  return SECTOR_MAP[t] ?? t
 }
 
 function unwrap<T>(v: T | T[] | null | undefined): T | null {
@@ -136,7 +153,7 @@ export async function getMyExchangeListings(): Promise<ExchangeListingRow[]> {
          price_per_share, notes, is_quick_sell, status, type, created_at,
          expires_at,
          seller:profiles!seller_id ( full_name, username ),
-         project:projects!project_id ( name, sector, share_price )`,
+         project:projects!project_id ( name, project_type, share_price )`,
       )
       .eq("seller_id", user.id)
       .order("created_at", { ascending: false })
@@ -173,7 +190,7 @@ export async function getMyExchangeListings(): Promise<ExchangeListingRow[]> {
           "أنا",
         project_id: r.project_id,
         project_name: project?.name?.trim() || "—",
-        project_sector: project?.sector ?? null,
+        project_sector: mapSector(project?.project_type) || null,
         project_share_price: iqd(project?.share_price),
         shares_offered: offered,
         shares_sold: sold,
@@ -224,7 +241,7 @@ export async function getExchangeListings(): Promise<ExchangeListingRow[]> {
          price_per_share, notes, is_quick_sell, status, type, created_at,
          expires_at,
          seller:profiles!seller_id ( full_name, username ),
-         project:projects!project_id ( name, sector, share_price )`,
+         project:projects!project_id ( name, project_type, share_price )`,
       )
       .eq("status", "active")
       .order("created_at", { ascending: false })
@@ -262,7 +279,7 @@ export async function getExchangeListings(): Promise<ExchangeListingRow[]> {
           "—",
         project_id: r.project_id,
         project_name: project?.name?.trim() || "—",
-        project_sector: project?.sector ?? null,
+        project_sector: mapSector(project?.project_type) || null,
         // Phase 11.25 — iqd() rounds dinar values to integer so
         // fractional drift can never reach the price-cap UI.
         project_share_price: iqd(project?.share_price),
