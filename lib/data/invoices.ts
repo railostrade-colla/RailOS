@@ -234,14 +234,83 @@ export function getAllInvoices(): Invoice[] {
 }
 
 /**
- * Async DB-backed list. Tries the real `invoices` table first; if the
- * table doesn't exist or RLS blocks the read, falls back to whatever
- * is in the local store (which is now empty in production until real
- * invoices are created).
- *
- * The admin panel uses this so it surfaces real DB rows when the
- * table is provisioned, and a clean empty state otherwise — no more
- * fake "مزرعة الواحة / برج بغداد" mocks.
+ * Phase 13.7 — DB row shape (flat columns) → nested Invoice shape.
+ * The DB stores from/to as separate columns (from_user_id, from_name,
+ * to_user_id, to_name, …) so they're queryable + indexable. The
+ * Invoice TS interface keeps them as nested party objects for UI
+ * convenience. This mapper bridges the two.
+ */
+interface InvoiceRow {
+  id: string
+  number: string
+  type: InvoiceType
+  status: "issued" | "voided"
+  from_user_id: string | null
+  from_name: string
+  from_email: string | null
+  from_phone: string | null
+  to_user_id: string | null
+  to_name: string
+  to_email: string | null
+  to_phone: string | null
+  project_id: string | null
+  project_name: string
+  project_symbol: string | null
+  shares_amount: number | string
+  price_per_share: number | string
+  subtotal: number | string
+  platform_fee_units: number | string | null
+  total_amount: number | string
+  source_id: string | null
+  digital_signature: string
+  issued_at: string
+  completed_at: string
+  notes: string | null
+}
+
+function rowToInvoice(r: InvoiceRow): Invoice {
+  const num = (v: number | string | null | undefined): number =>
+    v == null ? 0 : (typeof v === "string" ? Number(v) : v) || 0
+  return {
+    id: r.id,
+    number: r.number,
+    type: r.type,
+    status: r.status,
+    from: {
+      id: r.from_user_id ?? "",
+      name: r.from_name,
+      email: r.from_email ?? undefined,
+      phone: r.from_phone ?? undefined,
+    },
+    to: {
+      id: r.to_user_id ?? "",
+      name: r.to_name,
+      email: r.to_email ?? undefined,
+      phone: r.to_phone ?? undefined,
+    },
+    project_id: r.project_id ?? "",
+    project_name: r.project_name,
+    project_symbol: r.project_symbol ?? undefined,
+    shares_amount: num(r.shares_amount),
+    price_per_share: num(r.price_per_share),
+    subtotal: num(r.subtotal),
+    platform_fee_units: num(r.platform_fee_units),
+    total_amount: num(r.total_amount),
+    source_id: r.source_id ?? undefined,
+    digital_signature: r.digital_signature,
+    issued_at: r.issued_at,
+    completed_at: r.completed_at,
+    notes: r.notes ?? undefined,
+  }
+}
+
+/**
+ * Async DB-backed list. Reads the real `invoices` table (Phase 13.7
+ * schema). Falls back to the local store only when the DB read fails
+ * AND the local store has rows (legacy compatibility). When the DB
+ * succeeds — even if it returns 0 rows — that's the truth, so the
+ * admin panel correctly shows an empty state instead of pre-seeded
+ * mocks.
  */
 export async function getAllInvoicesAsync(limit = 500): Promise<Invoice[]> {
   hydrate()
@@ -253,11 +322,12 @@ export async function getAllInvoicesAsync(limit = 500): Promise<Invoice[]> {
       .select("*")
       .order("completed_at", { ascending: false })
       .limit(limit)
-    if (!error && Array.isArray(data) && data.length > 0) {
-      return data as Invoice[]
+    if (!error && Array.isArray(data)) {
+      // DB read succeeded — authoritative, even if empty.
+      return (data as InvoiceRow[]).map(rowToInvoice)
     }
   } catch {
-    // Fall through to local store.
+    // Fall through to local store on hard failure (network / SDK).
   }
   return [..._store]
 }

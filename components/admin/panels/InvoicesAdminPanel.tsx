@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Search, FileText, ExternalLink } from "lucide-react"
 import {
@@ -14,6 +14,7 @@ import {
   type Invoice,
   type InvoiceType,
 } from "@/lib/data/invoices"
+import { createClient } from "@/lib/supabase/client"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
@@ -33,14 +34,43 @@ export function InvoicesAdminPanel() {
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<"all" | InvoiceType>("all")
 
+  // Phase 13.7 — realtime subscription on `invoices`. Initial fetch
+  // on mount; any INSERT / UPDATE on the table refreshes the list
+  // instantly so a new completed deal's invoices show up without
+  // requiring a manual page reload.
+  const refresh = useCallback(async () => {
+    const rows = await getAllInvoicesAsync(500)
+    setInvoices(rows)
+  }, [])
+
   useEffect(() => {
     let cancelled = false
-    getAllInvoicesAsync(500).then((rows) => {
-      if (cancelled) return
-      setInvoices(rows)
-    })
-    return () => { cancelled = true }
-  }, [])
+    void refresh()
+
+    const supabase = createClient()
+    const channel = supabase
+      .channel("invoices-admin-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "invoices" },
+        () => { if (!cancelled) void refresh() },
+      )
+      // Also listen on `deals` — the moment a deal flips to completed,
+      // the trigger inserts invoices. The realtime channel above covers
+      // that, but listening here too gives a faster perceived latency
+      // (useful if the trigger lags by a tick under load).
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "deals" },
+        () => { if (!cancelled) setTimeout(() => void refresh(), 300) },
+      )
+      .subscribe()
+
+    return () => {
+      cancelled = true
+      try { supabase.removeChannel(channel) } catch { /* ignore */ }
+    }
+  }, [refresh])
 
   const filtered = useMemo(() => {
     let list = search.trim() ? searchInvoices(search) : invoices
