@@ -638,7 +638,7 @@ export function AdminTopBar() {
 
       {/* ═══ Messages dropdown — Phase 11.34 reads support_tickets directly ═══ */}
       {open === "messages" && (
-        <Dropdown title={`💬 الرسائل (${openTickets.length || counts.support})`} onSeeAll={() => handleNavigate("/admin?tab=support_inbox")} ctaLabel="📥 صندوق الدعم" side="right" rightOffset="ml-32 lg:ml-44">
+        <Dropdown title={`💬 الرسائل (${openTickets.length || counts.support})`} onSeeAll={() => handleNavigate("/admin?tab=users&sub=support")} ctaLabel="📥 صندوق الدعم" side="right" rightOffset="ml-32 lg:ml-44">
           {openTickets.length === 0 ? (
             <div className="text-xs text-neutral-500 text-center py-6">لا تذاكر مفتوحة</div>
           ) : (
@@ -646,7 +646,7 @@ export function AdminTopBar() {
               {openTickets.map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => handleNavigate(`/admin?tab=support_inbox&ticket=${t.id}`)}
+                  onClick={() => handleNavigate(`/admin?tab=users&sub=support&ticket=${t.id}`)}
                   className="w-full text-right p-3 hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 transition-colors flex items-start gap-2.5"
                 >
                   <span className="text-base flex-shrink-0">💬</span>
@@ -678,7 +678,7 @@ export function AdminTopBar() {
               {pendingFees.map((o) => (
                 <button
                   key={o.id}
-                  onClick={() => handleNavigate(`/admin?tab=fees&request=${o.id}`)}
+                  onClick={() => handleNavigate(`/admin?tab=fees&sub=units&request=${o.id}`)}
                   className="w-full text-right p-3 hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 transition-colors flex items-start gap-2.5"
                 >
                   <span className="text-base flex-shrink-0">💎</span>
@@ -698,7 +698,7 @@ export function AdminTopBar() {
 
       {/* ═══ KYC dropdown — Phase 11.34 reads kyc_submissions directly ═══ */}
       {open === "kyc" && (
-        <Dropdown title={`🛡️ طلبات التوثيق (${pendingKyc.length || counts.kyc})`} onSeeAll={() => handleNavigate("/admin?tab=users")} side="right" rightOffset="ml-8 lg:ml-20">
+        <Dropdown title={`🛡️ طلبات التوثيق (${pendingKyc.length || counts.kyc})`} onSeeAll={() => handleNavigate("/admin?tab=users&sub=kyc")} ctaLabel="📂 طلبات التوثيق" side="right" rightOffset="ml-8 lg:ml-20">
           {pendingKyc.length === 0 ? (
             <div className="text-xs text-neutral-500 text-center py-6">لا طلبات معلّقة</div>
           ) : (
@@ -706,7 +706,7 @@ export function AdminTopBar() {
               {pendingKyc.map((k) => (
                 <button
                   key={k.id}
-                  onClick={() => handleNavigate(`/admin?tab=users&user=${k.user_id}`)}
+                  onClick={() => handleNavigate(`/admin?tab=users&sub=kyc&user=${k.user_id}`)}
                   className="w-full text-right p-3 hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 transition-colors flex items-start gap-2.5"
                 >
                   <span className="text-base flex-shrink-0">🛡️</span>

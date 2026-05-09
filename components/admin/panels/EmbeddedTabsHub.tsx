@@ -14,8 +14,9 @@
  *     all of them up front (which would also fight for data fetches).
  */
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { ComponentType } from "react"
+import { useSearchParams } from "next/navigation"
 
 export interface EmbeddedTab {
   /** Stable key, also stored in `?sub=` if you want bookmarkable URLs later. */
@@ -38,7 +39,25 @@ export interface EmbeddedTabsHubProps {
 }
 
 export function EmbeddedTabsHub({ title, subtitle, tabs }: EmbeddedTabsHubProps) {
-  const [active, setActive] = useState<string>(tabs[0]?.key ?? "")
+  // Phase 13.5 — read `?sub=` from the URL so deep-links from
+  // notifications land on a specific sub-tab. Falls back to the
+  // first tab if `?sub=` is missing or doesn't match.
+  const searchParams = useSearchParams()
+  const subFromUrl = searchParams?.get("sub")
+  const initialKey =
+    (subFromUrl && tabs.some((t) => t.key === subFromUrl) ? subFromUrl : tabs[0]?.key) ?? ""
+
+  const [active, setActive] = useState<string>(initialKey)
+
+  // If the user navigates between hubs while staying inside /admin
+  // (e.g., bell dropdown jumps from one hub to another), `?sub=` may
+  // change without the component remounting; sync state to the URL.
+  useEffect(() => {
+    if (subFromUrl && tabs.some((t) => t.key === subFromUrl) && subFromUrl !== active) {
+      setActive(subFromUrl)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subFromUrl])
 
   const ActivePanel = tabs.find((t) => t.key === active)?.Panel ?? tabs[0]?.Panel
   const activeTab = tabs.find((t) => t.key === active) ?? tabs[0]

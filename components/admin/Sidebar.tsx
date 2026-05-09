@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react"
 import { ADMIN_NAV, type AdminTab } from "@/lib/admin/types"
 import { getMyAdminPermissions, type AdminPermission } from "@/lib/data/admin-permissions"
+import { getDashboardOverview } from "@/lib/data/admin-utilities"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils/cn"
 
@@ -32,110 +33,118 @@ export function AdminSidebar({
     return () => { cancelled = true }
   }, [])
 
-  // Phase 11.21 — per-tab notification badges.
-  // Map a tab key → unread/pending count. Polled every 30s and also
-  // updated via realtime INSERT/UPDATE on the notifications table.
-  // Counts use SECURITY DEFINER queries / public reads only, no
-  // admin-RPC dependency, so they show up for every admin tier.
+  // ─── Phase 13.5 — comprehensive per-tab pending counts ──────────
+  //
+  // Every sidebar entry that has admin-actionable items shows a red
+  // badge with the live count. The count is computed from the real
+  // DB on mount + every 30s, and also bumped optimistically when
+  // AdminRealtimeNotifier fires an `admin:badge-bump` window event.
+  //
+  // Mapping (source → sidebar tab):
+  //   • KYC pending          → users
+  //   • support open         → users
+  //   • disputes open        → users (the panel lives in Users hub)
+  //   • fee_unit_requests    → fees
+  //   • payment_proofs       → fees
+  //   • deals pending        → shares
+  //   • council proposals    → council_admin
+  //   • ambassador pending   → ambassadors_admin
+  //
+  // The number on each sidebar item is the SUM of every pending bucket
+  // that lives under it. Click → opens that hub; the sub-tab counts
+  // inside the hub guide the admin to the exact queue.
   const [badges, setBadges] = useState<Partial<Record<AdminTab, number>>>({})
+
+  const refresh = useCallback(async () => {
+    try {
+      const supabase = createClient()
+      const ov = await getDashboardOverview()
+
+      // Two extra counts not covered by get_dashboard_overview RPC.
+      // Best-effort — failures (missing table / RLS) silently drop to 0.
+      const [proofsRes, councilRes] = await Promise.all([
+        supabase
+          .from("payment_proofs")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending"),
+        supabase
+          .from("council_proposals")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "open"),
+      ])
+      const proofsPending = proofsRes?.count ?? 0
+      const councilOpen = councilRes?.count ?? 0
+
+      const next: Partial<Record<AdminTab, number>> = {}
+      const add = (tab: AdminTab, n: number) => {
+        if (n > 0) next[tab] = (next[tab] ?? 0) + n
+      }
+      add("users", ov.kyc_pending ?? 0)
+      add("users", ov.support_open ?? 0)
+      add("users", ov.disputes_open ?? 0)
+      add("fees", ov.fee_requests_pending ?? 0)
+      add("fees", proofsPending)
+      add("shares", ov.deals_pending ?? 0)
+      add("council_admin", councilOpen)
+      add("ambassadors_admin", ov.ambassador_pending ?? 0)
+      setBadges(next)
+    } catch {
+      // best-effort — leave badges as-is on transient failures
+    }
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     const supabase = createClient()
-    const refresh = async () => {
-      try {
-        const { data: auth } = await supabase.auth.getUser()
-        if (!auth?.user?.id || cancelled) return
-        const uid = auth.user.id
 
-        // Phase 13.3 — requests_hub was removed from the sidebar. The
-        // unread admin-notifications count (was driving its badge)
-        // is now surfaced only via the bell icon in the top bar. We
-        // still fetch it here in case future entries want to consume
-        // it, but no sidebar item is updated.
-        // Filter: only admin-targeted unread rows (link_url starts
-        // with /admin) so user-side notifications (deal_completed →
-        // /portfolio, gift_received → /gifts) don't pollute admin
-        // counts.
-        const { count: unread } = await supabase
-          .from("notifications")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", uid)
-          .eq("is_read", false)
-          .like("link_url", "/admin%")
-        void unread // count handled by AdminTopBar bell — no sidebar binding
+    void refresh()
+    const id = setInterval(() => { if (!cancelled) void refresh() }, 30_000)
 
-        if (cancelled) return
-        const next: Partial<Record<AdminTab, number>> = {}
-        setBadges(next)
-      } catch {
-        // best-effort
-      }
-    }
-    refresh()
-    const id = setInterval(refresh, 30_000)
+    // Realtime — any change on a queue table refreshes the counts
+    // immediately (no waiting for the 30s poll).
+    const channel = supabase
+      .channel("admin-sidebar-badges")
+      .on("postgres_changes", { event: "*", schema: "public", table: "kyc_submissions" },     () => { void refresh() })
+      .on("postgres_changes", { event: "*", schema: "public", table: "fee_unit_requests" },   () => { void refresh() })
+      .on("postgres_changes", { event: "*", schema: "public", table: "payment_proofs" },      () => { void refresh() })
+      .on("postgres_changes", { event: "*", schema: "public", table: "disputes" },            () => { void refresh() })
+      .on("postgres_changes", { event: "*", schema: "public", table: "deals" },               () => { void refresh() })
+      .on("postgres_changes", { event: "*", schema: "public", table: "support_tickets" },     () => { void refresh() })
+      .on("postgres_changes", { event: "*", schema: "public", table: "council_proposals" },   () => { void refresh() })
+      .subscribe()
 
-    // Realtime: any new INSERT or is_read flip on notifications →
-    // refresh the count immediately.
-    let ch: ReturnType<typeof supabase.channel> | null = null
-    ;(async () => {
-      try {
-        const { data: auth } = await supabase.auth.getUser()
-        const uid = auth?.user?.id
-        if (!uid || cancelled) return
-        ch = supabase
-          .channel(`sidebar-notifs-${uid}`)
-          .on(
-            "postgres_changes",
-            { event: "*", schema: "public", table: "notifications", filter: `user_id=eq.${uid}` },
-            () => { void refresh() }
-          )
-          .subscribe()
-      } catch { /* ignore */ }
-    })()
-
-    // Phase 13.0 — listen for AdminRealtimeNotifier badge-bump events.
-    // Optimistic increment so the sidebar number ticks UP the moment
-    // a new request arrives, without waiting for the next refresh().
+    // Optimistic bump on the badge-bump window event so the number
+    // ticks UP the moment AdminRealtimeNotifier shows a toast,
+    // without waiting for the realtime channel to round-trip.
     const onBump = (e: Event) => {
       const detail = (e as CustomEvent).detail as
         | { kind?: string }
         | undefined
       if (!detail) return
-      setBadges((prev) => {
-        const next = { ...prev }
-        // Map the realtime event kind → which sidebar tab gets bumped.
-        // Phase 13.4 — `deal` was removed; user-to-user new-deal events
-        // no longer raise an admin alert (they appear silently in
-        // LiveActivityFeed).
-        const map: Record<string, AdminTab> = {
-          kyc:           "users",
-          fee_request:   "fees",
-          dispute:       "shares",
-          payment_proof: "fees",
-          support:       "system",
-          council:       "council_admin",
-        }
-        const tab = map[detail.kind ?? ""] as AdminTab | undefined
-        if (tab) {
-          next[tab] = (next[tab] ?? 0) + 1
-        }
-        // Phase 13.3 — no longer bump requests_hub; that entry was
-        // removed from the sidebar.
-        return next
-      })
-      // Ground-truth refresh in 500ms so optimistic count corrects
-      // back to reality.
-      setTimeout(() => { void refresh() }, 500)
+      const map: Record<string, AdminTab> = {
+        kyc:           "users",
+        support:       "users",
+        dispute:       "users",
+        fee_request:   "fees",
+        payment_proof: "fees",
+        council:       "council_admin",
+      }
+      const tab = map[detail.kind ?? ""] as AdminTab | undefined
+      if (tab) {
+        setBadges((prev) => ({ ...prev, [tab]: (prev[tab] ?? 0) + 1 }))
+      }
+      // Ground-truth reconcile shortly after.
+      setTimeout(() => { if (!cancelled) void refresh() }, 800)
     }
     window.addEventListener("admin:badge-bump", onBump)
 
     return () => {
       cancelled = true
       clearInterval(id)
-      if (ch) { try { supabase.removeChannel(ch) } catch { /* ignore */ } }
+      try { supabase.removeChannel(channel) } catch { /* ignore */ }
       window.removeEventListener("admin:badge-bump", onBump)
     }
-  }, [])
+  }, [refresh])
 
   const allowed = (item: typeof ADMIN_NAV[number]): boolean => {
     if (perms === null) return true              // still loading — render all (avoids flicker)
