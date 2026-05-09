@@ -49,32 +49,37 @@ export function QuantityModal({
   onClose,
   onConfirm,
 }: Props) {
+  // ⚠ ALL hooks must run unconditionally on every render — moving the
+  // `if (!listing) return null` early-return ABOVE the useMemos was a
+  // hooks-order violation that triggered React error #310 the moment
+  // the parent passed in a non-null listing (the hook count went from
+  // 5 useState → 5 useState + 2 useMemo).
+  // The hooks now read from `listing` defensively so they're safe to
+  // call when listing is null. The early return happens AFTER the
+  // hooks, just before render.
   const [quantityInput, setQuantityInput] = useState("")
   const [duration, setDuration] = useState<24 | 48 | 72>(defaultDurationHours)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
   const [agreed, setAgreed] = useState(false)
 
-  if (!listing) return null
-
-  // تحديد نوع العملية للمستخدم:
-  // إعلان "بيع" من شخص آخر → المستخدم سيشتري
-  // إعلان "شراء" من شخص آخر → المستخدم سيبيع
-  const userAction: "buy" | "sell" = listing.type === "sell" ? "buy" : "sell"
+  // Pre-compute fields that work with a possibly-null listing.
+  const userAction: "buy" | "sell" = listing?.type === "sell" ? "buy" : "sell"
   const actionLabel = userAction === "buy" ? "شراء" : "بيع"
+  const minAllowed = listing?.min_shares ?? 1
+  const pricePerShare = listing?.price_per_share ?? 0
+  const availableShares = listing?.available_shares ?? 0
+  const maxShares = listing?.max_shares ?? Infinity
 
-  const minAllowed = listing.min_shares ?? 1
-
-  // الحدّ الأقصى الفعلي
   const maxAllowed = useMemo(() => {
     if (userAction === "buy") {
-      const byBalance = listing.price_per_share > 0
-        ? Math.floor(userBalance / listing.price_per_share)
+      const byBalance = pricePerShare > 0
+        ? Math.floor(userBalance / pricePerShare)
         : Infinity
-      return Math.min(byBalance, listing.available_shares, listing.max_shares ?? Infinity)
+      return Math.min(byBalance, availableShares, maxShares)
     }
-    return Math.min(userShares, listing.available_shares, listing.max_shares ?? Infinity)
-  }, [userAction, userBalance, userShares, listing])
+    return Math.min(userShares, availableShares, maxShares)
+  }, [userAction, userBalance, userShares, pricePerShare, availableShares, maxShares])
 
   // ─── معالجة الإدخال (أرقام صحيحة فقط) ───
   const handleQuantityChange = (value: string) => {
@@ -85,14 +90,14 @@ export function QuantityModal({
   }
 
   const quantity = parseInt(quantityInput) || 0
-  const totalPrice = quantity * listing.price_per_share
+  const totalPrice = quantity * pricePerShare
 
   // ─── التحقّق ───
   const validationError = useMemo((): string => {
-    if (quantity === 0) return ""  // لا تظهر خطأ قبل بدء الكتابة
+    if (quantity === 0) return ""
     if (quantity < minAllowed) return `الحد الأدنى ${minAllowed.toLocaleString("en-US")} حصة`
-    if (quantity > listing.available_shares) {
-      return `المتوفّر فقط ${listing.available_shares.toLocaleString("en-US")} حصة`
+    if (quantity > availableShares) {
+      return `المتوفّر فقط ${availableShares.toLocaleString("en-US")} حصة`
     }
     if (userAction === "buy" && totalPrice > userBalance) {
       return `الرصيد غير كافٍ (تحتاج ${totalPrice.toLocaleString("en-US")} د.ع)`
@@ -101,7 +106,10 @@ export function QuantityModal({
       return `لا تملك سوى ${userShares.toLocaleString("en-US")} حصة`
     }
     return ""
-  }, [quantity, minAllowed, listing, userAction, totalPrice, userBalance, userShares])
+  }, [quantity, minAllowed, availableShares, userAction, totalPrice, userBalance, userShares])
+
+  // Now safe to bail out — every hook above ran unconditionally.
+  if (!listing) return null
 
   const canSubmit = quantity > 0 && !validationError && agreed && !submitting
 
