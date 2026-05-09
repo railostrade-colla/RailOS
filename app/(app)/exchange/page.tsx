@@ -29,6 +29,11 @@ import { getCurrentFeeBalanceSimple } from "@/lib/data/wallet"
 import { dedupCache, readPersistedSync, invalidateCache } from "@/lib/data/cache"
 import { useRealtimeListings } from "@/lib/realtime/useRealtimeListings"
 import { createClient } from "@/lib/supabase/client"
+// Phase 12.8 — show online/last-seen badge next to each listing's owner.
+import {
+  UserPresenceDot,
+  UserPresenceText,
+} from "@/components/presence/UserPresence"
 import { cn } from "@/lib/utils/cn"
 
 /**
@@ -1057,8 +1062,19 @@ function ExchangeContent() {
                     {/* Header: User info */}
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-neutral-700 to-neutral-900 border border-white/[0.1] flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
-                          {l.user_name.charAt(0)}
+                        <div className="relative flex-shrink-0">
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-neutral-700 to-neutral-900 border border-white/[0.1] flex items-center justify-center text-sm font-bold text-white">
+                            {l.user_name.charAt(0)}
+                          </div>
+                          {/* Phase 12.8 — online dot anchored to the avatar
+                              (classic chat-app pattern). Skip on own listings. */}
+                          {!isOwn && l.user_id && (
+                            <UserPresenceDot
+                              userId={l.user_id}
+                              size="md"
+                              className="absolute -bottom-0.5 -left-0.5"
+                            />
+                          )}
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
@@ -1076,8 +1092,16 @@ function ExchangeContent() {
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] text-neutral-500 mt-0.5">
-                            {l.total_trades} صفقة • {l.success_rate}% نجاح
+                          <div className="text-[10px] text-neutral-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                            <span>{l.total_trades} صفقة</span>
+                            <span className="text-neutral-700">•</span>
+                            <span>{l.success_rate}% نجاح</span>
+                            {!isOwn && l.user_id && (
+                              <>
+                                <span className="text-neutral-700">•</span>
+                                <UserPresenceText userId={l.user_id} />
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>

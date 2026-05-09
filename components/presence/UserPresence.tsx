@@ -92,6 +92,39 @@ export function UserPresenceDot({
 }
 
 /**
+ * Just the text — "متّصل الآن" / "قبل ٥ د" — colored by state.
+ * Use it next to compact metadata where you've already shown the name.
+ */
+export function UserPresenceText({
+  userId,
+  className,
+}: {
+  userId: string | null | undefined
+  className?: string
+}) {
+  const presence = usePresence(userId)
+  const isOnline = !!presence?.is_online
+  return (
+    <span
+      className={cn(
+        "text-[10px] inline-flex items-center gap-1",
+        isOnline ? "text-green-400" : "text-neutral-500",
+        className,
+      )}
+    >
+      <span
+        className={cn(
+          "inline-block w-1.5 h-1.5 rounded-full shrink-0",
+          isOnline ? "bg-green-400" : "bg-neutral-500",
+        )}
+        aria-hidden="true"
+      />
+      {formatPresence(presence)}
+    </span>
+  )
+}
+
+/**
  * Renders "Name · ● online text" — used in deal page next to
  * buyer/seller names and inside the global request popup.
  */
