@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * AdminRealtimeNotifier — Phase 13.0.
+ * AdminRealtimeNotifier — Phase 13.0 / 13.4.
  *
  * Sits at the top of /admin layout. Subscribes via Supabase Realtime
  * to every admin-relevant table. The MOMENT any new row arrives:
@@ -13,15 +13,16 @@
  * No polling. No page refresh required. The user's browser stays
  * connected via WebSocket and gets pushed events from Supabase.
  *
- * Tables watched:
- *   • notifications       — admin-targeted notifications
- *   • fee_unit_requests   — new fee charge requests
- *   • kyc_submissions     — new KYC applications
- *   • disputes            — new disputes opened
- *   • deals               — new pending deals
- *   • payment_proofs      — new payment proofs uploaded
- *   • support_tickets     — new support tickets
- *   • council_proposals   — new council proposals
+ * Tables watched (all are USER → ADMIN actions; user → user events
+ * like new `deals` are intentionally NOT included here — they appear
+ * silently in the LiveActivityFeed log only, per founder spec
+ * Phase 13.4):
+ *   • fee_unit_requests   — user asks to buy fee units
+ *   • kyc_submissions     — user submits KYC for verification
+ *   • disputes            — user opens a dispute requesting resolution
+ *   • payment_proofs      — user uploads proof for admin review
+ *   • support_tickets     — user asks for support
+ *   • council_proposals   — proposal requiring admin oversight
  *
  * Each event is throttled — if the same kind fires twice within 2s
  * (rapid burst), only the first toast appears (the badge still counts
@@ -33,8 +34,6 @@ import { useRouter } from "next/navigation"
 import {
   Bell,
   X,
-  AlertCircle,
-  Briefcase,
   CreditCard,
   ShieldCheck,
   AlertTriangle,
@@ -59,7 +58,6 @@ type AdminEventKind =
   | "kyc"
   | "fee_request"
   | "dispute"
-  | "deal"
   | "payment_proof"
   | "support"
   | "council"
@@ -72,7 +70,6 @@ const KIND_META: Record<
   kyc:           { icon: ShieldCheck,    color: "blue",   label: "تحقّق KYC جديد" },
   fee_request:   { icon: CreditCard,     color: "yellow", label: "طلب شحن وحدات" },
   dispute:       { icon: AlertTriangle,  color: "red",    label: "نزاع جديد" },
-  deal:          { icon: Briefcase,      color: "green",  label: "صفقة جديدة" },
   payment_proof: { icon: Receipt,        color: "blue",   label: "إثبات دفع جديد" },
   support:       { icon: HelpCircle,     color: "purple", label: "تذكرة دعم" },
   council:       { icon: Vote,           color: "purple", label: "اقتراح مجلس" },
@@ -178,20 +175,10 @@ export function AdminRealtimeNotifier() {
           )
         },
       )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "deals" },
-        (payload) => {
-          if (cancelled || !initialLoadedRef.current) return
-          const row = payload.new as { shares?: number; total_amount?: number }
-          pushToast(
-            "deal",
-            "🤝 صفقة جديدة",
-            `${row.shares ?? "—"} حصة · ${(row.total_amount ?? 0).toLocaleString("en-US")} د.ع`,
-            "/admin?tab=shares",
-          )
-        },
-      )
+      // Phase 13.4 — `deals` INSERT was intentionally removed. New
+      // user-to-user deals are NOT admin-actionable; surfacing them
+      // here was creating false-urgency toasts/sounds. They still
+      // appear in LiveActivityFeed (the silent log) on the dashboard.
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "payment_proofs" },

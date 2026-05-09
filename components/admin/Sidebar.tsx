@@ -104,11 +104,13 @@ export function AdminSidebar({
       setBadges((prev) => {
         const next = { ...prev }
         // Map the realtime event kind → which sidebar tab gets bumped.
+        // Phase 13.4 — `deal` was removed; user-to-user new-deal events
+        // no longer raise an admin alert (they appear silently in
+        // LiveActivityFeed).
         const map: Record<string, AdminTab> = {
           kyc:           "users",
           fee_request:   "fees",
           dispute:       "shares",
-          deal:          "shares",
           payment_proof: "fees",
           support:       "system",
           council:       "council_admin",
