@@ -425,7 +425,7 @@ export default function DashboardPage() {
                         )}
                         <div className="flex-1 text-right">
                           <div className="text-xs text-white font-medium">{p.name}</div>
-                          <div className="text-[10px] text-neutral-500">{p.share_price.toLocaleString("en-US")} د.ع</div>
+                          <div className="text-[10px] text-neutral-500">{(p.current_market_price ?? p.share_price).toLocaleString("en-US")} د.ع</div>
                         </div>
                         {selectedProject.id === p.id && <span className="text-white text-sm">✓</span>}
                       </button>
@@ -581,7 +581,13 @@ export default function DashboardPage() {
             </div>
 
             {(() => {
-              const livePrice = getProjectCurrentPrice(selectedProject.id) || selectedProject.share_price
+              // Phase 12.9 — prefer DB current_market_price (driven by
+              // admin force-rise + per-trade engine) over the legacy
+              // mock helper which always returns 0 in production.
+              const livePrice =
+                selectedProject.current_market_price ||
+                getProjectCurrentPrice(selectedProject.id) ||
+                selectedProject.share_price
               const trend = getProjectPriceTrend(selectedProject.id)
               const trendArrow = trend === "up" ? "↗" : trend === "down" ? "↘" : "→"
               const trendColor = trend === "up" ? "text-green-400" : trend === "down" ? "text-red-400" : "text-neutral-500"
@@ -606,8 +612,12 @@ export default function DashboardPage() {
                   soldCount  = offering_shares − available_shares
                   volumeIQD  = soldCount × current_market_price */}
             {(() => {
+              // Phase 12.9 — same fallback chain as above so the volume
+              // ربط reflects admin-raised prices.
               const livePrice =
-                getProjectCurrentPrice(selectedProject.id) || selectedProject.share_price
+                selectedProject.current_market_price ||
+                getProjectCurrentPrice(selectedProject.id) ||
+                selectedProject.share_price
               const offering =
                 selectedProject.offering_shares ?? selectedProject.available_shares ?? 0
               const available = selectedProject.available_shares ?? 0
@@ -643,7 +653,14 @@ export default function DashboardPage() {
 
             <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2.5 mb-4">
               <div className="text-[10px] text-neutral-500 mb-1">آخر 7 أيام</div>
-              <Sparkline basePrice={getProjectCurrentPrice(selectedProject.id) || selectedProject.share_price} height={50} />
+              <Sparkline
+                basePrice={
+                  selectedProject.current_market_price ||
+                  getProjectCurrentPrice(selectedProject.id) ||
+                  selectedProject.share_price
+                }
+                height={50}
+              />
             </div>
 
             <button
@@ -684,7 +701,11 @@ export default function DashboardPage() {
               for (const p of dbProjects) {
                 const offering = p.offering_shares ?? p.available_shares ?? 0
                 const sold = Math.max(0, offering - (p.available_shares ?? 0))
-                const price = getProjectCurrentPrice(p.id) || p.share_price || 0
+                const price =
+                  p.current_market_price ||
+                  getProjectCurrentPrice(p.id) ||
+                  p.share_price ||
+                  0
                 totalSold   += sold
                 totalVolume += sold * price
               }

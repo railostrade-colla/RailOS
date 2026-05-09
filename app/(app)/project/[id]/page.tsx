@@ -285,17 +285,25 @@ export default function ProjectDetailPage() {
               </div>
             </div>
 
-            {/* Price */}
+            {/* Price (Phase 12.9 — prefer current_market_price) */}
             <div className="mb-3">
               <div className="text-[11px] text-neutral-500 mb-1">السعر الحالي للحصة</div>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-white tracking-tight font-mono">{project.share_price.toLocaleString("en-US")}</span>
+                <span className="text-3xl font-bold text-white tracking-tight font-mono">
+                  {(project.current_market_price ?? project.share_price).toLocaleString("en-US")}
+                </span>
                 <span className="text-xs text-neutral-500">IQD</span>
                 <span className={cn("text-sm font-bold flex items-center gap-0.5 mr-2", isUp ? "text-green-400" : "text-red-400")}>
                   {isUp ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
                   {Math.abs(parseFloat(priceChange))}%
                 </span>
               </div>
+              {project.current_market_price &&
+               project.current_market_price !== project.share_price && (
+                <div className="text-[10px] text-neutral-600 mt-1">
+                  السعر الاسمي: {project.share_price.toLocaleString("en-US")} د.ع
+                </div>
+              )}
             </div>
 
             {/* Progress */}
@@ -900,7 +908,7 @@ export default function ProjectDetailPage() {
             <div className="flex justify-between items-start mb-1">
               <div>
                 <div className="text-base font-bold text-white">اختر طريقة الشراء</div>
-                <div className="text-[11px] text-neutral-500 mt-0.5">{project.name} • {project.share_price.toLocaleString("en-US")} IQD/حصة</div>
+                <div className="text-[11px] text-neutral-500 mt-0.5">{project.name} • {(project.current_market_price ?? project.share_price).toLocaleString("en-US")} IQD/حصة</div>
               </div>
               <button onClick={() => setShowBuyOptions(false)} className="text-neutral-500 hover:text-white">
                 <X className="w-5 h-5" />
