@@ -34,6 +34,8 @@ import {
   UserPresenceDot,
   UserPresenceText,
 } from "@/components/presence/UserPresence"
+// Phase 12.8 — synthetic sound effects on key transitions.
+import { playRequestSent } from "@/lib/sounds"
 import { cn } from "@/lib/utils/cn"
 
 /**
@@ -780,6 +782,7 @@ function ExchangeContent() {
       // Phase 12.8: deals open in pending_seller_approval. The seller
       // sees a global popup (DealRequestNotifier) anywhere in the app
       // and decides accept/reject. We tell the buyer to wait.
+      playRequestSent()
       showSuccess(
         isBuyListing
           ? `📤 تم إرسال طلب الشراء — بانتظار موافقة البائع`

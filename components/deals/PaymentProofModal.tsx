@@ -25,6 +25,9 @@ import {
   type ExchangePaymentMethod,
 } from "@/lib/data/payment-proof-submit"
 import { showSuccess, showError } from "@/lib/utils/toast"
+// Phase 12.8 — proof-submitted sound for buyer (seller hears its own
+// version via the deal-page status-transition watcher).
+import { playPaymentSubmitted } from "@/lib/sounds"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -138,6 +141,7 @@ export function PaymentProofModal({
       return
     }
 
+    playPaymentSubmitted()
     showSuccess("✅ تم إرسال الإثبات — البائع سيتحقّق ويُحرِّر الحصص")
     reset()
     onSubmitted()

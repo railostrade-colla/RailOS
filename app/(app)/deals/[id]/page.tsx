@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, use } from "react"
+import { useState, useMemo, useEffect, useRef, use } from "react"
 import { useRouter } from "next/navigation"
 import {
   Lock,
@@ -49,6 +49,8 @@ import { SellerPaymentMethods } from "@/components/deals/SellerPaymentMethods"
 import { PaymentProofModal } from "@/components/deals/PaymentProofModal"
 import { PaymentProofViewer } from "@/components/deals/PaymentProofViewer"
 import { UserPresenceLabel } from "@/components/presence/UserPresence"
+// Phase 12.8 — sound effects on deal lifecycle transitions.
+import { playDealCompleted, playPaymentSubmitted } from "@/lib/sounds"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -103,6 +105,27 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
 
   // Live updates for DB deals (no-op for mock)
   const { updateCount } = useRealtimeDeal(isDbDeal ? id : null)
+
+  // Phase 12.8 — sound notifications on deal-status transitions.
+  // We only play when the LOCAL view changed status (so the buyer
+  // who just clicked "submit" doesn't hear it twice).
+  const lastStatusRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!deal) return
+    const prev = lastStatusRef.current
+    const curr = deal.status
+    lastStatusRef.current = curr
+    if (!prev || prev === curr) return
+    // Buyer or seller transitioning into payment_confirmed = the buyer
+    // just submitted proof. Sound is most useful for the seller.
+    if (prev !== "payment_confirmed" && curr === "payment_confirmed") {
+      playPaymentSubmitted()
+    }
+    // Either side transitioning into completed = seller released shares.
+    if (prev !== "completed" && curr === "completed") {
+      playDealCompleted()
+    }
+  }, [deal])
 
   // tick — refresh timer كل ثانية
   const [, setTick] = useState(0)
@@ -232,6 +255,7 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
       notes: deal.notes,
     })
 
+    playDealCompleted()
     showSuccess(`🎉 تم تحويل ${fmtNum(deal.shares_amount)} حصة + إصدار الفاتورة الرسمية`)
     refresh()
     closeModal()

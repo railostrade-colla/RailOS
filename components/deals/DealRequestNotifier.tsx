@@ -47,6 +47,9 @@ import {
 } from "@/lib/data/seller-deal-actions"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { UserPresenceDot, UserPresenceText } from "@/components/presence/UserPresence"
+// Phase 12.8 — synth sounds on approve / reject actions + on the
+// arrival of a new request so the seller hears the popup land.
+import { playApproval, playRejection, playRequestSent } from "@/lib/sounds"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -130,6 +133,9 @@ export function DealRequestNotifier() {
           seenIds.current.add(newRow.id)
           const hydrated = await getPendingDealRequest(newRow.id)
           if (!hydrated) return
+          // Audible cue so the seller looks up immediately. The
+          // visual popup will follow within the same render tick.
+          playRequestSent()
           setQueue((prev) => {
             if (prev.some((p) => p.id === hydrated.id)) return prev
             return [hydrated, ...prev]
@@ -210,6 +216,7 @@ export function DealRequestNotifier() {
       showError(r.error ?? "تعذّر الموافقة")
       return
     }
+    playApproval()
     showSuccess(`✅ وافقت على صفقة ${head.buyer_name}`)
     popHead()
   }
@@ -227,6 +234,7 @@ export function DealRequestNotifier() {
       showError(r.error ?? "تعذّر الرفض")
       return
     }
+    playRejection()
     showSuccess("❌ تم رفض الطلب")
     popHead()
   }
