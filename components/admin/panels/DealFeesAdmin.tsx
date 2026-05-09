@@ -16,7 +16,7 @@
  * manual refund button we'll wire it via an RPC in a follow-up.
  */
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Search, RefreshCw } from "lucide-react"
 import {
@@ -28,6 +28,7 @@ import {
   computeDealFeeStats,
   type DealFeeRow,
 } from "@/lib/data/deal-fees-admin"
+import { createClient } from "@/lib/supabase/client"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 const fmtDate = (iso: string) => {
@@ -45,7 +46,7 @@ export function DealFeesAdminPanel() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setRefreshing(true)
     try {
       const data = await getDealFeesAdmin(500)
@@ -54,18 +55,32 @@ export function DealFeesAdminPanel() {
       setRefreshing(false)
       setLoading(false)
     }
-  }
+  }, [])
 
+  // Phase 13.6 — initial fetch + realtime subscription on `deals`.
+  // Any INSERT/UPDATE/DELETE on the deals table triggers an instant
+  // refresh, so the ledger stays current without a page reload.
   useEffect(() => {
     let cancelled = false
-    getDealFeesAdmin(500).then((data) => {
-      if (!cancelled) {
-        setRows(data)
-        setLoading(false)
-      }
-    })
-    return () => { cancelled = true }
-  }, [])
+    void refresh()
+
+    const supabase = createClient()
+    const channel = supabase
+      .channel("deal-fees-admin-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "deals" },
+        () => {
+          if (!cancelled) void refresh()
+        },
+      )
+      .subscribe()
+
+    return () => {
+      cancelled = true
+      try { supabase.removeChannel(channel) } catch { /* ignore */ }
+    }
+  }, [refresh])
 
   const stats = useMemo(() => computeDealFeeStats(rows), [rows])
 

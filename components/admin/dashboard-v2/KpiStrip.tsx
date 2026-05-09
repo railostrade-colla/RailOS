@@ -1,21 +1,29 @@
 "use client"
 
 /**
- * KpiStrip — Phase 13.1.
+ * KpiStrip — Phase 13.1 / 13.6.
  *
- * The 4 numbers an admin glances at first thing in the morning.
- * Each card auto-refreshes every 30 s and animates the number
- * change with a brief flash.
+ * The 5 numbers an admin glances at first thing in the morning:
+ * users · deals · volume · pending decisions · collected fees.
+ *
+ * Phase 13.6 — added "إجمالي الرسوم المحصلة" (collected commission
+ * units across every completed deal). Also subscribes to the `deals`
+ * table via Realtime, so volume + collected-fees + pending-deals
+ * counts tick up the moment a deal lands without waiting for the
+ * next 30 s poll.
  */
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   Users,
   Briefcase,
   Wallet,
   AlertCircle,
+  Coins,
 } from "lucide-react"
 import { getDashboardOverview } from "@/lib/data/admin-utilities"
+import { getTotalCollectedFees } from "@/lib/data/deal-fees-admin"
+import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -25,17 +33,27 @@ interface Stats {
   deals_today: number
   volume_today: number
   pending_total: number
+  collected_fees: number
 }
 
-const ZERO: Stats = { users: 0, deals_today: 0, volume_today: 0, pending_total: 0 }
+const ZERO: Stats = {
+  users: 0,
+  deals_today: 0,
+  volume_today: 0,
+  pending_total: 0,
+  collected_fees: 0,
+}
 
 export function KpiStrip() {
   const [stats, setStats] = useState<Stats>(ZERO)
   const [loading, setLoading] = useState(true)
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
-      const ov = await getDashboardOverview()
+      const [ov, fees] = await Promise.all([
+        getDashboardOverview(),
+        getTotalCollectedFees(),
+      ])
       if (!ov) return
       const pending =
         (ov.kyc_pending ?? 0) +
@@ -47,20 +65,45 @@ export function KpiStrip() {
         deals_today: ov.deals_total ?? 0,
         volume_today: ov.deals_volume_total ?? 0,
         pending_total: pending,
+        collected_fees: fees,
       })
     } finally {
       setLoading(false)
     }
-  }
-
-  useEffect(() => {
-    void refresh()
-    const t = setInterval(refresh, 30_000)
-    return () => clearInterval(t)
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    void refresh()
+    const t = setInterval(() => { if (!cancelled) void refresh() }, 30_000)
+
+    // Phase 13.6 — realtime: any change on `deals` triggers an instant
+    // refresh of every KPI (volume, total deals, pending, collected
+    // fees all derive from the deals table).
+    const supabase = createClient()
+    const channel = supabase
+      .channel("kpi-strip-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "deals" },
+        () => { if (!cancelled) void refresh() },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "profiles" },
+        () => { if (!cancelled) void refresh() },
+      )
+      .subscribe()
+
+    return () => {
+      cancelled = true
+      clearInterval(t)
+      try { supabase.removeChannel(channel) } catch { /* ignore */ }
+    }
+  }, [refresh])
+
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
       <Card
         icon={<Users className="w-4 h-4" />}
         label="إجمالي المستخدمين"
@@ -81,6 +124,14 @@ export function KpiStrip() {
         value={fmtNum(stats.volume_today)}
         unit="د.ع"
         tone="yellow"
+        loading={loading}
+      />
+      <Card
+        icon={<Coins className="w-4 h-4" />}
+        label="إجمالي الرسوم المحصلة"
+        value={fmtNum(stats.collected_fees)}
+        unit="وحدة"
+        tone="purple"
         loading={loading}
       />
       <Card
@@ -106,7 +157,7 @@ function Card({
   label: string
   value: string
   unit?: string
-  tone: "blue" | "green" | "yellow" | "red" | "neutral"
+  tone: "blue" | "green" | "yellow" | "red" | "purple" | "neutral"
   loading: boolean
 }) {
   const toneClass = {
@@ -114,6 +165,7 @@ function Card({
     green: "bg-green-400/[0.06] border-green-400/20 text-green-400",
     yellow: "bg-yellow-400/[0.06] border-yellow-400/20 text-yellow-400",
     red: "bg-red-400/[0.06] border-red-400/20 text-red-400",
+    purple: "bg-purple-400/[0.06] border-purple-400/20 text-purple-400",
     neutral: "bg-white/[0.04] border-white/[0.08] text-white",
   }[tone]
 

@@ -11,7 +11,7 @@
  * Listens to admin:badge-bump so counts tick up live.
  */
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import {
   ShieldCheck,
@@ -22,6 +22,7 @@ import {
   HelpCircle,
 } from "lucide-react"
 import { getDashboardOverview } from "@/lib/data/admin-utilities"
+import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils/cn"
 
 interface Counts {
@@ -46,24 +47,56 @@ export function PendingQueueCard() {
   const router = useRouter()
   const [counts, setCounts] = useState<Counts>(ZERO)
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
+    const supabase = createClient()
     const ov = await getDashboardOverview()
     if (!ov) return
+    // Phase 13.6 — payment_proofs + support are not in the dashboard
+    // overview RPC; query them directly so the cell shows real counts.
+    // Failures silently fall back to 0.
+    const [proofsRes, supportRes] = await Promise.all([
+      supabase
+        .from("payment_proofs")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending"),
+      supabase
+        .from("support_tickets")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["open", "in_progress"]),
+    ])
     setCounts({
       kyc: ov.kyc_pending ?? 0,
       fee_requests: ov.fee_requests_pending ?? 0,
-      payment_proofs: 0, // not in overview yet — derived elsewhere
+      payment_proofs: proofsRes?.count ?? 0,
       disputes: ov.disputes_open ?? 0,
       deals: ov.deals_pending ?? 0,
-      support: 0, // not in overview yet
+      support: supportRes?.count ?? ov.support_open ?? 0,
     })
-  }
+  }, [])
 
   useEffect(() => {
+    let cancelled = false
     void refresh()
-    const t = setInterval(refresh, 30_000)
+    const t = setInterval(() => { if (!cancelled) void refresh() }, 30_000)
 
-    // Phase 13.0 — bump optimistically when AdminRealtimeNotifier fires.
+    // Phase 13.6 — direct realtime subscriptions on every queue table.
+    // Any INSERT/UPDATE/DELETE on these tables refreshes the counts
+    // immediately, so when an admin processes something (e.g. flips
+    // a kyc status from pending → approved) the cell ticks DOWN
+    // without waiting for the 30s poll.
+    const supabase = createClient()
+    const channel = supabase
+      .channel("pending-queue-card-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "kyc_submissions" },   () => { if (!cancelled) void refresh() })
+      .on("postgres_changes", { event: "*", schema: "public", table: "fee_unit_requests" }, () => { if (!cancelled) void refresh() })
+      .on("postgres_changes", { event: "*", schema: "public", table: "payment_proofs" },    () => { if (!cancelled) void refresh() })
+      .on("postgres_changes", { event: "*", schema: "public", table: "disputes" },          () => { if (!cancelled) void refresh() })
+      .on("postgres_changes", { event: "*", schema: "public", table: "deals" },             () => { if (!cancelled) void refresh() })
+      .on("postgres_changes", { event: "*", schema: "public", table: "support_tickets" },   () => { if (!cancelled) void refresh() })
+      .subscribe()
+
+    // Optimistic bump when AdminRealtimeNotifier emits a toast — gives
+    // an instant tick UP before the realtime channel round-trips.
     const onBump = (e: Event) => {
       const detail = (e as CustomEvent).detail as { kind?: string }
       if (!detail) return
@@ -74,21 +107,20 @@ export function PendingQueueCard() {
           case "fee_request":   next.fee_requests++; break
           case "payment_proof": next.payment_proofs++; break
           case "dispute":       next.disputes++; break
-          case "deal":          next.deals++; break
           case "support":       next.support++; break
         }
         return next
       })
-      // Sync back to ground truth in 500ms.
-      setTimeout(() => { void refresh() }, 500)
     }
     window.addEventListener("admin:badge-bump", onBump)
 
     return () => {
+      cancelled = true
       clearInterval(t)
+      try { supabase.removeChannel(channel) } catch { /* ignore */ }
       window.removeEventListener("admin:badge-bump", onBump)
     }
-  }, [])
+  }, [refresh])
 
   const items = [
     {

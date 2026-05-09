@@ -51,7 +51,11 @@ interface RawDeal {
   project_id: string | null
   buyer_id: string | null
   seller_id: string | null
-  shares_amount: number | string | null
+  // Phase 13.6 — actual column on `deals` is `shares` (BIGINT). The
+  // earlier `shares_amount` here was a copy-paste from an older draft
+  // of the table that never made it to production; the SELECT was
+  // failing with 42703 silently and the panel was showing zeros.
+  shares: number | string | null
   total_amount: number | string | null
   buyer_commission?: number | string | null
   seller_commission?: number | string | null
@@ -110,7 +114,7 @@ export async function getDealFeesAdmin(limit = 500): Promise<DealFeeRow[]> {
     const { data, error } = await supabase
       .from("deals")
       .select(
-        "id, project_id, buyer_id, seller_id, shares_amount, total_amount, buyer_commission, seller_commission, status, created_at, completed_at",
+        "id, project_id, buyer_id, seller_id, shares, total_amount, buyer_commission, seller_commission, status, created_at, completed_at",
       )
       .order("created_at", { ascending: false })
       .limit(limit)
@@ -137,7 +141,7 @@ export async function getDealFeesAdmin(limit = 500): Promise<DealFeeRow[]> {
     try {
       const { data, error } = await supabase
         .from("deals")
-        .select("id, project_id, buyer_id, seller_id, shares_amount, total_amount, status, created_at, completed_at")
+        .select("id, project_id, buyer_id, seller_id, shares, total_amount, status, created_at, completed_at")
         .order("created_at", { ascending: false })
         .limit(limit)
       if (error) {
@@ -217,7 +221,7 @@ export async function getDealFeesAdmin(limit = 500): Promise<DealFeeRow[]> {
       buyer_name: displayName(buyer, d.buyer_id),
       seller_id: d.seller_id ?? "",
       seller_name: displayName(seller, d.seller_id),
-      shares: num(d.shares_amount),
+      shares: num(d.shares),
       deal_total: total,
       fee_percent: COMMISSION_RATE * 100,
       fee_amount: feeAmount,
@@ -251,5 +255,40 @@ export function computeDealFeeStats(rows: DealFeeRow[]): DealFeeStats {
     total_collected: collected,
     total_pending: pending,
     total_refunded: refunded,
+  }
+}
+
+/**
+ * Phase 13.6 — cheap aggregate for the dashboard KPI strip.
+ * Returns the total commission units collected across every completed
+ * deal. Failures (missing column / RLS / network) silently return 0.
+ */
+export async function getTotalCollectedFees(): Promise<number> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("deals")
+      .select("buyer_commission, seller_commission, total_amount")
+      .eq("status", "completed")
+    if (error || !data) return 0
+
+    type CompletedDeal = {
+      buyer_commission?: number | string | null
+      seller_commission?: number | string | null
+      total_amount?: number | string | null
+    }
+    return (data as CompletedDeal[]).reduce((sum, d) => {
+      const buyer = num(d.buyer_commission)
+      const seller = num(d.seller_commission)
+      // Synthesise from total_amount @ 2% if commissions are zeroed
+      // (legacy rows pre-Phase-12 column rollout).
+      if (buyer === 0 && seller === 0) {
+        const synth = Math.floor(num(d.total_amount) * COMMISSION_RATE)
+        return sum + synth * 2
+      }
+      return sum + buyer + seller
+    }, 0)
+  } catch {
+    return 0
   }
 }
