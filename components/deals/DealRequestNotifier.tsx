@@ -42,6 +42,7 @@ import {
   type PendingDealRequest,
 } from "@/lib/data/seller-deal-actions"
 import { showSuccess, showError } from "@/lib/utils/toast"
+import { UserPresenceLabel } from "@/components/presence/UserPresence"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -219,8 +220,13 @@ export function DealRequestNotifier() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-sm font-bold text-white">🛒 طلب فتح صفقة</div>
-            <div className="text-[11px] text-blue-300 mt-0.5">
-              من <strong>{head.buyer_name}</strong>
+            <div className="mt-0.5">
+              <span className="text-[11px] text-blue-300">من </span>
+              <UserPresenceLabel
+                userId={head.buyer_id}
+                name={head.buyer_name}
+                showText
+              />
             </div>
           </div>
           {queue.length > 1 && (

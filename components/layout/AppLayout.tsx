@@ -12,6 +12,9 @@ import { PushPermissionPrompt } from "@/components/notifications/PushPermissionP
 // buyer requests to open a deal on one of my listings. The seller can
 // approve/reject without leaving their current page.
 import { DealRequestNotifier } from "@/components/deals/DealRequestNotifier"
+// Phase 12.8 — bumps profiles.last_seen_at every 30s while the tab is
+// visible so other users see an accurate "متصل الآن" / "آخر اتصال" badge.
+import { useHeartbeat } from "@/lib/hooks/useHeartbeat"
 import { cn } from "@/lib/utils/cn"
 // Phase 11.31 — global SWR preloader. Warms the dedupCache for every
 // commonly-read endpoint (projects, portfolio, fee balance, profile,
@@ -77,6 +80,10 @@ export function AppLayout({ children, hideBottomNav = false, hideFooter = false 
   // then refresh every 60 s in the background. Pages read the same
   // cache keys with readPersistedSync for synchronous first paint.
   usePreloadAppData()
+
+  // Phase 12.8 — keep profiles.last_seen_at fresh so counter-parties
+  // see an accurate online/last-seen indicator next to my name.
+  useHeartbeat()
 
   return (
     <div className="min-h-screen flex flex-col bg-black">

@@ -170,7 +170,7 @@ BEGIN
     'secondary', p_quantity, v_listing.price_per_share, 0,
     'pending_seller_approval', 'exchange', p_listing_id,
     v_commission, 0,
-    NOW() + (p_duration_hours || ' hours')::INTERVAL
+    NOW() + INTERVAL '15 minutes'  -- Phase 12.8: 15-min chat window
   )
   RETURNING id INTO v_deal_id;
 
@@ -332,7 +332,7 @@ BEGIN
     'secondary', p_quantity, v_listing.price_per_share, 0,
     'pending_seller_approval', 'exchange', p_listing_id,
     v_commission, 0,
-    NOW() + (p_duration_hours || ' hours')::INTERVAL
+    NOW() + INTERVAL '15 minutes'  -- Phase 12.8: 15-min chat window
   )
   RETURNING id INTO v_deal_id;
 

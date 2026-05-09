@@ -47,6 +47,7 @@ import { DealChat } from "@/components/deals/DealChat"
 import { SellerPaymentMethods } from "@/components/deals/SellerPaymentMethods"
 import { PaymentProofModal } from "@/components/deals/PaymentProofModal"
 import { PaymentProofViewer } from "@/components/deals/PaymentProofViewer"
+import { UserPresenceLabel } from "@/components/presence/UserPresence"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -61,6 +62,11 @@ function formatTimeLeft(ms: number): string {
   const h = Math.floor(totalSec / 3600)
   const m = Math.floor((totalSec % 3600) / 60)
   const s = totalSec % 60
+  // Phase 12.8: deals run 15 minutes — drop the leading "00:" so the
+  // visible format is "14:23" (more readable than "00:14:23").
+  if (h === 0) {
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+  }
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
 }
 
@@ -344,6 +350,35 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
               )}
             </div>
           </Card>
+
+          {/* ═══ Section 0.5: Parties + presence (Phase 12.8) ═══ */}
+          {isDbDeal && (
+            <Card className="mb-4">
+              <div className="text-[11px] font-bold text-neutral-300 mb-3">
+                👥 طرفا الصفقة
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white/[0.03] border border-white/[0.06] rounded-lg p-3">
+                  <div className="text-[10px] text-neutral-500 mb-1">المشتري</div>
+                  <UserPresenceLabel
+                    userId={deal.buyer_id}
+                    name={deal.buyer_name}
+                    align="right"
+                    showText
+                  />
+                </div>
+                <div className="bg-white/[0.03] border border-white/[0.06] rounded-lg p-3">
+                  <div className="text-[10px] text-neutral-500 mb-1">البائع</div>
+                  <UserPresenceLabel
+                    userId={deal.seller_id}
+                    name={deal.seller_name}
+                    align="right"
+                    showText
+                  />
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* ═══ Section 1: Deal Info ═══ */}
           <Card className="mb-4">
