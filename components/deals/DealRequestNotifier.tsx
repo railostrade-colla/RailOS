@@ -101,7 +101,15 @@ export function DealRequestNotifier() {
     void refresh()
   }, [uid, refresh])
 
-  // Realtime
+  // Realtime + safety-net polling. Realtime is preferred (latency
+  // < 1s) but it can silently drop in three edge-cases the founder
+  // saw in production:
+  //   1. The seller's `deals` row isn't in supabase_realtime publication.
+  //   2. WebSocket got dropped by a flaky network and didn't reconnect.
+  //   3. Browser tab was throttled (mobile Safari) and missed events.
+  //
+  // The 10-second polling fallback below catches all three so the
+  // popup ALWAYS appears within 10 s without the user refreshing.
   useEffect(() => {
     if (!uid) return
     const supabase = createClient()
@@ -143,14 +151,49 @@ export function DealRequestNotifier() {
           }
         },
       )
-      .subscribe()
+      .subscribe((status) => {
+        // Log subscription state so we can diagnose if realtime is
+        // silently failing in prod (Supabase reports CHANNEL_ERROR
+        // when the table isn't in the publication, for example).
+        if (
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT" ||
+          status === "CLOSED"
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn("[deal-requests] realtime status:", status)
+        }
+      })
+
+    // Safety net: poll every 10 seconds. Cheap (single SELECT, indexed
+    // on seller_id+status). Pauses while tab is hidden to save battery.
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState !== "visible") return
+      void refresh()
+    }, 10_000)
+
+    // Refresh immediately whenever the tab regains focus — catches
+    // any events that happened while the tab was throttled.
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void refresh()
+      }
+    }
+    const onFocus = () => {
+      void refresh()
+    }
+    document.addEventListener("visibilitychange", onVisibility)
+    window.addEventListener("focus", onFocus)
 
     return () => {
       try {
         supabase.removeChannel(channel)
       } catch { /* ignore */ }
+      clearInterval(pollInterval)
+      document.removeEventListener("visibilitychange", onVisibility)
+      window.removeEventListener("focus", onFocus)
     }
-  }, [uid])
+  }, [uid, refresh])
 
   const popHead = () => {
     setQueue((prev) => prev.slice(1))
