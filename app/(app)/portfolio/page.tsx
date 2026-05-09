@@ -47,6 +47,9 @@ import { parseIqdInput } from "@/lib/utils/money"
 // Phase 11.31 — read last-known portfolio data synchronously on mount
 // so the page paints with real numbers instead of a loading skeleton.
 import { readPersistedSync } from "@/lib/data/cache"
+// Phase 12.10 — commission-aware P&L (subtracts buy/sell commissions
+// from the headline percentage shown next to "القيمة الإجمالية").
+import { getUserPnLSummary, type UserPnLSummary } from "@/lib/data/user-pnl"
 
 // TODO Phase 4.X — derive from this month's deals.total_amount sum.
 const CURRENT_USER_USED_THIS_MONTH = 0
@@ -167,19 +170,32 @@ function PortfolioContent() {
     return () => { cancelled = true }
   }, [active])
 
+  // Phase 12.10 — accurate P&L (subtracts commissions, includes
+  // realized + unrealized profit). Fetched in parallel with the
+  // legacy portfolio summary; the legacy values are used for everything
+  // EXCEPT the headline % badge which now uses pnl.profit_pct.
+  const [pnl, setPnl] = useState<UserPnLSummary | null>(null)
+
   const refresh = async () => {
-    const fresh = await getPortfolioData()
+    const [fresh, freshPnl] = await Promise.all([
+      getPortfolioData(),
+      getUserPnLSummary(),
+    ])
     setData(fresh)
+    setPnl(freshPnl)
     setLoading(false)
   }
 
   useEffect(() => {
     let cancelled = false
-    getPortfolioData().then((d) => {
-      if (cancelled) return
-      setData(d)
-      setLoading(false)
-    })
+    Promise.all([getPortfolioData(), getUserPnLSummary()]).then(
+      ([d, p]) => {
+        if (cancelled) return
+        setData(d)
+        setPnl(p)
+        setLoading(false)
+      },
+    )
     return () => {
       cancelled = true
     }
@@ -242,10 +258,19 @@ function PortfolioContent() {
   const totalShares = summary?.totalShares ?? 0
   const totalValue = summary?.totalValue ?? 0
   const totalInvested = summary?.totalInvested ?? 0
-  const netProfit = summary?.totalProfit ?? 0
-  const profitPct = totalInvested > 0
-    ? ((netProfit / totalInvested) * 100).toFixed(2)
-    : "0"
+  // Phase 12.10 — prefer the commission-aware P&L from the new RPC.
+  // It accounts for:
+  //   • buyer commissions added to cost
+  //   • seller commissions subtracted from sale revenue
+  //   • realized profit from completed sales
+  //   • unrealized profit on currently held shares (current_market_price)
+  // Falls back to the legacy summary when pnl hasn't loaded yet.
+  const netProfit = pnl ? pnl.net_profit : (summary?.totalProfit ?? 0)
+  const profitPct = pnl
+    ? pnl.profit_pct.toFixed(2)
+    : totalInvested > 0
+      ? ((netProfit / totalInvested) * 100).toFixed(2)
+      : "0"
   const isUp = netProfit >= 0
   const bestPerformerPct = summary?.bestPerformerPct ?? 0
   const bestHolding = summary?.bestPerformerHolding ?? null
