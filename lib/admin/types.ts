@@ -93,8 +93,14 @@ export interface AdminNavItem {
 // URL — but the daily workflow runs through these 5 sections.
 export const ADMIN_NAV: AdminNavItem[] = [
   // ─── 1. نظرة عامة (the at-a-glance landing) ───────────────────
+  // Phase 13.3 — "مركز الطلبات" was REMOVED from the sidebar. Every
+  // bucket it surfaced (shares / fees / deals / disputes / volume /
+  // inbox) is already presented inside a dedicated hub or on the
+  // dashboard, so the sidebar entry was pure duplication. The panel
+  // file remains registered in app/admin/page.tsx so legacy URLs
+  // (?tab=requests_hub) keep resolving for anyone who has them
+  // bookmarked.
   { key: "dashboard",    label: "لوحة التحكم",    icon: "◈",  section: "نظرة عامة", requiredPermission: "view_dashboard" },
-  { key: "requests_hub", label: "مركز الطلبات",   icon: "🎯", section: "نظرة عامة", requiredPermission: "manage_orders" },
   { key: "monitor",      label: "مراقبة السوق",   icon: "📡", section: "نظرة عامة", requiredPermission: "manage_market" },
   { key: "log",          label: "سجل القرارات",   icon: "📋", section: "نظرة عامة", requiredPermission: "view_audit" },
 

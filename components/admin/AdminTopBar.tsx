@@ -599,7 +599,7 @@ export function AdminTopBar() {
 
       {/* ═══ Notifications dropdown ═══ */}
       {open === "notifications" && (
-        <Dropdown title={`🔔 الإشعارات (${totalNotifs})`} onSeeAll={() => handleNavigate("/admin?tab=requests_hub")} side="right" rightOffset="ml-44 lg:ml-56">
+        <Dropdown title={`🔔 الإشعارات (${totalNotifs})`} onSeeAll={() => handleNavigate("/admin?tab=dashboard")} ctaLabel="📥 لوحة التحكم" side="right" rightOffset="ml-44 lg:ml-56">
           {allNotifs.length === 0 ? (
             <div className="text-xs text-neutral-500 text-center py-6">لا إشعارات جديدة</div>
           ) : (
@@ -667,7 +667,7 @@ export function AdminTopBar() {
 
       {/* ═══ Orders dropdown — Phase 11.34 reads fee_unit_requests directly ═══ */}
       {open === "orders" && (
-        <Dropdown title={`📦 الطلبات (${pendingFees.length || ordersCount})`} onSeeAll={() => handleNavigate("/admin?tab=requests_hub")} ctaLabel="مركز الطلبات ←" side="right" rightOffset="ml-20 lg:ml-32">
+        <Dropdown title={`📦 الطلبات (${pendingFees.length || ordersCount})`} onSeeAll={() => handleNavigate("/admin?tab=fees")} ctaLabel="فتح في الرسوم ←" side="right" rightOffset="ml-20 lg:ml-32">
           <div className="px-3 pt-2 pb-1 text-[9px] text-neutral-600 flex items-center gap-2">
             <span>💎 رسوم معلّقة: <span className="text-yellow-400 font-mono">{pendingFees.length}</span></span>
           </div>
@@ -678,7 +678,7 @@ export function AdminTopBar() {
               {pendingFees.map((o) => (
                 <button
                   key={o.id}
-                  onClick={() => handleNavigate(`/admin?tab=requests_hub&request=${o.id}`)}
+                  onClick={() => handleNavigate(`/admin?tab=fees&request=${o.id}`)}
                   className="w-full text-right p-3 hover:bg-white/[0.04] border-b border-white/[0.04] last:border-0 transition-colors flex items-start gap-2.5"
                 >
                   <span className="text-base flex-shrink-0">💎</span>

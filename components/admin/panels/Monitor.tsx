@@ -3,27 +3,24 @@
 /**
  * MonitorPanel — /admin?tab=monitor.
  *
- * Phase 12.10 cleanup: the page used to mount 8 Phase-12 panels
- * back-to-back plus two always-empty advisor sections. Founder
- * called it noisy. New structure groups everything into 6 named
- * sections in a top-to-bottom hierarchy that mirrors how the
- * admin actually uses it:
+ * Phase 13.3 — converted from a 7-section vertical scroll into a
+ * tabbed hub. Founder feedback: "the page was a long wall and I had
+ * to scroll past sections I didn't need." Now each concern lives in
+ * its own tab; only the active tab's panel is mounted at a time, so
+ * the heavy market-engine sub-panels don't all hit the DB on every
+ * page load.
  *
- *   1. 📡 نظرة عامة         — KPIs + top movers + latest deals
- *   2. 🩺 صحة السوق         — compact 5-metric strip
- *   3. 📈 رفع سعر السوق      — primary admin action (per-project)
- *   4. ⚙️ المحرّك والقواعد    — engine state + sector caps
- *   5. 💰 إدارة العمولات     — commissions panel
- *   6. 🛡️ الحماية والمراقبة  — freeze + transfers + protection
- *   7. 📜 سجلّ القرارات       — admin decisions log
+ * Tabs:
+ *   1. 📡 نظرة عامة         — KPIs + top movers + recent deals + health
+ *   2. 📈 رفع السعر         — manual price-rise (founder's main action)
+ *   3. ⚙️ المحرّك والقواعد    — engine state + sector caps
+ *   4. 💰 العمولات          — commissions management
+ *   5. 🛡️ الحماية والمراقبة  — freeze + transfers + protection
+ *   6. 📜 سجلّ القرارات       — admin decisions audit trail
  *
- * Removed:
- *   • "نصائح المستشار" + "خطّة العمل" — both always rendered an empty
- *     placeholder ("لا توجد توصيات حالياً") because the underlying
- *     mock helpers were intentionally short-circuited.
- *   • "السوق مفتوح" banner — `isOpen` was hardcoded TRUE, so the
- *     pulsing green dot was a permanent decoration.
- *   • All imports related to the dead advisor system.
+ * Each tab keeps its own data fetch + clock so the overview tab
+ * doesn't pay the cost of mounting freeze/transfer/protection panels
+ * unless the admin actually opens them.
  */
 
 import { useState, useEffect, useMemo } from "react"
@@ -49,6 +46,7 @@ import {
   type MonitorOverview,
 } from "@/lib/data/admin-monitor"
 import { getAllProjects } from "@/lib/data/projects"
+import { EmbeddedTabsHub } from "./EmbeddedTabsHub"
 // Phase 12 — engine + commission + protection panels.
 import { EngineDashboardCard } from "@/components/admin/market-engine/EngineDashboardCard"
 import { CommissionsManagementPanel } from "@/components/admin/market-engine/CommissionsManagementPanel"
@@ -71,7 +69,11 @@ const fmtTime = (iso: string) => {
   })
 }
 
-export function MonitorPanel() {
+// ─────────────────────────────────────────────────────────────
+// Tab 1 — Overview (KPIs + top movers + recent deals + health)
+// ─────────────────────────────────────────────────────────────
+
+function MonitorOverviewTab() {
   const [scope, setScope] = useState<string>("global")
   const [overview, setOverview] = useState<MonitorOverview>({
     total_volume_24h: 0,
@@ -148,9 +150,6 @@ export function MonitorPanel() {
 
   return (
     <div className="p-6 max-w-screen-2xl">
-      {/* ════════════════════════════════════════════════════════════
-          1. نظرة عامة (Overview)
-          ════════════════════════════════════════════════════════════ */}
       <SectionHeader
         title="📡 نظرة عامة"
         subtitle={`بيانات السوق آخر 24 ساعة · ${scopeName} · آخر تحديث ${now}`}
@@ -302,10 +301,8 @@ export function MonitorPanel() {
         </div>
       </div>
 
-      {/* ════════════════════════════════════════════════════════════
-          2. صحة السوق (Health strip)
-          ════════════════════════════════════════════════════════════ */}
-      <div className="mb-7">
+      {/* Health strip */}
+      <div className="mb-3">
         <div className="flex items-center justify-between mb-3">
           <div>
             <div className="text-sm font-bold text-white">🩺 صحة السوق</div>
@@ -362,73 +359,149 @@ export function MonitorPanel() {
           />
         </div>
       </div>
+    </div>
+  )
+}
 
-      {/* ════════════════════════════════════════════════════════════
-          3. رفع سعر السوق (الإجراء الرئيسي للمؤسس)
-          ════════════════════════════════════════════════════════════ */}
-      <div className="mb-7">
-        <SectionHeader
-          title="📈 رفع سعر السوق"
-          subtitle="رفع يدوي للسعر المعروض في السوق · إظهار الشروط الطبيعية + خيار override"
-        />
-        <RaiseMarketPricePanel />
-      </div>
+// ─────────────────────────────────────────────────────────────
+// Tab 2 — Raise market price (founder's primary action)
+// ─────────────────────────────────────────────────────────────
 
-      {/* ════════════════════════════════════════════════════════════
-          4. المحرّك والقواعد (Engine + caps)
-          ════════════════════════════════════════════════════════════ */}
-      <div className="mb-7">
-        <SectionHeader
-          title="⚙️ المحرّك والقواعد"
-          subtitle="حالة محرّك السوق + سقوف الرفع الشهرية حسب القطاع"
-        />
-        <div className="space-y-4">
-          <EngineDashboardCard />
-          <SectorCapsTable />
-        </div>
-      </div>
+function MonitorRaisePriceTab() {
+  return (
+    <div className="p-6 max-w-screen-2xl">
+      <SectionHeader
+        title="📈 رفع سعر السوق"
+        subtitle="رفع يدوي للسعر المعروض في السوق · إظهار الشروط الطبيعية + خيار override"
+      />
+      <RaiseMarketPricePanel />
+    </div>
+  )
+}
 
-      {/* ════════════════════════════════════════════════════════════
-          5. إدارة العمولات
-          ════════════════════════════════════════════════════════════ */}
-      <div className="mb-7">
-        <SectionHeader
-          title="💰 إدارة العمولات"
-          subtitle="التحكم بكل عمولة بشكل مستقل · شرطين · سقوف"
-        />
-        <CommissionsManagementPanel />
-      </div>
+// ─────────────────────────────────────────────────────────────
+// Tab 3 — Engine + sector caps
+// ─────────────────────────────────────────────────────────────
 
-      {/* ════════════════════════════════════════════════════════════
-          6. الحماية والمراقبة (Observability)
-          ════════════════════════════════════════════════════════════ */}
-      <div className="mb-7">
-        <SectionHeader
-          title="🛡️ الحماية والمراقبة"
-          subtitle="تجميد المشاريع · مراقبة إرسالات النظام · حماية المستخدمين"
-        />
-        <div className="space-y-4">
-          <FreezeManagementPanel />
-          <TransfersMonitoringPanel />
-          <ProtectionMonitoringPanel />
-        </div>
-      </div>
-
-      {/* ════════════════════════════════════════════════════════════
-          7. سجل القرارات الإدارية (Audit trail)
-          ════════════════════════════════════════════════════════════ */}
-      <div className="mb-3">
-        <SectionHeader
-          title="📜 سجلّ القرارات"
-          subtitle="كل قرار إداري على المحرّك (override / freeze / commission change …)"
-        />
-        <AdminDecisionsLog />
+function MonitorEngineTab() {
+  return (
+    <div className="p-6 max-w-screen-2xl">
+      <SectionHeader
+        title="⚙️ المحرّك والقواعد"
+        subtitle="حالة محرّك السوق + سقوف الرفع الشهرية حسب القطاع"
+      />
+      <div className="space-y-4">
+        <EngineDashboardCard />
+        <SectorCapsTable />
       </div>
     </div>
   )
 }
 
-// ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Tab 4 — Commissions
+// ─────────────────────────────────────────────────────────────
+
+function MonitorCommissionsTab() {
+  return (
+    <div className="p-6 max-w-screen-2xl">
+      <SectionHeader
+        title="💰 إدارة العمولات"
+        subtitle="التحكم بكل عمولة بشكل مستقل · شرطين · سقوف"
+      />
+      <CommissionsManagementPanel />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// Tab 5 — Protection (freeze + transfers + protection)
+// ─────────────────────────────────────────────────────────────
+
+function MonitorProtectionTab() {
+  return (
+    <div className="p-6 max-w-screen-2xl">
+      <SectionHeader
+        title="🛡️ الحماية والمراقبة"
+        subtitle="تجميد المشاريع · مراقبة إرسالات النظام · حماية المستخدمين"
+      />
+      <div className="space-y-4">
+        <FreezeManagementPanel />
+        <TransfersMonitoringPanel />
+        <ProtectionMonitoringPanel />
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// Tab 6 — Decisions log (audit trail)
+// ─────────────────────────────────────────────────────────────
+
+function MonitorDecisionsLogTab() {
+  return (
+    <div className="p-6 max-w-screen-2xl">
+      <SectionHeader
+        title="📜 سجلّ القرارات"
+        subtitle="كل قرار إداري على المحرّك (override / freeze / commission change …)"
+      />
+      <AdminDecisionsLog />
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// Hub
+// ─────────────────────────────────────────────────────────────
+
+export function MonitorPanel() {
+  return (
+    <EmbeddedTabsHub
+      title="📡 مراقبة السوق"
+      subtitle="بيانات السوق + رفع الأسعار + المحرّك + العمولات + الحماية + سجلّ القرارات"
+      tabs={[
+        {
+          key: "overview",
+          label: "📡 نظرة عامة",
+          hint: "حجم 24 ساعة + الأعلى تحركاً + آخر الصفقات + صحة السوق",
+          Panel: MonitorOverviewTab,
+        },
+        {
+          key: "raise_price",
+          label: "📈 رفع السعر",
+          hint: "رفع يدوي لسعر السوق لأي مشروع — مع التحقّق + الـ override",
+          Panel: MonitorRaisePriceTab,
+        },
+        {
+          key: "engine",
+          label: "⚙️ المحرّك",
+          hint: "حالة محرّك السوق + سقوف الرفع حسب القطاع",
+          Panel: MonitorEngineTab,
+        },
+        {
+          key: "commissions",
+          label: "💰 العمولات",
+          hint: "إدارة كل عمولة بشكل مستقل (شرطَين + سقوف)",
+          Panel: MonitorCommissionsTab,
+        },
+        {
+          key: "protection",
+          label: "🛡️ الحماية",
+          hint: "تجميد المشاريع + مراقبة الإرسالات + حماية المستخدمين",
+          Panel: MonitorProtectionTab,
+        },
+        {
+          key: "log",
+          label: "📜 السجلّ",
+          hint: "كل قرار إداري على المحرّك — مع التاريخ + الفاعل",
+          Panel: MonitorDecisionsLogTab,
+        },
+      ]}
+    />
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
 
 function StatCell({
   label,

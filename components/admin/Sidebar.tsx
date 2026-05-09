@@ -47,21 +47,25 @@ export function AdminSidebar({
         if (!auth?.user?.id || cancelled) return
         const uid = auth.user.id
 
-        // Count unread ADMIN-targeted notifications for this admin
-        // (drives the requests_hub badge). Phase 11.22 filter:
-        // user-side notifications (deal_completed → /portfolio,
-        // gift_received → /gifts) must not appear in the admin
-        // sidebar even when the admin's user_id receives them.
+        // Phase 13.3 — requests_hub was removed from the sidebar. The
+        // unread admin-notifications count (was driving its badge)
+        // is now surfaced only via the bell icon in the top bar. We
+        // still fetch it here in case future entries want to consume
+        // it, but no sidebar item is updated.
+        // Filter: only admin-targeted unread rows (link_url starts
+        // with /admin) so user-side notifications (deal_completed →
+        // /portfolio, gift_received → /gifts) don't pollute admin
+        // counts.
         const { count: unread } = await supabase
           .from("notifications")
           .select("id", { count: "exact", head: true })
           .eq("user_id", uid)
           .eq("is_read", false)
           .like("link_url", "/admin%")
+        void unread // count handled by AdminTopBar bell — no sidebar binding
 
         if (cancelled) return
         const next: Partial<Record<AdminTab, number>> = {}
-        if ((unread ?? 0) > 0) next["requests_hub"] = unread ?? 0
         setBadges(next)
       } catch {
         // best-effort
@@ -113,8 +117,8 @@ export function AdminSidebar({
         if (tab) {
           next[tab] = (next[tab] ?? 0) + 1
         }
-        // requests_hub always reflects the total unread admin notifs.
-        next["requests_hub"] = (next["requests_hub"] ?? 0) + 1
+        // Phase 13.3 — no longer bump requests_hub; that entry was
+        // removed from the sidebar.
         return next
       })
       // Ground-truth refresh in 500ms so optimistic count corrects
