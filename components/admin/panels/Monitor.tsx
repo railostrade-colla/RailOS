@@ -14,6 +14,17 @@ import {
   PRIORITY_LABELS,
 } from "@/lib/mock-data/marketAdvisor"
 import { showSuccess } from "@/lib/utils/toast"
+// Phase 12 — market engine + commissions + transfers + protection panels.
+// Mounted here (under sidebar tab "مراقبة السوق") so the founder finds
+// every Phase-12 control where they expect — same components also live
+// inside MarketStatePanel for advanced/secondary access.
+import { EngineDashboardCard } from "@/components/admin/market-engine/EngineDashboardCard"
+import { CommissionsManagementPanel } from "@/components/admin/market-engine/CommissionsManagementPanel"
+import { SectorCapsTable } from "@/components/admin/market-engine/SectorCapsTable"
+import { FreezeManagementPanel } from "@/components/admin/market-engine/FreezeManagementPanel"
+import { TransfersMonitoringPanel } from "@/components/admin/market-engine/TransfersMonitoringPanel"
+import { ProtectionMonitoringPanel } from "@/components/admin/market-engine/ProtectionMonitoringPanel"
+import { AdminDecisionsLog } from "@/components/admin/market-engine/AdminDecisionsLog"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
@@ -326,6 +337,35 @@ export function MonitorPanel() {
             </Table>
           )}
         </div>
+      </div>
+
+      {/* ═══ Phase 12 — محرك السوق + إدارة العمولات الديناميكية ═══ */}
+      <div className="mt-10 space-y-5">
+        <SectionHeader
+          title="⚙️ محرك السوق + إدارة العمولات (Phase 12)"
+          subtitle="التحكم بكل عمولة بشكل مستقل · الشرطين · السقوف الشهرية · التجميد · الإرسالات · الحماية"
+        />
+
+        {/* 1. حالة المحرك */}
+        <EngineDashboardCard />
+
+        {/* 2. إدارة العمولات (الجديد الجوهري) */}
+        <CommissionsManagementPanel />
+
+        {/* 3. السقوف الشهرية حسب القطاع */}
+        <SectorCapsTable />
+
+        {/* 4. التجميد اليدوي */}
+        <FreezeManagementPanel />
+
+        {/* 5. مراقبة الإرسالات */}
+        <TransfersMonitoringPanel />
+
+        {/* 6. مراقبة الحماية */}
+        <ProtectionMonitoringPanel />
+
+        {/* 7. سجل القرارات الإدارية */}
+        <AdminDecisionsLog />
       </div>
 
     </div>
