@@ -1,25 +1,29 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Search, X, ZoomIn } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Search, X, ZoomIn, AlertCircle } from "lucide-react"
 import {
   Badge, ActionBtn, Table, THead, TH, TBody, TR, TD,
   SectionHeader, KPI, InnerTabBar, AdminEmpty,
 } from "@/components/admin/ui"
 import {
-  MOCK_PAYMENT_PROOFS,
   PAYMENT_METHOD_LABELS,
   PROOF_STATUS_LABELS,
   MATCH_STATUS_META,
   type PaymentProof,
 } from "@/lib/mock-data/payments"
 import { getPaymentProofsAdmin } from "@/lib/data/payment-proofs-admin"
-import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
-type ActionMode = null | "confirm" | "reject" | "resubmit"
+// ─── Read-only by design ──────────────────────────────────────────
+// The deal flow `payment_submitted → completed` is the SELLER's call
+// once they verify the off-platform transfer. Admin overrides happen
+// through the disputes system, not here. The panel surfaces the
+// proof queue + amount comparison so admins can spot mismatches and
+// open a dispute when warranted.
 
 const DAY_MS = 86_400_000
 
@@ -40,14 +44,13 @@ function computeStats(list: PaymentProof[]) {
 }
 
 export function PaymentProofsPanel() {
+  const router = useRouter()
   const [filter, setFilter] = useState<string>("pending")
   const [search, setSearch] = useState("")
   const [minAmount, setMinAmount] = useState<string>("")
   const [maxAmount, setMaxAmount] = useState<string>("")
   const [selected, setSelected] = useState<PaymentProof | null>(null)
   const [zoomImage, setZoomImage] = useState<string | null>(null)
-  const [actionMode, setActionMode] = useState<ActionMode>(null)
-  const [reason, setReason] = useState("")
 
   // Production mode — DB only.
   const [proofs, setProofs] = useState<PaymentProof[]>([])
@@ -85,20 +88,13 @@ export function PaymentProofsPanel() {
 
   const closeAll = () => {
     setSelected(null)
-    setActionMode(null)
-    setReason("")
   }
 
-  const handleConfirm = () => {
-    if (!selected || !actionMode) return
-    if ((actionMode === "reject" || actionMode === "resubmit") && !reason.trim()) {
-      showError("اكتب السبب قبل المتابعة")
-      return
-    }
-    if (actionMode === "confirm") showSuccess(`✅ تم تأكيد المطابقة + تحديث حالة الصفقة ${selected.deal_id} إلى paid`)
-    if (actionMode === "reject") showSuccess("❌ تم رفض الإثبات + إرسال إشعار للمستخدم")
-    if (actionMode === "resubmit") showSuccess("🔄 تم طلب إعادة إرفاق الإثبات")
-    closeAll()
+  // Open the deal in /admin?tab=disputes (or directly to the deal
+  // page so the admin can see context). Disputes panel handles the
+  // actual override flow.
+  const openDispute = (dealId: string) => {
+    router.push(`/deals/${dealId}`)
   }
 
   return (
@@ -203,8 +199,8 @@ export function PaymentProofsPanel() {
         </Table>
       )}
 
-      {/* Review Modal */}
-      {selected && !actionMode && (
+      {/* Review Modal — read-only by design (see header comment) */}
+      {selected && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start mb-5">
@@ -287,78 +283,28 @@ export function PaymentProofsPanel() {
               )}
             </div>
 
-            {/* Footer actions */}
-            {selected.status === "pending" ? (
-              <div className="grid grid-cols-3 gap-2">
-                <ActionBtn label="✅ تأكيد" color="green" onClick={() => setActionMode("confirm")} />
-                <ActionBtn label="🔄 إعادة رفع" color="yellow" onClick={() => setActionMode("resubmit")} />
-                <ActionBtn label="❌ رفض" color="red" onClick={() => setActionMode("reject")} />
-              </div>
-            ) : (
+            {/* Read-only footer — the panel surfaces evidence; the
+                seller closes the deal, and admins override via
+                disputes (not here). The buttons below open the deal
+                page, where the dispute flow is one click away. */}
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-400/[0.06] border border-blue-400/20 rounded-lg mb-3">
+              <AlertCircle className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-blue-300 leading-relaxed">
+                هذه الصفحة <strong>للمراجعة فقط</strong>. التأكيد على البائع، والتدخّل الإداري يتمّ عبر <strong>النزاعات</strong> من صفحة الصفقة.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={closeAll}
-                className="w-full py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                className="py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
               >
                 إغلاق
               </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Confirm Modal */}
-      {selected && actionMode && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-w-md">
-            <div className="flex justify-between items-start mb-4">
-              <div className="text-base font-bold text-white">
-                {actionMode === "confirm" && "✅ تأكيد المطابقة"}
-                {actionMode === "reject" && "❌ رفض الإثبات"}
-                {actionMode === "resubmit" && "🔄 طلب إعادة الإرفاق"}
-              </div>
-              <button onClick={() => { setActionMode(null); setReason("") }} className="text-neutral-500 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {actionMode === "confirm" && (
-              <div className="bg-green-400/[0.05] border border-green-400/[0.2] rounded-xl p-3 mb-4 text-xs text-green-400">
-                سيتم تحديث حالة الصفقة <span className="font-mono font-bold">{selected.deal_id}</span> إلى <span className="font-bold">paid</span> وإشعار البائع لتسليم الحصص.
-              </div>
-            )}
-
-            {(actionMode === "reject" || actionMode === "resubmit") && (
-              <>
-                <label className="text-xs text-neutral-400 mb-2 block font-bold">
-                  {actionMode === "reject" ? "سبب الرفض (إجباري)" : "سبب طلب الإعادة (إجباري)"}
-                </label>
-                <textarea
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  rows={3}
-                  placeholder="اكتب السبب الذي سيُرسل للمستخدم..."
-                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 resize-none mb-4"
-                />
-              </>
-            )}
-
-            <div className="flex gap-2">
               <button
-                onClick={() => { setActionMode(null); setReason("") }}
-                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                onClick={() => openDispute(selected.deal_id)}
+                className="py-3 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-400 text-sm font-bold hover:bg-blue-500/[0.2]"
               >
-                إلغاء
-              </button>
-              <button
-                onClick={handleConfirm}
-                className={cn(
-                  "flex-1 py-3 rounded-xl text-sm font-bold border",
-                  actionMode === "confirm" && "bg-green-500/[0.15] border-green-500/[0.3] text-green-400 hover:bg-green-500/[0.2]",
-                  actionMode === "reject" && "bg-red-500/[0.15] border-red-500/[0.3] text-red-400 hover:bg-red-500/[0.2]",
-                  actionMode === "resubmit" && "bg-yellow-500/[0.15] border-yellow-500/[0.3] text-yellow-400 hover:bg-yellow-500/[0.2]"
-                )}
-              >
-                تأكيد
+                فتح صفحة الصفقة
               </button>
             </div>
           </div>
