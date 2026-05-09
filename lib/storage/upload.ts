@@ -150,6 +150,27 @@ export async function uploadPaymentProof(file: File): Promise<UploadResult> {
 }
 
 /**
+ * Upload a deal-payment proof (Phase 12.7). The bucket is now public-read
+ * for these so the seller can render the image straight from the URL.
+ * Filename includes the deal id so admins reviewing disputes can spot
+ * the deal at a glance from the storage listing.
+ */
+export async function uploadDealPaymentProof(
+  file: File,
+  dealId: string,
+): Promise<UploadResult> {
+  const ext = getExtension(file)
+  // Sanitise dealId for the filename (UUIDs are already safe but be defensive).
+  const safe = dealId.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 36) || "deal"
+  return uploadToBucket(
+    "payment-proofs",
+    `deal-${safe}-${Date.now()}.${ext}`,
+    file,
+    true, // bucket is public after Phase 12.7 migration
+  )
+}
+
+/**
  * Upload (or replace) the user's avatar. Bucket: user-avatars (public read).
  * Filename is fixed (`avatar.<ext>`) so it overwrites the previous one.
  */

@@ -44,6 +44,9 @@ import {
 import { useRealtimeDeal } from "@/lib/realtime/useRealtimeDeal"
 import { createInvoice, getInvoicesBySourceId, type Invoice } from "@/lib/data/invoices"
 import { DealChat } from "@/components/deals/DealChat"
+import { SellerPaymentMethods } from "@/components/deals/SellerPaymentMethods"
+import { PaymentProofModal } from "@/components/deals/PaymentProofModal"
+import { PaymentProofViewer } from "@/components/deals/PaymentProofViewer"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -461,13 +464,24 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
 
           {/* ═══ Section 6: Actions ═══ */}
           {role === "buyer" && deal.status === "pending" && (
-            <div className="space-y-2">
+            <div className="space-y-3">
+              {/* Phase 12.7 — show the seller's payment methods so the
+                  buyer can transfer funds off-platform before uploading
+                  proof. Only DB-backed deals carry methods (mock deals
+                  don't have RPC support). */}
+              {isDbDeal && (
+                <SellerPaymentMethods
+                  dealId={deal.id}
+                  title={`💳 طرق دفع ${deal.seller_name}`}
+                />
+              )}
+
               <button
                 onClick={() => setModal("confirm_payment")}
                 className="w-full bg-green-500 text-white font-bold py-3 rounded-xl hover:bg-green-600 transition-colors text-sm flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                تأكيد الدفع
+                دفعت — رفع إثبات الدفع
               </button>
               <button
                 onClick={() => setModal("open_dispute")}
@@ -522,7 +536,17 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
           )}
 
           {role === "seller" && deal.status === "payment_confirmed" && (
-            <div className="space-y-2">
+            <div className="space-y-3">
+              {/* Phase 12.7 — show the buyer's uploaded proof so the
+                  seller can verify before releasing shares. DB deals
+                  only — mock deals have no proof rows. */}
+              {isDbDeal && (
+                <PaymentProofViewer
+                  dealId={deal.id}
+                  expectedAmount={deal.total_amount}
+                />
+              )}
+
               <button
                 onClick={() => setModal("release_shares")}
                 className="w-full bg-green-500 text-white font-bold py-3 rounded-xl hover:bg-green-600 transition-colors text-sm flex items-center justify-center gap-2"
@@ -604,34 +628,51 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* ═══ Modals ═══ */}
 
-      {/* Confirm Payment (buyer) */}
-      <Modal
-        isOpen={modal === "confirm_payment"}
-        onClose={closeModal}
-        title="✅ تأكيد إتمام الدفع"
-        subtitle={`صفقة #${deal.id.slice(-6).toUpperCase()}`}
-        size="sm"
-        footer={
-          <>
-            <button onClick={closeModal} disabled={submitting} className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إلغاء</button>
-            <button onClick={handleConfirmPayment} disabled={submitting || !agreed} className="flex-1 py-2.5 rounded-xl bg-green-500 text-white text-sm font-bold hover:bg-green-600 disabled:opacity-50">
-              {submitting ? "جاري..." : "تأكيد"}
-            </button>
-          </>
-        }
-      >
-        <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 mb-3 text-xs">
-          <div className="flex justify-between mb-1.5"><span className="text-neutral-500">المستلم</span><span className="text-white">{deal.seller_name}</span></div>
-          <div className="flex justify-between mb-1.5"><span className="text-neutral-500">المبلغ</span><span className="text-yellow-400 font-mono font-bold">{fmtNum(deal.total_amount)} د.ع</span></div>
-          <div className="flex justify-between"><span className="text-neutral-500">الكمية</span><span className="text-white">{fmtNum(deal.shares_amount)} حصة</span></div>
-        </div>
-        <label className="flex items-start gap-2.5 cursor-pointer p-2.5 rounded-lg border border-white/[0.06] bg-white/[0.04]">
-          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 w-4 h-4" />
-          <span className="text-[11px] text-neutral-300 leading-relaxed">
-            أُقرّ بأنّني دفعت المبلغ كاملاً (<span className="text-yellow-400 font-bold">{fmtNum(deal.total_amount)} د.ع</span>) للبائع. الإقرار الكاذب يُعرِّضني للحظر.
-          </span>
-        </label>
-      </Modal>
+      {/* Confirm Payment (buyer) — Phase 12.7:
+          DB deals → new PaymentProofModal with image upload
+          Mock deals → keep the legacy checkbox-only modal so the
+                       /demo path doesn't break. */}
+      {isDbDeal ? (
+        <PaymentProofModal
+          isOpen={modal === "confirm_payment"}
+          onClose={closeModal}
+          dealId={deal.id}
+          expectedAmount={deal.total_amount}
+          sellerName={deal.seller_name}
+          onSubmitted={() => {
+            closeModal()
+            refresh()
+          }}
+        />
+      ) : (
+        <Modal
+          isOpen={modal === "confirm_payment"}
+          onClose={closeModal}
+          title="✅ تأكيد إتمام الدفع"
+          subtitle={`صفقة #${deal.id.slice(-6).toUpperCase()}`}
+          size="sm"
+          footer={
+            <>
+              <button onClick={closeModal} disabled={submitting} className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]">إلغاء</button>
+              <button onClick={handleConfirmPayment} disabled={submitting || !agreed} className="flex-1 py-2.5 rounded-xl bg-green-500 text-white text-sm font-bold hover:bg-green-600 disabled:opacity-50">
+                {submitting ? "جاري..." : "تأكيد"}
+              </button>
+            </>
+          }
+        >
+          <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 mb-3 text-xs">
+            <div className="flex justify-between mb-1.5"><span className="text-neutral-500">المستلم</span><span className="text-white">{deal.seller_name}</span></div>
+            <div className="flex justify-between mb-1.5"><span className="text-neutral-500">المبلغ</span><span className="text-yellow-400 font-mono font-bold">{fmtNum(deal.total_amount)} د.ع</span></div>
+            <div className="flex justify-between"><span className="text-neutral-500">الكمية</span><span className="text-white">{fmtNum(deal.shares_amount)} حصة</span></div>
+          </div>
+          <label className="flex items-start gap-2.5 cursor-pointer p-2.5 rounded-lg border border-white/[0.06] bg-white/[0.04]">
+            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 w-4 h-4" />
+            <span className="text-[11px] text-neutral-300 leading-relaxed">
+              أُقرّ بأنّني دفعت المبلغ كاملاً (<span className="text-yellow-400 font-bold">{fmtNum(deal.total_amount)} د.ع</span>) للبائع. الإقرار الكاذب يُعرِّضني للحظر.
+            </span>
+          </label>
+        </Modal>
+      )}
 
       {/* Release Shares (seller) */}
       <Modal

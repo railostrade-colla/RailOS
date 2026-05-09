@@ -26,6 +26,7 @@ import {
   resetBiometricPrompt,
 } from "@/lib/auth/biometric"
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/data/profile"
+import { PaymentMethodsEditor } from "@/components/settings/PaymentMethodsEditor"
 import { cn } from "@/lib/utils/cn"
 
 type SettingsTab = "notifications" | "general" | "security" | "finance" | "appearance"
@@ -424,24 +425,28 @@ function SettingsContent() {
 
           {/* ═══ Finance ═══ */}
           {tab === "finance" && (
-            <Card>
-              <div className="text-xs font-bold text-white mb-3 flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-yellow-400" strokeWidth={2} />
-                الإعدادات المالية
-              </div>
-              <div className="divide-y divide-white/[0.04]">
-                <div className="py-2.5 flex justify-between items-center">
-                  <div>
-                    <div className="text-sm text-white font-medium">حدّي الشهري الحالي</div>
-                    <div className="text-[11px] text-neutral-500 mt-0.5">حسب مستواك ({levelKey})</div>
-                  </div>
-                  <span className="text-sm font-bold text-yellow-400 font-mono">{fmtLimit(LEVEL_LIMITS[levelKey])} د.ع</span>
+            <div className="space-y-4">
+              <Card>
+                <div className="text-xs font-bold text-white mb-3 flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-yellow-400" strokeWidth={2} />
+                  الإعدادات المالية
                 </div>
-                <ActionRow label="وحدات الرسوم" description="رصيد + شراء وحدات إضافية" onClick={() => showInfo("ستتاح إدارة وحدات الرسوم قريباً")} />
-                <ActionRow label="البيانات البنكية" description="حسابات السحب والإيداع" onClick={() => router.push("/profile-setup")} />
-                <ActionRow label="كشف الحسابات" description="تنزيل سجل المعاملات (PDF)" onClick={() => showInfo("جاري تجهيز كشف الحسابات...")} />
-              </div>
-            </Card>
+                <div className="divide-y divide-white/[0.04]">
+                  <div className="py-2.5 flex justify-between items-center">
+                    <div>
+                      <div className="text-sm text-white font-medium">حدّي الشهري الحالي</div>
+                      <div className="text-[11px] text-neutral-500 mt-0.5">حسب مستواك ({levelKey})</div>
+                    </div>
+                    <span className="text-sm font-bold text-yellow-400 font-mono">{fmtLimit(LEVEL_LIMITS[levelKey])} د.ع</span>
+                  </div>
+                  <ActionRow label="وحدات الرسوم" description="رصيد + شراء وحدات إضافية" onClick={() => showInfo("ستتاح إدارة وحدات الرسوم قريباً")} />
+                  <ActionRow label="كشف الحسابات" description="تنزيل سجل المعاملات (PDF)" onClick={() => showInfo("جاري تجهيز كشف الحسابات...")} />
+                </div>
+              </Card>
+
+              {/* Phase 12.7 — payment methods buyers see on the deal page */}
+              <PaymentMethodsEditor />
+            </div>
           )}
 
           {/* ═══ Appearance ═══ */}
