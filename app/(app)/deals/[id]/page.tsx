@@ -13,7 +13,8 @@ import {
   ChevronLeft,
 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
+// Phase 12.8 — GridBackground removed per founder request: deal page
+// uses a flat black background so the data cards stand out cleanly.
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Badge, Modal } from "@/components/ui"
 import { InvoiceCard } from "@/components/invoices/InvoiceCard"
@@ -140,7 +141,6 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
     return (
       <AppLayout>
         <div className="relative">
-          <GridBackground showCircles={false} />
           <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
             <PageHeader title="الصفقة غير موجودة" subtitle="لم نتمكّن من العثور على هذه الصفقة" backHref="/deals" />
             <Card>
@@ -311,8 +311,6 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
         <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader
