@@ -15,6 +15,10 @@ import { DealRequestNotifier } from "@/components/deals/DealRequestNotifier"
 // Phase 12.8 — bumps profiles.last_seen_at every 30s while the tab is
 // visible so other users see an accurate "متصل الآن" / "آخر اتصال" badge.
 import { useHeartbeat } from "@/lib/hooks/useHeartbeat"
+// Phase 12.8 v2 — joins the global Supabase Realtime presence channel
+// so online state propagates to every other client in <1 s, replacing
+// the slow polling-based detection.
+import { useGlobalPresenceTracker } from "@/lib/hooks/useGlobalPresenceTracker"
 import { cn } from "@/lib/utils/cn"
 // Phase 11.31 — global SWR preloader. Warms the dedupCache for every
 // commonly-read endpoint (projects, portfolio, fee balance, profile,
@@ -82,8 +86,12 @@ export function AppLayout({ children, hideBottomNav = false, hideFooter = false 
   usePreloadAppData()
 
   // Phase 12.8 — keep profiles.last_seen_at fresh so counter-parties
-  // see an accurate online/last-seen indicator next to my name.
+  // see an accurate "آخر اتصال منذ X" string when I'm offline.
   useHeartbeat()
+
+  // Phase 12.8 v2 — broadcast my presence on the global realtime
+  // channel; other clients see the green dot flip in <1 s.
+  useGlobalPresenceTracker()
 
   return (
     <div className="min-h-screen flex flex-col bg-black">
