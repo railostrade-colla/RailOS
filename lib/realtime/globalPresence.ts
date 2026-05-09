@@ -70,34 +70,51 @@ class GlobalPresence {
       config: { presence: { key: uid } },
     })
 
+    // Supabase ships its presence event payloads with a generic
+    // `Presence<{ [key: string]: any }>` shape that doesn't statically
+    // claim our custom fields (user_id, online_at). We cast through
+    // `unknown` to a local interface so TS stops complaining about
+    // "may be a mistake because neither type sufficiently overlaps".
+    interface JoinPayload {
+      key: string
+      newPresences: Array<{ user_id?: string; online_at?: string }>
+    }
+    interface LeavePayload {
+      key: string
+    }
+
     channel
       .on("presence", { event: "sync" }, () => {
         // Full snapshot — rebuild the map.
-        const presenceState =
-          channel.presenceState<PresenceMeta>() as Record<
-            string,
-            PresenceMeta[]
-          >
+        const raw = channel.presenceState() as unknown as Record<
+          string,
+          Array<{ user_id?: string; online_at?: string }>
+        >
         this.state.clear()
-        for (const [key, presences] of Object.entries(presenceState)) {
+        for (const [key, presences] of Object.entries(raw)) {
           if (presences && presences.length > 0) {
-            this.state.set(key, presences[0])
+            const p = presences[0]
+            this.state.set(key, {
+              user_id: p.user_id ?? key,
+              online_at: p.online_at ?? new Date().toISOString(),
+            })
           }
         }
         this.notify()
       })
       .on("presence", { event: "join" }, (payload) => {
-        const { key, newPresences } = payload as {
-          key: string
-          newPresences: PresenceMeta[]
-        }
+        const { key, newPresences } = payload as unknown as JoinPayload
         if (newPresences && newPresences.length > 0) {
-          this.state.set(key, newPresences[0])
+          const p = newPresences[0]
+          this.state.set(key, {
+            user_id: p.user_id ?? key,
+            online_at: p.online_at ?? new Date().toISOString(),
+          })
           this.notify()
         }
       })
       .on("presence", { event: "leave" }, (payload) => {
-        const { key } = payload as { key: string }
+        const { key } = payload as unknown as LeavePayload
         if (this.state.has(key)) {
           this.state.delete(key)
           this.notify()
