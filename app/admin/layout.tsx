@@ -8,6 +8,10 @@ import { AdminDiagnosticBanner } from "@/components/admin/AdminDiagnosticBanner"
 // Phase 11.31 — also warm the cache for admins. Common reads share
 // keys with the user shell, so the same hook benefits both.
 import { usePreloadAppData } from "@/lib/data/preload"
+// Phase 13.0 — global realtime notifier for admins. Subscribes to
+// every admin-relevant table and shows toast + plays sound + emits
+// a window event the sidebar listens to for badge updates.
+import { AdminRealtimeNotifier } from "@/components/admin/AdminRealtimeNotifier"
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(true)
@@ -43,6 +47,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         )}
         <Suspense fallback={null}>{children}</Suspense>
       </main>
+
+      {/* Phase 13.0 — global realtime notifier (toasts + sound) */}
+      {showTopBar && (
+        <Suspense fallback={null}>
+          <AdminRealtimeNotifier />
+        </Suspense>
+      )}
     </div>
   )
 }

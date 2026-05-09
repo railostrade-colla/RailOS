@@ -89,10 +89,45 @@ export function AdminSidebar({
       } catch { /* ignore */ }
     })()
 
+    // Phase 13.0 — listen for AdminRealtimeNotifier badge-bump events.
+    // Optimistic increment so the sidebar number ticks UP the moment
+    // a new request arrives, without waiting for the next refresh().
+    const onBump = (e: Event) => {
+      const detail = (e as CustomEvent).detail as
+        | { kind?: string }
+        | undefined
+      if (!detail) return
+      setBadges((prev) => {
+        const next = { ...prev }
+        // Map the realtime event kind → which sidebar tab gets bumped.
+        const map: Record<string, AdminTab> = {
+          kyc:           "users",
+          fee_request:   "fees",
+          dispute:       "shares",
+          deal:          "shares",
+          payment_proof: "fees",
+          support:       "system",
+          council:       "council_admin",
+        }
+        const tab = map[detail.kind ?? ""] as AdminTab | undefined
+        if (tab) {
+          next[tab] = (next[tab] ?? 0) + 1
+        }
+        // requests_hub always reflects the total unread admin notifs.
+        next["requests_hub"] = (next["requests_hub"] ?? 0) + 1
+        return next
+      })
+      // Ground-truth refresh in 500ms so optimistic count corrects
+      // back to reality.
+      setTimeout(() => { void refresh() }, 500)
+    }
+    window.addEventListener("admin:badge-bump", onBump)
+
     return () => {
       cancelled = true
       clearInterval(id)
       if (ch) { try { supabase.removeChannel(ch) } catch { /* ignore */ } }
+      window.removeEventListener("admin:badge-bump", onBump)
     }
   }, [])
 
