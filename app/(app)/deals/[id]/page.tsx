@@ -146,8 +146,20 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
     )
   }
 
-  const statusMeta = STATUS_META[deal.status]
-  const timeLeftMs = new Date(deal.expires_at).getTime() - Date.now()
+  // Phase 12 hardening — never crash on an unknown status that slipped
+  // past mapStatus (e.g. a brand-new DB enum value the mock map doesn't
+  // know yet). Fall back to a neutral chip + safe timing.
+  const statusMeta = STATUS_META[deal.status] ?? {
+    label: "غير معروف",
+    color: "neutral",
+    icon: "❓",
+  }
+  const expiresMs = (() => {
+    if (!deal.expires_at) return 0
+    const t = new Date(deal.expires_at).getTime()
+    return Number.isFinite(t) ? t : 0
+  })()
+  const timeLeftMs = expiresMs > 0 ? expiresMs - Date.now() : 0
   const isActive = deal.status === "pending" || deal.status === "payment_confirmed" || deal.status === "cancellation_requested"
 
   const closeModal = () => {
