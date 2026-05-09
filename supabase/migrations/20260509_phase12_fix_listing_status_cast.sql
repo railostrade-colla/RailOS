@@ -125,7 +125,13 @@ BEGIN
       updated_at = NOW()
   WHERE id = v_holding.id;
 
-  -- ⚠ FIX: 'sold' (real enum value) + explicit ::listing_status cast.
+  -- ⚠ FIX (Phase 12.6): three things on the listing UPDATE —
+  --   1. 'sold' (the actual enum value) instead of 'completed'.
+  --   2. ::listing_status cast on the CASE result.
+  --   3. set buyer_id + sold_at when status flips to 'sold' so the
+  --      `buyer_set_if_sold` CHECK constraint is satisfied
+  --      (the constraint demands buyer_id IS NOT NULL when sold).
+  --      Caller is the buyer here → buyer_id = v_uid.
   UPDATE public.listings
   SET shares_sold = COALESCE(shares_sold, 0) + p_quantity,
       status = (CASE
@@ -133,6 +139,16 @@ BEGIN
           THEN 'sold'
         ELSE 'active'
       END)::listing_status,
+      buyer_id = CASE
+        WHEN COALESCE(shares_sold, 0) + p_quantity >= shares_offered
+          THEN v_uid
+        ELSE buyer_id
+      END,
+      sold_at = CASE
+        WHEN COALESCE(shares_sold, 0) + p_quantity >= shares_offered
+          THEN NOW()
+        ELSE sold_at
+      END,
       updated_at = NOW()
   WHERE id = p_listing_id;
 
@@ -262,7 +278,14 @@ BEGIN
       updated_at = NOW()
   WHERE id = v_holding.id;
 
-  -- ⚠ FIX: 'sold' (real enum value) + explicit ::listing_status cast.
+  -- ⚠ FIX (Phase 12.6): three things on the listing UPDATE —
+  --   1. 'sold' (the actual enum value) instead of 'completed'.
+  --   2. ::listing_status cast on the CASE result.
+  --   3. set buyer_id + sold_at when status flips to 'sold' so the
+  --      `buyer_set_if_sold` CHECK constraint is satisfied. For a
+  --      buy-listing the LISTING CREATOR is the original buyer
+  --      (v_listing.seller_id is the column name, but semantically
+  --      represents the listing creator i.e. the buyer here).
   UPDATE public.listings
   SET shares_sold = COALESCE(shares_sold, 0) + p_quantity,
       frozen_fee_units = GREATEST(0, COALESCE(frozen_fee_units, 0) - v_proportional_freeze),
@@ -271,6 +294,16 @@ BEGIN
           THEN 'sold'
         ELSE 'active'
       END)::listing_status,
+      buyer_id = CASE
+        WHEN COALESCE(shares_sold, 0) + p_quantity >= shares_offered
+          THEN v_listing.seller_id
+        ELSE buyer_id
+      END,
+      sold_at = CASE
+        WHEN COALESCE(shares_sold, 0) + p_quantity >= shares_offered
+          THEN NOW()
+        ELSE sold_at
+      END,
       updated_at = NOW()
   WHERE id = p_listing_id;
 
@@ -487,16 +520,17 @@ GRANT EXECUTE ON FUNCTION public.expire_pending_deals() TO authenticated;
 DO $$
 BEGIN
   RAISE NOTICE '═══════════════════════════════════════';
-  RAISE NOTICE 'Phase 12.6 listing-status enum hotfix applied:';
-  RAISE NOTICE '  ✓ place_deal_from_listing      ("sold" + cast)';
-  RAISE NOTICE '  ✓ accept_buy_listing            ("sold" + cast)';
-  RAISE NOTICE '  ✓ seller_reject_deal            (compare "sold")';
-  RAISE NOTICE '  ✓ respond_deal_cancellation     (compare "sold")';
-  RAISE NOTICE '  ✓ expire_pending_deals          (compare "sold")';
+  RAISE NOTICE 'Phase 12.6 listing-status hotfix applied:';
+  RAISE NOTICE '  ✓ place_deal_from_listing  ("sold" + cast + buyer_id/sold_at)';
+  RAISE NOTICE '  ✓ accept_buy_listing       ("sold" + cast + buyer_id/sold_at)';
+  RAISE NOTICE '  ✓ seller_reject_deal       (compare "sold")';
+  RAISE NOTICE '  ✓ respond_deal_cancellation (compare "sold")';
+  RAISE NOTICE '  ✓ expire_pending_deals     (compare "sold")';
   RAISE NOTICE '';
-  RAISE NOTICE 'After applying: try buying a full-quantity listing —';
-  RAISE NOTICE 'the deal will be created and the listing flips to';
-  RAISE NOTICE 'status=sold (was failing before because the enum';
-  RAISE NOTICE 'rejected the literal "completed").';
+  RAISE NOTICE 'Three bugs squashed in one migration:';
+  RAISE NOTICE '  • enum value mismatch ("completed" → "sold")';
+  RAISE NOTICE '  • text→enum cast required on CASE expression';
+  RAISE NOTICE '  • buyer_set_if_sold CHECK constraint needs';
+  RAISE NOTICE '    buyer_id IS NOT NULL when status=''sold''';
   RAISE NOTICE '═══════════════════════════════════════';
 END $$;
