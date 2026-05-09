@@ -23,6 +23,9 @@ import {
   type DealMessage,
 } from "@/lib/data/deal-messages"
 import { showError } from "@/lib/utils/toast"
+// Phase 12.8 — soft "pop" sound when a message arrives from the
+// other party (we suppress it for our own messages).
+import { playChatMessage } from "@/lib/sounds"
 import { cn } from "@/lib/utils/cn"
 
 interface Props {
@@ -46,7 +49,10 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
     setLoading(false)
   }, [dealId])
 
-  // Initial load + realtime subscription
+  // Initial load + realtime subscription + 5s polling safety net.
+  // Phase 12.8: realtime can drop silently (publication drift, flaky
+  // socket); polling guarantees the chat refreshes even when the
+  // socket is dead. Both run; setMessages dedupes by row id.
   useEffect(() => {
     if (!dealId) return
     let cancelled = false
@@ -64,17 +70,53 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
           table: "deal_messages",
           filter: `deal_id=eq.${dealId}`,
         },
-        () => {
-          if (!cancelled) refresh()
+        (payload) => {
+          if (cancelled) return
+          // Pop sound only for messages from the other party.
+          const newRow = payload.new as { sender_id?: string }
+          if (
+            currentUserId &&
+            newRow?.sender_id &&
+            newRow.sender_id !== currentUserId
+          ) {
+            playChatMessage()
+          }
+          refresh()
         },
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT" ||
+          status === "CLOSED"
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn("[deal-chat] realtime status:", status)
+        }
+      })
+
+    // 5-second polling fallback so chat updates even if the socket
+    // died. Pauses while the tab is hidden (battery).
+    const pollInterval = setInterval(() => {
+      if (cancelled) return
+      if (document.visibilityState !== "visible") return
+      void refresh()
+    }, 5_000)
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && !cancelled) {
+        void refresh()
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibility)
 
     return () => {
       cancelled = true
+      clearInterval(pollInterval)
+      document.removeEventListener("visibilitychange", onVisibility)
       supabase.removeChannel(channel)
     }
-  }, [dealId, refresh])
+  }, [dealId, refresh, currentUserId])
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {

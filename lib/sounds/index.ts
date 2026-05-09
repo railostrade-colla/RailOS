@@ -99,6 +99,17 @@ export function playNotification() {
 }
 
 /**
+ * Soft "pop" for incoming chat messages — quieter and shorter than
+ * playNotification so it doesn't get annoying during rapid chats.
+ */
+export function playChatMessage() {
+  play([
+    { freq: 1175, start: 0,    dur: 0.08, gain: 0.14 },
+    { freq: 1568, start: 0.05, dur: 0.10, gain: 0.14 },
+  ])
+}
+
+/**
  * Buyer just submitted a deal request — quick ascending blip
  * ("whoosh"-like) that says "sent".
  */
@@ -107,6 +118,28 @@ export function playRequestSent() {
     { freq: 660,  start: 0,    dur: 0.10, gain: 0.18 },
     { freq: 990,  start: 0.06, dur: 0.10, gain: 0.18 },
     { freq: 1480, start: 0.12, dur: 0.14, gain: 0.18 },
+  ])
+}
+
+/**
+ * Phone-style ringtone for the SELLER when a buyer requests a deal.
+ * Stronger and longer than playRequestSent — three rings spaced 0.4s
+ * apart, each ring = a two-tone alternation (classic phone pattern).
+ *
+ * Total duration ~2 seconds. Designed to grab attention even from the
+ * other side of the room.
+ */
+export function playIncomingDealRequest() {
+  const ring = (start: number) => [
+    // First half-ring: high tone
+    { freq: 1318, start: start + 0.00, dur: 0.20, gain: 0.30 },
+    // Second half-ring: lower companion
+    { freq: 988,  start: start + 0.20, dur: 0.20, gain: 0.30 },
+  ]
+  play([
+    ...ring(0.00),  // first ring
+    ...ring(0.55),  // second ring
+    ...ring(1.10),  // third ring
   ])
 }
 

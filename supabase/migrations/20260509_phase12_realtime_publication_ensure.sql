@@ -34,6 +34,7 @@ BEGIN
     SELECT unnest(ARRAY[
       'notifications',
       'deals',
+      'deal_messages',
       'payment_proofs',
       'listings'
     ])
@@ -77,14 +78,15 @@ BEGIN
   FROM pg_publication_tables
   WHERE pubname = 'supabase_realtime'
     AND schemaname = 'public'
-    AND tablename IN ('notifications', 'deals', 'payment_proofs', 'listings');
+    AND tablename IN ('notifications', 'deals', 'deal_messages', 'payment_proofs', 'listings');
 
   RAISE NOTICE '═══════════════════════════════════════';
-  RAISE NOTICE '✅ Realtime publication contains % of 4 critical tables', v_count;
+  RAISE NOTICE '✅ Realtime publication contains % of 5 critical tables', v_count;
   RAISE NOTICE 'After this migration:';
   RAISE NOTICE '  • Bell badge updates instantly (no refresh)';
   RAISE NOTICE '  • Deal-request popup pops within ~1s of buyer click';
   RAISE NOTICE '  • Payment-proof image appears instantly to seller';
   RAISE NOTICE '  • Listing capacity refreshes live on /exchange';
+  RAISE NOTICE '  • Deal-room chat messages appear without refresh';
   RAISE NOTICE '═══════════════════════════════════════';
 END $$;

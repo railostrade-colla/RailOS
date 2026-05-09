@@ -49,7 +49,11 @@ import { showSuccess, showError } from "@/lib/utils/toast"
 import { UserPresenceDot, UserPresenceText } from "@/components/presence/UserPresence"
 // Phase 12.8 — synth sounds on approve / reject actions + on the
 // arrival of a new request so the seller hears the popup land.
-import { playApproval, playRejection, playRequestSent } from "@/lib/sounds"
+import {
+  playApproval,
+  playRejection,
+  playIncomingDealRequest,
+} from "@/lib/sounds"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -133,9 +137,9 @@ export function DealRequestNotifier() {
           seenIds.current.add(newRow.id)
           const hydrated = await getPendingDealRequest(newRow.id)
           if (!hydrated) return
-          // Audible cue so the seller looks up immediately. The
-          // visual popup will follow within the same render tick.
-          playRequestSent()
+          // Phone-style ringtone — stronger than the soft "sent" blip
+          // so the seller hears it from across the room.
+          playIncomingDealRequest()
           setQueue((prev) => {
             if (prev.some((p) => p.id === hydrated.id)) return prev
             return [hydrated, ...prev]
@@ -218,7 +222,13 @@ export function DealRequestNotifier() {
     }
     playApproval()
     showSuccess(`✅ وافقت على صفقة ${head.buyer_name}`)
+    // Phase 12.8: redirect the seller straight to the deal page so
+    // they can see the buyer's payment proof when it lands. The buyer
+    // is already there waiting (the realtime status flip + toast tells
+    // them the seller approved).
+    const dealId = head.id
     popHead()
+    router.push(`/deals/${dealId}`)
   }
 
   const handleReject = async () => {

@@ -106,9 +106,10 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
   // Live updates for DB deals (no-op for mock)
   const { updateCount } = useRealtimeDeal(isDbDeal ? id : null)
 
-  // Phase 12.8 — sound notifications on deal-status transitions.
-  // We only play when the LOCAL view changed status (so the buyer
-  // who just clicked "submit" doesn't hear it twice).
+  // Phase 12.8 — toast + sound on deal-status transitions.
+  // Catches everything that flows through realtime: seller approval,
+  // buyer's proof upload, completion, etc. The popup notifier handles
+  // the "request waiting" step before this kicks in.
   const lastStatusRef = useRef<string | null>(null)
   useEffect(() => {
     if (!deal) return
@@ -116,12 +117,33 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
     const curr = deal.status
     lastStatusRef.current = curr
     if (!prev || prev === curr) return
-    // Buyer or seller transitioning into payment_confirmed = the buyer
-    // just submitted proof. Sound is most useful for the seller.
+
+    // ── awaiting_seller_approval → pending = seller approved ──
+    // For the buyer: toast + approval chime ("تمت الموافقة").
+    if (prev === "awaiting_seller_approval" && curr === "pending") {
+      // playApproval is already imported via the sound-effects barrel.
+      void import("@/lib/sounds").then((m) => m.playApproval?.())
+      showSuccess(`✅ وافق ${deal.seller_name} — يمكنك الآن رفع إثبات الدفع`)
+    }
+
+    // ── awaiting_seller_approval → cancelled_mutual = seller rejected.
+    if (
+      prev === "awaiting_seller_approval" &&
+      (curr === "cancelled_mutual" || curr === "cancelled_expired")
+    ) {
+      void import("@/lib/sounds").then((m) => m.playRejection?.())
+      showError("❌ رفض البائع طلبك")
+    }
+
+    // ── pending / accepted → payment_confirmed = buyer submitted proof.
     if (prev !== "payment_confirmed" && curr === "payment_confirmed") {
       playPaymentSubmitted()
+      if (role === "seller") {
+        showSuccess("🧾 المشتري أرفق إثبات الدفع — راجعه قبل تحرير الحصص")
+      }
     }
-    // Either side transitioning into completed = seller released shares.
+
+    // ── any → completed = shares released, deal done.
     if (prev !== "completed" && curr === "completed") {
       playDealCompleted()
     }
