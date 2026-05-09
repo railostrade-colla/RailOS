@@ -768,20 +768,31 @@ function ExchangeContent() {
           : `🔒 تم تعليق ${quantity} حصة وفتح الصفقة`,
       )
       setSelectedListing(null)
-      // Refresh DB listings so capacity reflects immediately
-      getExchangeListings().then((rows) => {
-        const sells: Listing[] = []
-        const buys: Listing[] = []
-        rows.forEach((r) => {
-          const l = dbToMockListing(r)
-          if (l.type === "sell") sells.push(l)
-          else buys.push(l)
+      // Refresh DB listings so capacity reflects immediately. Wrap in
+      // catch so a transient network blip doesn't bubble up to the
+      // global error boundary right after a successful deal.
+      invalidateCache("listings:exchange:active")
+      getExchangeListings()
+        .then((rows) => {
+          const sells: Listing[] = []
+          const buys: Listing[] = []
+          rows.forEach((r) => {
+            const l = dbToMockListing(r)
+            if (l.type === "sell") sells.push(l)
+            else buys.push(l)
+          })
+          setDbSellListings(sells)
+          setDbBuyListings(buys)
         })
-        setDbSellListings(sells)
-        setDbBuyListings(buys)
-      })
-      if (res.deal_id) router.push("/deals/" + res.deal_id)
-      else router.push("/deals")
+        .catch(() => { /* swallow — capacity will refresh on next mount */ })
+      // Phase 12 — defensive redirect: if anything throws (rare), fall
+      // back to the deals list so the user lands somewhere sensible.
+      try {
+        if (res.deal_id) router.push("/deals/" + res.deal_id)
+        else router.push("/deals")
+      } catch {
+        router.push("/deals")
+      }
       return
     }
 
