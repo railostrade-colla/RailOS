@@ -168,16 +168,16 @@ BEGIN
   ) VALUES (
     v_listing.project_id, v_uid, v_listing.seller_id,
     'secondary', p_quantity, v_listing.price_per_share, 0,
-    'accepted', 'exchange', p_listing_id,
+    'pending_seller_approval', 'exchange', p_listing_id,
     v_commission, 0,
     NOW() + (p_duration_hours || ' hours')::INTERVAL
   )
   RETURNING id INTO v_deal_id;
 
-  -- Phase 12.7: open directly in 'accepted' (the listing itself
-  -- is the seller's pre-approval — no extra friction). accepted_at
-  -- mirrors created_at since they happen at the same moment.
-  UPDATE public.deals SET accepted_at = NOW() WHERE id = v_deal_id;
+  -- Phase 12.8: deal opens in 'pending_seller_approval'. The seller
+  -- gets a global popup (DealRequestNotifier) anywhere in the app
+  -- to accept/reject. On accept → status flips to 'accepted' and
+  -- the buyer can submit payment proof.
 
   BEGIN
     PERFORM public.create_user_notification(
@@ -330,16 +330,16 @@ BEGIN
   ) VALUES (
     v_listing.project_id, v_listing.seller_id, v_uid,
     'secondary', p_quantity, v_listing.price_per_share, 0,
-    'accepted', 'exchange', p_listing_id,
+    'pending_seller_approval', 'exchange', p_listing_id,
     v_commission, 0,
     NOW() + (p_duration_hours || ' hours')::INTERVAL
   )
   RETURNING id INTO v_deal_id;
 
-  -- Phase 12.7: open directly in 'accepted' (the listing itself
-  -- is the seller's pre-approval — no extra friction). accepted_at
-  -- mirrors created_at since they happen at the same moment.
-  UPDATE public.deals SET accepted_at = NOW() WHERE id = v_deal_id;
+  -- Phase 12.8: deal opens in 'pending_seller_approval'. The seller
+  -- gets a global popup (DealRequestNotifier) anywhere in the app
+  -- to accept/reject. On accept → status flips to 'accepted' and
+  -- the buyer can submit payment proof.
 
   BEGIN
     PERFORM public.create_user_notification(

@@ -29,6 +29,7 @@ function mapStatus(
   }
   switch (dbStatus) {
     case "pending_seller_approval":
+      return "awaiting_seller_approval"
     case "accepted":
       return "pending"
     case "payment_submitted":

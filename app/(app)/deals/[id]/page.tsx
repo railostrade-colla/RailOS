@@ -463,6 +463,46 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
           )}
 
           {/* ═══ Section 6: Actions ═══ */}
+
+          {/* Phase 12.8 — buyer is waiting for seller approval. */}
+          {role === "buyer" && deal.status === "awaiting_seller_approval" && (
+            <Card>
+              <div className="flex items-start gap-3">
+                <Clock className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" strokeWidth={2} />
+                <div className="flex-1">
+                  <div className="text-sm font-bold text-white mb-1">
+                    📤 تم إرسال طلبك
+                  </div>
+                  <p className="text-[11px] text-neutral-400 leading-relaxed">
+                    البائع <strong>{deal.seller_name}</strong> سيتلقّى نافذة منبثقة في
+                    أيّ مكان في التطبيق. عند موافقته ستُفتح صفحة الدفع وستحصل على
+                    طرق دفعه. سيُشعَرك التطبيق بمجرّد ردّه.
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Phase 12.8 — seller side: a Card mirror of the request notifier
+              for sellers who clicked "تأجيل القرار" then came back here. */}
+          {role === "seller" && deal.status === "awaiting_seller_approval" && (
+            <Card>
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" strokeWidth={2} />
+                <div className="flex-1">
+                  <div className="text-sm font-bold text-white mb-1">
+                    🛒 طلب فتح صفقة بانتظار قرارك
+                  </div>
+                  <p className="text-[11px] text-neutral-400 leading-relaxed">
+                    عاد إليك المشتري <strong>{deal.buyer_name}</strong>. النافذة
+                    المنبثقة العامة تتيح لك الموافقة أو الرفض من أيّ مكان في
+                    التطبيق — أعد تحميل الصفحة لو لم تظهر تلقائياً.
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
           {role === "buyer" && deal.status === "pending" && (
             <div className="space-y-3">
               {/* Phase 12.7 — show the seller's payment methods so the

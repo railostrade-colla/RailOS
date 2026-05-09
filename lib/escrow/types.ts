@@ -15,7 +15,8 @@
  */
 
 export type EscrowDealStatus =
-  | "pending"                  // فُتحت، تنتظر تأكيد الدفع
+  | "awaiting_seller_approval" // طُلبت، تنتظر موافقة البائع (Phase 12.8)
+  | "pending"                  // وافق البائع، تنتظر دفع المشتري
   | "payment_confirmed"        // المشتري أكّد الدفع
   | "completed"                // الحصص حُرِّرت
   | "cancellation_requested"   // البائع طلب إلغاء
@@ -98,13 +99,14 @@ export const STATUS_META: Record<
   EscrowDealStatus,
   { label: string; color: "yellow" | "blue" | "green" | "red" | "neutral" | "orange" }
 > = {
-  pending:                { label: "بانتظار الدفع",     color: "yellow"  },
-  payment_confirmed:      { label: "تأكّد الدفع",        color: "blue"    },
-  completed:              { label: "مكتملة",            color: "green"   },
-  cancellation_requested: { label: "طلب إلغاء",          color: "orange"  },
-  disputed:               { label: "نزاع",              color: "red"     },
-  cancelled_mutual:       { label: "ملغاة بالتراضي",     color: "neutral" },
-  cancelled_expired:      { label: "ملغاة (انتهى الوقت)", color: "neutral" },
+  awaiting_seller_approval: { label: "بانتظار موافقة البائع", color: "yellow"  },
+  pending:                  { label: "بانتظار الدفع",         color: "yellow"  },
+  payment_confirmed:        { label: "تأكّد الدفع",            color: "blue"    },
+  completed:                { label: "مكتملة",                color: "green"   },
+  cancellation_requested:   { label: "طلب إلغاء",              color: "orange"  },
+  disputed:                 { label: "نزاع",                  color: "red"     },
+  cancelled_mutual:         { label: "ملغاة بالتراضي",         color: "neutral" },
+  cancelled_expired:        { label: "ملغاة (انتهى الوقت)",     color: "neutral" },
 }
 
 // ──────────────────────────────────────────────────────────────────────────

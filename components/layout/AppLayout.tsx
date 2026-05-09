@@ -8,6 +8,10 @@ import { BottomNav } from "./BottomNav"
 import { Footer } from "./Footer"
 import { OfflineBanner } from "./OfflineBanner"
 import { PushPermissionPrompt } from "@/components/notifications/PushPermissionPrompt"
+// Phase 12.8 — global popup that appears anywhere in the app when a
+// buyer requests to open a deal on one of my listings. The seller can
+// approve/reject without leaving their current page.
+import { DealRequestNotifier } from "@/components/deals/DealRequestNotifier"
 import { cn } from "@/lib/utils/cn"
 // Phase 11.31 — global SWR preloader. Warms the dedupCache for every
 // commonly-read endpoint (projects, portfolio, fee balance, profile,
@@ -107,6 +111,10 @@ export function AppLayout({ children, hideBottomNav = false, hideFooter = false 
 
       {/* Push permission prompt (shows once after 3s for new users) */}
       <PushPermissionPrompt />
+
+      {/* Phase 12.8 — global deal-request popup (seller side).
+          Renders nothing when there's nothing pending. */}
+      <DealRequestNotifier />
     </div>
   )
 }

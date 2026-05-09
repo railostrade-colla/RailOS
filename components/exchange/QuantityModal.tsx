@@ -323,8 +323,8 @@ export function QuantityModal({
           <div className="flex items-center gap-2.5 px-3 py-2.5 bg-blue-400/[0.06] border border-blue-400/20 rounded-lg">
             <Clock size={14} className="text-blue-400 shrink-0" />
             <p className="text-[11px] text-blue-300 leading-relaxed">
-              بعد التأكيد تُعلَّق الحصص وتفتح دردشة <strong>{DEAL_CHAT_DURATION_MINUTES} دقيقة</strong>{" "}
-              بين الطرفَين لإكمال التحويل خارجياً.
+              يُرسَل طلبك للبائع بنافذة منبثقة. لو وافق، تُفتح دردشة{" "}
+              <strong>{DEAL_CHAT_DURATION_MINUTES} دقيقة</strong> لإكمال التحويل خارجياً.
             </p>
           </div>
 
@@ -371,8 +371,9 @@ export function QuantityModal({
               {agreed && <span className="text-black text-[9px] font-bold">✓</span>}
             </div>
             <span className={cn("text-[11px] leading-relaxed", agreed ? "text-green-400" : "text-neutral-400")}>
-              أوافق على تعليق الحصص في Escrow وخصم {requiredFeeUnits > 0 ? requiredFeeUnits.toLocaleString("en-US") : "ما يقابل 2%"}{" "}
-              وحدة رسوم كعمولة. الدفع يتمّ خارج التطبيق خلال {DEAL_CHAT_DURATION_MINUTES} دقيقة من فتح الصفقة.
+              أوافق على إرسال طلب فتح صفقة للبائع وعند موافقته يُخصَم{" "}
+              {requiredFeeUnits > 0 ? requiredFeeUnits.toLocaleString("en-US") : "ما يقابل 2%"}{" "}
+              وحدة رسوم كعمولة. الدفع يتمّ خارج التطبيق خلال {DEAL_CHAT_DURATION_MINUTES} دقيقة من موافقة البائع.
             </span>
           </button>
         </div>
@@ -399,7 +400,7 @@ export function QuantityModal({
             )}
           >
             <Lock className="w-4 h-4" strokeWidth={2} />
-            {submitting ? "جاري الفتح..." : `🔒 تأكيد ${actionLabel} + تعليق`}
+            {submitting ? "جاري الإرسال..." : `📤 إرسال طلب ${actionLabel} للبائع`}
           </button>
         </div>
       </div>
