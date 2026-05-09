@@ -25,6 +25,12 @@ import {
 } from "@/lib/mock-data"
 import { getProjectById } from "@/lib/data"
 import { getProjectUpdates, type ProjectUpdate } from "@/lib/data/projects"
+// Phase 12.11 — live wallet stats so حصص متاحة + نسبة التمويل +
+// المبلغ الممول + المتبقي للتمويل all reflect REAL sold count.
+import {
+  getProjectWalletStats,
+  type ProjectWalletStats,
+} from "@/lib/data/project-wallet-stats"
 import { Card, SectionHeader, StatCard, Badge, SkeletonCard } from "@/components/ui"
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts"
 
@@ -108,6 +114,9 @@ export default function ProjectDetailPage() {
   // DB instead of the hardcoded `247` and `0` placeholders.
   const [investors, setInvestors] = useState(0)
   const [myShares, setMyShares] = useState(0)
+  // Phase 12.11 — live wallet stats. Falls back to 0s when migration
+  // not applied; the page then degrades to legacy `project.available_shares`.
+  const [walletStats, setWalletStats] = useState<ProjectWalletStats | null>(null)
 
   // Real DB-backed project updates (Phase O). Fetched in parallel with
   // the project itself so the "تحديثات" tab is ready when the user
@@ -124,6 +133,16 @@ export default function ProjectDetailPage() {
         else if (!project) setProject(mockProjects[id] || mockProjects["1"])
         setUpdates(ups)
         setLoading(false)
+        // Phase 12.11 — fire wallet stats query in parallel with the
+        // project load. Falls back to ZERO_STATS if the DB doesn't
+        // yet have a wallet row, in which case the legacy display
+        // path kicks in (project.available_shares).
+        if (p) {
+          const sp = p.share_price || 0
+          getProjectWalletStats(id, sp).then((stats) => {
+            if (!cancelled) setWalletStats(stats)
+          })
+        }
       })
       .catch(() => {
         if (cancelled) return
@@ -197,9 +216,21 @@ export default function ProjectDetailPage() {
   // Phase 11.19 — keep the percentage as a float so a small sale
   // (35 of 16,000 ≈ 0.22%) doesn't round to 0% and the green bar
   // doesn't disappear. Bar width is also clamped to ≥2% when there
-  // is ANY progress so the user can see a visible sliver.
-  const offeringTotal = project.offering_shares ?? project.available_shares ?? 0
-  const soldFromOffering = Math.max(0, offeringTotal - (project.available_shares ?? 0))
+  // ─── Phase 12.11 — live numbers from project_wallets ─────────────
+  // walletStats has the authoritative offering total/available/sold.
+  // Fall back to project columns when the wallet row isn't there.
+  const offeringTotal =
+    walletStats?.offering_total ??
+    project.offering_shares ??
+    project.available_shares ??
+    0
+  const soldFromOffering =
+    walletStats?.offering_sold ??
+    Math.max(0, offeringTotal - (project.available_shares ?? 0))
+  const liveAvailable =
+    walletStats?.offering_available ??
+    Math.max(0, offeringTotal - soldFromOffering)
+
   const pctRaw = offeringTotal > 0
     ? Math.min(100, (soldFromOffering / offeringTotal) * 100)
     : 0
@@ -208,12 +239,27 @@ export default function ProjectDetailPage() {
     pctRaw < 10 ? Number(pctRaw.toFixed(2)) :
     Math.round(pctRaw)
   const pctBarWidth = pctRaw === 0 ? 0 : Math.max(2, pctRaw)
-  // Phase 10.82 — spec: "القيمة السوقية = share_price × total_shares
-  // الإجمالي للمشروع". Was using (total - available) which is "sold
-  // value" not "market cap".
+
+  // Phase 10.82 — market cap = share_price × total_shares (whole project).
   const marketCap = project.share_price * (project.total_shares ?? 0)
-  const priceChange = (pct * 0.12).toFixed(1)
+
+  // Phase 12.11 — funded amount = sold × share_price (real money raised).
+  // Remaining funding = available × share_price.
+  const fundedAmount = walletStats
+    ? walletStats.funded_amount
+    : project.share_price * soldFromOffering
+  const remainingAmount = walletStats
+    ? walletStats.remaining_amount
+    : project.share_price * liveAvailable
+
+  // Phase 12.11 — REAL price change: (current − share_price) / share_price × 100.
+  const livePrice = project.current_market_price ?? project.share_price
+  const priceChange =
+    project.share_price > 0
+      ? (((livePrice - project.share_price) / project.share_price) * 100).toFixed(2)
+      : "0.00"
   const isUp = parseFloat(priceChange) >= 0
+
   const chartDays: Record<string, number> = { "1D": 24, "7D": 30, "30D": 60, "كل": 120 }
   const chartData = genChart(project.share_price, chartDays[period] || 30, project.id?.charCodeAt(0) || 1)
 
@@ -327,8 +373,11 @@ export default function ProjectDetailPage() {
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: "القيمة السوقية", value: fmtIQD(marketCap) + " IQD" },
-                { label: "المستثمرين", value: investors },
-                { label: "حصص متاحة", value: project.available_shares.toLocaleString("en-US") },
+                { label: "المستثمرين", value: investors.toLocaleString("en-US") },
+                {
+                  label: "حصص متاحة",
+                  value: liveAvailable.toLocaleString("en-US"),
+                },
                 { label: "إجمالي الحصص", value: project.total_shares.toLocaleString("en-US") },
               ].map((s, i) => (
                 <div key={i} className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5">
@@ -469,8 +518,10 @@ export default function ProjectDetailPage() {
                 <div className="divide-y divide-white/[0.04]">
                   {[
                     { label: "رأس المال الكلي", value: fmtIQD(project.share_price * project.total_shares) + " IQD" },
-                    { label: "المبلغ الممول", value: fmtIQD(marketCap) + " IQD" },
-                    { label: "المتبقي للتمويل", value: fmtIQD(project.share_price * project.available_shares) + " IQD" },
+                    // Phase 12.11 — funded = sold × share_price (real money raised).
+                    { label: "المبلغ الممول", value: fmtIQD(fundedAmount) + " IQD" },
+                    // Remaining = available × share_price (still on the market).
+                    { label: "المتبقي للتمويل", value: fmtIQD(remainingAmount) + " IQD" },
                     { label: "الحد الأدنى للاستثمار", value: project.share_price.toLocaleString("en-US") + " IQD" },
                     { label: "إجمالي الحصص", value: project.total_shares.toLocaleString("en-US") + " SHR" },
                   ].map((item, i) => (
