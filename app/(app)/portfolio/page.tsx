@@ -50,9 +50,13 @@ import { readPersistedSync } from "@/lib/data/cache"
 // Phase 12.10 — commission-aware P&L (subtracts buy/sell commissions
 // from the headline percentage shown next to "القيمة الإجمالية").
 import { getUserPnLSummary, type UserPnLSummary } from "@/lib/data/user-pnl"
-
-// TODO Phase 4.X — derive from this month's deals.total_amount sum.
-const CURRENT_USER_USED_THIS_MONTH = 0
+// Phase 12.12 — pending-requests modal (cancel/ignore/complete).
+import {
+  PendingRequestsModal,
+  type PendingItem,
+} from "@/components/portfolio/PendingRequestsModal"
+// Phase 12.12 — monthly investment limit (real usage from DB).
+import { getMyMonthlySpent } from "@/lib/data/monthly-limit"
 
 /** Map raw DB level → InvestorLevel supported by contractLimits. */
 function safeInvestorLevel(raw: string | undefined | null): InvestorLevel {
@@ -117,6 +121,8 @@ function PortfolioContent() {
   })()
   const [tab, setTab] = useState<PortfolioTab>(initialTab)
   const [showFeeModal, setShowFeeModal] = useState(false)
+  // Phase 12.12 — pending requests modal (opens from the pending pill).
+  const [showPendingModal, setShowPendingModal] = useState(false)
   const [feeAmount, setFeeAmount] = useState(0)
   const [feeNote, setFeeNote] = useState("")
   const [paymentMethod, setPaymentMethod] = useState<"zaincash" | "mastercard" | "bank">("zaincash")
@@ -175,27 +181,34 @@ function PortfolioContent() {
   // legacy portfolio summary; the legacy values are used for everything
   // EXCEPT the headline % badge which now uses pnl.profit_pct.
   const [pnl, setPnl] = useState<UserPnLSummary | null>(null)
+  // Phase 12.12 — real monthly investment usage.
+  const [monthlySpent, setMonthlySpent] = useState<number>(0)
 
   const refresh = async () => {
-    const [fresh, freshPnl] = await Promise.all([
+    const [fresh, freshPnl, spent] = await Promise.all([
       getPortfolioData(),
       getUserPnLSummary(),
+      getMyMonthlySpent(),
     ])
     setData(fresh)
     setPnl(freshPnl)
+    setMonthlySpent(spent)
     setLoading(false)
   }
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([getPortfolioData(), getUserPnLSummary()]).then(
-      ([d, p]) => {
-        if (cancelled) return
-        setData(d)
-        setPnl(p)
-        setLoading(false)
-      },
-    )
+    Promise.all([
+      getPortfolioData(),
+      getUserPnLSummary(),
+      getMyMonthlySpent(),
+    ]).then(([d, p, s]) => {
+      if (cancelled) return
+      setData(d)
+      setPnl(p)
+      setMonthlySpent(s)
+      setLoading(false)
+    })
     return () => {
       cancelled = true
     }
@@ -308,6 +321,56 @@ function PortfolioContent() {
     (e) => e.statusBadge === "معلّقة" || e.statusBadge === "بانتظار"
   ).length
   const pendingCount = pendingFeeCount + pendingShareCount
+
+  // Phase 12.12 — Build the pending-items array for the modal.
+  // Strips the "deal-" / "xfer-" prefix from extraHistory ids so each
+  // item carries the raw row id usable by the modal's actions.
+  const pendingItems: PendingItem[] = useMemo(() => {
+    const out: PendingItem[] = []
+    for (const e of extraHistory) {
+      if (e.statusBadge !== "معلّقة" && e.statusBadge !== "بانتظار") continue
+      if (e.id.startsWith("deal-")) {
+        out.push({
+          kind: "deal",
+          id: e.id.slice(5),
+          icon: e.icon,
+          title: e.title,
+          subtitle: e.subtitle,
+          amount: e.amount,
+          statusLabel: e.statusBadge,
+          created_at: e.created_at,
+        })
+      } else if (e.id.startsWith("xfer-")) {
+        out.push({
+          kind: "transfer",
+          id: e.id.slice(5),
+          icon: e.icon,
+          title: e.title,
+          subtitle: e.subtitle,
+          amount: e.amount,
+          statusLabel: e.statusBadge,
+          created_at: e.created_at,
+        })
+      }
+    }
+    // Pending fee requests come from feeRequests directly.
+    for (const r of feeRequests) {
+      if (r.status !== "pending") continue
+      out.push({
+        kind: "fee_request",
+        id: r.id,
+        icon: "💎",
+        title: `طلب شحن ${r.amount_requested} وحدة`,
+        subtitle: r.payment_method,
+        statusLabel: "قيد المراجعة",
+        created_at: r.created_at,
+      })
+    }
+    return out.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    )
+  }, [extraHistory, feeRequests])
 
   useEffect(() => {
     let cancelled = false
@@ -530,14 +593,14 @@ function PortfolioContent() {
               <div className="flex justify-between text-[9px] text-neutral-500 mb-0.5">
                 <span>المستخدم</span>
                 <span className="font-mono">
-                  {fmtLimit(CURRENT_USER_USED_THIS_MONTH)} / {fmtLimit(LEVEL_LIMITS[userLevel])}
+                  {fmtLimit(monthlySpent)} / {fmtLimit(LEVEL_LIMITS[userLevel])}
                 </span>
               </div>
               <div className="h-1 bg-white/[0.05] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-blue-400 to-blue-500 transition-all"
                   style={{
-                    width: `${Math.min(100, (CURRENT_USER_USED_THIS_MONTH / LEVEL_LIMITS[userLevel]) * 100)}%`,
+                    width: `${Math.min(100, (monthlySpent / LEVEL_LIMITS[userLevel]) * 100)}%`,
                   }}
                 />
               </div>
@@ -615,19 +678,26 @@ function PortfolioContent() {
                   {isUp ? "+" : ""}{fmtIQD(netProfit)} IQD
                 </div>
               </div>
-              <div className={cn(
-                "rounded-lg p-3 border",
-                pendingCount > 0
-                  ? "bg-yellow-400/[0.08] border-yellow-400/[0.2]"
-                  : "bg-white/[0.04] border-white/[0.06]"
-              )}>
+              <button
+                onClick={() => setShowPendingModal(true)}
+                disabled={pendingCount === 0}
+                className={cn(
+                  "rounded-lg p-3 border text-right transition-colors",
+                  pendingCount > 0
+                    ? "bg-yellow-400/[0.08] border-yellow-400/[0.2] hover:bg-yellow-400/[0.12] cursor-pointer"
+                    : "bg-white/[0.04] border-white/[0.06] cursor-default"
+                )}
+              >
                 <div className={cn("text-[10px] mb-1", pendingCount > 0 ? "text-yellow-400" : "text-neutral-500")}>
                   ⏳ طلبات معلقة
+                  {pendingCount > 0 && (
+                    <span className="text-[9px] text-yellow-300 mr-1">(اضغط)</span>
+                  )}
                 </div>
                 <div className={cn("text-sm font-bold", pendingCount > 0 ? "text-yellow-400" : "text-white")}>
                   {pendingCount} طلب
                 </div>
-              </div>
+              </button>
             </div>
 
             {/* 4 أزرار */}
@@ -1265,6 +1335,16 @@ function PortfolioContent() {
           </div>
         </div>
       )}
+
+      {/* Phase 12.12 — pending requests modal */}
+      <PendingRequestsModal
+        isOpen={showPendingModal}
+        onClose={() => setShowPendingModal(false)}
+        items={pendingItems}
+        onChanged={() => {
+          void refresh()
+        }}
+      />
     </AppLayout>
   )
 }

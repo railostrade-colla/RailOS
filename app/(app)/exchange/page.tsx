@@ -26,6 +26,10 @@ import {
 import { getAllProjects } from "@/lib/data/projects"
 // Phase 11.24 — real fee-units balance for the QuantityModal cap.
 import { getCurrentFeeBalanceSimple } from "@/lib/data/wallet"
+// Phase 12.12 — monthly investment limit enforcement.
+import { getMyMonthlySpent } from "@/lib/data/monthly-limit"
+import { getCurrentUserProfile } from "@/lib/data/profile"
+import { LEVEL_LIMITS, type InvestorLevel } from "@/lib/utils/contractLimits"
 import { dedupCache, readPersistedSync, invalidateCache } from "@/lib/data/cache"
 import { useRealtimeListings } from "@/lib/realtime/useRealtimeListings"
 import { createClient } from "@/lib/supabase/client"
@@ -550,15 +554,26 @@ function ExchangeContent() {
   const [feeBalance, setFeeBalance] = useState<number>(
     () => readPersistedSync<number>("wallet:feeBalance") ?? 0,
   )
+  // Phase 12.12 — monthly limit (level-based) + already-spent this month.
+  const [monthlyLimit, setMonthlyLimit] = useState<number>(0)
+  const [monthlySpent, setMonthlySpent] = useState<number>(0)
+
   useEffect(() => {
     let cancelled = false
     Promise.all([
       getAllProjects(),
       dedupCache("wallet:feeBalance", getCurrentFeeBalanceSimple, 30_000),
-    ]).then(([rows, fb]) => {
+      getCurrentUserProfile(),
+      getMyMonthlySpent(),
+    ]).then(([rows, fb, prof, spent]) => {
       if (cancelled) return
       setDbProjects(rows)
       setFeeBalance(fb)
+      setMonthlySpent(spent)
+      const lvlRaw = prof?.level
+      const lvl: InvestorLevel =
+        lvlRaw === "advanced" || lvlRaw === "pro" ? lvlRaw : "basic"
+      setMonthlyLimit(LEVEL_LIMITS[lvl] ?? 0)
     })
     return () => { cancelled = true }
   }, [])
@@ -1272,6 +1287,8 @@ function ExchangeContent() {
         listing={modalListing}
         userBalance={feeBalance}
         userShares={userSharesInProject}
+        monthlyLimit={monthlyLimit}
+        monthlySpent={monthlySpent}
         onClose={() => setSelectedListing(null)}
         onConfirm={handleConfirmDeal}
       />

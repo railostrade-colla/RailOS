@@ -54,6 +54,10 @@ interface Props {
   userBalance?: number
   /** عدد حصص المستخدم في هذا المشروع (للبيع). */
   userShares?: number
+  /** Phase 12.12 — السقف الشهري للاستثمار (د.ع) حسب مستوى المستخدم. */
+  monthlyLimit?: number
+  /** Phase 12.12 — كم استثمر المستخدم هذا الشهر بالفعل (د.ع). */
+  monthlySpent?: number
   /**
    * مدّة الصفقة بالساعات — يُمرَّر إلى onConfirm للحفاظ على توافق الواجهة
    * مع الـ backend. لم يعد قابلاً للاختيار من المستخدم — الصفقة تفتح
@@ -68,6 +72,8 @@ export function QuantityModal({
   listing,
   userBalance = 0,
   userShares = 0,
+  monthlyLimit = 0,
+  monthlySpent = 0,
   defaultDurationHours = 24,
   onClose,
   onConfirm,
@@ -109,8 +115,18 @@ export function QuantityModal({
     if (userAction === "sell") {
       return Math.min(baseCap, userShares)
     }
+    // Phase 12.12 — also cap by remaining monthly limit (BUY only).
+    if (monthlyLimit > 0 && pricePerShare > 0) {
+      const remaining = Math.max(0, monthlyLimit - monthlySpent)
+      const byMonthlyLimit = Math.floor(remaining / pricePerShare)
+      return Math.min(baseCap, byMonthlyLimit)
+    }
     return baseCap
-  }, [userAction, userBalance, userShares, pricePerShare, availableShares, maxShares])
+  }, [
+    userAction, userBalance, userShares,
+    pricePerShare, availableShares, maxShares,
+    monthlyLimit, monthlySpent,
+  ])
 
   // ─── معالجة الإدخال (أرقام صحيحة فقط) ───
   const handleQuantityChange = (value: string) => {
@@ -128,6 +144,9 @@ export function QuantityModal({
   // العمولة المطلوبة بوحدات الرسوم (مُقرَّبة لأعلى لتجنّب الفقد على الكسور).
   const requiredFeeUnits = Math.ceil(totalSharesValue * COMMISSION_RATE)
 
+  // Phase 12.12 — حد المستخدم الشهري المتبقّي.
+  const monthlyRemaining = Math.max(0, monthlyLimit - monthlySpent)
+
   // ─── التحقّق ───
   const validationError = useMemo((): string => {
     if (quantity === 0) return ""
@@ -142,8 +161,22 @@ export function QuantityModal({
       const shortBy = requiredFeeUnits - userBalance
       return `وحدات الرسوم غير كافية — تحتاج ${requiredFeeUnits.toLocaleString("en-US")} وحدة (ينقصك ${shortBy.toLocaleString("en-US")})`
     }
+    // Phase 12.12 — block buy if it exceeds the monthly investment limit.
+    // Only applies to BUY actions (sells release shares, don't add to spend).
+    if (
+      userAction === "buy" &&
+      monthlyLimit > 0 &&
+      totalSharesValue > monthlyRemaining
+    ) {
+      const overBy = totalSharesValue - monthlyRemaining
+      return `يتجاوز حدّك الشهري (${monthlyRemaining.toLocaleString("en-US")} د.ع متبقّية) — قلِّل الكمية بـ ${overBy.toLocaleString("en-US")} د.ع`
+    }
     return ""
-  }, [quantity, minAllowed, availableShares, userAction, userShares, requiredFeeUnits, userBalance])
+  }, [
+    quantity, minAllowed, availableShares, userAction, userShares,
+    requiredFeeUnits, userBalance,
+    totalSharesValue, monthlyLimit, monthlyRemaining,
+  ])
 
   // Now safe to bail out — every hook above ran unconditionally.
   if (!listing) return null
