@@ -26,10 +26,9 @@ import {
 import { getAllProjects } from "@/lib/data/projects"
 // Phase 11.24 — real fee-units balance for the QuantityModal cap.
 import { getCurrentFeeBalanceSimple } from "@/lib/data/wallet"
-import { dedupCache, readPersistedSync } from "@/lib/data/cache"
+import { dedupCache, readPersistedSync, invalidateCache } from "@/lib/data/cache"
 import { useRealtimeListings } from "@/lib/realtime/useRealtimeListings"
 import { createClient } from "@/lib/supabase/client"
-import { invalidateCache } from "@/lib/data/cache"
 import { cn } from "@/lib/utils/cn"
 
 /**
