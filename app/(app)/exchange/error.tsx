@@ -50,9 +50,27 @@ export default function ExchangeError({
             الرئيسية
           </Link>
         </div>
-        {error.digest && (
-          <p className="mt-4 text-[10px] text-neutral-600 font-mono" dir="ltr">{error.digest}</p>
-        )}
+        {/* DEBUG INFO — show the actual error so we can fix it */}
+        <details className="mt-4 text-right">
+          <summary className="text-[11px] text-blue-400 cursor-pointer">
+            عرض تفاصيل تقنية للمطوّر
+          </summary>
+          <div className="mt-2 bg-black/40 border border-white/[0.06] rounded p-2 text-left">
+            <p className="text-[10px] text-red-300 font-mono break-all" dir="ltr">
+              {error.name}: {error.message}
+            </p>
+            {error.stack && (
+              <pre className="text-[9px] text-neutral-500 font-mono mt-2 whitespace-pre-wrap break-all overflow-auto max-h-40" dir="ltr">
+                {error.stack.split("\n").slice(0, 8).join("\n")}
+              </pre>
+            )}
+            {error.digest && (
+              <p className="mt-2 text-[10px] text-neutral-500 font-mono" dir="ltr">
+                digest: {error.digest}
+              </p>
+            )}
+          </div>
+        </details>
       </div>
     </div>
   )
