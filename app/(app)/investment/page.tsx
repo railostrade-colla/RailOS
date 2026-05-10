@@ -267,7 +267,11 @@ function InvestmentPageContent() {
   // ─── Render ──────────────────────────────────────────────────────
   return (
     <AppLayout>
-      <div className="px-3 sm:px-6 py-4 max-w-screen-xl mx-auto">
+      {/* Phase 13.23 — full-width container on every breakpoint.
+           Chart fills 100% of the viewport width (minus a small
+           padding) so it reads like a dedicated trading surface
+           on desktop. Mobile keeps tighter padding for legibility. */}
+      <div className="px-2 sm:px-4 lg:px-6 py-4 w-full">
         {/* Header — back + title */}
         <div className="flex items-center justify-between mb-4">
           <button
@@ -348,10 +352,10 @@ function InvestmentPageContent() {
               symbol={snapshot?.symbol ?? selected.symbol}
             />
 
-            {/* 3. Status grid */}
-            <ProjectStatusGrid values={status} loading={loadingHistory} />
-
-            {/* 4. Buy / Sell action row */}
+            {/* 3. Buy / Sell action row — Phase 13.23: directly under
+                 the chart per founder spec, before the status grid,
+                 so the primary actions are within thumb reach on
+                 mobile. */}
             <div className="grid grid-cols-2 gap-2 sm:gap-3 pt-1">
               <button
                 onClick={() => goToExchange("buy")}
@@ -368,13 +372,16 @@ function InvestmentPageContent() {
                 onClick={() => goToExchange("sell")}
                 className={cn(
                   "py-3.5 sm:py-4 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all",
-                  "bg-white/[0.05] border border-white/[0.1] text-white hover:bg-white/[0.08] active:scale-[0.98]",
+                  "bg-red-400/[0.1] border border-red-400/30 text-red-300 hover:bg-red-400/[0.15] active:scale-[0.98]",
                 )}
               >
                 <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.5} />
                 بيع
               </button>
             </div>
+
+            {/* 4. Status grid — under the action row */}
+            <ProjectStatusGrid values={status} loading={loadingHistory} />
 
             {/* 5. Brief project info — Phase 13.22 reads description,
                  sector, distribution_type, expected return, risk

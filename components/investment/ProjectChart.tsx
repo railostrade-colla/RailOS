@@ -313,14 +313,16 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
         </div>
       </div>
 
-      {/* Chart canvas — mobile: 280px, lg+: 420px
-           Phase 13.18 — three-state rendering:
+      {/* Chart canvas — Phase 13.23: spec'd to fill the visible
+           viewport on mobile and stretch tall on desktop. The cap
+           prevents extreme ratios on huge monitors.
+           Phase 13.18 three-state rendering:
              • showSkeleton → animated bars (no false-empty flash)
              • isEmpty      → friendly empty state (only after fetch)
              • else         → recharts canvas */}
       <div
         className="w-full"
-        style={{ height: "min(60vh, 420px)", minHeight: 280 }}
+        style={{ height: "min(75vh, 600px)", minHeight: 360 }}
       >
         {showSkeleton ? (
           <ChartSkeleton />
@@ -511,13 +513,20 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
   )
 }
 
-// ─── Phase 13.21 — Candle custom shape ────────────────────────────
+// ─── Phase 13.21 / 13.23 — Candle custom shape ────────────────────
 //
 // Recharts has no native candlestick. We render one by giving every
 // Bar a custom shape: a thin vertical wick from low → high plus a
-// rectangular body from open → close. Bullish (close > open) candles
-// are green (#4ade80), bearish are red (#f87171), doji (open == close)
-// are neutral (#deff9a — Raylos accent).
+// rectangular body from open → close.
+//
+// Phase 13.23 colors (matching the founder's Binance-style reference
+// + Raylos brand):
+//   • Bullish (close > open) → #deff9a — the app's signature green.
+//                                Body filled solid for visibility.
+//   • Bearish (close < open) → #f87171 — soft red. Body filled solid
+//                                so it reads at a glance, even at the
+//                                small bucket sizes on mobile.
+//   • Doji   (close == open) → #d4d4d4 — neutral grey, no fill.
 interface CandleShapeProps {
   /** Pixel coordinates of the bar's bounding box, supplied by recharts. */
   x?: number
@@ -543,7 +552,8 @@ function Candle(props: CandleShapeProps) {
 
   const bullish = payload.close > payload.open
   const bearish = payload.close < payload.open
-  const color = bullish ? "#4ade80" : bearish ? "#f87171" : "#deff9a"
+  // Raylos green for bullish, red for bearish, neutral for doji.
+  const color = bullish ? "#deff9a" : bearish ? "#f87171" : "#d4d4d4"
 
   // Body: rectangle from min(open,close) to max(open,close).
   const bodyTop = Math.min(yOpen, yClose)
@@ -566,15 +576,17 @@ function Candle(props: CandleShapeProps) {
         y1={yHigh}
         y2={yLow}
         stroke={color}
-        strokeWidth={1}
+        strokeWidth={1.25}
       />
-      {/* Body */}
+      {/* Body — both bullish and bearish are SOLID-filled for parity
+          with Binance/TradingView. Doji renders as a thin horizontal
+          line (open == close) which is automatic via bodyHeight=1. */}
       <rect
         x={bodyX}
         y={bodyTop}
         width={bodyWidth}
         height={bodyHeight}
-        fill={bullish ? color : "transparent"}
+        fill={color}
         stroke={color}
         strokeWidth={1}
       />
