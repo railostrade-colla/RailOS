@@ -146,18 +146,17 @@ function dbToProject(row: DBProject): Project {
 
 export async function getAllProjects(): Promise<Project[]> {
   return dedupCache("projects:active:all", async () => {
+    // Phase 13.38 — every project the RLS layer exposes. No
+    // status filter (server-side or client-side) — admin uses
+    // "حذف" on the Projects panel to retire what shouldn't show.
     try {
       const supabase = createClient()
-      // Phase 13.27 — pull all + filter in JS (PostgREST escape
-      // syntax for negated IN was misbehaving and dropping every
-      // row). isDiscoverable handles NULL + every legacy value.
       const { data, error } = await supabase
         .from("projects")
         .select("*")
         .order("created_at", { ascending: false })
       if (error || !data) return []
-      const filtered = (data as Array<{ status?: string | null }>).filter(isDiscoverable)
-      const mapped = filtered.map((row) => dbToProject(row as DBProject))
+      const mapped = (data as DBProject[]).map(dbToProject)
       return await enrichProjectsWithSales(mapped)
     } catch {
       return []
@@ -543,9 +542,8 @@ export async function adminUpdateProject(
 }
 
 /** Drop cached project lists — call after any admin mutation.
- *  Phase 13.34 — invalidate both v2 (legacy) and v3 (current) keys
- *  so any stale empty results from before the fallback fix are
- *  evicted on the next user mutation. */
+ *  Phase 13.38 — invalidate every legacy and current cache key
+ *  so a fresh fetch always happens after a write. */
 function invalidateProjectCaches(): void {
   // Lazy import to keep the module tree-shake friendly.
   import("./cache").then(({ invalidateCache }) => {
@@ -554,9 +552,12 @@ function invalidateProjectCaches(): void {
       invalidateCache(`projects:new:${i}`)
       invalidateCache(`projects:trending:${i}`)
       invalidateCache(`projects:coming_soon:${i}`)
-      invalidateCache(`projects:new:v3:${i}`)         // Phase 13.34
+      invalidateCache(`projects:new:v3:${i}`)
       invalidateCache(`projects:trending:v3:${i}`)
       invalidateCache(`projects:coming_soon:v3:${i}`)
+      invalidateCache(`projects:new:v4:${i}`)
+      invalidateCache(`projects:trending:v4:${i}`)
+      invalidateCache(`projects:coming_soon:v4:${i}`)
     }
   })
 }
@@ -576,137 +577,35 @@ export async function getProjectById(id: string): Promise<Project | null> {
   }
 }
 
-// Phase 13.13 — explicit column list for the discover/home cards.
-// dbToProject only reads ~25 of the 60+ columns on `projects`; the
-// rest were being shipped over the wire on every dashboard mount.
-// This trims payload by ~60% and lets PostgREST skip jsonb decoding
-// for `gallery_images` / `documents` which the card never displays.
-const CARD_COLUMNS =
-  "id, name, slug, short_description, description, project_type, " +
-  "logo_url, cover_url, cover_image_url, symbol, " +
-  "total_shares, share_price, total_value, current_market_price, " +
-  "offering_percentage, status, " +
-  "offering_start_date, offering_end_date, duration_open, duration_months, " +
-  "created_at, published_at, " +
-  "risk_level, return_min, return_max, expected_return_min, expected_return_max, " +
-  "distribution_type"
-
-// Phase 13.17 — discover surface uses get_discover_projects RPC
-// which combines admin pins + auto-rules:
-//   trending    → ORDER BY investor_count DESC
-//   new         → created_at > NOW() - 30 days
-//   coming_soon → offering_start_date > NOW()
-// The RPC returns the full card payload + investor_count in one
-// round-trip, so we don't need enrichProjectsWithSales afterwards.
-async function getDiscoverProjectsViaRPC(
-  tab: "trending" | "new" | "coming_soon",
-  limit: number,
-): Promise<Project[] | null> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase.rpc("get_discover_projects", {
-      p_tab: tab,
-      p_limit: limit,
-    })
-    if (error || !Array.isArray(data)) return null
-    type DiscoverRow = DBProject & { investor_count?: number | string }
-    const mapped = (data as DiscoverRow[]).map((row) => ({
-      ...dbToProject(row as DBProject),
-      investors_count: Number(row.investor_count ?? 0),
-    }))
-    return mapped
-  } catch {
-    return null
-  }
-}
-
-// Phase 13.28 — show every project regardless of status.
-// Phase 13.26/13.27 tried to filter the obvious "off" states
-// (draft, pending, paused, ...) client- and server-side, but the
-// founder's project رايلوس carries a status value that's none of
-// the canonical ones AND none of the hidden ones — so EVERY filter
-// I tried either over-hid it or under-included it. Pragmatic fix:
-// drop the predicate. Discover lists every project; admin removes
-// what shouldn't appear via the existing "حذف" action on the
-// Projects panel.
+// Phase 13.38 — Discover surface (radically simplified).
 //
-// Truly archived states are still excluded server-side via the
-// projects RLS policy (the row simply isn't readable for
-// non-admins), so this can't accidentally reveal soft-deleted
-// projects to end users.
-function isDiscoverable(_row: { status?: string | null }): boolean {
-  return true
-}
-
-/**
- * Phase 13.30 — direct-query fallback. Pulls every project the RLS
- * lets the caller see, ordered per the discover tab semantics, with
- * NO status filter (Discover-side filtering is the user's call,
- * see Phase 13.28 reasoning).
- */
-async function getDiscoverProjectsViaDirectQuery(
-  ordering: "created_at" | "share_price",
-  limit: number,
-): Promise<Project[]> {
-  try {
-    const supabase = createClient()
-    const { data } = await supabase
-      .from("projects")
-      .select(CARD_COLUMNS)
-      .order(ordering, { ascending: false })
-      .limit(limit * 3)
-    const filtered = ((data ?? []) as Array<{ status?: string | null }>)
-      .filter(isDiscoverable)
-      .slice(0, limit)
-    const mapped = filtered.map((row) => dbToProject(row as unknown as DBProject))
-    return await enrichProjectsWithSales(mapped)
-  } catch {
-    return []
-  }
-}
-
+// Past phases (13.13–13.34) accumulated layer-on-layer of column
+// lists, RPCs, status filters, fallbacks, and admin pins. Each
+// addition introduced a new failure mode and the founder's project
+// kept slipping through the cracks. This phase wipes the slate:
+//
+//   • One simple SELECT * per tab. No CARD_COLUMNS list (which
+//     would silently fail if any column is missing on the DB).
+//   • No status filter at all — RLS is the security layer.
+//   • No RPCs (get_discover_projects) — fewer moving parts means
+//     no missing-migration edge case.
+//   • No discover_tag pinning — that whole feature is removed
+//     including the admin dropdown column.
+//
+// "رائج" sorts by created_at DESC for now (closest universal
+// signal). "جديد" filters by created_at > NOW() - 30 days.
 export async function getNewProjects(limit = 6): Promise<Project[]> {
-  return dedupCache(`projects:new:v3:${limit}`, async () => {
-    // Phase 13.30 — try the RPC first; if it returns 0 rows (older
-    // migration still filtering by status='active'), fall back to
-    // the permissive direct query so the founder's project surfaces
-    // whether or not Phase 13.29 has been applied to this DB.
-    const viaRpc = await getDiscoverProjectsViaRPC("new", limit)
-    if (viaRpc && viaRpc.length > 0) return viaRpc
-    return getDiscoverProjectsViaDirectQuery("created_at", limit)
-  }, 30_000)
-}
-
-export async function getTrendingProjects(limit = 6): Promise<Project[]> {
-  return dedupCache(`projects:trending:v3:${limit}`, async () => {
-    // Phase 13.30 — same dual-path strategy as getNewProjects.
-    const viaRpc = await getDiscoverProjectsViaRPC("trending", limit)
-    if (viaRpc && viaRpc.length > 0) return viaRpc
-    return getDiscoverProjectsViaDirectQuery("share_price", limit)
-  }, 30_000)
-}
-
-/** Phase 13.17 — coming-soon projects (admin-pinned + future
- *  offering_start_date). New surface for the "قريباً" tab.
- *  Phase 13.30 — same dual-path as trending/new. */
-export async function getComingSoonProjects(limit = 6): Promise<Project[]> {
-  return dedupCache(`projects:coming_soon:v3:${limit}`, async () => {
-    const viaRpc = await getDiscoverProjectsViaRPC("coming_soon", limit)
-    if (viaRpc && viaRpc.length > 0) return viaRpc
-    // Direct query: only projects with a future offering_start_date.
+  return dedupCache(`projects:new:v4:${limit}`, async () => {
     try {
       const supabase = createClient()
-      const nowIso = new Date().toISOString()
+      const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString()
       const { data } = await supabase
         .from("projects")
-        .select(CARD_COLUMNS)
-        .gt("offering_start_date", nowIso)
-        .order("offering_start_date", { ascending: true })
-        .limit(limit * 3)
-      const filtered = ((data ?? []) as Array<{ status?: string | null }>)
-        .filter(isDiscoverable)
-        .slice(0, limit)
-      const mapped = filtered.map((row) => dbToProject(row as unknown as DBProject))
+        .select("*")
+        .gte("created_at", cutoff)
+        .order("created_at", { ascending: false })
+        .limit(limit)
+      const mapped = (data ?? []).map((row) => dbToProject(row as DBProject))
       return await enrichProjectsWithSales(mapped)
     } catch {
       return []
@@ -714,78 +613,40 @@ export async function getComingSoonProjects(limit = 6): Promise<Project[]> {
   }, 30_000)
 }
 
-/** Phase 13.17 — admin write: pin/unpin a project to a discover tab.
- *  Pass `null` to clear the pin and revert to auto-ranking.
- *
- *  Phase 13.33 — dual-path: try the RPC first; if it's missing
- *  (Phase 13.17 migration not applied yet), fall back to a direct
- *  UPDATE on projects.discover_tag. The UPDATE is gated by admin
- *  RLS so non-admins can't reach it. */
-export async function adminSetDiscoverTag(
-  projectId: string,
-  tag: "trending" | "coming_soon" | "new" | null,
-): Promise<{ success: boolean; error?: string }> {
-  const supabase = createClient()
+export async function getTrendingProjects(limit = 6): Promise<Project[]> {
+  return dedupCache(`projects:trending:v4:${limit}`, async () => {
+    try {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("projects")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(limit)
+      const mapped = (data ?? []).map((row) => dbToProject(row as DBProject))
+      return await enrichProjectsWithSales(mapped)
+    } catch {
+      return []
+    }
+  }, 30_000)
+}
 
-  // 1) Try the RPC.
-  try {
-    const { data, error } = await supabase.rpc("admin_set_discover_tag", {
-      p_project_id: projectId,
-      p_tag: tag,
-    })
-    if (!error) {
-      const r = (data ?? {}) as { success?: boolean; error?: string }
-      if (r.success) {
-        invalidateProjectCaches()
-        return { success: true }
-      }
-      // RPC ran but returned a known error code (not_admin etc.).
-      return { success: false, error: r.error ?? "unknown" }
+export async function getComingSoonProjects(limit = 6): Promise<Project[]> {
+  return dedupCache(`projects:coming_soon:v4:${limit}`, async () => {
+    try {
+      const supabase = createClient()
+      const nowIso = new Date().toISOString()
+      const { data } = await supabase
+        .from("projects")
+        .select("*")
+        .gt("offering_start_date", nowIso)
+        .order("offering_start_date", { ascending: true })
+        .limit(limit)
+      const mapped = (data ?? []).map((row) => dbToProject(row as DBProject))
+      return await enrichProjectsWithSales(mapped)
+    } catch {
+      return []
     }
-    // RPC missing? Fall through to the direct UPDATE.
-    const msg = error.message || ""
-    const isMissing =
-      msg.toLowerCase().includes("could not find the function") ||
-      msg.toLowerCase().includes("schema cache") ||
-      error.code === "PGRST202" ||
-      error.code === "42883"
-    if (!isMissing) {
-      return { success: false, error: msg }
-    }
-  } catch { /* fall through to UPDATE */ }
-
-  // 2) Fallback: direct UPDATE. Requires admin RLS on projects
-  //    UPDATE (already in place from Phase 5.x).
-  try {
-    const { data: auth } = await supabase.auth.getUser()
-    const uid = auth?.user?.id ?? null
-    const { error: updErr } = await supabase
-      .from("projects")
-      .update({
-        discover_tag: tag,
-        discover_tag_set_by: tag == null ? null : uid,
-        discover_tag_set_at: tag == null ? null : new Date().toISOString(),
-      })
-      .eq("id", projectId)
-    if (updErr) {
-      // 42703 = column doesn't exist (Phase 13.17 migration
-      // truly missing — no way around it without DB changes).
-      if (updErr.code === "42703" || /column .* does not exist/i.test(updErr.message)) {
-        return {
-          success: false,
-          error: "Phase 13.17 migration not applied — please run 20260510_phase13_17_discover_tags.sql",
-        }
-      }
-      return { success: false, error: updErr.message }
-    }
-    invalidateProjectCaches()
-    return { success: true }
-  } catch (err) {
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "unknown",
-    }
-  }
+  }, 30_000)
 }
 
 // ──────────────────────────────────────────────────────────────────────
