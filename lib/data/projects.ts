@@ -709,20 +709,69 @@ export async function getComingSoonProjects(limit = 6): Promise<Project[]> {
 }
 
 /** Phase 13.17 — admin write: pin/unpin a project to a discover tab.
- *  Pass `null` to clear the pin and revert to auto-ranking. */
+ *  Pass `null` to clear the pin and revert to auto-ranking.
+ *
+ *  Phase 13.33 — dual-path: try the RPC first; if it's missing
+ *  (Phase 13.17 migration not applied yet), fall back to a direct
+ *  UPDATE on projects.discover_tag. The UPDATE is gated by admin
+ *  RLS so non-admins can't reach it. */
 export async function adminSetDiscoverTag(
   projectId: string,
   tag: "trending" | "coming_soon" | "new" | null,
 ): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient()
+
+  // 1) Try the RPC.
   try {
-    const supabase = createClient()
     const { data, error } = await supabase.rpc("admin_set_discover_tag", {
       p_project_id: projectId,
       p_tag: tag,
     })
-    if (error) return { success: false, error: error.message }
-    const r = (data ?? {}) as { success?: boolean; error?: string }
-    if (!r.success) return { success: false, error: r.error ?? "unknown" }
+    if (!error) {
+      const r = (data ?? {}) as { success?: boolean; error?: string }
+      if (r.success) {
+        invalidateProjectCaches()
+        return { success: true }
+      }
+      // RPC ran but returned a known error code (not_admin etc.).
+      return { success: false, error: r.error ?? "unknown" }
+    }
+    // RPC missing? Fall through to the direct UPDATE.
+    const msg = error.message || ""
+    const isMissing =
+      msg.toLowerCase().includes("could not find the function") ||
+      msg.toLowerCase().includes("schema cache") ||
+      error.code === "PGRST202" ||
+      error.code === "42883"
+    if (!isMissing) {
+      return { success: false, error: msg }
+    }
+  } catch { /* fall through to UPDATE */ }
+
+  // 2) Fallback: direct UPDATE. Requires admin RLS on projects
+  //    UPDATE (already in place from Phase 5.x).
+  try {
+    const { data: auth } = await supabase.auth.getUser()
+    const uid = auth?.user?.id ?? null
+    const { error: updErr } = await supabase
+      .from("projects")
+      .update({
+        discover_tag: tag,
+        discover_tag_set_by: tag == null ? null : uid,
+        discover_tag_set_at: tag == null ? null : new Date().toISOString(),
+      })
+      .eq("id", projectId)
+    if (updErr) {
+      // 42703 = column doesn't exist (Phase 13.17 migration
+      // truly missing — no way around it without DB changes).
+      if (updErr.code === "42703" || /column .* does not exist/i.test(updErr.message)) {
+        return {
+          success: false,
+          error: "Phase 13.17 migration not applied — please run 20260510_phase13_17_discover_tags.sql",
+        }
+      }
+      return { success: false, error: updErr.message }
+    }
     invalidateProjectCaches()
     return { success: true }
   } catch (err) {

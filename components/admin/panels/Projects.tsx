@@ -896,6 +896,7 @@ function DiscoverTagSelect({
   onChange: (tag: DiscoverTag) => void | Promise<void>
 }) {
   const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -913,25 +914,27 @@ function DiscoverTagSelect({
     <div ref={ref} className="relative inline-block" onClick={(e) => e.stopPropagation()}>
       <button
         onClick={() => setOpen((v) => !v)}
+        disabled={busy}
         className={cn(
-          "px-2 py-1 rounded-lg border text-[10px] font-bold transition-colors flex items-center gap-1",
+          "px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-colors flex items-center gap-1.5 min-w-[110px] justify-center",
           value
             ? "bg-white/[0.06] border-white/[0.12] hover:bg-white/[0.1]"
             : "bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05]",
+          busy && "opacity-50 cursor-wait",
           current.color,
         )}
         title="ضع المشروع في الرائج / قريباً / جديد"
       >
-        <span>{current.icon}</span>
+        <span className="text-[12px]">{current.icon}</span>
         <span>{current.label}</span>
       </button>
       {open && (
-        // Phase 13.32 — opens UPWARD (`bottom-full mb-1`) so a row
-        // near the bottom of the table doesn't have its dropdown
-        // clipped by the page footer / scroll edge. z-50 keeps it
-        // above the table's sticky header.
+        // Phase 13.33 — fixed width matches/exceeds the trigger so
+        // the panel doesn't render shorter than its tab. Opens
+        // upward (bottom-full + mb-1) to avoid clipping at the
+        // bottom of the table.
         <div
-          className="absolute bottom-full left-0 mb-1 z-50 min-w-[140px] bg-[#0a0a0a] border border-white/[0.12] rounded-lg shadow-2xl ring-1 ring-black/40 overflow-hidden"
+          className="absolute bottom-full left-0 mb-1 z-50 w-[150px] bg-[#0a0a0a] border border-white/[0.12] rounded-lg shadow-2xl ring-1 ring-black/40 overflow-hidden"
         >
           {TAG_OPTIONS.map((opt) => {
             const active = opt.value === value
@@ -939,11 +942,20 @@ function DiscoverTagSelect({
               <button
                 key={opt.value ?? "none"}
                 onClick={async () => {
+                  if (opt.value === value) {
+                    setOpen(false)
+                    return
+                  }
+                  setBusy(true)
                   setOpen(false)
-                  if (opt.value !== value) await onChange(opt.value)
+                  try {
+                    await onChange(opt.value)
+                  } finally {
+                    setBusy(false)
+                  }
                 }}
                 className={cn(
-                  "w-full flex items-center gap-2 px-3 py-2 text-[11px] text-right transition-colors",
+                  "w-full flex items-center gap-2 px-3 py-2 text-[11px] text-right transition-colors border-b border-white/[0.04] last:border-0",
                   active ? "bg-white/[0.08]" : "hover:bg-white/[0.04]",
                   opt.color,
                 )}
