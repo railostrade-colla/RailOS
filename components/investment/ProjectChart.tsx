@@ -24,10 +24,15 @@
 import { useMemo, useState } from "react"
 import {
   AreaChart, Area, LineChart, Line,
+  ComposedChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from "recharts"
-import { LineChart as LineIcon, AreaChart as AreaIcon, TrendingUp, TrendingDown } from "lucide-react"
+import {
+  LineChart as LineIcon, AreaChart as AreaIcon,
+  CandlestickChart as CandleIcon,
+  TrendingUp, TrendingDown,
+} from "lucide-react"
 import type { PriceHistoryPoint } from "@/lib/data/price-history"
 import { cn } from "@/lib/utils/cn"
 
@@ -41,10 +46,76 @@ const PERIODS = [
 type PeriodId = typeof PERIODS[number]["id"]
 
 const MODES = [
-  { id: "area", label: "منطقة", icon: AreaIcon },
-  { id: "line", label: "خطّي",  icon: LineIcon },
+  { id: "area",   label: "منطقة", icon: AreaIcon },
+  { id: "line",   label: "خطّي",  icon: LineIcon },
+  { id: "candle", label: "شموع",  icon: CandleIcon },
 ] as const
 type ChartMode = typeof MODES[number]["id"]
+
+// Phase 13.21 — bucket granularity per period. Each price point in
+// the source data is a discrete event (deal, admin change, anchor).
+// For candlesticks we group those events into fixed time intervals
+// and compute OHLC per bucket.
+const BUCKET_MS: Record<PeriodId, number> = {
+  "1d":  60 * 60 * 1000,           // 1 hour
+  "7d":  4 * 60 * 60 * 1000,       // 4 hours
+  "30d": 24 * 60 * 60 * 1000,      // 1 day
+  "1y":  7 * 24 * 60 * 60 * 1000,  // 1 week
+  "all": 30 * 24 * 60 * 60 * 1000, // 30 days
+}
+
+interface OHLC {
+  ts: number
+  open: number
+  high: number
+  low: number
+  close: number
+  /** [low, high] body range — recharts wants two values per bar so
+   *  the bar fills the wick range; the actual body is drawn by our
+   *  custom shape. */
+  range: [number, number]
+}
+
+/**
+ * Group an ascending [{ ts, price }] series into OHLC buckets of
+ * `bucketMs` width. Empty buckets are dropped (the chart shows only
+ * intervals with at least one observation).
+ */
+function bucketToOHLC(
+  series: { ts: number; price: number }[],
+  bucketMs: number,
+): OHLC[] {
+  if (series.length === 0) return []
+  // Group by floor(ts / bucketMs).
+  const groups = new Map<number, { ts: number; price: number }[]>()
+  for (const s of series) {
+    const key = Math.floor(s.ts / bucketMs) * bucketMs
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(s)
+  }
+  const result: OHLC[] = []
+  for (const [bucketTs, items] of Array.from(groups.entries()).sort((a, b) => a[0] - b[0])) {
+    if (items.length === 0) continue
+    const sorted = items.slice().sort((a, b) => a.ts - b.ts)
+    const open = sorted[0].price
+    const close = sorted[sorted.length - 1].price
+    let high = -Infinity
+    let low = Infinity
+    for (const it of items) {
+      if (it.price > high) high = it.price
+      if (it.price < low) low = it.price
+    }
+    result.push({
+      ts: bucketTs + bucketMs / 2, // center-of-bucket for x-axis
+      open,
+      high,
+      low,
+      close,
+      range: [low, high],
+    })
+  }
+  return result
+}
 
 const fmt = (n: number) => n.toLocaleString("en-US")
 
@@ -111,6 +182,13 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
       }))
   }, [parsed, period])
 
+  // Phase 13.21 — OHLC buckets for candle mode. Computed only when
+  // mode === "candle" so the line/area paths skip the work.
+  const candles = useMemo(() => {
+    if (mode !== "candle") return []
+    return bucketToOHLC(series, BUCKET_MS[period])
+  }, [series, mode, period])
+
   // ─── Phase 13.18 — derive the "show empty state" decision ───────
   // Three states:
   //   • Loading       → skeleton
@@ -139,12 +217,19 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
   // ─── Dynamic Y-axis padding (5% above max / below min) ───────────
   const yDomain = useMemo<[number, number]>(() => {
     if (series.length === 0) return [0, 1]
-    const prices = series.map((s) => s.price)
+    const prices: number[] = series.map((s) => s.price)
+    // Phase 13.21 — include candle highs/lows so they're not clipped.
+    if (mode === "candle") {
+      for (const c of candles) {
+        prices.push(c.high)
+        prices.push(c.low)
+      }
+    }
     const min = Math.min(...prices, currentPrice || Infinity)
     const max = Math.max(...prices, currentPrice || -Infinity)
     const pad = Math.max(1, (max - min) * 0.1)
     return [Math.max(0, Math.floor(min - pad)), Math.ceil(max + pad)]
-  }, [series, currentPrice])
+  }, [series, candles, mode, currentPrice])
 
   const accent = "#deff9a"
   const trendColor = trend.up ? "#4ade80" : "#f87171"
@@ -253,7 +338,64 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            {mode === "area" ? (
+            {mode === "candle" ? (
+              <ComposedChart data={candles} margin={{ top: 20, right: 12, bottom: 8, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                <XAxis
+                  dataKey="ts"
+                  type="number"
+                  domain={["dataMin", "dataMax"]}
+                  tickFormatter={(v) =>
+                    new Date(v).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" })
+                  }
+                  tick={{ fill: "#737373", fontSize: 10 }}
+                  axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
+                  tickLine={false}
+                />
+                <YAxis
+                  domain={yDomain}
+                  tickFormatter={(v) => fmt(Math.round(v))}
+                  tick={{ fill: "#737373", fontSize: 10 }}
+                  axisLine={{ stroke: "rgba(255,255,255,0.06)" }}
+                  tickLine={false}
+                  width={60}
+                  orientation="right"
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "rgba(10,10,10,0.95)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: 12,
+                    fontSize: 12,
+                  }}
+                  labelFormatter={(v) => new Date(Number(v)).toLocaleString("en-GB")}
+                  // OHLC tooltip: show all 4 values for the bucket.
+                  formatter={(value, name, item) => {
+                    const p = item?.payload as OHLC | undefined
+                    if (!p) return [String(value), String(name)]
+                    return [
+                      `O ${fmt(p.open)} • H ${fmt(p.high)} • L ${fmt(p.low)} • C ${fmt(p.close)}`,
+                      "OHLC",
+                    ]
+                  }}
+                  cursor={{ stroke: accent, strokeWidth: 1, strokeOpacity: 0.4 }}
+                />
+                {currentPrice > 0 && (
+                  <ReferenceLine
+                    y={currentPrice}
+                    stroke={accent}
+                    strokeDasharray="4 4"
+                    strokeOpacity={0.4}
+                  />
+                )}
+                {/* Single Bar with custom shape draws wick + body. */}
+                <Bar
+                  dataKey="range"
+                  isAnimationActive={false}
+                  shape={(props: unknown) => <Candle {...(props as CandleShapeProps)} />}
+                />
+              </ComposedChart>
+            ) : mode === "area" ? (
               <AreaChart data={series} margin={{ top: 20, right: 12, bottom: 8, left: 0 }}>
                 <defs>
                   <linearGradient id="priceFill" x1="0" y1="0" x2="0" y2="1">
@@ -368,6 +510,78 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
     </div>
   )
 }
+
+// ─── Phase 13.21 — Candle custom shape ────────────────────────────
+//
+// Recharts has no native candlestick. We render one by giving every
+// Bar a custom shape: a thin vertical wick from low → high plus a
+// rectangular body from open → close. Bullish (close > open) candles
+// are green (#4ade80), bearish are red (#f87171), doji (open == close)
+// are neutral (#deff9a — Raylos accent).
+interface CandleShapeProps {
+  /** Pixel coordinates of the bar's bounding box, supplied by recharts. */
+  x?: number
+  y?: number
+  width?: number
+  height?: number
+  /** The OHLC payload that recharts attached to this bar. */
+  payload?: OHLC
+  /** Y-axis pixel-mapping helper recharts injects when shape is a fn. */
+  yAxis?: { scale?: (v: number) => number }
+}
+
+function Candle(props: CandleShapeProps) {
+  const { x, width, payload, yAxis } = props
+  if (!payload || x === undefined || width === undefined) return null
+  const scale = yAxis?.scale
+  if (typeof scale !== "function") return null
+
+  const yHigh  = scale(payload.high)
+  const yLow   = scale(payload.low)
+  const yOpen  = scale(payload.open)
+  const yClose = scale(payload.close)
+
+  const bullish = payload.close > payload.open
+  const bearish = payload.close < payload.open
+  const color = bullish ? "#4ade80" : bearish ? "#f87171" : "#deff9a"
+
+  // Body: rectangle from min(open,close) to max(open,close).
+  const bodyTop = Math.min(yOpen, yClose)
+  const bodyBottom = Math.max(yOpen, yClose)
+  const bodyHeight = Math.max(1, bodyBottom - bodyTop)
+
+  // Body width = ~70% of bucket slot, centered on x.
+  const bodyWidth = Math.max(2, width * 0.7)
+  const bodyX = x + (width - bodyWidth) / 2
+
+  // Wick = single vertical line at the slot center.
+  const wickX = x + width / 2
+
+  return (
+    <g>
+      {/* Wick (low → high) */}
+      <line
+        x1={wickX}
+        x2={wickX}
+        y1={yHigh}
+        y2={yLow}
+        stroke={color}
+        strokeWidth={1}
+      />
+      {/* Body */}
+      <rect
+        x={bodyX}
+        y={bodyTop}
+        width={bodyWidth}
+        height={bodyHeight}
+        fill={bullish ? color : "transparent"}
+        stroke={color}
+        strokeWidth={1}
+      />
+    </g>
+  )
+}
+
 
 // ─── Phase 13.18 — ChartSkeleton ──────────────────────────────────
 //
