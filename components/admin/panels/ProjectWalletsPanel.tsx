@@ -452,6 +452,30 @@ export function ProjectWalletsPanel() {
               }
               return (
                 <>
+                  {/* Phase 13.9 — Hero box: shares actually available to
+                       sell right now = offering_total - sold_shares.
+                       This is the live pool the platform draws from
+                       for any sale, listing, or auction. Decrements by
+                       the bought quantity on every successful purchase. */}
+                  <div className="bg-gradient-to-l from-cyan-400/[0.1] to-cyan-400/[0.04] border-2 border-cyan-400/30 rounded-xl p-4 mb-3 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-[11px] text-cyan-300 font-bold mb-1 flex items-center gap-1.5">
+                        💎 الحصص المتوفرة للبيع
+                      </div>
+                      <div className="text-[9px] text-neutral-400 leading-relaxed">
+                        المباعة تُخصم تلقائياً · يُسحب منها لأي بيع/مزاد جديد
+                      </div>
+                    </div>
+                    <div className="text-left">
+                      <div className="text-3xl lg:text-4xl font-bold text-cyan-300 font-mono leading-none">
+                        {fmtNum(adminRow.offering_available)}
+                      </div>
+                      <div className="text-[10px] text-neutral-500 mt-1 font-mono">
+                        من أصل {fmtNum(adminRow.offering_total)} معروضة
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Row 1: shares counts */}
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     <div className="bg-purple-400/[0.05] border border-purple-400/[0.2] rounded-lg p-3 text-center">
