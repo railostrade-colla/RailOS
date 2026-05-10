@@ -248,48 +248,21 @@ export default function SendSharesPage() {
     })
 
     if (!result.success) {
-      // Map known DB errors to friendly Arabic messages.
+      // Phase 13.42 — drop the heuristic that showed "RPC قديم"
+      // for any error containing "does not exist". It was masking
+      // legitimate problems (e.g. NOT NULL on average_buy_price)
+      // by attributing them to the wrong cause. Now we show the
+      // raw error string so we can see what's actually wrong.
       const msg = (result.reason ?? "").toLowerCase()
       const friendly =
         msg.includes("kyc_required") ? "مطلوب توثيق KYC للطرفَين قبل التحويل"
         : msg.includes("insufficient_shares") ? "ليس لديك حصص كافية للإرسال"
         : msg.includes("insufficient_fee_units") ? "رصيد وحدات الرسوم غير كافٍ لتغطية العمولة"
         : msg.includes("cannot_transfer_to_self") ? "لا يمكن التحويل لنفس الحساب"
-        : msg.includes("v_has_mutual") || msg.includes("does not exist")
-          ? "RPC قديم على القاعدة — طبّق ملف 20260510_phase13_35_fix_execute_share_transfer.sql"
-          : result.reason ?? "تعذّر تنفيذ التحويل"
+        : `❌ ${result.reason ?? "تعذّر تنفيذ التحويل"}`
       showError(friendly)
       setSending(false)
       return
-    }
-
-    // Phase 13.37 — verify the holding actually decreased. If the
-    // RPC returned success but our share count didn't change, that
-    // means the DB rolled back silently (older RPC bug, RLS, …).
-    // Block the success toast in that case so the user isn't lied
-    // to about the transfer.
-    try {
-      const { createClient } = await import("@/lib/supabase/client")
-      const sb = createClient()
-      const { data: holdRows } = await sb
-        .from("holdings")
-        .select("shares")
-        .eq("user_id", currentUserId)
-        .eq("project_id", selectedHolding.project_id)
-        .maybeSingle()
-      const sharesAfter = Number((holdRows as { shares?: number } | null)?.shares ?? 0)
-      const expectedAfter = selectedHolding.shares - qtyNum
-      if (sharesAfter > expectedAfter + 0.01) {
-        showError(
-          `⚠️ الحصص لم تتحرك فعلياً (ما زالت ${sharesAfter.toLocaleString("en-US")}). ` +
-          `طبّق Phase 13.35 SQL في Supabase ثم أعد المحاولة.`,
-        )
-        setSending(false)
-        return
-      }
-    } catch {
-      // Verification is best-effort; if it fails, fall through to
-      // success path (RPC already returned success).
     }
 
     // ─── 📄 إنشاء الفاتورة الرسمية للتحويل ───
