@@ -85,6 +85,45 @@ export function AdminUsersPanel() {
     return () => { cancelled = true }
   }, [refresh])
 
+  // Phase 13.40 — ALL hooks must run on every render. The previous
+  // version called useMemo for pickerCandidates AFTER the early
+  // returns below, which violates the Rules of Hooks and threw
+  // React error #310 ("Rendered more hooks than during the previous
+  // render"). Moved ahead of the early returns.
+  const pickerCandidates = useMemo(() => {
+    return allUsers
+      .filter((u) => !u.is_admin)
+      .filter((u) => {
+        if (!pickerSearch) return true
+        const q = pickerSearch.toLowerCase()
+        return (
+          u.full_name.toLowerCase().includes(q) ||
+          (u.email ?? "").toLowerCase().includes(q) ||
+          (u.username ?? "").toLowerCase().includes(q)
+        )
+      })
+      .slice(0, 30)
+  }, [allUsers, pickerSearch])
+
+  // Phase 13.40 — derived values memoised so they're stable for
+  // child components even though they don't strictly need to be
+  // hooks. Keeps the render path predictable.
+  const filtered = useMemo(() => {
+    return users.filter((u) =>
+      !search ||
+      u.full_name.includes(search) ||
+      (u.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (u.username ?? "").toLowerCase().includes(search.toLowerCase()),
+    )
+  }, [users, search])
+
+  const stats = useMemo(() => ({
+    total:        users.length,
+    super_admins: users.filter((u) => u.is_super_admin).length,
+    admins:       users.filter((u) => u.role === "admin").length,
+  }), [users])
+
+  // Now safe to early-return — every hook above runs on every render.
   if (!accessChecked) {
     return (
       <div className="p-6 text-center text-xs text-neutral-500">
@@ -108,19 +147,6 @@ export function AdminUsersPanel() {
         </div>
       </div>
     )
-  }
-
-  const filtered = users.filter((u) =>
-    !search ||
-    u.full_name.includes(search) ||
-    (u.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (u.username ?? "").toLowerCase().includes(search.toLowerCase()),
-  )
-
-  const stats = {
-    total:        users.length,
-    super_admins: users.filter((u) => u.is_super_admin).length,
-    admins:       users.filter((u) => u.role === "admin").length,
   }
 
   const demote = async (u: AdminUserListRow) => {
@@ -229,22 +255,6 @@ export function AdminUsersPanel() {
     closeEditPerms()
     refresh()
   }
-
-  // List of non-admin users for the picker (filtered by search)
-  const pickerCandidates = useMemo(() => {
-    return allUsers
-      .filter((u) => !u.is_admin)
-      .filter((u) => {
-        if (!pickerSearch) return true
-        const q = pickerSearch.toLowerCase()
-        return (
-          u.full_name.toLowerCase().includes(q) ||
-          (u.email ?? "").toLowerCase().includes(q) ||
-          (u.username ?? "").toLowerCase().includes(q)
-        )
-      })
-      .slice(0, 30)
-  }, [allUsers, pickerSearch])
 
   return (
     <div className="p-6 max-w-screen-2xl">
