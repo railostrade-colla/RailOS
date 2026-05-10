@@ -30,7 +30,6 @@ import {
   type AdminUserListRow,
 } from "@/lib/data/admin-utilities"
 import {
-  adminGrantAdmin,
   adminSetAdminPermissions,
   ALL_PERMISSIONS,
   DEFAULT_PERMISSIONS,
@@ -52,11 +51,16 @@ export function AdminUsersPanel() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
 
-  // Phase 11.00 — Add-Admin modal state
+  // Phase 11.00 / 13.44 — Add-Admin modal. Phase 13.44 swapped the
+  // user-picker for a self-contained creation form (full_name, phone,
+  // email, password) that calls /api/admin/create-admin.
   const [showAddModal, setShowAddModal] = useState(false)
   const [allUsers, setAllUsers] = useState<AdminUserListRow[]>([])
-  const [pickerSearch, setPickerSearch] = useState("")
-  const [pickedUserId, setPickedUserId] = useState<string | null>(null)
+  const [formFullName, setFormFullName] = useState("")
+  const [formPhone, setFormPhone] = useState("")
+  const [formEmail, setFormEmail] = useState("")
+  const [formPassword, setFormPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [permSet, setPermSet] = useState<Set<AdminPermission>>(new Set(DEFAULT_PERMISSIONS))
   const [submitting, setSubmitting] = useState(false)
 
@@ -85,25 +89,8 @@ export function AdminUsersPanel() {
     return () => { cancelled = true }
   }, [refresh])
 
-  // Phase 13.40 — ALL hooks must run on every render. The previous
-  // version called useMemo for pickerCandidates AFTER the early
-  // returns below, which violates the Rules of Hooks and threw
-  // React error #310 ("Rendered more hooks than during the previous
-  // render"). Moved ahead of the early returns.
-  const pickerCandidates = useMemo(() => {
-    return allUsers
-      .filter((u) => !u.is_admin)
-      .filter((u) => {
-        if (!pickerSearch) return true
-        const q = pickerSearch.toLowerCase()
-        return (
-          u.full_name.toLowerCase().includes(q) ||
-          (u.email ?? "").toLowerCase().includes(q) ||
-          (u.username ?? "").toLowerCase().includes(q)
-        )
-      })
-      .slice(0, 30)
-  }, [allUsers, pickerSearch])
+  // Phase 13.44 — pickerCandidates removed; the Add Admin modal
+  // now uses a creation form, not a user picker.
 
   // Phase 13.40 — derived values memoised so they're stable for
   // child components even though they don't strictly need to be
@@ -172,17 +159,22 @@ export function AdminUsersPanel() {
     refresh()
   }
 
-  // ─── Phase 11.00 — Add Admin flow ─────────────────────────────
-  const openAddModal = () => {
-    setShowAddModal(true)
-    setPickedUserId(null)
-    setPickerSearch("")
+  // ─── Phase 13.44 — Add Admin via form (creates new auth user) ──
+  const resetForm = () => {
+    setFormFullName("")
+    setFormPhone("")
+    setFormEmail("")
+    setFormPassword("")
+    setShowPassword(false)
     setPermSet(new Set(DEFAULT_PERMISSIONS))
+  }
+  const openAddModal = () => {
+    resetForm()
+    setShowAddModal(true)
   }
   const closeAddModal = () => {
     setShowAddModal(false)
-    setPickedUserId(null)
-    setPermSet(new Set(DEFAULT_PERMISSIONS))
+    resetForm()
   }
   const togglePerm = (p: AdminPermission) => {
     setPermSet((cur) => {
@@ -193,27 +185,64 @@ export function AdminUsersPanel() {
     })
   }
   const submitAddAdmin = async () => {
-    if (!pickedUserId) return showError("اختر المستخدم أولاً")
+    const name = formFullName.trim()
+    const email = formEmail.trim().toLowerCase()
+    const phone = formPhone.trim()
+    const password = formPassword
+
+    if (!name || name.length < 2) return showError("الاسم مطلوب (حرفان على الأقل)")
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return showError("البريد الإلكتروني غير صالح")
+    }
+    if (!password || password.length < 6) {
+      return showError("كلمة المرور قصيرة (6 أحرف على الأقل)")
+    }
     if (permSet.size === 0) {
       const ok = window.confirm("لم تختر أي صلاحية. هل تريد المتابعة (الأدمن لن يرى أي شيء)؟")
       if (!ok) return
     }
+
     setSubmitting(true)
-    const r = await adminGrantAdmin(pickedUserId, Array.from(permSet))
-    setSubmitting(false)
-    if (!r.success) {
-      const map: Record<string, string> = {
-        super_admin_only: "هذا الإجراء يتطلب Super Admin",
-        user_not_found: "المستخدم غير موجود",
-        invalid_permissions: "قائمة الصلاحيات غير صالحة",
-        missing_table: "طبّق Migration 11.00 في Supabase أولاً",
+    try {
+      const res = await fetch("/api/admin/create-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          full_name: name,
+          phone,
+          email,
+          password,
+          permissions: Array.from(permSet),
+        }),
+      })
+      const json = await res.json() as { ok: boolean; error?: string; warning?: string; detail?: string }
+      if (!res.ok || !json.ok) {
+        const map: Record<string, string> = {
+          unauthenticated: "سجّل الدخول أوّلاً",
+          not_super_admin: "هذا الإجراء يتطلّب Super Admin",
+          name_required: "الاسم مطلوب",
+          email_invalid: "البريد الإلكتروني غير صالح",
+          password_too_short: "كلمة المرور قصيرة (6 أحرف على الأقل)",
+          email_already_exists: "هذا البريد مسجَّل بالفعل",
+          service_role_missing: "إعدادات الخادم ناقصة — أبلغ المطوّر (SUPABASE_SERVICE_ROLE_KEY)",
+          auth_create_failed: "تعذّر إنشاء الحساب — راجع كلمة المرور",
+          profile_upsert_failed: "تعذّر حفظ الملف الشخصي",
+        }
+        const msg = map[json.error ?? ""] ?? json.detail ?? json.error ?? "فشل الإضافة"
+        showError(msg)
+        return
       }
-      return showError(map[r.reason ?? ""] ?? `فشل الإضافة${r.error ? ": " + r.error : ""}`)
+      const successMsg = json.warning === "permissions_failed"
+        ? `✅ تم إنشاء الحساب لكن تعذّر حفظ الصلاحيات — حدّثها يدوياً`
+        : `✅ تم إنشاء أدمن جديد: ${name} (${permSet.size} صلاحية)`
+      showSuccess(successMsg)
+      closeAddModal()
+      refresh()
+    } catch (err) {
+      showError(err instanceof Error ? err.message : "خطأ في الشبكة")
+    } finally {
+      setSubmitting(false)
     }
-    const u = allUsers.find((x) => x.id === pickedUserId)
-    showSuccess(`✅ تم تعيين ${u?.full_name ?? "المستخدم"} كأدمن مع ${permSet.size} صلاحية`)
-    closeAddModal()
-    refresh()
   }
 
   // ─── Phase 11.00 — Edit permissions flow ──────────────────────
@@ -405,51 +434,75 @@ export function AdminUsersPanel() {
             </div>
 
             <div className="p-5 space-y-4">
-              {/* User picker */}
+              {/* Phase 13.44 — Creation form (replaces user picker) */}
               <div>
                 <label className="text-xs text-neutral-400 mb-2 block font-bold">
-                  1. اختر المستخدم <span className="text-red-400">*</span>
+                  1. الاسم الكامل <span className="text-red-400">*</span>
                 </label>
-                <div className="relative mb-2">
-                  <Search className="w-3.5 h-3.5 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={formFullName}
+                  onChange={(e) => setFormFullName(e.target.value)}
+                  placeholder="مثال: محمد علي"
+                  autoComplete="off"
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-neutral-400 mb-2 block font-bold">
+                    البريد الإلكتروني <span className="text-red-400">*</span>
+                  </label>
                   <input
-                    type="text"
-                    value={pickerSearch}
-                    onChange={(e) => setPickerSearch(e.target.value)}
-                    placeholder="بحث (اسم/بريد/username)..."
-                    className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg pr-9 pl-3 py-2 text-xs text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
+                    type="email"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    placeholder="admin@example.com"
+                    autoComplete="off"
+                    dir="ltr"
+                    className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 font-mono"
                   />
                 </div>
-                <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg max-h-48 overflow-y-auto divide-y divide-white/[0.04]">
-                  {pickerCandidates.length === 0 ? (
-                    <div className="text-center text-[11px] text-neutral-500 py-6">
-                      {pickerSearch ? "لا توجد نتائج" : "كل المستخدمين أدمنز بالفعل"}
-                    </div>
-                  ) : (
-                    pickerCandidates.map((u) => {
-                      const isPicked = pickedUserId === u.id
-                      return (
-                        <button
-                          key={u.id}
-                          onClick={() => setPickedUserId(u.id)}
-                          className={cn(
-                            "w-full px-3 py-2 text-right hover:bg-white/[0.06] transition-colors flex items-center justify-between gap-2",
-                            isPicked && "bg-blue-400/[0.08]",
-                          )}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs text-white font-bold truncate">{u.full_name}</div>
-                            <div className="text-[10px] text-neutral-500 truncate" dir="ltr">
-                              {u.email ?? u.username ?? "—"}
-                            </div>
-                          </div>
-                          {isPicked && (
-                            <span className="text-[10px] text-blue-400 font-bold flex-shrink-0">✓ مختار</span>
-                          )}
-                        </button>
-                      )
-                    })
-                  )}
+                <div>
+                  <label className="text-xs text-neutral-400 mb-2 block font-bold">
+                    رقم الهاتف
+                    <span className="text-neutral-500 font-normal"> (اختياري)</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={formPhone}
+                    onChange={(e) => setFormPhone(e.target.value)}
+                    placeholder="+9647XXXXXXXXX"
+                    autoComplete="off"
+                    dir="ltr"
+                    className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-neutral-400 mb-2 block font-bold">
+                  كلمة المرور <span className="text-red-400">*</span>
+                  <span className="text-neutral-500 font-normal"> (6 أحرف على الأقل)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={formPassword}
+                    onChange={(e) => setFormPassword(e.target.value)}
+                    placeholder="••••••••"
+                    autoComplete="new-password"
+                    dir="ltr"
+                    className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg pr-3 pl-16 py-2 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-blue-400 hover:text-blue-300 px-2 py-1"
+                  >
+                    {showPassword ? "إخفاء" : "إظهار"}
+                  </button>
                 </div>
               </div>
 
@@ -457,7 +510,7 @@ export function AdminUsersPanel() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs text-neutral-400 font-bold">
-                    2. الصلاحيات <span className="text-neutral-500 font-normal">({permSet.size})</span>
+                    2. الصلاحيات <span className="text-neutral-500 font-normal">({permSet.size}/{ALL_PERMISSIONS.length})</span>
                   </label>
                   <div className="flex gap-1.5">
                     <button
@@ -528,10 +581,15 @@ export function AdminUsersPanel() {
               </button>
               <button
                 onClick={submitAddAdmin}
-                disabled={submitting || !pickedUserId}
+                disabled={
+                  submitting ||
+                  !formFullName.trim() ||
+                  !formEmail.trim() ||
+                  formPassword.length < 6
+                }
                 className="flex-1 py-2.5 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-300 text-sm font-bold hover:bg-blue-500/[0.2] disabled:opacity-50"
               >
-                {submitting ? "جاري الإضافة..." : "👑 تأكيد الإضافة"}
+                {submitting ? "جاري الإنشاء..." : "👑 إنشاء الأدمن"}
               </button>
             </div>
           </div>
