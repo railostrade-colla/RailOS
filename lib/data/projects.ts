@@ -632,45 +632,70 @@ function isDiscoverable(_row: { status?: string | null }): boolean {
   return true
 }
 
+/**
+ * Phase 13.30 — direct-query fallback. Pulls every project the RLS
+ * lets the caller see, ordered per the discover tab semantics, with
+ * NO status filter (Discover-side filtering is the user's call,
+ * see Phase 13.28 reasoning).
+ */
+async function getDiscoverProjectsViaDirectQuery(
+  ordering: "created_at" | "share_price",
+  limit: number,
+): Promise<Project[]> {
+  try {
+    const supabase = createClient()
+    const { data } = await supabase
+      .from("projects")
+      .select(CARD_COLUMNS)
+      .order(ordering, { ascending: false })
+      .limit(limit * 3)
+    const filtered = ((data ?? []) as Array<{ status?: string | null }>)
+      .filter(isDiscoverable)
+      .slice(0, limit)
+    const mapped = filtered.map((row) => dbToProject(row as unknown as DBProject))
+    return await enrichProjectsWithSales(mapped)
+  } catch {
+    return []
+  }
+}
+
 export async function getNewProjects(limit = 6): Promise<Project[]> {
   return dedupCache(`projects:new:${limit}`, async () => {
-    // Phase 13.17 — try the new RPC first; fall back to a permissive
-    // direct query for any DB without the migration. The RPC already
-    // applies the status filter server-side, so we only need it in
-    // the fallback path.
+    // Phase 13.30 — try the RPC first; if it returns 0 rows (older
+    // migration still filtering by status='active'), fall back to
+    // the permissive direct query so the founder's project surfaces
+    // whether or not Phase 13.29 has been applied to this DB.
     const viaRpc = await getDiscoverProjectsViaRPC("new", limit)
-    if (viaRpc !== null) return viaRpc
-    try {
-      const supabase = createClient()
-      const { data } = await supabase
-        .from("projects")
-        .select(CARD_COLUMNS)
-        .order("created_at", { ascending: false })
-        .limit(limit * 3)  // fetch extra so post-filter still has enough
-      const filtered = ((data ?? []) as Array<{ status?: string | null }>)
-        .filter(isDiscoverable)
-        .slice(0, limit)
-      const mapped = filtered.map((row) => dbToProject(row as unknown as DBProject))
-      return await enrichProjectsWithSales(mapped)
-    } catch {
-      return []
-    }
+    if (viaRpc && viaRpc.length > 0) return viaRpc
+    return getDiscoverProjectsViaDirectQuery("created_at", limit)
   }, 30_000)
 }
 
 export async function getTrendingProjects(limit = 6): Promise<Project[]> {
   return dedupCache(`projects:trending:${limit}`, async () => {
-    // Phase 13.17 — RPC ranks by investor_count DESC, with admin pins
-    // first. Fallback path keeps the previous share_price ordering
-    // for compat with any DB missing the new RPC.
+    // Phase 13.30 — same dual-path strategy as getNewProjects.
     const viaRpc = await getDiscoverProjectsViaRPC("trending", limit)
-    if (viaRpc !== null) return viaRpc
+    if (viaRpc && viaRpc.length > 0) return viaRpc
+    return getDiscoverProjectsViaDirectQuery("share_price", limit)
+  }, 30_000)
+}
+
+/** Phase 13.17 — coming-soon projects (admin-pinned + future
+ *  offering_start_date). New surface for the "قريباً" tab.
+ *  Phase 13.30 — same dual-path as trending/new. */
+export async function getComingSoonProjects(limit = 6): Promise<Project[]> {
+  return dedupCache(`projects:coming_soon:${limit}`, async () => {
+    const viaRpc = await getDiscoverProjectsViaRPC("coming_soon", limit)
+    if (viaRpc && viaRpc.length > 0) return viaRpc
+    // Direct query: only projects with a future offering_start_date.
     try {
       const supabase = createClient()
+      const nowIso = new Date().toISOString()
       const { data } = await supabase
         .from("projects")
         .select(CARD_COLUMNS)
-        .order("share_price", { ascending: false })
+        .gt("offering_start_date", nowIso)
+        .order("offering_start_date", { ascending: true })
         .limit(limit * 3)
       const filtered = ((data ?? []) as Array<{ status?: string | null }>)
         .filter(isDiscoverable)
@@ -680,16 +705,6 @@ export async function getTrendingProjects(limit = 6): Promise<Project[]> {
     } catch {
       return []
     }
-  }, 30_000)
-}
-
-/** Phase 13.17 — coming-soon projects (admin-pinned + future
- *  offering_start_date). New surface for the "قريباً" tab. */
-export async function getComingSoonProjects(limit = 6): Promise<Project[]> {
-  return dedupCache(`projects:coming_soon:${limit}`, async () => {
-    const viaRpc = await getDiscoverProjectsViaRPC("coming_soon", limit)
-    if (viaRpc !== null) return viaRpc
-    return []
   }, 30_000)
 }
 
