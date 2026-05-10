@@ -552,20 +552,58 @@ function Candle(props: CandleShapeProps) {
 
   const bullish = payload.close > payload.open
   const bearish = payload.close < payload.open
-  // Raylos green for bullish, red for bearish, neutral for doji.
-  const color = bullish ? "#deff9a" : bearish ? "#f87171" : "#d4d4d4"
+  const isDoji  = !bullish && !bearish
+  // Raylos green for bullish, red for bearish. Phase 13.25 — when
+  // the bucket has only 1 observation (O=H=L=C), use the Raylos
+  // accent so the doji is visible AND visually tied to the brand.
+  const color = bullish ? "#deff9a" : bearish ? "#f87171" : "#deff9a"
 
-  // Body: rectangle from min(open,close) to max(open,close).
-  const bodyTop = Math.min(yOpen, yClose)
-  const bodyBottom = Math.max(yOpen, yClose)
-  const bodyHeight = Math.max(1, bodyBottom - bodyTop)
+  // ─── Phase 13.25 — minimum-visibility guards ─────────────────
+  // A doji or single-point bucket gives bodyHeight=0 and wick of
+  // 0 length, so the candle vanishes. Force a minimum 4-pixel body
+  // and, for true doji, a 5-pixel-wide centered horizontal block
+  // so the user sees the price marker even on a flat day.
+  const MIN_BODY_PX = 4
 
-  // Body width = ~70% of bucket slot, centered on x.
-  const bodyWidth = Math.max(2, width * 0.7)
+  // Body width = ~70% of bucket slot (min 4px) centered on x.
+  const bodyWidth = Math.max(4, width * 0.7)
   const bodyX = x + (width - bodyWidth) / 2
 
   // Wick = single vertical line at the slot center.
   const wickX = x + width / 2
+
+  if (isDoji) {
+    // Single-point bucket: render a flat horizontal bar at the
+    // close price so the candle is visible. Wick degenerates to
+    // a dot, so we omit it.
+    const yMid = yClose
+    return (
+      <g>
+        <rect
+          x={bodyX}
+          y={yMid - MIN_BODY_PX / 2}
+          width={bodyWidth}
+          height={MIN_BODY_PX}
+          fill={color}
+          stroke={color}
+          strokeWidth={1}
+          rx={1}
+        />
+      </g>
+    )
+  }
+
+  // Normal bullish/bearish candle.
+  let bodyTop = Math.min(yOpen, yClose)
+  let bodyBottom = Math.max(yOpen, yClose)
+  let bodyHeight = bodyBottom - bodyTop
+  if (bodyHeight < MIN_BODY_PX) {
+    // Expand around the midpoint so the candle stays anchored.
+    const mid = (bodyTop + bodyBottom) / 2
+    bodyTop = mid - MIN_BODY_PX / 2
+    bodyBottom = mid + MIN_BODY_PX / 2
+    bodyHeight = MIN_BODY_PX
+  }
 
   return (
     <g>
@@ -578,9 +616,7 @@ function Candle(props: CandleShapeProps) {
         stroke={color}
         strokeWidth={1.25}
       />
-      {/* Body — both bullish and bearish are SOLID-filled for parity
-          with Binance/TradingView. Doji renders as a thin horizontal
-          line (open == close) which is automatic via bodyHeight=1. */}
+      {/* Body — solid fill for both bullish and bearish. */}
       <rect
         x={bodyX}
         y={bodyTop}
