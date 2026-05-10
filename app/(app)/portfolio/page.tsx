@@ -27,7 +27,9 @@ const USER_ACTIVE_CONTRACTS: Array<{
 import {
   getPortfolioData,
   submitFeeRequest as apiSubmitFeeRequest,
+  getLifetimeInvestmentStats,
   type PortfolioData,
+  type LifetimeInvestmentStats,
 } from "@/lib/data/portfolio"
 import {
   getContractHoldings,
@@ -149,6 +151,14 @@ function PortfolioContent() {
   const [contractHoldings, setContractHoldings] = useState<ContractHoldingRow[]>([])
   const [contractTxns, setContractTxns] = useState<ContractTransactionRow[]>([])
 
+  // Phase 13.36 — lifetime investment stats from completed deals.
+  // Persists even after the user sells all their shares, unlike
+  // portfolio.summary which is current-holdings-only.
+  const [lifetime, setLifetime] = useState<LifetimeInvestmentStats>({
+    total_ever_invested: 0,
+    investment_events: 0,
+  })
+
   // Phase 10 — share-transfer modal state
   const [transferTarget, setTransferTarget] = useState<{
     project_id: string
@@ -213,6 +223,23 @@ function PortfolioContent() {
       cancelled = true
     }
   }, [])
+
+  // Phase 13.36 — fetch lifetime investment stats once we know the
+  // current user's id (taken from the SWR cache via the data layer
+  // — getLifetimeInvestmentStats reads auth.uid implicitly via the
+  // RLS-bound deals select). Re-runs when the active account flips.
+  useEffect(() => {
+    let cancelled = false
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: auth }) => {
+      const uid = auth?.user?.id
+      if (!uid || cancelled) return
+      void getLifetimeInvestmentStats(uid).then((s) => {
+        if (!cancelled) setLifetime(s)
+      })
+    })
+    return () => { cancelled = true }
+  }, [active])
 
   // Phase 10.69 — realtime: refresh portfolio when:
   //   • holdings change (new shares received / transferred)
@@ -912,45 +939,171 @@ function PortfolioContent() {
             )
           )}
 
-          {/* Stats Tab */}
-          {tab === "stats" && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "إجمالي الاستثمار", value: fmtIQD(totalInvested), unit: "IQD" },
-                  { label: "إجمالي الأرباح", value: (isUp ? "+" : "") + fmtIQD(netProfit), unit: "IQD", color: isUp ? "text-green-400" : "text-red-400" },
-                  { label: "عدد الاستثمارات", value: String(holdings.length), unit: "مشروع" },
-                  { label: "متوسط العائد", value: profitPct + "%", unit: "", color: isUp ? "text-green-400" : "text-red-400" },
-                ].map((s, i) => (
-                  <div key={i} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4">
-                    <div className="text-[10px] text-neutral-500 mb-2">{s.label}</div>
-                    <div className={cn("text-lg font-bold font-mono", s.color || "text-white")}>{s.value}</div>
-                    <div className="text-[10px] text-neutral-500 mt-1">{s.unit}</div>
-                  </div>
-                ))}
-              </div>
+          {/* Stats Tab — Phase 13.36 wiring:
+               • إجمالي الاستثمار  = lifetime cumulative (from deals, never decreases)
+               • إجمالي الأرباح    = realized P&L (Phase 13.15)
+               • عدد الاستثمارات   = lifetime event count (buyer-side completed deals)
+               • الاستثمارات المحفوظة = current open holdings count
+               + full-width "حالة الاستثمارات المحفوظة" tile with
+                 aggregate value, expected return, holding duration,
+                 and days until next return distribution. */}
+          {tab === "stats" && (() => {
+            // ─── Held investments aggregates ────────────────────
+            // Total current value (sum of holding.current_value)
+            const heldValue = holdings.reduce((s, h) => s + (h.current_value || 0), 0)
+            // Weighted-average expected annual return (using
+            // project.expected_return_max as the optimistic ceiling).
+            type PE = {
+              expected_return_min?: number | string | null
+              expected_return_max?: number | string | null
+              duration_months?: number | string | null
+              distribution_type?: string | null
+            }
+            let returnNumerator = 0
+            let returnWeight = 0
+            let durationSum = 0
+            let durationCount = 0
+            let nextDistDays: number | null = null
+            const now = Date.now()
+            for (const h of holdings) {
+              const proj = (h.project ?? {}) as unknown as PE
+              const annualMid =
+                (Number(proj.expected_return_min ?? 0) +
+                 Number(proj.expected_return_max ?? 0)) / 2 || 0
+              const weight = h.current_value || h.total_invested || h.shares
+              if (annualMid > 0 && weight > 0) {
+                returnNumerator += annualMid * weight
+                returnWeight += weight
+              }
+              const months = Number(proj.duration_months ?? 0)
+              if (months > 0) {
+                durationSum += months
+                durationCount++
+              }
+              // Next distribution: depends on distribution_type +
+              // last_acquired_at. Approximate via fixed interval:
+              //   monthly: 30d, quarterly: 90d, semi_annual: 180d, annual: 365d
+              const distType = String(proj.distribution_type ?? "").toLowerCase()
+              const intervalDays =
+                distType === "monthly" ? 30
+                : distType === "quarterly" ? 90
+                : distType === "semi_annual" ? 180
+                : distType === "annual" ? 365
+                : 0
+              if (intervalDays > 0) {
+                // last_acquired_at lives on the DB row but isn't on
+                // the PortfolioHolding TS shape — read it through a
+                // permissive cast so the chart doesn't gate on the
+                // type definition catching up.
+                const hAny = h as unknown as { last_acquired_at?: string | null }
+                const acquiredMs = hAny.last_acquired_at
+                  ? new Date(hAny.last_acquired_at).getTime()
+                  : 0
+                if (acquiredMs > 0) {
+                  const elapsedDays = (now - acquiredMs) / 86_400_000
+                  const intoCycle = elapsedDays % intervalDays
+                  const remaining = Math.ceil(intervalDays - intoCycle)
+                  if (nextDistDays === null || remaining < nextDistDays) {
+                    nextDistDays = remaining
+                  }
+                }
+              }
+            }
+            const avgReturn = returnWeight > 0 ? returnNumerator / returnWeight : 0
+            const avgDurationMonths = durationCount > 0 ? durationSum / durationCount : 0
 
-              {holdings.length > 0 && (
-                <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4">
-                  <div className="text-[11px] text-neutral-500 mb-3 flex items-center gap-1.5">
-                    <Trophy className="w-3 h-3 text-yellow-400" />
-                    أفضل مشروع أداء
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-lg">
-                      {sectorIcon(bestHolding?.project?.sector || "")}
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: "إجمالي الاستثمار", value: fmtIQD(lifetime.total_ever_invested), unit: "IQD", hint: "تراكميّ — يبقى حتى بعد البيع" },
+                    { label: "إجمالي الأرباح", value: (isUp ? "+" : "") + fmtIQD(netProfit), unit: "IQD", color: isUp ? "text-green-400" : "text-red-400", hint: "محقَّق — بعد العمولات" },
+                    { label: "عدد الاستثمارات", value: String(lifetime.investment_events), unit: "صفقة", hint: "كم مرّة اشتريت حصصاً" },
+                    { label: "الاستثمارات المحفوظة", value: String(holdings.length), unit: "مشروع", hint: "تجلب لك العوائد", color: "text-[#deff9a]" },
+                  ].map((s, i) => (
+                    <div key={i} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4">
+                      <div className="text-[10px] text-neutral-500 mb-2">{s.label}</div>
+                      <div className={cn("text-lg font-bold font-mono", s.color || "text-white")}>{s.value}</div>
+                      <div className="text-[10px] text-neutral-500 mt-1">{s.unit}</div>
+                      {s.hint && (
+                        <div className="text-[9px] text-neutral-600 mt-0.5 leading-tight">{s.hint}</div>
+                      )}
                     </div>
-                    <div>
-                      <div className="text-sm font-bold text-white">{bestHolding?.project?.name}</div>
-                      <div className="text-[11px] text-green-400">
-                        ↑ {bestPerformerPct >= 0 ? "+" : ""}{bestPerformerPct.toFixed(1)}%
+                  ))}
+                </div>
+
+                {/* Phase 13.36 — full-width tile aggregating the held
+                     investments. Visible only when the user has at
+                     least one open holding. */}
+                {holdings.length > 0 && (
+                  <div className="bg-gradient-to-l from-[#deff9a]/[0.06] to-white/[0.03] border border-[#deff9a]/[0.2] rounded-2xl p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Sparkles className="w-3.5 h-3.5 text-[#deff9a]" strokeWidth={2} />
+                      <div className="text-xs font-bold text-white">حالة الاستثمارات المحفوظة</div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { label: "القيمة الكلية", value: fmtIQD(heldValue), unit: "IQD", accent: false },
+                        { label: "العائد المتوقّع", value: avgReturn > 0 ? `${avgReturn.toFixed(1)}%` : "—", unit: "سنويّاً", accent: true },
+                        {
+                          label: "مدة الاحتفاظ",
+                          value: avgDurationMonths > 0
+                            ? avgDurationMonths >= 12
+                              ? `${(avgDurationMonths / 12).toFixed(1)}س`
+                              : `${Math.round(avgDurationMonths)}ش`
+                            : "—",
+                          unit: "متوسّط",
+                          accent: false,
+                        },
+                        {
+                          label: "استلام العوائد",
+                          value: nextDistDays != null ? `${nextDistDays}ي` : "—",
+                          unit: "بعد",
+                          accent: true,
+                        },
+                      ].map((t, i) => (
+                        <div
+                          key={i}
+                          className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-2.5 text-center"
+                        >
+                          <div className="text-[9px] text-neutral-500 mb-1">{t.label}</div>
+                          <div
+                            className={cn(
+                              "text-sm font-bold font-mono",
+                              t.accent ? "text-[#deff9a]" : "text-white",
+                            )}
+                          >
+                            {t.value}
+                          </div>
+                          <div className="text-[9px] text-neutral-600 mt-0.5">{t.unit}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {holdings.length > 0 && (
+                  <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4">
+                    <div className="text-[11px] text-neutral-500 mb-3 flex items-center gap-1.5">
+                      <Trophy className="w-3 h-3 text-yellow-400" />
+                      أفضل مشروع أداء
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-lg">
+                        {sectorIcon(bestHolding?.project?.sector || "")}
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-white">{bestHolding?.project?.name}</div>
+                        <div className="text-[11px] text-green-400">
+                          ↑ {bestPerformerPct >= 0 ? "+" : ""}{bestPerformerPct.toFixed(1)}%
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )
+          })()}
 
           {/* History Tab — Phase 10.82: unified timeline.
                Sources:

@@ -674,6 +674,55 @@ async function fetchHoldings(
 }
 
 /**
+ * Phase 13.36 — LIFETIME investment stats.
+ *
+ * Founder spec: the portfolio "stats" tab should show how much
+ * the user has EVER invested + how many distinct investment
+ * events they've made — even after they sell their shares, those
+ * numbers persist. So we sum from `deals` (buyer side, completed)
+ * rather than current holdings.
+ *
+ * Returns:
+ *   • total_ever_invested = SUM(buyer-side completed total_amount
+ *                           + buyer commission)
+ *   • investment_events   = COUNT of buyer-side completed deals
+ *
+ * Failures (table missing / RLS / network) silently return zeros.
+ */
+export interface LifetimeInvestmentStats {
+  total_ever_invested: number
+  investment_events: number
+}
+
+export async function getLifetimeInvestmentStats(
+  userId: string,
+): Promise<LifetimeInvestmentStats> {
+  if (!userId) return { total_ever_invested: 0, investment_events: 0 }
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("deals")
+      .select("total_amount, buyer_commission")
+      .eq("buyer_id", userId)
+      .eq("status", "completed")
+    if (error || !Array.isArray(data)) {
+      return { total_ever_invested: 0, investment_events: 0 }
+    }
+    type Row = { total_amount?: number | string | null; buyer_commission?: number | string | null }
+    const total = (data as Row[]).reduce(
+      (s, r) => s + n(r.total_amount) + n(r.buyer_commission),
+      0,
+    )
+    return {
+      total_ever_invested: total,
+      investment_events: data.length,
+    }
+  } catch {
+    return { total_ever_invested: 0, investment_events: 0 }
+  }
+}
+
+/**
  * Phase 13.15 — REALIZED profit/loss for a user.
  *
  * Founder spec: "إجمالي الأرباح" must show only realized P&L. A user
