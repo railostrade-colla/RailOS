@@ -118,6 +118,13 @@ export default function ProjectDetailPage() {
   // not applied; the page then degrades to legacy `project.available_shares`.
   const [walletStats, setWalletStats] = useState<ProjectWalletStats | null>(null)
 
+  // Phase 13.11 — direct-buy suspension state for this project.
+  // Read straight off `projects` columns (Phase 10.93 schema). When
+  // true, the "طلب شراء مباشر" button on the buy-options modal is
+  // disabled with an inline "غير متوفر حالياً" message.
+  const [offeringSuspended, setOfferingSuspended] = useState(false)
+  const [offeringSuspensionReason, setOfferingSuspensionReason] = useState<string | null>(null)
+
   // Real DB-backed project updates (Phase O). Fetched in parallel with
   // the project itself so the "تحديثات" tab is ready when the user
   // clicks it. Empty array ⇒ section renders an empty-state.
@@ -179,6 +186,18 @@ export default function ProjectDetailPage() {
             .eq("user_id", auth.user.id)
             .maybeSingle()
           if (!cancelled) setMyShares(Number((my as { shares?: number } | null)?.shares ?? 0))
+        }
+
+        // Phase 13.11 — direct-buy suspension flags (Phase 10.93 schema)
+        const { data: pflags } = await sb
+          .from("projects")
+          .select("offering_suspended, offering_suspension_reason")
+          .eq("id", id)
+          .maybeSingle()
+        if (!cancelled && pflags) {
+          const f = pflags as { offering_suspended?: boolean; offering_suspension_reason?: string | null }
+          setOfferingSuspended(Boolean(f.offering_suspended))
+          setOfferingSuspensionReason(f.offering_suspension_reason ?? null)
         }
       } catch {
         /* ignore — keep zero defaults */
@@ -924,6 +943,25 @@ export default function ProjectDetailPage() {
             </div>
           )}
 
+          {/* Phase 13.11 — Page-level banner when direct buy is suspended */}
+          {offeringSuspended && (
+            <div className="mt-4 bg-red-400/[0.06] border-2 border-red-400/30 rounded-xl p-3 flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-red-400/[0.12] border border-red-400/30 flex items-center justify-center flex-shrink-0 text-base">
+                🔒
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold text-red-300 mb-0.5">
+                  البيع المباشر معلَّق حالياً
+                </div>
+                <div className="text-[11px] text-neutral-300 leading-relaxed">
+                  لا يمكن طلب شراء مباشر من المنصة بالوقت الحالي.
+                  {offeringSuspensionReason ? ` السبب: ${offeringSuspensionReason}.` : ""}
+                  {" "}لا يزال بإمكانك الشراء من المستثمرين الآخرين عبر سوق التبادل.
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Action buttons */}
           <div className="flex gap-2 mt-4">
             <button
@@ -966,27 +1004,51 @@ export default function ProjectDetailPage() {
               </button>
             </div>
 
-            {/* Option 1: Direct buy from system */}
+            {/* Option 1: Direct buy from system — Phase 13.11:
+                disabled when admin set offering_suspended=true. */}
             <button
               onClick={() => {
+                if (offeringSuspended) return
                 setShowBuyOptions(false)
                 setShowCreateDeal(true)
               }}
-              className="w-full mt-4 bg-white/[0.04] border border-white/[0.1] rounded-xl p-4 text-right hover:bg-white/[0.06] transition-colors"
+              disabled={offeringSuspended}
+              className={cn(
+                "w-full mt-4 border rounded-xl p-4 text-right transition-colors",
+                offeringSuspended
+                  ? "bg-white/[0.02] border-white/[0.05] opacity-60 cursor-not-allowed"
+                  : "bg-white/[0.04] border-white/[0.1] hover:bg-white/[0.06]"
+              )}
             >
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-10 h-10 rounded-xl bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-xl flex-shrink-0">
-                  🏦
+                  {offeringSuspended ? "🔒" : "🏦"}
                 </div>
                 <div className="flex-1">
                   <div className="text-sm font-bold text-white">طلب شراء مباشر</div>
-                  <div className="text-[11px] text-neutral-400 mt-0.5">الشراء مباشرةً من المنصة</div>
+                  <div className="text-[11px] text-neutral-400 mt-0.5">
+                    {offeringSuspended
+                      ? "غير متوفر حالياً"
+                      : "الشراء مباشرةً من المنصة"}
+                  </div>
                 </div>
               </div>
-              <div className="bg-yellow-400/[0.06] border border-yellow-400/20 rounded-lg p-2.5 text-[11px] text-yellow-400 leading-relaxed">
-                <Clock className="w-3 h-3 inline ml-1" />
-                الطلب يذهب للبائع فوراً، يحتاج رد خلال 5 دقائق
-              </div>
+              {offeringSuspended ? (
+                <div className="bg-red-400/[0.06] border border-red-400/20 rounded-lg p-2.5 text-[11px] text-red-300 leading-relaxed">
+                  ⛔ <span className="font-bold">البيع المباشر غير متوفر بالوقت الحالي.</span>
+                  {" "}يمكنك الشراء من المستثمرين عبر الخيار أدناه.
+                  {offeringSuspensionReason && (
+                    <div className="mt-1 text-neutral-400">
+                      السبب: {offeringSuspensionReason}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-yellow-400/[0.06] border border-yellow-400/20 rounded-lg p-2.5 text-[11px] text-yellow-400 leading-relaxed">
+                  <Clock className="w-3 h-3 inline ml-1" />
+                  الطلب يذهب للبائع فوراً، يحتاج رد خلال 5 دقائق
+                </div>
+              )}
             </button>
 
             {/* Option 2: From investors */}

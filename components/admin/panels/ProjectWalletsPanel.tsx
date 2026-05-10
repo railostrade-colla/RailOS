@@ -23,6 +23,7 @@ import {
   adminResumeOffering,
   getAllProjectWalletsAdmin,
 } from "@/lib/data/admin-utilities"
+import { createClient } from "@/lib/supabase/client"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
@@ -52,6 +53,10 @@ export function ProjectWalletsPanel() {
   const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "error">("idle")
   const [loadError, setLoadError] = useState<string>("")
 
+  // Phase 13.11 — sum of shares added via admin_add_shares_to_offering
+  // for the currently-selected project, computed from audit_log.
+  const [sharesAddedAfter, setSharesAddedAfter] = useState<number>(0)
+
   const reload = () => {
     setLoadState("loading")
     setLoadError("")
@@ -69,6 +74,43 @@ export function ProjectWalletsPanel() {
   useEffect(() => {
     reload()
   }, [])
+
+  // Phase 13.11 — when a project is selected, sum every
+  // add_shares_to_offering audit_log entry for that project so we can
+  // surface "الحصص المُضافة بعد الإعلان" in the modal. This gives an
+  // exact running total of post-launch additions independent of any
+  // offering_total recalculation.
+  useEffect(() => {
+    if (!selected) {
+      setSharesAddedAfter(0)
+      return
+    }
+    // ProjectWallet.id and adminRow.project_id are the same value
+    // (matched at line ~434 in the modal lookup).
+    const projectId = (selected as unknown as { project_id?: string }).project_id ?? selected.id
+    let cancelled = false
+    void (async () => {
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from("audit_log")
+          .select("metadata")
+          .eq("action", "add_shares_to_offering")
+          .eq("entity_type", "project")
+          .eq("entity_id", projectId)
+        if (cancelled || error || !data) return
+        const total = (data as Array<{ metadata: { amount?: number | string } | null }>)
+          .reduce((sum, row) => {
+            const amt = Number(row.metadata?.amount ?? 0)
+            return sum + (Number.isFinite(amt) ? amt : 0)
+          }, 0)
+        setSharesAddedAfter(total)
+      } catch {
+        if (!cancelled) setSharesAddedAfter(0)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [selected])
 
   // Cast to admin-shape so we can read the new Phase 10.57 fields.
   // The cast is safe because every entry in `wallets` came from
@@ -497,7 +539,7 @@ export function ProjectWalletsPanel() {
                        always matches the hero "متوفرة للبيع" box exactly,
                        regardless of how the server-side RPC chose to value
                        legacy rows. */}
-                  <div className="grid grid-cols-2 gap-2 mb-4">
+                  <div className="grid grid-cols-2 gap-2 mb-3">
                     <div className="bg-emerald-400/[0.05] border border-emerald-400/[0.2] rounded-lg p-3 text-center">
                       <div className="text-[10px] text-neutral-500 mb-1">إيرادات المباعة (سعر السوق)</div>
                       <div className="text-base font-bold text-emerald-400 font-mono">{fmtNum(adminRow.sold_value)} د.ع</div>
@@ -509,6 +551,28 @@ export function ProjectWalletsPanel() {
                       </div>
                       <div className="text-[9px] text-neutral-500 mt-1 font-mono">
                         {fmtNum(adminRow.market_price)} × {fmtNum(adminRow.offering_available)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Row 3 (Phase 13.11): reserve + shares-added-after-launch */}
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <div className="bg-orange-400/[0.05] border border-orange-400/[0.2] rounded-lg p-3 text-center">
+                      <div className="text-[10px] text-neutral-500 mb-1">🏦 الاحتياطي</div>
+                      <div className="text-base font-bold text-orange-400 font-mono">
+                        {fmtNum(adminRow.reserve_available)}
+                      </div>
+                      <div className="text-[9px] text-neutral-500 mt-1">
+                        من أصل {fmtNum(adminRow.reserve_total)} حصة
+                      </div>
+                    </div>
+                    <div className="bg-pink-400/[0.05] border border-pink-400/[0.2] rounded-lg p-3 text-center">
+                      <div className="text-[10px] text-neutral-500 mb-1">➕ حصص مُضافة بعد الإعلان</div>
+                      <div className="text-base font-bold text-pink-400 font-mono">
+                        {fmtNum(sharesAddedAfter)}
+                      </div>
+                      <div className="text-[9px] text-neutral-500 mt-1">
+                        مجموع كل عمليات "إضافة حصص للطرح"
                       </div>
                     </div>
                   </div>
