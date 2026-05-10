@@ -673,6 +673,82 @@ async function fetchHoldings(
   }
 }
 
+/**
+ * Phase 13.15 — REALIZED profit/loss for a user.
+ *
+ * Founder spec: "إجمالي الأرباح" must show only realized P&L. A user
+ * who bought 100 shares for 1M and still holds them all has profit
+ * of 0 (not "-1M unrealized loss"). Profit only crystallises on a
+ * completed sale, with the buy/sell prices and commissions netted.
+ *
+ * Formula:
+ *   realized_profit
+ *     = (Σ sell proceeds − Σ sell commissions)
+ *     − (Σ buy costs    + Σ buy commissions)
+ *     + Σ cost basis of currently-held shares
+ *
+ * Why the cost-basis term?
+ *   The first two lines compute net CASH FLOW from trading. By itself
+ *   that's negative until the user sells, even when no shares have
+ *   moved at a loss. Adding back the cost basis of unsold shares
+ *   "removes" the un-realized portion, leaving only the gain/loss
+ *   on the shares that were actually sold.
+ *
+ * Worked examples (commissions ignored for clarity):
+ *   • Bought 100@10K, sold 0:
+ *       cash = 0 − 1M = −1M; held basis = 1M ⇒ profit = 0 ✓
+ *   • Bought 100@10K, sold 50@15K:
+ *       cash = 750K − 1M = −250K; held basis = 500K ⇒ profit = 250K ✓
+ *   • Bought 100@10K, sold 100@9K (loss):
+ *       cash = 900K − 1M = −100K; held basis = 0 ⇒ profit = −100K ✓
+ *
+ * Commissions live on `deals.buyer_commission` / `seller_commission`
+ * (Phase 12 schema, fee units where 1 unit == 1 IQD). Failures here
+ * silently fall back to 0 — the panel keeps painting cleanly.
+ */
+async function fetchRealizedProfit(
+  supabase: SupabaseClient,
+  userId: string,
+  heldCostBasis: number,
+): Promise<number> {
+  try {
+    type DealRow = {
+      buyer_id: string | null
+      seller_id: string | null
+      total_amount: number | string | null
+      buyer_commission: number | string | null
+      seller_commission: number | string | null
+    }
+
+    const { data, error } = await supabase
+      .from("deals")
+      .select("buyer_id, seller_id, total_amount, buyer_commission, seller_commission")
+      .eq("status", "completed")
+      .or(`buyer_id.eq.${userId},seller_id.eq.${userId}`)
+
+    if (error || !Array.isArray(data)) return 0
+
+    let netCash = 0
+    for (const d of data as DealRow[]) {
+      const total = n(d.total_amount)
+      const buyerCom = n(d.buyer_commission)
+      const sellerCom = n(d.seller_commission)
+      if (d.seller_id === userId) {
+        // User received total, paid seller commission
+        netCash += total - sellerCom
+      }
+      if (d.buyer_id === userId) {
+        // User paid total + buyer commission
+        netCash -= total + buyerCom
+      }
+    }
+
+    return netCash + heldCostBasis
+  } catch {
+    return 0
+  }
+}
+
 function computeSummary(holdings: PortfolioHolding[]): PortfolioSummary {
   if (holdings.length === 0) return EMPTY_SUMMARY
 
@@ -699,9 +775,13 @@ function computeSummary(holdings: PortfolioHolding[]): PortfolioSummary {
     }
   }
 
-  const totalProfit = totalValue - totalInvested
+  // Phase 13.15 — totalProfit is now overwritten by the realized
+  // calculation in fetchPortfolioDataInner. The unrealized number
+  // (totalValue − totalInvested) is still useful internally but no
+  // longer surfaces as "إجمالي الأرباح" on the profile.
+  const unrealizedProfit = totalValue - totalInvested
   const profitPct =
-    totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0
+    totalInvested > 0 ? (unrealizedProfit / totalInvested) * 100 : 0
 
   return {
     holdingsCount: holdings.length,
@@ -709,10 +789,10 @@ function computeSummary(holdings: PortfolioHolding[]): PortfolioSummary {
     totalValue,
     totalInvested,
     totalCost: totalInvested,
-    totalProfit,
-    netProfit: totalProfit,
+    totalProfit: unrealizedProfit,        // ← overwritten in caller
+    netProfit: unrealizedProfit,          // ← overwritten in caller
     profitPct,
-    isUp: totalProfit >= 0,
+    isUp: unrealizedProfit >= 0,
     bestPerformerPct: Number.isFinite(bestPct) ? bestPct : 0,
     bestPerformerHolding: bestHolding,
     sectorsCount: sectors.size,
@@ -834,7 +914,11 @@ export async function getPortfolioData(): Promise<PortfolioData | null> {
   // Phase 11.28 — bumped cache key to :v2 so any user with stale
   // "— مشروع غير معروف —" data in localStorage from before the
   // legacy-projects-query fix gets a fresh fetch on first mount.
-  return dedupCache("portfolio:data:v2", () => fetchPortfolioDataInner(), 15_000)
+  // Phase 13.15 — bumped to :v3 because totalProfit semantics changed
+  // (was unrealized, now realized). Users with cached negative
+  // numbers from holdings-only math need a re-fetch to see the
+  // correct realized P&L.
+  return dedupCache("portfolio:data:v3", () => fetchPortfolioDataInner(), 15_000)
 }
 
 async function fetchPortfolioDataInner(): Promise<PortfolioData | null> {
@@ -862,10 +946,31 @@ async function fetchPortfolioDataInner(): Promise<PortfolioData | null> {
       fetchFeeTransactions(supabase, userId),
     ])
 
+  // Phase 13.15 — overlay realized P&L on top of the unrealized
+  // baseline computed inside computeSummary. The held cost basis is
+  // already in summary.totalInvested, so fetchRealizedProfit just
+  // needs to pull completed deals and net the cash flows.
+  const summary = computeSummary(holdings)
+  const realizedProfit = await fetchRealizedProfit(
+    supabase,
+    userId,
+    summary.totalInvested,
+  )
+  const profitPct =
+    summary.totalInvested > 0
+      ? (realizedProfit / summary.totalInvested) * 100
+      : 0
+
   return {
     level,
     holdings,
-    summary: computeSummary(holdings),
+    summary: {
+      ...summary,
+      totalProfit: realizedProfit,
+      netProfit: realizedProfit,
+      profitPct,
+      isUp: realizedProfit >= 0,
+    },
     feeBalance,
     feeRequests,
     feeTransactions,

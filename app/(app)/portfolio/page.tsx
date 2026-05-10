@@ -135,12 +135,12 @@ function PortfolioContent() {
   // first paint, not a 0/empty skeleton. The background fetch in the
   // useEffect below silently overwrites with fresh data 1-2s later.
   const [data, setData] = useState<PortfolioData | null>(
-    () => readPersistedSync<PortfolioData>("portfolio:data:v2"),
+    () => readPersistedSync<PortfolioData>("portfolio:data:v3"),
   )
   // Loading flag flips to false the moment we have ANY data (cached
   // or fresh) so the skeleton doesn't even flash for returning users.
   const [loading, setLoading] = useState<boolean>(
-    () => readPersistedSync<PortfolioData>("portfolio:data:v2") == null,
+    () => readPersistedSync<PortfolioData>("portfolio:data:v3") == null,
   )
   const [submittingFee, setSubmittingFee] = useState(false)
 

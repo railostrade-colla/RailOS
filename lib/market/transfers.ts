@@ -46,7 +46,7 @@ export async function executeShareTransfer(params: {
       p_notes: params.notes ?? null,
     })
     if (error) return { success: false, reason: error.message }
-    invalidateCache("portfolio:data:v2")
+    invalidateCache("portfolio:data:v3")
     invalidateCache("phase12:transfers:recent")
     return { success: true, transferId: data as string }
   } catch (err) {

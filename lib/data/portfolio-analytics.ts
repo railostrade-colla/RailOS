@@ -189,7 +189,7 @@ export async function createListingDB(
     // belt-and-suspenders.
     invalidateCache("listings:exchange:active")
     invalidateCache("listings:mine:all")
-    invalidateCache("portfolio:data:v2")
+    invalidateCache("portfolio:data:v3")
     return result
   } catch (err) {
     return {

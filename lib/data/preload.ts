@@ -74,8 +74,8 @@ async function preloadAll(): Promise<void> {
     safe(
       swrRevalidate("projects:trending:3", () => getTrendingProjects(3), 30_000),
     ),
-    // Portfolio (matches the v2 cache key in portfolio.ts).
-    safe(swrRevalidate("portfolio:data:v2", getPortfolioData, 15_000)),
+    // Portfolio (matches the v3 cache key in portfolio.ts — Phase 13.15).
+    safe(swrRevalidate("portfolio:data:v3", getPortfolioData, 15_000)),
     // Wallet fee balance (used on /exchange and exchange/create).
     safe(
       swrRevalidate("wallet:feeBalance", getCurrentFeeBalanceSimple, 30_000),

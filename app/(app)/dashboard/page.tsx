@@ -226,7 +226,7 @@ export default function DashboardPage() {
   const cachedNew        = readPersistedSync<Project[]>("projects:new:3") ?? []
   const cachedAllProj    = readPersistedSync<Project[]>("projects:active:all") ?? []
   const cachedProfile    = readPersistedSync<CurrentUserProfile>("currentUser:profile")
-  const cachedPortfolio  = readPersistedSync<{ summary: DBPortfolioSummary }>("portfolio:data:v2")
+  const cachedPortfolio  = readPersistedSync<{ summary: DBPortfolioSummary }>("portfolio:data:v3")
 
   const [userProfile, setUserProfile] = useState<CurrentUserProfile | null>(cachedProfile)
   const [dbPortfolio, setDbPortfolio] = useState<DBPortfolioSummary | null>(
