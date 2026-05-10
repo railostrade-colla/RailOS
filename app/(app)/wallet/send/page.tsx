@@ -7,6 +7,7 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
 import { createInvoice } from "@/lib/data/invoices"
+import { executeShareTransfer } from "@/lib/market/transfers"
 import { LEVEL_LIMITS, fmtLimit, type InvestorLevel } from "@/lib/utils/contractLimits"
 // Phase 4.3: user identity, holdings, fee balance and recipient verify
 // are real (Supabase). Recent recipients is empty until a transfers
@@ -227,9 +228,43 @@ export default function SendSharesPage() {
   const handleSubmit = async () => {
     if (!recipientUser || !selectedHolding) return
     setSending(true)
-    await new Promise((r) => setTimeout(r, 1200))
+
+    // Phase 13.35 — execute the REAL share transfer via Supabase
+    // RPC. The previous flow only created a local-storage invoice
+    // and showed a fake success toast — no shares actually moved.
+    // Now we hit `executeShareTransfer` which atomically:
+    //   • verifies the sender has the shares
+    //   • deducts the commission from fee_unit_balances
+    //   • moves shares from sender.holdings to recipient.holdings
+    //   • inserts a row in share_transfers (audit trail)
+    //   • inserts share_lineage for provenance
+    // Only on success do we issue the local invoice for navigation.
+    const result = await executeShareTransfer({
+      senderId: currentUserId,
+      recipientId: recipientUser.id,
+      projectId: selectedHolding.project_id,
+      shares: qtyNum,
+      notes: note.trim() || null,
+    })
+
+    if (!result.success) {
+      // Map known DB errors to friendly Arabic messages.
+      const msg = (result.reason ?? "").toLowerCase()
+      const friendly =
+        msg.includes("kyc_required") ? "مطلوب توثيق KYC للطرفَين قبل التحويل"
+        : msg.includes("insufficient_shares") ? "ليس لديك حصص كافية للإرسال"
+        : msg.includes("insufficient_fee_units") ? "رصيد وحدات الرسوم غير كافٍ لتغطية العمولة"
+        : msg.includes("cannot_transfer_to_self") ? "لا يمكن التحويل لنفس الحساب"
+        : result.reason ?? "تعذّر تنفيذ التحويل"
+      showError(friendly)
+      setSending(false)
+      return
+    }
 
     // ─── 📄 إنشاء الفاتورة الرسمية للتحويل ───
+    // Local invoice for the redirect target. The real share_transfers
+    // row is in the DB; the invoice here is a UI artifact tied to
+    // the visible /invoices/[id] page.
     const invoice = createInvoice({
       type: "transfer_send",
       from: { id: currentUserId, name: "أنا" },
@@ -239,10 +274,11 @@ export default function SendSharesPage() {
       shares_amount: qtyNum,
       price_per_share: selectedHolding.project.share_price,
       platform_fee_units: transferFee,
+      source_id: result.transferId,
       notes: note.trim() || undefined,
     })
 
-    showSuccess(`✅ تم إرسال ${qtyNum} حصة + إصدار الفاتورة ${invoice.id}`)
+    showSuccess(`✅ تم تحويل ${qtyNum} حصة إلى ${recipientUser.name}`)
     setShowConfirm(false)
     setSending(false)
     setTimeout(() => router.replace(`/invoices/${invoice.id}`), 800)
