@@ -1,13 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Plus, Edit2, Trash2, AlertTriangle, X, Eye, FileEdit, Clock } from "lucide-react"
 import { Badge, ActionBtn, Table, THead, TH, TBody, TR, TD, SectionHeader, AdminEmpty, KPI, InnerTabBar } from "@/components/admin/ui"
 import { EntityFormPanel, type EntityFormData } from "./EntityFormPanel"
 import { EntityDetailsView } from "./EntityDetailsView"
 import { EmbeddedTabsHub } from "./EmbeddedTabsHub"
 import { ProjectWalletsPanel } from "./ProjectWalletsPanel"
-import { getAllProjects, getProjectByIdAdmin } from "@/lib/data/projects"
+import { getAllProjects, getProjectByIdAdmin, adminSetDiscoverTag } from "@/lib/data/projects"
 import { getAllCompanies } from "@/lib/data/companies"
 import { getAllProjectWalletsAdmin, adminDeleteProject } from "@/lib/data/admin-utilities"
 import {
@@ -57,6 +57,8 @@ interface EntityRow {
   trading_suspension_reason: string | null
   offering_suspended: boolean
   offering_suspension_reason: string | null
+  /** Phase 13.17 — admin override pin for the home Discover surface */
+  discover_tag: "trending" | "coming_soon" | "new" | null
 }
 
 /** Map a Project type DB enum back to the form's sector option. */
@@ -281,6 +283,7 @@ function ProjectsListPanel() {
         available_shares?: number | string
         offering_percentage?: number | string
         status?: string
+        discover_tag?: string | null
       }>).map((p) => {
         const total = Number(p.total_shares ?? 0)
         const price = Number(p.share_price ?? 0)
@@ -315,6 +318,10 @@ function ProjectsListPanel() {
           trading_suspension_reason: susp?.trading_suspension_reason ?? null,
           offering_suspended: susp?.offering_suspended ?? false,
           offering_suspension_reason: susp?.offering_suspension_reason ?? null,
+          discover_tag:
+            (p.discover_tag === "trending" || p.discover_tag === "coming_soon" || p.discover_tag === "new")
+              ? p.discover_tag
+              : null,
         }
       })
       const companyRows: EntityRow[] = (companies as Array<{
@@ -337,6 +344,7 @@ function ProjectsListPanel() {
         trading_suspension_reason: null,
         offering_suspended: false,
         offering_suspension_reason: null,
+        discover_tag: null,
       }))
       setEntities([...projectRows, ...companyRows])
     })
@@ -600,6 +608,7 @@ function ProjectsListPanel() {
             <TH>قيمة المشروع</TH>
             <TH>الحالة</TH>
             <TH>الجودة</TH>
+            <TH>🌟 الواجهة</TH>
             <TH>إجراءات</TH>
           </THead>
           <TBody>
@@ -632,6 +641,41 @@ function ProjectsListPanel() {
                     label={p.quality === "high" ? "★ عالية" : p.quality === "medium" ? "متوسطة" : "منخفضة"}
                     color={p.quality === "high" ? "purple" : p.quality === "medium" ? "blue" : "gray"}
                   />
+                </TD>
+                <TD>
+                  {p.entity_type === "project" ? (
+                    <DiscoverTagSelect
+                      value={p.discover_tag}
+                      onChange={async (tag) => {
+                        const r = await adminSetDiscoverTag(p.id, tag)
+                        if (!r.success) {
+                          showError(
+                            r.error === "not_admin"
+                              ? "صلاحياتك لا تسمح"
+                              : r.error === "invalid_tag"
+                                ? "خيار غير صالح"
+                                : r.error ?? "تعذّر الحفظ"
+                          )
+                          return
+                        }
+                        // Optimistic update
+                        setEntities((prev) =>
+                          prev.map((e) => (e.id === p.id ? { ...e, discover_tag: tag } : e))
+                        )
+                        showSuccess(
+                          tag === null
+                            ? "أُزيل من تثبيت الواجهة"
+                            : tag === "trending"
+                              ? "🌟 ثُبِّت في رائج"
+                              : tag === "coming_soon"
+                                ? "⏳ ثُبِّت في قريباً"
+                                : "🆕 ثُبِّت في جديد"
+                        )
+                      }}
+                    />
+                  ) : (
+                    <span className="text-[10px] text-neutral-600">—</span>
+                  )}
                 </TD>
                 <TD>
                   <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -797,6 +841,87 @@ function DraftsList({ projectDrafts, companyDrafts, onResume, onDelete }: Drafts
     <div>
       {renderSection("مسودّات المشاريع", "🏗️", projectDrafts, "project")}
       {renderSection("مسودّات الشركات", "🏢", companyDrafts, "company")}
+    </div>
+  )
+}
+
+// ─── Phase 13.17 — Discover-tag inline selector ────────────────────
+//
+// Tiny inline dropdown for the Projects table. The 4 options map to:
+//   null         — no pin (project shows up via auto-rules only)
+//   trending     — pinned to "🌟 رائج" tab
+//   coming_soon  — pinned to "⏳ قريباً" tab
+//   new          — pinned to "🆕 جديد" tab
+// Click outside to dismiss; clicking a row issues admin_set_discover_tag.
+type DiscoverTag = "trending" | "coming_soon" | "new" | null
+const TAG_OPTIONS: { value: DiscoverTag; label: string; icon: string; color: string }[] = [
+  { value: null,          label: "تلقائي",  icon: "—",  color: "text-neutral-400" },
+  { value: "trending",    label: "رائج",     icon: "🌟", color: "text-yellow-300" },
+  { value: "coming_soon", label: "قريباً",   icon: "⏳", color: "text-blue-300" },
+  { value: "new",         label: "جديد",     icon: "🆕", color: "text-green-300" },
+]
+
+function DiscoverTagSelect({
+  value,
+  onChange,
+}: {
+  value: DiscoverTag
+  onChange: (tag: DiscoverTag) => void | Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", onDoc)
+    return () => document.removeEventListener("mousedown", onDoc)
+  }, [open])
+
+  const current = TAG_OPTIONS.find((o) => o.value === value) ?? TAG_OPTIONS[0]
+
+  return (
+    <div ref={ref} className="relative inline-block" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "px-2 py-1 rounded-lg border text-[10px] font-bold transition-colors flex items-center gap-1",
+          value
+            ? "bg-white/[0.06] border-white/[0.12] hover:bg-white/[0.1]"
+            : "bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05]",
+          current.color,
+        )}
+        title="ضع المشروع في الرائج / قريباً / جديد"
+      >
+        <span>{current.icon}</span>
+        <span>{current.label}</span>
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-30 w-32 bg-[#0a0a0a] border border-white/[0.1] rounded-lg shadow-2xl overflow-hidden">
+          {TAG_OPTIONS.map((opt) => {
+            const active = opt.value === value
+            return (
+              <button
+                key={opt.value ?? "none"}
+                onClick={async () => {
+                  setOpen(false)
+                  if (opt.value !== value) await onChange(opt.value)
+                }}
+                className={cn(
+                  "w-full flex items-center gap-2 px-2.5 py-1.5 text-[10px] text-right transition-colors",
+                  active ? "bg-white/[0.08]" : "hover:bg-white/[0.04]",
+                  opt.color,
+                )}
+              >
+                <span>{opt.icon}</span>
+                <span className="font-bold">{opt.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

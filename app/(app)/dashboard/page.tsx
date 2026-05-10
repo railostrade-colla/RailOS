@@ -39,6 +39,7 @@ import type { Project } from "@/lib/mock-data/types"
 import {
   getNewProjects as dbGetNewProjects,
   getTrendingProjects as dbGetTrendingProjects,
+  getComingSoonProjects as dbGetComingSoonProjects,
   getLatestNews as dbGetLatestNews,
   getAllProjects as dbGetAllProjects,
 } from "@/lib/data"
@@ -205,11 +206,13 @@ export default function DashboardPage() {
 
   // ─── Production defaults (zero state — no mock fallbacks) ─────
   const alerts: Array<{ id: string; type: string; title: string; href: string }> = []
-  const closing: ProjectCardData[] = []
 
   // Live data — populated from DB only
   const [trending, setTrending] = useState<ProjectCardData[]>([])
   const [newProjects, setNewProjects] = useState<ProjectCardData[]>([])
+  // Phase 13.17 — coming-soon tab now backed by the discover RPC
+  // (admin pins + future offering_start_date).
+  const [closing, setClosing] = useState<ProjectCardData[]>([])
   const [news, setNews] = useState<Array<{
     id: string; icon: string; title: string; date: string; is_new: boolean
   }>>([])
@@ -267,18 +270,21 @@ export default function DashboardPage() {
     Promise.all([
       dbGetTrendingProjects(3),
       dbGetNewProjects(3),
+      dbGetComingSoonProjects(3),
       dbGetLatestNews(4),
       getCurrentUserProfile(),
       getPortfolioData(),
       dbGetAllProjects(),
       getActiveAds("dashboard"),
     ])
-      .then(([t, n, ns, prof, port, allProj, ads]) => {
+      .then(([t, n, cs, ns, prof, port, allProj, ads]) => {
         if (cancelled) return
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setTrending(t as any as ProjectCardData[])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setNewProjects(n as any as ProjectCardData[])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setClosing(cs as any as ProjectCardData[])
         setNews(ns.map((row) => ({
           id: row.id,
           icon: row.news_type === "feature" ? "🎉" : row.news_type === "promo" ? "🎁" : row.news_type === "alert" ? "⚠️" : "📢",

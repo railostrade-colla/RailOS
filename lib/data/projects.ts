@@ -547,6 +547,7 @@ function invalidateProjectCaches(): void {
     for (let i = 1; i <= 12; i++) {
       invalidateCache(`projects:new:${i}`)
       invalidateCache(`projects:trending:${i}`)
+      invalidateCache(`projects:coming_soon:${i}`)  // Phase 13.17
     }
   })
 }
@@ -581,8 +582,41 @@ const CARD_COLUMNS =
   "risk_level, return_min, return_max, expected_return_min, expected_return_max, " +
   "distribution_type"
 
+// Phase 13.17 — discover surface uses get_discover_projects RPC
+// which combines admin pins + auto-rules:
+//   trending    → ORDER BY investor_count DESC
+//   new         → created_at > NOW() - 30 days
+//   coming_soon → offering_start_date > NOW()
+// The RPC returns the full card payload + investor_count in one
+// round-trip, so we don't need enrichProjectsWithSales afterwards.
+async function getDiscoverProjectsViaRPC(
+  tab: "trending" | "new" | "coming_soon",
+  limit: number,
+): Promise<Project[] | null> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("get_discover_projects", {
+      p_tab: tab,
+      p_limit: limit,
+    })
+    if (error || !Array.isArray(data)) return null
+    type DiscoverRow = DBProject & { investor_count?: number | string }
+    const mapped = (data as DiscoverRow[]).map((row) => ({
+      ...dbToProject(row as DBProject),
+      investors_count: Number(row.investor_count ?? 0),
+    }))
+    return mapped
+  } catch {
+    return null
+  }
+}
+
 export async function getNewProjects(limit = 6): Promise<Project[]> {
   return dedupCache(`projects:new:${limit}`, async () => {
+    // Phase 13.17 — try the new RPC first; fall back to the legacy
+    // "ORDER BY created_at DESC" path for any DB without the migration.
+    const viaRpc = await getDiscoverProjectsViaRPC("new", limit)
+    if (viaRpc !== null) return viaRpc
     try {
       const supabase = createClient()
       const { data } = await supabase
@@ -601,6 +635,11 @@ export async function getNewProjects(limit = 6): Promise<Project[]> {
 
 export async function getTrendingProjects(limit = 6): Promise<Project[]> {
   return dedupCache(`projects:trending:${limit}`, async () => {
+    // Phase 13.17 — RPC ranks by investor_count DESC, with admin pins
+    // first. Fallback path keeps the previous share_price ordering
+    // for compat with any DB missing the new RPC.
+    const viaRpc = await getDiscoverProjectsViaRPC("trending", limit)
+    if (viaRpc !== null) return viaRpc
     try {
       const supabase = createClient()
       const { data } = await supabase
@@ -615,6 +654,41 @@ export async function getTrendingProjects(limit = 6): Promise<Project[]> {
       return []
     }
   }, 30_000)
+}
+
+/** Phase 13.17 — coming-soon projects (admin-pinned + future
+ *  offering_start_date). New surface for the "قريباً" tab. */
+export async function getComingSoonProjects(limit = 6): Promise<Project[]> {
+  return dedupCache(`projects:coming_soon:${limit}`, async () => {
+    const viaRpc = await getDiscoverProjectsViaRPC("coming_soon", limit)
+    if (viaRpc !== null) return viaRpc
+    return []
+  }, 30_000)
+}
+
+/** Phase 13.17 — admin write: pin/unpin a project to a discover tab.
+ *  Pass `null` to clear the pin and revert to auto-ranking. */
+export async function adminSetDiscoverTag(
+  projectId: string,
+  tag: "trending" | "coming_soon" | "new" | null,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("admin_set_discover_tag", {
+      p_project_id: projectId,
+      p_tag: tag,
+    })
+    if (error) return { success: false, error: error.message }
+    const r = (data ?? {}) as { success?: boolean; error?: string }
+    if (!r.success) return { success: false, error: r.error ?? "unknown" }
+    invalidateProjectCaches()
+    return { success: true }
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "unknown",
+    }
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────
