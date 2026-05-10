@@ -40,7 +40,7 @@ import {
 } from "@/components/investment/ProjectStatusGrid"
 import { getAllProjects } from "@/lib/data/projects"
 import {
-  getPriceHistory,
+  getProjectPriceTimeline,
   type PriceHistoryPoint,
 } from "@/lib/data/price-history"
 import { createClient } from "@/lib/supabase/client"
@@ -115,9 +115,12 @@ function InvestmentPageContent() {
     setError(null)
     const supabase = createClient()
 
-    // Parallel: history + investors + dividends (best-effort)
+    // Parallel: timeline + investors + dividends (best-effort)
+    // Phase 13.19 — getProjectPriceTimeline merges price_history,
+    // completed deals, and creation/current anchors so the chart
+    // always has at least 2 points for an active project.
     const [historyRes, investorsRes, dividendsRes] = await Promise.allSettled([
-      getPriceHistory(projectId, 200),
+      getProjectPriceTimeline(projectId, 200),
       supabase.rpc("get_public_investor_counts", { p_project_ids: [projectId] }),
       supabase
         .from("dividends")
@@ -203,6 +206,18 @@ function InvestmentPageContent() {
           event: "*",
           schema: "public",
           table: "holdings",
+          filter: `project_id=eq.${selected.id}`,
+        },
+        () => { if (!cancelled) void refreshSelected(selected.id) },
+      )
+      // Phase 13.19 — completed deals are now plotted as price points
+      // on the chart, so a new completion should trigger a refresh.
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "deals",
           filter: `project_id=eq.${selected.id}`,
         },
         () => { if (!cancelled) void refreshSelected(selected.id) },
