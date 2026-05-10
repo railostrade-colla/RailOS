@@ -926,7 +926,12 @@ function DiscoverTagSelect({
         <span>{current.label}</span>
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 z-30 w-32 bg-[#0a0a0a] border border-white/[0.1] rounded-lg shadow-2xl overflow-hidden">
+        // Phase 13.29 — z-50 (was z-30) so the dropdown rises above
+        // the table's sticky header and the Tabs strip; min-w + ring
+        // give it clear visual lift over surrounding rows.
+        <div
+          className="absolute top-full left-0 mt-1 z-50 min-w-[140px] bg-[#0a0a0a] border border-white/[0.12] rounded-lg shadow-2xl ring-1 ring-black/40 overflow-hidden"
+        >
           {TAG_OPTIONS.map((opt) => {
             const active = opt.value === value
             return (
@@ -937,12 +942,12 @@ function DiscoverTagSelect({
                   if (opt.value !== value) await onChange(opt.value)
                 }}
                 className={cn(
-                  "w-full flex items-center gap-2 px-2.5 py-1.5 text-[10px] text-right transition-colors",
+                  "w-full flex items-center gap-2 px-3 py-2 text-[11px] text-right transition-colors",
                   active ? "bg-white/[0.08]" : "hover:bg-white/[0.04]",
                   opt.color,
                 )}
               >
-                <span>{opt.icon}</span>
+                <span className="text-[13px]">{opt.icon}</span>
                 <span className="font-bold">{opt.label}</span>
               </button>
             )
