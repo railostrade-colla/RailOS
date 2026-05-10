@@ -5,7 +5,6 @@ import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Printer, Download, Share2, Mail, MessageCircle, Copy, Check, ArrowLeft, ShieldCheck } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
 import { Modal } from "@/components/ui"
 import { InvoiceQR } from "@/components/invoices/InvoiceQR"
 import { getInvoiceByIdAsync, INVOICE_TYPE_META, type Invoice } from "@/lib/data/invoices"
@@ -55,7 +54,6 @@ function InvoiceContent({ params }: { params: Promise<{ id: string }> }) {
   if (loading) {
     return (
       <div className="relative">
-        <GridBackground showCircles={false} />
         <div className="relative z-10 px-4 py-12 max-w-2xl mx-auto text-center">
           <div className="text-3xl mb-4 opacity-50 animate-pulse">📄</div>
           <div className="text-sm text-neutral-400">جاري تحميل الفاتورة...</div>
@@ -67,7 +65,6 @@ function InvoiceContent({ params }: { params: Promise<{ id: string }> }) {
   if (!invoice) {
     return (
       <div className="relative">
-        <GridBackground showCircles={false} />
         <div className="relative z-10 px-4 py-12 max-w-2xl mx-auto text-center">
           <div className="text-5xl mb-4 opacity-50">🔍</div>
           <div className="text-lg font-bold text-white mb-2">الفاتورة غير موجودة</div>
@@ -141,7 +138,6 @@ function InvoiceContent({ params }: { params: Promise<{ id: string }> }) {
       `}</style>
 
       <div className="relative">
-        <GridBackground showCircles={false} />
 
         <div className="relative z-10 px-3 lg:px-8 py-6 max-w-3xl mx-auto pb-20">
           {/* Header — hidden in print */}
