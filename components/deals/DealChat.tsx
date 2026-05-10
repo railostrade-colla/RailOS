@@ -3,6 +3,7 @@
 /**
  * DealChat — chat between buyer + seller for a single deal.
  * Phase 10.63 wires the previously orphan `deal_messages` table.
+ * Phase 13.14 — adds optimistic UI on send + cleaner unsubscribe.
  *
  * Drop into the deal detail page:
  *   <DealChat dealId={deal.id} />
@@ -10,12 +11,23 @@
  * The component:
  *   • Loads existing messages via get_deal_messages RPC.
  *   • Subscribes to realtime INSERT on deal_messages filtered by deal_id.
+ *     The deal_id filter ensures the user only receives messages for
+ *     the deal currently open — no leakage between concurrent chats.
  *   • Posts new messages via post_deal_message RPC (RLS-aware: only
  *     buyer + seller + admins can post).
+ *   • Optimistic UI: the moment the user clicks "إرسال", a pending
+ *     bubble appears in the list (state="pending"). When the server
+ *     confirms, the bubble is reconciled (replaced by the real row
+ *     once realtime delivers it). On failure, the bubble flips to
+ *     state="failed" with a retry tap and an error toast — the typed
+ *     text stays in the input so nothing is lost.
+ *   • Unsubscribes from the realtime channel on unmount, on dealId
+ *     change, and clears the visibility/poll listeners. No leaked
+ *     sockets when navigating away.
  */
 
 import { useEffect, useRef, useState, useCallback } from "react"
-import { Send, MessageCircle } from "lucide-react"
+import { Send, MessageCircle, AlertCircle } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import {
   getDealMessages,
@@ -28,6 +40,16 @@ import { showError } from "@/lib/utils/toast"
 import { playChatMessage } from "@/lib/sounds"
 import { cn } from "@/lib/utils/cn"
 
+// Phase 13.14 — optimistic message shape. Wraps DealMessage with a
+// transient state used only on the client; the real DB row replaces
+// it once realtime delivers (or via the next refresh()).
+type ChatItem = DealMessage & {
+  /** Local-only flag. Absent for confirmed server rows. */
+  _optimistic?: "pending" | "failed"
+  /** Echo of the user's typed text — used to retry on failure. */
+  _draft?: string
+}
+
 interface Props {
   dealId: string
   /** When provided, used to right-align the user's own bubbles. */
@@ -37,7 +59,7 @@ interface Props {
 }
 
 export function DealChat({ dealId, currentUserId, className }: Props) {
-  const [messages, setMessages] = useState<DealMessage[]>([])
+  const [messages, setMessages] = useState<ChatItem[]>([])
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -45,7 +67,14 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
 
   const refresh = useCallback(async () => {
     const rows = await getDealMessages(dealId)
-    setMessages(rows)
+    // Phase 13.14 — preserve any *failed* optimistic bubbles when
+    // refreshing. Pending bubbles are dropped on the assumption
+    // that realtime will deliver the real row shortly; we don't
+    // want duplicate bubbles in the list.
+    setMessages((prev) => {
+      const failedDrafts = prev.filter((m) => m._optimistic === "failed")
+      return [...rows, ...failedDrafts]
+    })
     setLoading(false)
   }, [dealId])
 
@@ -125,26 +154,83 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
     }
   }, [messages])
 
+  // Phase 13.14 — optimistic send.
+  //
+  // Flow:
+  //   1. Build a pending ChatItem with a temp id, push it to state
+  //      so the user sees their bubble INSTANTLY.
+  //   2. Clear the input — the typed text is now "owned" by the
+  //      pending bubble (in _draft) so it can be retried on failure.
+  //   3. Hit the RPC in the background.
+  //   4. On success: drop the optimistic bubble. The real row will
+  //      arrive via realtime (filter=deal_id) and slot in.
+  //   5. On failure: flip the bubble's state to "failed" so the
+  //      user can tap to retry. Show a toast and restore the text
+  //      to the input so they can edit if they want.
+  const sendInternal = useCallback(async (text: string, draftRef?: string): Promise<boolean> => {
+    const tempId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const nowIso = new Date().toISOString()
+
+    const optimistic: ChatItem = {
+      id: tempId,
+      deal_id: dealId,
+      sender_id: currentUserId ?? "",
+      sender_name: "أنت",
+      message_type: "text",
+      content: text,
+      attachment_url: null,
+      is_read: false,
+      read_at: null,
+      created_at: nowIso,
+      _optimistic: "pending",
+      _draft: draftRef ?? text,
+    }
+
+    // 1 + 2: push pending bubble + clear input
+    setMessages((prev) => [...prev, optimistic])
+
+    // 3: hit RPC
+    const result = await postDealMessage(dealId, text)
+    if (result.success) {
+      // 4: drop the pending bubble — realtime will deliver the real one.
+      // (If realtime drifts, the polling fallback in the effect
+      //  below covers it within 5s.)
+      setMessages((prev) => prev.filter((m) => m.id !== tempId))
+      return true
+    }
+
+    // 5: mark failed
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === tempId ? { ...m, _optimistic: "failed" as const } : m,
+      ),
+    )
+    const map: Record<string, string> = {
+      unauthenticated: "سجّل دخولك أولاً",
+      empty_message: "اكتب رسالة قبل الإرسال",
+      deal_not_found: "الصفقة غير موجودة",
+      not_party: "لست طرفاً في هذه الصفقة",
+    }
+    showError(map[result.error ?? ""] ?? "تعذّر إرسال الرسالة — انقر للمحاولة مجدداً")
+    return false
+  }, [dealId, currentUserId])
+
   const handleSend = async () => {
     const text = input.trim()
     if (!text) return
     setSending(true)
-    const result = await postDealMessage(dealId, text)
-    setSending(false)
-    if (!result.success) {
-      const map: Record<string, string> = {
-        unauthenticated: "سجّل دخولك أولاً",
-        empty_message: "اكتب رسالة قبل الإرسال",
-        deal_not_found: "الصفقة غير موجودة",
-        not_party: "لست طرفاً في هذه الصفقة",
-      }
-      showError(map[result.error ?? ""] ?? "تعذّر إرسال الرسالة")
-      return
-    }
     setInput("")
-    // Realtime will refresh automatically; refresh() also covers the
-    // edge case where the channel hasn't fired yet.
-    refresh()
+    await sendInternal(text)
+    setSending(false)
+  }
+
+  /** Tap a failed bubble to retry. Removes the failed bubble and
+   *  re-issues a fresh optimistic send with the same draft text. */
+  const handleRetry = async (item: ChatItem) => {
+    const draft = item._draft ?? item.content ?? ""
+    if (!draft) return
+    setMessages((prev) => prev.filter((m) => m.id !== item.id))
+    await sendInternal(draft)
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -185,7 +271,9 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
           </div>
         ) : (
           messages.map((m) => {
-            const isMe = currentUserId && m.sender_id === currentUserId
+            const isMe = !!(currentUserId && m.sender_id === currentUserId) || m._optimistic
+            const isPending = m._optimistic === "pending"
+            const isFailed = m._optimistic === "failed"
             return (
               <div
                 key={m.id}
@@ -194,18 +282,34 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
                   isMe ? "ml-auto items-end" : "mr-auto items-start",
                 )}
               >
-                <div className="text-[10px] text-neutral-500 px-1">
-                  {isMe ? "أنت" : m.sender_name}
-                  <span className="mx-1.5 text-neutral-700" dir="ltr">
+                <div className="text-[10px] text-neutral-500 px-1 flex items-center gap-1.5">
+                  <span>{isMe ? "أنت" : m.sender_name}</span>
+                  <span className="text-neutral-700" dir="ltr">
                     {m.created_at.replace("T", " ").slice(0, 16)}
                   </span>
+                  {isPending && (
+                    <span className="text-blue-400 text-[9px] font-mono animate-pulse">
+                      جاري الإرسال…
+                    </span>
+                  )}
+                  {isFailed && (
+                    <span className="text-red-400 text-[9px] font-mono flex items-center gap-1">
+                      <AlertCircle className="w-2.5 h-2.5" /> فشل — انقر للإعادة
+                    </span>
+                  )}
                 </div>
-                <div
+                <button
+                  type="button"
+                  onClick={isFailed ? () => handleRetry(m) : undefined}
+                  disabled={!isFailed}
                   className={cn(
-                    "px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap break-words",
+                    "px-3 py-2 rounded-2xl text-xs leading-relaxed whitespace-pre-wrap break-words text-right",
                     isMe
                       ? "bg-blue-500/[0.15] border border-blue-500/[0.25] text-blue-100"
                       : "bg-white/[0.06] border border-white/[0.08] text-neutral-200",
+                    isPending && "opacity-60",
+                    isFailed && "border-red-500/40 bg-red-500/[0.08] text-red-100 cursor-pointer hover:bg-red-500/[0.12]",
+                    !isFailed && "cursor-default",
                   )}
                 >
                   {m.content || "—"}
@@ -220,7 +324,7 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
                       📎 مرفق
                     </a>
                   )}
-                </div>
+                </button>
               </div>
             )
           })

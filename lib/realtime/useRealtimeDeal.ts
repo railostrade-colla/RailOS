@@ -5,15 +5,25 @@ import { createClient } from "@/lib/supabase/client"
 import type { RealtimeChannel } from "@supabase/supabase-js"
 
 /**
- * useRealtimeDeal — subscribes to UPDATEs on a single deal row so
- * /deals/[id] can react to status changes (accepted / rejected /
- * expired / completed) without polling.
+ * useRealtimeDeal — subscribes to ALL row events (INSERT, UPDATE,
+ * DELETE) on a single deal so /deals/[id] reacts to lifecycle
+ * changes — accepted / rejected / expired / completed / cancelled —
+ * without polling.
  *
- * Returns the latest payload + a counter that ticks on every update,
- * which callers can use as a key/dep to refresh derived data.
+ * Phase 13.14: upgraded from event=UPDATE to event="*" per founder
+ * spec. INSERT is rare (the deal already exists when we subscribe)
+ * but DELETE matters for admin force-cancel flows; covering all
+ * three is future-proof and costs nothing extra.
  *
- * Requires `deals` to be in the Supabase Realtime publication (see
- * 20260504_phase10_portfolio_history.sql).
+ * Returns:
+ *   • latest      — newest row payload (NEW for INSERT/UPDATE,
+ *                   OLD for DELETE — matches what UI needs to react)
+ *   • eventType   — last event type ("INSERT" | "UPDATE" | "DELETE")
+ *   • updateCount — counter that ticks on every event; useful as a
+ *                   useEffect dep to re-fetch derived data
+ *
+ * Requires `deals` in the supabase_realtime publication. Cleans up
+ * its channel on unmount, so leaving the page releases the socket.
  */
 
 export interface DealUpdatePayload {
@@ -28,9 +38,12 @@ export interface DealUpdatePayload {
   updated_at: string | null
 }
 
+type DealEventType = "INSERT" | "UPDATE" | "DELETE"
+
 export function useRealtimeDeal(dealId: string | null) {
   const [updateCount, setUpdateCount] = useState(0)
   const [latest, setLatest] = useState<DealUpdatePayload | null>(null)
+  const [eventType, setEventType] = useState<DealEventType | null>(null)
   const channelRef = useRef<RealtimeChannel | null>(null)
 
   useEffect(() => {
@@ -43,14 +56,21 @@ export function useRealtimeDeal(dealId: string | null) {
       .on(
         "postgres_changes",
         {
-          event: "UPDATE",
+          event: "*", // INSERT / UPDATE / DELETE
           schema: "public",
           table: "deals",
           filter: `id=eq.${dealId}`,
         },
         (payload) => {
           if (cancelled) return
-          setLatest(payload.new as DealUpdatePayload)
+          // For DELETE, payload.new is empty — fall back to OLD so
+          // callers always get a non-null row to work with.
+          const row =
+            payload.eventType === "DELETE"
+              ? (payload.old as DealUpdatePayload)
+              : (payload.new as DealUpdatePayload)
+          setLatest(row)
+          setEventType(payload.eventType as DealEventType)
           setUpdateCount((c) => c + 1)
         },
       )
@@ -67,5 +87,5 @@ export function useRealtimeDeal(dealId: string | null) {
     }
   }, [dealId])
 
-  return { latest, updateCount }
+  return { latest, eventType, updateCount }
 }
