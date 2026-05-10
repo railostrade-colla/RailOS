@@ -148,23 +148,16 @@ export async function getAllProjects(): Promise<Project[]> {
   return dedupCache("projects:active:all", async () => {
     try {
       const supabase = createClient()
-      // Phase 13.26 — negative status filter so legacy/published
-      // projects + rows with NULL status are visible. Strict
-      // eq("status", "active") was hiding the founder's project.
+      // Phase 13.27 — pull all + filter in JS (PostgREST escape
+      // syntax for negated IN was misbehaving and dropping every
+      // row). isDiscoverable handles NULL + every legacy value.
       const { data, error } = await supabase
         .from("projects")
         .select("*")
-        .not(
-          "status",
-          "in",
-          `(${[
-            "draft", "pending", "review",
-            "paused", "frozen", "archived", "cancelled", "closed",
-          ].map((s) => `"${s}"`).join(",")})`,
-        )
         .order("created_at", { ascending: false })
       if (error || !data) return []
-      const mapped = data.map(dbToProject)
+      const filtered = (data as Array<{ status?: string | null }>).filter(isDiscoverable)
+      const mapped = filtered.map((row) => dbToProject(row as DBProject))
       return await enrichProjectsWithSales(mapped)
     } catch {
       return []
@@ -621,19 +614,33 @@ async function getDiscoverProjectsViaRPC(
   }
 }
 
-// Phase 13.26 — list of statuses we WANT to show in Discover. The
-// previous strict eq("status", "active") missed projects whose
-// status column had legacy values ('published') or was NULL on
-// older rows. Negative-filter via .not(...) is more forgiving.
-const DISCOVER_HIDDEN_STATUSES = [
+// Phase 13.27 — drop the client-side status filter entirely.
+// The previous attempt with `.not("status", "in", '("draft",...)')`
+// broke because PostgREST expects `(draft,...)` without the
+// surrounding quotes; the filter then matched nothing and Discover
+// stayed empty.
+//
+// New strategy: pull every project the RLS lets the caller see,
+// then filter on the JS side using a tolerant rule. This sidesteps
+// PostgREST escape pitfalls AND handles NULL status / legacy values
+// uniformly.
+const DISCOVER_HIDDEN_STATUSES = new Set([
   "draft", "pending", "review",
   "paused", "frozen", "archived", "cancelled", "closed",
-]
+])
+
+function isDiscoverable(row: { status?: string | null }): boolean {
+  const s = (row.status ?? "").toString().trim().toLowerCase()
+  if (!s) return true              // NULL / empty -> assume publishable
+  return !DISCOVER_HIDDEN_STATUSES.has(s)
+}
 
 export async function getNewProjects(limit = 6): Promise<Project[]> {
   return dedupCache(`projects:new:${limit}`, async () => {
-    // Phase 13.17 — try the new RPC first; fall back to the legacy
-    // path for any DB without the migration.
+    // Phase 13.17 — try the new RPC first; fall back to a permissive
+    // direct query for any DB without the migration. The RPC already
+    // applies the status filter server-side, so we only need it in
+    // the fallback path.
     const viaRpc = await getDiscoverProjectsViaRPC("new", limit)
     if (viaRpc !== null) return viaRpc
     try {
@@ -641,12 +648,12 @@ export async function getNewProjects(limit = 6): Promise<Project[]> {
       const { data } = await supabase
         .from("projects")
         .select(CARD_COLUMNS)
-        // Phase 13.26 — negative filter so legacy/published projects
-        // also surface; matches the RPC's NOT IN list exactly.
-        .not("status", "in", `(${DISCOVER_HIDDEN_STATUSES.map((s) => `"${s}"`).join(",")})`)
         .order("created_at", { ascending: false })
-        .limit(limit)
-      const mapped = (data ?? []).map((row) => dbToProject(row as unknown as DBProject))
+        .limit(limit * 3)  // fetch extra so post-filter still has enough
+      const filtered = ((data ?? []) as Array<{ status?: string | null }>)
+        .filter(isDiscoverable)
+        .slice(0, limit)
+      const mapped = filtered.map((row) => dbToProject(row as unknown as DBProject))
       return await enrichProjectsWithSales(mapped)
     } catch {
       return []
@@ -666,10 +673,12 @@ export async function getTrendingProjects(limit = 6): Promise<Project[]> {
       const { data } = await supabase
         .from("projects")
         .select(CARD_COLUMNS)
-        .not("status", "in", `(${DISCOVER_HIDDEN_STATUSES.map((s) => `"${s}"`).join(",")})`)
         .order("share_price", { ascending: false })
-        .limit(limit)
-      const mapped = (data ?? []).map((row) => dbToProject(row as unknown as DBProject))
+        .limit(limit * 3)
+      const filtered = ((data ?? []) as Array<{ status?: string | null }>)
+        .filter(isDiscoverable)
+        .slice(0, limit)
+      const mapped = filtered.map((row) => dbToProject(row as unknown as DBProject))
       return await enrichProjectsWithSales(mapped)
     } catch {
       return []
