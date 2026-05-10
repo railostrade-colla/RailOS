@@ -566,16 +566,32 @@ export async function getProjectById(id: string): Promise<Project | null> {
   }
 }
 
+// Phase 13.13 — explicit column list for the discover/home cards.
+// dbToProject only reads ~25 of the 60+ columns on `projects`; the
+// rest were being shipped over the wire on every dashboard mount.
+// This trims payload by ~60% and lets PostgREST skip jsonb decoding
+// for `gallery_images` / `documents` which the card never displays.
+const CARD_COLUMNS =
+  "id, name, slug, short_description, description, project_type, " +
+  "logo_url, cover_url, cover_image_url, symbol, " +
+  "total_shares, share_price, total_value, current_market_price, " +
+  "offering_percentage, status, " +
+  "offering_start_date, offering_end_date, duration_open, duration_months, " +
+  "created_at, published_at, " +
+  "risk_level, return_min, return_max, expected_return_min, expected_return_max, " +
+  "distribution_type"
+
 export async function getNewProjects(limit = 6): Promise<Project[]> {
   return dedupCache(`projects:new:${limit}`, async () => {
     try {
       const supabase = createClient()
       const { data } = await supabase
         .from("projects")
-        .select("*")
+        .select(CARD_COLUMNS)
+        .eq("status", "active")
         .order("created_at", { ascending: false })
         .limit(limit)
-      const mapped = (data ?? []).map(dbToProject)
+      const mapped = (data ?? []).map((row) => dbToProject(row as unknown as DBProject))
       return await enrichProjectsWithSales(mapped)
     } catch {
       return []
@@ -589,10 +605,11 @@ export async function getTrendingProjects(limit = 6): Promise<Project[]> {
       const supabase = createClient()
       const { data } = await supabase
         .from("projects")
-        .select("*")
+        .select(CARD_COLUMNS)
+        .eq("status", "active")
         .order("share_price", { ascending: false })
         .limit(limit)
-      const mapped = (data ?? []).map(dbToProject)
+      const mapped = (data ?? []).map((row) => dbToProject(row as unknown as DBProject))
       return await enrichProjectsWithSales(mapped)
     } catch {
       return []

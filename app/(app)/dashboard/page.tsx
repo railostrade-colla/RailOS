@@ -47,6 +47,7 @@ import type { Ad } from "@/lib/mock-data/types"
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/data/profile"
 import { getPortfolioData, type PortfolioSummary as DBPortfolioSummary } from "@/lib/data/portfolio"
 import { readPersistedSync } from "@/lib/data/cache"
+import { ProjectCardSkeleton } from "@/components/skeletons/ProjectCardSkeleton"
 import { LEVEL_LABELS, LEVEL_ICONS } from "@/lib/utils/contractLimits"
 import { cn } from "@/lib/utils/cn"
 
@@ -341,6 +342,17 @@ export default function DashboardPage() {
     discoverTab === "trending" ? "لا توجد مشاريع رائجة حالياً" :
     discoverTab === "closing" ? "لا توجد فرص تنتهي قريباً" :
     "لا توجد مشاريع جديدة"
+
+  // Phase 13.13 — only show the skeleton on the FIRST visit (cold
+  // localStorage cache). On subsequent visits we already painted with
+  // cached data, so the empty state below is the right fallback when
+  // the fresh fetch genuinely returns 0 rows.
+  const discoverFirstLoad =
+    loading &&
+    trending.length === 0 &&
+    newProjects.length === 0 &&
+    cachedTrending.length === 0 &&
+    cachedNew.length === 0
 
   return (
     <AppLayout>
@@ -813,8 +825,13 @@ export default function DashboardPage() {
                 />
               </div>
 
-              {/* Cards */}
-              {discoverItems.length === 0 ? (
+              {/* Cards — Phase 13.13:
+                   • Cold cache + first fetch in flight → skeleton
+                   • Otherwise empty fetch → empty state
+                   • Otherwise → cards (cached or fresh) */}
+              {discoverFirstLoad ? (
+                <ProjectCardSkeleton count={3} className="grid grid-cols-1 lg:grid-cols-3 gap-3 space-y-0" />
+              ) : discoverItems.length === 0 ? (
                 <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-10 text-center">
                   <div className="text-3xl mb-2 opacity-50">🔍</div>
                   <div className="text-sm text-neutral-400">{discoverEmptyMsg}</div>
