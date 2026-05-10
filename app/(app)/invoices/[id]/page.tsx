@@ -1,13 +1,14 @@
 "use client"
 
 import { useEffect, useState, use, Suspense } from "react"
+import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Printer, Download, Share2, Mail, MessageCircle, Copy, Check, ArrowLeft } from "lucide-react"
+import { Printer, Download, Share2, Mail, MessageCircle, Copy, Check, ArrowLeft, ShieldCheck } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
-import { Card, Modal } from "@/components/ui"
+import { Modal } from "@/components/ui"
 import { InvoiceQR } from "@/components/invoices/InvoiceQR"
-import { getInvoiceById, INVOICE_TYPE_META, seedMockInvoices, type Invoice } from "@/lib/data/invoices"
+import { getInvoiceByIdAsync, INVOICE_TYPE_META, type Invoice } from "@/lib/data/invoices"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { APP_NAME, APP_NAME_EN } from "@/lib/utils/version"
 import { cn } from "@/lib/utils/cn"
@@ -25,24 +26,43 @@ function InvoiceContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
 
   const [invoice, setInvoice] = useState<Invoice | undefined>()
+  const [loading, setLoading] = useState(true)
   const [showShare, setShowShare] = useState(false)
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    seedMockInvoices()
-    const found = getInvoiceById(id)
-    setInvoice(found)
+    let cancelled = false
+    setLoading(true)
+    getInvoiceByIdAsync(id)
+      .then((found) => {
+        if (cancelled) return
+        setInvoice(found)
+        setLoading(false)
 
-    // Auto-trigger print/share if URL params requested it
-    if (found) {
-      if (searchParams?.get("print") === "1") {
-        setTimeout(() => window.print(), 500)
-      }
-      if (searchParams?.get("share") === "1") {
-        setShowShare(true)
-      }
-    }
+        if (found) {
+          if (searchParams?.get("print") === "1") {
+            setTimeout(() => window.print(), 500)
+          }
+          if (searchParams?.get("share") === "1") {
+            setShowShare(true)
+          }
+        }
+      })
+      .catch(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [id, searchParams])
+
+  if (loading) {
+    return (
+      <div className="relative">
+        <GridBackground showCircles={false} />
+        <div className="relative z-10 px-4 py-12 max-w-2xl mx-auto text-center">
+          <div className="text-3xl mb-4 opacity-50 animate-pulse">📄</div>
+          <div className="text-sm text-neutral-400">جاري تحميل الفاتورة...</div>
+        </div>
+      </div>
+    )
+  }
 
   if (!invoice) {
     return (
@@ -154,6 +174,23 @@ function InvoiceContent({ params }: { params: Promise<{ id: string }> }) {
             </div>
           </div>
 
+          {/* ═══ Phase 13.8 — keepsake banner (hidden in print) ═══ */}
+          <div
+            data-no-print
+            className="mb-4 bg-gradient-to-l from-green-400/[0.08] to-blue-400/[0.05] border-2 border-green-400/30 rounded-2xl p-4 flex items-start gap-3"
+          >
+            <div className="w-10 h-10 rounded-xl bg-green-400/[0.15] border border-green-400/30 flex items-center justify-center flex-shrink-0">
+              <ShieldCheck className="w-5 h-5 text-green-400" strokeWidth={2.5} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-bold text-white mb-1">📄 احتفظ بنسختك من الفاتورة</div>
+              <div className="text-[11px] text-neutral-300 leading-relaxed">
+                هذه الفاتورة هي <span className="font-bold text-green-400">عقدك الرسمي</span> لامتلاك الحصص.
+                نوصي بشدّة بتحميلها كـ PDF والاحتفاظ بنسخة لديك — اضغط <span className="font-bold text-white">"تنزيل / طباعة"</span> أدناه.
+              </div>
+            </div>
+          </div>
+
           {/* ═══ Invoice (printable area) ═══ */}
           <div
             data-print-area
@@ -163,8 +200,15 @@ function InvoiceContent({ params }: { params: Promise<{ id: string }> }) {
             <div className="flex justify-between items-start mb-6 pb-5 border-b-2 border-white/[0.1]">
               <div>
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-12 h-12 rounded-xl bg-black border border-white/[0.15] flex items-center justify-center text-2xl">
-                    🚂
+                  <div className="w-12 h-12 rounded-xl bg-black border border-white/[0.15] overflow-hidden flex items-center justify-center">
+                    <Image
+                      src="/logo.png"
+                      alt="RailOS"
+                      width={48}
+                      height={48}
+                      className="w-full h-full object-contain"
+                      unoptimized
+                    />
                   </div>
                   <div>
                     <div className="text-xl font-bold text-white">{APP_NAME}</div>
@@ -227,14 +271,35 @@ function InvoiceContent({ params }: { params: Promise<{ id: string }> }) {
               </div>
             </div>
 
-            {/* Project */}
+            {/* Project — Phase 13.8: shows project logo (denormalised) */}
             <div className="bg-blue-400/[0.05] border-2 border-blue-400/[0.2] rounded-xl p-4 mb-6">
               <div className="text-[10px] text-neutral-500 mb-2 font-bold uppercase tracking-wider">🏗️ المشروع</div>
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div>
-                  <div className="text-base font-bold text-white">{invoice.project_name}</div>
+              <div className="flex items-center gap-3 flex-wrap">
+                {invoice.project_logo_url ? (
+                  <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-blue-400/30 bg-white/[0.04] flex-shrink-0">
+                    <Image
+                      src={invoice.project_logo_url}
+                      alt={invoice.project_name}
+                      width={56}
+                      height={56}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  </div>
+                ) : (
+                  <div className="w-14 h-14 rounded-xl border-2 border-blue-400/30 bg-blue-400/[0.08] flex items-center justify-center flex-shrink-0 text-2xl">
+                    🏗️
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-base font-bold text-white truncate">{invoice.project_name}</div>
                   {invoice.project_symbol && (
                     <div className="text-xs text-blue-400 font-mono mt-0.5" dir="ltr">{invoice.project_symbol}</div>
+                  )}
+                  {invoice.project_id && (
+                    <div className="text-[9px] text-neutral-600 font-mono mt-1 truncate" dir="ltr">
+                      ID: {invoice.project_id.slice(0, 18)}...
+                    </div>
                   )}
                 </div>
               </div>

@@ -43,7 +43,12 @@ import {
   dealActionErrorAr,
 } from "@/lib/data/deal-actions"
 import { useRealtimeDeal } from "@/lib/realtime/useRealtimeDeal"
-import { createInvoice, getInvoicesBySourceId, type Invoice } from "@/lib/data/invoices"
+import {
+  createInvoice,
+  getInvoicesBySourceId,
+  getInvoicesByDealIdAsync,
+  type Invoice,
+} from "@/lib/data/invoices"
 import { DealChat } from "@/components/deals/DealChat"
 import { SellerPaymentMethods } from "@/components/deals/SellerPaymentMethods"
 import { PaymentProofModal } from "@/components/deals/PaymentProofModal"
@@ -102,6 +107,8 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
   const [agreed, setAgreed] = useState(false)
   const [reason, setReason] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  // Phase 13.8 — auto-opens once when the deal flips to completed.
+  const [showCompletedInvoiceModal, setShowCompletedInvoiceModal] = useState(false)
 
   // Live updates for DB deals (no-op for mock)
   const { updateCount } = useRealtimeDeal(isDbDeal ? id : null)
@@ -146,6 +153,10 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
     // ── any → completed = shares released, deal done.
     if (prev !== "completed" && curr === "completed") {
       playDealCompleted()
+      // Phase 13.8 — auto-open the keepsake modal once. Wait 1.5s so
+      // the trigger has time to insert the invoice rows before we
+      // attempt to load them.
+      setTimeout(() => setShowCompletedInvoiceModal(true), 1500)
     }
   }, [deal])
 
@@ -927,19 +938,157 @@ export default function DealDetailPage({ params }: { params: Promise<{ id: strin
           ⚠️ يمكنك رفع أدلّة إضافية (صور إيصالات، شات...) عبر صفحة الدعم.
         </div>
       </Modal>
+
+      {/* ═══ Phase 13.8 — Deal-completed keepsake modal ═══
+          Auto-opens once when the deal flips to completed. Surfaces
+          the user's own invoice (buyer or seller copy) with a
+          prominent "احتفظ بنسختك" recommendation. */}
+      <DealCompletedInvoiceModal
+        dealId={deal.id}
+        isOpen={showCompletedInvoiceModal}
+        onClose={() => setShowCompletedInvoiceModal(false)}
+      />
     </AppLayout>
   )
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Sub-component: Deal Invoice (auto-renders the invoice for a completed deal)
+// Sub-component: Deal Invoice — Phase 13.8 async DB-aware version
 // ──────────────────────────────────────────────────────────────────────────
+// Loads the invoice pair from `invoices` (issued automatically by the
+// trg_invoices_on_deal_complete trigger). Picks the side that belongs
+// to the current user (buyer → exchange_buy, seller → exchange_sell)
+// so each party sees their own copy. Falls back to local-store legacy
+// rows for pre-Phase-13.7 mock deals.
 
 function DealInvoice({ dealId }: { dealId: string }) {
-  const invoices = getInvoicesBySourceId(dealId)
-  const invoice: Invoice | undefined = invoices[0]
+  const [invoice, setInvoice] = useState<Invoice | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      // 1. DB pair (Phase 13.7+)
+      const fromDb = await getInvoicesByDealIdAsync(dealId)
+      if (cancelled) return
+      if (fromDb.length > 0) {
+        // Prefer the invoice where the current user is the recipient
+        // (to_user_id). For the buyer that's exchange_buy, for the
+        // seller it's exchange_sell. Fallback to the first one.
+        const uid = await getCurrentAuthUserId()
+        const mine = uid ? fromDb.find((i) => i.to.id === uid) : null
+        setInvoice(mine ?? fromDb[0])
+        return
+      }
+      // 2. Legacy local store (mock deals)
+      const local = getInvoicesBySourceId(dealId)
+      if (!cancelled && local[0]) setInvoice(local[0])
+    })()
+    return () => { cancelled = true }
+  }, [dealId])
+
   if (!invoice) return null
   return <InvoiceCard invoice={invoice} variant="banner" />
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Sub-component: Deal-Completed Invoice Modal — Phase 13.8
+// ──────────────────────────────────────────────────────────────────────────
+// Auto-shown once when the deal transitions to completed. Shows the
+// user's invoice copy (buyer or seller side), a strong recommendation
+// to download/keep it, and a primary "تنزيل / طباعة" action that
+// jumps to the full /invoices/[id]?print=1 page.
+
+function DealCompletedInvoiceModal({
+  dealId,
+  isOpen,
+  onClose,
+}: {
+  dealId: string
+  isOpen: boolean
+  onClose: () => void
+}) {
+  const router = useRouter()
+  const [invoice, setInvoice] = useState<Invoice | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) return
+    let cancelled = false
+    setLoading(true)
+    void (async () => {
+      const fromDb = await getInvoicesByDealIdAsync(dealId)
+      if (cancelled) return
+      if (fromDb.length > 0) {
+        const uid = await getCurrentAuthUserId()
+        const mine = uid ? fromDb.find((i) => i.to.id === uid) : null
+        setInvoice(mine ?? fromDb[0])
+      }
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [dealId, isOpen])
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="🎉 الصفقة اكتملت — فاتورتك جاهزة"
+      subtitle="هذه الفاتورة هي عقدك الرسمي — احتفظ بنسخة منها"
+      size="md"
+      footer={
+        <>
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+          >
+            لاحقاً
+          </button>
+          <button
+            onClick={() => {
+              if (invoice) {
+                router.push(`/invoices/${invoice.id}?print=1`)
+              } else {
+                router.push("/invoices")
+              }
+            }}
+            disabled={!invoice}
+            className="flex-1 py-2.5 rounded-xl bg-green-500 text-white text-sm font-bold hover:bg-green-600 disabled:opacity-50 flex items-center justify-center gap-1.5"
+          >
+            <Coins className="w-4 h-4" strokeWidth={2.5} />
+            تنزيل / طباعة الفاتورة
+          </button>
+        </>
+      }
+    >
+      {/* Recommendation banner */}
+      <div className="mb-4 bg-gradient-to-l from-green-400/[0.1] to-blue-400/[0.05] border-2 border-green-400/30 rounded-2xl p-4">
+        <div className="text-sm font-bold text-green-400 mb-1.5 flex items-center gap-1.5">
+          <CheckCircle2 className="w-4 h-4" strokeWidth={2.5} />
+          احتفظ بنسختك من الفاتورة
+        </div>
+        <div className="text-[11px] text-neutral-300 leading-relaxed">
+          هذه الفاتورة <span className="font-bold text-white">عقد رسمي</span> يثبت ملكيتك للحصص.
+          ننصحك بشدّة بتنزيلها كـ PDF والاحتفاظ بنسخة لديك للمراجع المستقبلية أو في حال احتجت إثبات ملكيّة.
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="py-8 text-center">
+          <div className="text-3xl mb-2 opacity-50 animate-pulse">📄</div>
+          <div className="text-xs text-neutral-500">جاري تحميل الفاتورة...</div>
+        </div>
+      ) : invoice ? (
+        <InvoiceCard invoice={invoice} variant="banner" />
+      ) : (
+        <div className="py-6 text-center bg-white/[0.04] border border-white/[0.06] rounded-xl">
+          <div className="text-2xl mb-2 opacity-50">⏳</div>
+          <div className="text-xs text-neutral-400 mb-1">جاري إصدار الفاتورة الرسمية...</div>
+          <div className="text-[10px] text-neutral-600">
+            ستظهر خلال ثوانٍ — يمكنك إغلاق هذه النافذة والعودة لاحقاً.
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
 }
 
 // ──────────────────────────────────────────────────────────────────────────

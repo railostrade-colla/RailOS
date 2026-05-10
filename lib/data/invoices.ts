@@ -47,6 +47,8 @@ export interface Invoice {
   project_id: string
   project_name: string
   project_symbol?: string
+  /** Phase 13.8 — denormalised project logo URL for the printed copy. */
+  project_logo_url?: string
   shares_amount: number
   price_per_share: number
   subtotal: number       // shares_amount * price_per_share
@@ -256,6 +258,7 @@ interface InvoiceRow {
   project_id: string | null
   project_name: string
   project_symbol: string | null
+  project_logo_url: string | null
   shares_amount: number | string
   price_per_share: number | string
   subtotal: number | string
@@ -291,6 +294,7 @@ function rowToInvoice(r: InvoiceRow): Invoice {
     project_id: r.project_id ?? "",
     project_name: r.project_name,
     project_symbol: r.project_symbol ?? undefined,
+    project_logo_url: r.project_logo_url ?? undefined,
     shares_amount: num(r.shares_amount),
     price_per_share: num(r.price_per_share),
     subtotal: num(r.subtotal),
@@ -330,6 +334,54 @@ export async function getAllInvoicesAsync(limit = 500): Promise<Invoice[]> {
     // Fall through to local store on hard failure (network / SDK).
   }
   return [..._store]
+}
+
+/**
+ * Phase 13.8 — async by-id fetcher that hits the real DB. The
+ * synchronous getInvoiceById() above only ever knew about the local
+ * store; for invoices that are issued by the deal-completion trigger
+ * the page would always 404. Falls back to the local store for
+ * compat with any legacy callers.
+ */
+export async function getInvoiceByIdAsync(id: string): Promise<Invoice | undefined> {
+  hydrate()
+  try {
+    const { createClient } = await import("@/lib/supabase/client")
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("invoices")
+      .select("*")
+      .or(`id.eq.${id},number.eq.${id}`)
+      .maybeSingle()
+    if (!error && data) {
+      return rowToInvoice(data as InvoiceRow)
+    }
+  } catch {
+    // fall through to local
+  }
+  return _store.find((i) => i.id === id || i.number === id)
+}
+
+/**
+ * Phase 13.8 — fetch invoices linked to a specific deal id. Returns
+ * BOTH the buyer-side (exchange_buy) and seller-side (exchange_sell)
+ * invoices so the post-deal modal can show the one that belongs to
+ * the calling user.
+ */
+export async function getInvoicesByDealIdAsync(dealId: string): Promise<Invoice[]> {
+  try {
+    const { createClient } = await import("@/lib/supabase/client")
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("invoices")
+      .select("*")
+      .eq("source_id", dealId)
+      .order("type", { ascending: true })
+    if (!error && Array.isArray(data)) {
+      return (data as InvoiceRow[]).map(rowToInvoice)
+    }
+  } catch { /* ignore */ }
+  return []
 }
 
 export function getInvoicesByUser(userId: string): Invoice[] {
