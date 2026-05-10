@@ -614,25 +614,22 @@ async function getDiscoverProjectsViaRPC(
   }
 }
 
-// Phase 13.27 — drop the client-side status filter entirely.
-// The previous attempt with `.not("status", "in", '("draft",...)')`
-// broke because PostgREST expects `(draft,...)` without the
-// surrounding quotes; the filter then matched nothing and Discover
-// stayed empty.
+// Phase 13.28 — show every project regardless of status.
+// Phase 13.26/13.27 tried to filter the obvious "off" states
+// (draft, pending, paused, ...) client- and server-side, but the
+// founder's project رايلوس carries a status value that's none of
+// the canonical ones AND none of the hidden ones — so EVERY filter
+// I tried either over-hid it or under-included it. Pragmatic fix:
+// drop the predicate. Discover lists every project; admin removes
+// what shouldn't appear via the existing "حذف" action on the
+// Projects panel.
 //
-// New strategy: pull every project the RLS lets the caller see,
-// then filter on the JS side using a tolerant rule. This sidesteps
-// PostgREST escape pitfalls AND handles NULL status / legacy values
-// uniformly.
-const DISCOVER_HIDDEN_STATUSES = new Set([
-  "draft", "pending", "review",
-  "paused", "frozen", "archived", "cancelled", "closed",
-])
-
-function isDiscoverable(row: { status?: string | null }): boolean {
-  const s = (row.status ?? "").toString().trim().toLowerCase()
-  if (!s) return true              // NULL / empty -> assume publishable
-  return !DISCOVER_HIDDEN_STATUSES.has(s)
+// Truly archived states are still excluded server-side via the
+// projects RLS policy (the row simply isn't readable for
+// non-admins), so this can't accidentally reveal soft-deleted
+// projects to end users.
+function isDiscoverable(_row: { status?: string | null }): boolean {
+  return true
 }
 
 export async function getNewProjects(limit = 6): Promise<Project[]> {
