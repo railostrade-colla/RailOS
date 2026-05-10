@@ -491,7 +491,12 @@ export function ProjectWalletsPanel() {
                       <div className="text-base font-bold text-blue-400 font-mono">{fmtNum(adminRow.investors_count)}</div>
                     </div>
                   </div>
-                  {/* Row 2: market values */}
+                  {/* Row 2: market values
+                       Phase 13.10 — "قيمة الحصص غير المباعة" is now computed
+                       client-side as market_price × offering_available so it
+                       always matches the hero "متوفرة للبيع" box exactly,
+                       regardless of how the server-side RPC chose to value
+                       legacy rows. */}
                   <div className="grid grid-cols-2 gap-2 mb-4">
                     <div className="bg-emerald-400/[0.05] border border-emerald-400/[0.2] rounded-lg p-3 text-center">
                       <div className="text-[10px] text-neutral-500 mb-1">إيرادات المباعة (سعر السوق)</div>
@@ -499,7 +504,12 @@ export function ProjectWalletsPanel() {
                     </div>
                     <div className="bg-yellow-400/[0.05] border border-yellow-400/[0.2] rounded-lg p-3 text-center">
                       <div className="text-[10px] text-neutral-500 mb-1">قيمة الحصص غير المباعة</div>
-                      <div className="text-base font-bold text-yellow-400 font-mono">{fmtNum(adminRow.unsold_offering_value)} د.ع</div>
+                      <div className="text-base font-bold text-yellow-400 font-mono">
+                        {fmtNum(adminRow.market_price * adminRow.offering_available)} د.ع
+                      </div>
+                      <div className="text-[9px] text-neutral-500 mt-1 font-mono">
+                        {fmtNum(adminRow.market_price)} × {fmtNum(adminRow.offering_available)}
+                      </div>
                     </div>
                   </div>
                   {/* Helper line: market price */}
