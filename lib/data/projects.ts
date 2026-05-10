@@ -148,10 +148,20 @@ export async function getAllProjects(): Promise<Project[]> {
   return dedupCache("projects:active:all", async () => {
     try {
       const supabase = createClient()
+      // Phase 13.26 — negative status filter so legacy/published
+      // projects + rows with NULL status are visible. Strict
+      // eq("status", "active") was hiding the founder's project.
       const { data, error } = await supabase
         .from("projects")
         .select("*")
-        .eq("status", "active")
+        .not(
+          "status",
+          "in",
+          `(${[
+            "draft", "pending", "review",
+            "paused", "frozen", "archived", "cancelled", "closed",
+          ].map((s) => `"${s}"`).join(",")})`,
+        )
         .order("created_at", { ascending: false })
       if (error || !data) return []
       const mapped = data.map(dbToProject)
@@ -611,10 +621,19 @@ async function getDiscoverProjectsViaRPC(
   }
 }
 
+// Phase 13.26 — list of statuses we WANT to show in Discover. The
+// previous strict eq("status", "active") missed projects whose
+// status column had legacy values ('published') or was NULL on
+// older rows. Negative-filter via .not(...) is more forgiving.
+const DISCOVER_HIDDEN_STATUSES = [
+  "draft", "pending", "review",
+  "paused", "frozen", "archived", "cancelled", "closed",
+]
+
 export async function getNewProjects(limit = 6): Promise<Project[]> {
   return dedupCache(`projects:new:${limit}`, async () => {
     // Phase 13.17 — try the new RPC first; fall back to the legacy
-    // "ORDER BY created_at DESC" path for any DB without the migration.
+    // path for any DB without the migration.
     const viaRpc = await getDiscoverProjectsViaRPC("new", limit)
     if (viaRpc !== null) return viaRpc
     try {
@@ -622,7 +641,9 @@ export async function getNewProjects(limit = 6): Promise<Project[]> {
       const { data } = await supabase
         .from("projects")
         .select(CARD_COLUMNS)
-        .eq("status", "active")
+        // Phase 13.26 — negative filter so legacy/published projects
+        // also surface; matches the RPC's NOT IN list exactly.
+        .not("status", "in", `(${DISCOVER_HIDDEN_STATUSES.map((s) => `"${s}"`).join(",")})`)
         .order("created_at", { ascending: false })
         .limit(limit)
       const mapped = (data ?? []).map((row) => dbToProject(row as unknown as DBProject))
@@ -645,7 +666,7 @@ export async function getTrendingProjects(limit = 6): Promise<Project[]> {
       const { data } = await supabase
         .from("projects")
         .select(CARD_COLUMNS)
-        .eq("status", "active")
+        .not("status", "in", `(${DISCOVER_HIDDEN_STATUSES.map((s) => `"${s}"`).join(",")})`)
         .order("share_price", { ascending: false })
         .limit(limit)
       const mapped = (data ?? []).map((row) => dbToProject(row as unknown as DBProject))
