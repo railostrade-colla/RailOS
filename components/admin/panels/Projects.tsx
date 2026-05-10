@@ -926,11 +926,12 @@ function DiscoverTagSelect({
         <span>{current.label}</span>
       </button>
       {open && (
-        // Phase 13.29 — z-50 (was z-30) so the dropdown rises above
-        // the table's sticky header and the Tabs strip; min-w + ring
-        // give it clear visual lift over surrounding rows.
+        // Phase 13.32 — opens UPWARD (`bottom-full mb-1`) so a row
+        // near the bottom of the table doesn't have its dropdown
+        // clipped by the page footer / scroll edge. z-50 keeps it
+        // above the table's sticky header.
         <div
-          className="absolute top-full left-0 mt-1 z-50 min-w-[140px] bg-[#0a0a0a] border border-white/[0.12] rounded-lg shadow-2xl ring-1 ring-black/40 overflow-hidden"
+          className="absolute bottom-full left-0 mb-1 z-50 min-w-[140px] bg-[#0a0a0a] border border-white/[0.12] rounded-lg shadow-2xl ring-1 ring-black/40 overflow-hidden"
         >
           {TAG_OPTIONS.map((opt) => {
             const active = opt.value === value
