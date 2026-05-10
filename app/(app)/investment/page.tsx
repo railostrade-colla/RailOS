@@ -43,6 +43,10 @@ import {
   getProjectPriceTimeline,
   type PriceHistoryPoint,
 } from "@/lib/data/price-history"
+import {
+  getProjectLiveSnapshot,
+  type ProjectLiveSnapshot,
+} from "@/lib/data/project-snapshot"
 import { createClient } from "@/lib/supabase/client"
 import { readPersistedSync } from "@/lib/data/cache"
 import type { Project } from "@/lib/mock-data/types"
@@ -83,8 +87,9 @@ function InvestmentPageContent() {
   // has finished at least once. The chart uses this to decide
   // skeleton vs. real empty state.
   const [historyFetched, setHistoryFetched] = useState(false)
-  const [investorsCount, setInvestorsCount] = useState(0)
-  const [dividendsTotal, setDividendsTotal] = useState<number>(-1) // -1 = unknown
+  // Phase 13.22 — canonical live snapshot from get_project_live_snapshot.
+  // Replaces the per-field manual derivations with a single object.
+  const [snapshot, setSnapshot] = useState<ProjectLiveSnapshot | null>(null)
 
   // ─── Effect: load projects from DB (refresh) ─────────────────────
   useEffect(() => {
@@ -113,19 +118,19 @@ function InvestmentPageContent() {
                               // chart never shows stale data while
                               // loading the new project.
     setError(null)
-    const supabase = createClient()
 
-    // Parallel: timeline + investors + dividends (best-effort)
-    // Phase 13.19 — getProjectPriceTimeline merges price_history,
-    // completed deals, and creation/current anchors so the chart
-    // always has at least 2 points for an active project.
-    const [historyRes, investorsRes, dividendsRes] = await Promise.allSettled([
+    // Phase 13.22 — single live snapshot replaces the previous
+    // 3 separate queries (investors RPC + dividends + manual ratio
+    // math). It returns offering_total, offering_available,
+    // offering_sold, owner_shares, funding_pct, investor_count and
+    // dividends_total in one round-trip from project_wallets +
+    // holdings + dividends, all aggregated server-side.
+    //
+    // The price timeline still runs in parallel since it pulls a
+    // larger payload (200 history rows).
+    const [historyRes, snapshotRes] = await Promise.allSettled([
       getProjectPriceTimeline(projectId, 200),
-      supabase.rpc("get_public_investor_counts", { p_project_ids: [projectId] }),
-      supabase
-        .from("dividends")
-        .select("amount")
-        .eq("project_id", projectId),
+      getProjectLiveSnapshot(projectId),
     ])
 
     if (historyRes.status === "fulfilled") {
@@ -134,26 +139,10 @@ function InvestmentPageContent() {
       setPriceHistory([])
     }
 
-    if (investorsRes.status === "fulfilled" && Array.isArray(investorsRes.value.data)) {
-      const row = (investorsRes.value.data as Array<{ investor_count: number | string }>)[0]
-      setInvestorsCount(Number(row?.investor_count ?? 0))
+    if (snapshotRes.status === "fulfilled" && snapshotRes.value) {
+      setSnapshot(snapshotRes.value)
     } else {
-      setInvestorsCount(0)
-    }
-
-    if (
-      dividendsRes.status === "fulfilled" &&
-      Array.isArray(dividendsRes.value.data)
-    ) {
-      type DivRow = { amount?: number | string | null }
-      const total = (dividendsRes.value.data as DivRow[]).reduce(
-        (s, r) => s + Number(r.amount ?? 0),
-        0,
-      )
-      setDividendsTotal(total)
-    } else {
-      // Table missing or RLS blocked → unknown (renders "—").
-      setDividendsTotal(-1)
+      setSnapshot(null)
     }
 
     setLoadingHistory(false)
@@ -222,6 +211,20 @@ function InvestmentPageContent() {
         },
         () => { if (!cancelled) void refreshSelected(selected.id) },
       )
+      // Phase 13.22 — admin "إضافة حصص للطرح" mutates project_wallets
+      // (the offering wallet's total_shares + available_shares). The
+      // snapshot RPC reads these directly, so we need to refresh
+      // when they change.
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "project_wallets",
+          filter: `project_id=eq.${selected.id}`,
+        },
+        () => { if (!cancelled) void refreshSelected(selected.id) },
+      )
       .subscribe()
 
     return () => {
@@ -231,8 +234,13 @@ function InvestmentPageContent() {
   }, [selected, refreshSelected])
 
   // ─── Derived: status values ──────────────────────────────────────
+  // Phase 13.22 — read EVERYTHING from the live snapshot. Owner
+  // equity is never part of the funding ratio (the RPC enforces
+  // funding_pct = offering_sold / offering_total). When admin clicks
+  // "إضافة حصص للطرح", the offering_wallet grows, the snapshot's
+  // offering_total updates, and the percentage adjusts naturally.
   const status: ProjectStatusValues = useMemo(() => {
-    if (!selected) {
+    if (!snapshot) {
       return {
         fundedPct: 0,
         sharesSold: 0,
@@ -241,25 +249,14 @@ function InvestmentPageContent() {
         dividendsTotal: -1,
       }
     }
-    type WithOfferingPct = Project & { offering_percentage?: number }
-    const offeringPct = Number((selected as WithOfferingPct).offering_percentage ?? 0)
-    const offeringTotal =
-      offeringPct > 0
-        ? Math.round(Number(selected.total_shares ?? 0) * offeringPct / 100)
-        : Number(selected.total_shares ?? 0)
-    const available = Number(selected.available_shares ?? 0)
-    const sharesSold = Math.max(0, offeringTotal - available)
-    const fundedPct =
-      offeringTotal > 0 ? (sharesSold / offeringTotal) * 100 : 0
-
     return {
-      fundedPct,
-      sharesSold,
-      offeringTotal,
-      investorsCount,
-      dividendsTotal,
+      fundedPct: snapshot.funding_pct,
+      sharesSold: snapshot.offering_sold,
+      offeringTotal: snapshot.offering_total,
+      investorsCount: snapshot.investor_count,
+      dividendsTotal: snapshot.dividends_total,
     }
-  }, [selected, investorsCount, dividendsTotal])
+  }, [snapshot])
 
   // ─── Action handlers ────────────────────────────────────────────
   const goToExchange = (mode: "buy" | "sell") => {
@@ -330,22 +327,25 @@ function InvestmentPageContent() {
         {/* 2. Hero: chart + status + actions — only when a project is selected */}
         {selected && (
           <div className="space-y-3 sm:space-y-4">
-            {/* Chart — Phase 13.18: explicit hasFetched so the empty
-                 state never shows during the initial fetch. The
-                 `key` prop forces a clean remount when the user picks
-                 a different project so internal chart state (period,
-                 mode) doesn't bleed across projects. */}
+            {/* Chart — Phase 13.22: currentPrice now comes from the
+                 live snapshot (which reads project_wallets +
+                 projects in one RPC call). Falls back to local
+                 selected.share_price when snapshot hasn't returned
+                 yet so the price ribbon is never blank. */}
             <ProjectChart
               key={selected.id}
               points={priceHistory}
-              currentPrice={Number(
-                (selected as Project & { current_market_price?: number }).current_market_price ??
-                  selected.share_price ??
-                  0,
-              )}
+              currentPrice={
+                snapshot?.current_market_price ??
+                Number(
+                  (selected as Project & { current_market_price?: number }).current_market_price ??
+                    selected.share_price ??
+                    0,
+                )
+              }
               loading={loadingHistory}
               hasFetched={historyFetched}
-              symbol={selected.symbol}
+              symbol={snapshot?.symbol ?? selected.symbol}
             />
 
             {/* 3. Status grid */}
@@ -376,8 +376,11 @@ function InvestmentPageContent() {
               </button>
             </div>
 
-            {/* 5. Brief project info */}
-            <ProjectInfoCard project={selected} />
+            {/* 5. Brief project info — Phase 13.22 reads description,
+                 sector, distribution_type, expected return, risk
+                 level from the live snapshot so admin edits show
+                 up here without a page reload. */}
+            <ProjectInfoCard project={selected} snapshot={snapshot} />
           </div>
         )}
 
@@ -393,28 +396,61 @@ function InvestmentPageContent() {
 }
 
 // ─── Sub-component: brief project info card ────────────────────────
-function ProjectInfoCard({ project }: { project: Project }) {
+// Phase 13.22 — every field reads from the live snapshot first; the
+// `project` prop is only the cached fallback for cold-cache visits
+// before the snapshot RPC resolves. Admin edits to risk_level /
+// distribution_type / expected_return propagate here within ~1s
+// thanks to the realtime project + project_wallets channel.
+const DISTRIBUTION_LABEL: Record<string, string> = {
+  monthly: "شهرياً",
+  quarterly: "ربع سنوي",
+  semi_annual: "نصف سنوي",
+  annual: "سنوياً",
+}
+const RISK_LABEL: Record<string, string> = {
+  low: "منخفض",
+  medium: "متوسط",
+  high: "مرتفع",
+}
+
+function ProjectInfoCard({
+  project,
+  snapshot,
+}: {
+  project: Project
+  snapshot: ProjectLiveSnapshot | null
+}) {
+  // Snapshot wins for every field; fall back to the cached Project
+  // shape only when the snapshot hasn't loaded yet.
   type Extra = Project & {
     short_description?: string | null
     expected_return_min?: number | string | null
     expected_return_max?: number | string | null
   }
-  const p = project as Extra
-  const shortDesc =
-    p.short_description?.toString().trim() ||
-    p.description?.toString().trim() ||
-    ""
-  const annualMin = Number(p.expected_return_min ?? p.expected_return_min ?? 0)
-  const annualMax = Number(p.expected_return_max ?? p.expected_return_max ?? 0)
+  const fallback = project as Extra
+
+  const name        = snapshot?.name        ?? project.name
+  const symbol      = snapshot?.symbol      ?? project.symbol
+  const logoUrl     = snapshot?.logo_url    ?? project.logo_url
+  const shortDesc   = (snapshot?.short_description ?? fallback.short_description ?? "")
+                       .toString()
+                       .trim()
+                     || (snapshot?.description ?? fallback.description ?? "").toString().trim()
+  const annualMin   = snapshot?.expected_return_min ?? Number(fallback.expected_return_min ?? 0)
+  const annualMax   = snapshot?.expected_return_max ?? Number(fallback.expected_return_max ?? 0)
+  const distRaw     = (snapshot?.distribution_type ?? "").toString()
+  const distLabel   = DISTRIBUTION_LABEL[distRaw] ?? null
+  const riskRaw     = (snapshot?.risk_level ?? "").toString()
+  const riskLabel   = RISK_LABEL[riskRaw] ?? null
 
   return (
     <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4">
       <div className="flex items-start gap-3 mb-3">
-        {project.logo_url ? (
+        {logoUrl ? (
           <div className="w-12 h-12 rounded-xl overflow-hidden border border-white/[0.08] bg-white/[0.04] flex-shrink-0">
             <Image
-              src={project.logo_url}
-              alt={project.name}
+              src={logoUrl}
+              alt={name}
               width={48}
               height={48}
               className="w-full h-full object-cover"
@@ -428,13 +464,13 @@ function ProjectInfoCard({ project }: { project: Project }) {
         )}
         <div className="flex-1 min-w-0">
           <div className="text-sm sm:text-base font-bold text-white truncate">
-            {project.name}
+            {name}
           </div>
           <div className="text-[10px] sm:text-[11px] text-neutral-500 mt-0.5 flex items-center gap-2 flex-wrap">
             {project.sector && <span>{project.sector}</span>}
-            {project.symbol && (
+            {symbol && (
               <span className="font-mono text-[#deff9a]" dir="ltr">
-                {project.symbol}
+                {symbol}
               </span>
             )}
           </div>
@@ -449,6 +485,30 @@ function ProjectInfoCard({ project }: { project: Project }) {
           </div>
         )}
       </div>
+
+      {/* Phase 13.22 — distribution + risk pills, read live from snapshot */}
+      {(distLabel || riskLabel) && (
+        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+          {distLabel && (
+            <span className="text-[10px] bg-blue-400/[0.08] border border-blue-400/[0.2] text-blue-300 rounded-md px-2 py-0.5">
+              التوزيع: {distLabel}
+            </span>
+          )}
+          {riskLabel && (
+            <span
+              className={cn(
+                "text-[10px] rounded-md px-2 py-0.5 border",
+                riskRaw === "low"  && "bg-green-400/[0.08] border-green-400/[0.2] text-green-300",
+                riskRaw === "medium" && "bg-yellow-400/[0.08] border-yellow-400/[0.2] text-yellow-300",
+                riskRaw === "high" && "bg-red-400/[0.08] border-red-400/[0.2] text-red-300",
+              )}
+            >
+              المخاطرة: {riskLabel}
+            </span>
+          )}
+        </div>
+      )}
+
       {shortDesc && (
         <p className="text-[11px] sm:text-xs text-neutral-300 leading-relaxed">
           {shortDesc}
