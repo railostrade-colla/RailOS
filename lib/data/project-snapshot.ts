@@ -168,21 +168,170 @@ function rowToSnapshot(r: RawSnapshotRow): ProjectLiveSnapshot {
 }
 
 /**
- * Fetch a single project's live snapshot. Uses the RPC for
- * authoritative numbers; returns null on any failure so callers
- * can fall back to local/cached data.
+ * Fetch a single project's live snapshot.
+ *
+ * Phase 13.31 — dual-path resolution. The RPC is the canonical
+ * source (single round-trip, server-side aggregation), but if it
+ * fails OR isn't deployed yet on this DB, we fall back to a
+ * stitched-together snapshot built from public reads:
+ *   • projects.* (RLS lets users read active projects)
+ *   • get_public_investor_counts RPC (Phase 13.12)
+ *   • dividends sum (best-effort, table may not exist)
+ *
+ * Owner_shares is derived in the fallback via offering_percentage,
+ * which works for new projects but degrades gracefully for legacy
+ * rows by falling back to the share_price field.
  */
 export async function getProjectLiveSnapshot(
   projectId: string,
 ): Promise<ProjectLiveSnapshot | null> {
   if (!projectId) return null
+  const supabase = createClient()
+
+  // ─── 1. Try the RPC (authoritative) ─────────────────────────
   try {
-    const supabase = createClient()
     const { data, error } = await supabase.rpc("get_project_live_snapshot", {
       p_project_id: projectId,
     })
-    if (error || !Array.isArray(data) || data.length === 0) return null
-    return rowToSnapshot(data[0] as RawSnapshotRow)
+    if (!error && Array.isArray(data) && data.length > 0) {
+      return rowToSnapshot(data[0] as RawSnapshotRow)
+    }
+  } catch {
+    /* fall through */
+  }
+
+  // ─── 2. Fallback: stitch the snapshot from public reads ──────
+  return await buildFallbackSnapshot(supabase, projectId)
+}
+
+async function buildFallbackSnapshot(
+  supabase: ReturnType<typeof createClient>,
+  projectId: string,
+): Promise<ProjectLiveSnapshot | null> {
+  try {
+    // Project row — every column the snapshot type needs.
+    // Use `select("*")` to avoid PostgREST's GenericStringError union
+    // when listing many columns inline; the response is a plain object
+    // we cast directly.
+    const { data: pRaw, error: pErr } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("id", projectId)
+      .maybeSingle()
+
+    if (pErr || !pRaw) return null
+    const p = pRaw as unknown as Record<string, unknown>
+    // Local helper to coerce unknown column values into numbers.
+    const N = (v: unknown): number => {
+      if (v == null) return 0
+      const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : 0
+      return Number.isFinite(n) ? n : 0
+    }
+
+    // Investor count via public RPC (Phase 13.12 — always available
+    // on production, exposes only counts).
+    let investorCount = 0
+    try {
+      const { data: ic } = await supabase.rpc("get_public_investor_counts", {
+        p_project_ids: [projectId],
+      })
+      if (Array.isArray(ic) && ic.length > 0) {
+        const row = ic[0] as { investor_count?: number | string }
+        investorCount = num(row.investor_count)
+      }
+    } catch { /* keep 0 */ }
+
+    // Dividends total — best-effort; table may not exist.
+    let dividendsTotal = -1
+    try {
+      const { data: divs, error: divErr } = await supabase
+        .from("dividends")
+        .select("amount")
+        .eq("project_id", projectId)
+      if (!divErr && Array.isArray(divs)) {
+        type DivRow = { amount?: number | string | null }
+        dividendsTotal = (divs as DivRow[]).reduce(
+          (s, r) => s + num(r.amount),
+          0,
+        )
+      }
+    } catch { /* -1 */ }
+
+    // Derive ratios. offering_total = total_shares × offering_pct/100
+    // (or full total_shares if no offering_pct set, treating the
+    // whole project as offered). offering_available comes off the
+    // projects column when wallets aren't readable.
+    const totalShares = N(p.total_shares)
+    const offeringPct = N(p.offering_percentage)
+    const offeringTotal = offeringPct > 0
+      ? Math.round(totalShares * offeringPct / 100)
+      : totalShares
+    // available_shares on projects mirrors the wallet's available;
+    // when missing, treat as fully unsold (offeringTotal).
+    const availableRaw = p.available_shares
+    const offeringAvailable = availableRaw == null ? offeringTotal : N(availableRaw)
+    const offeringSold = Math.max(0, offeringTotal - offeringAvailable)
+    const fundingPct = offeringTotal > 0
+      ? Math.round((offeringSold / offeringTotal) * 100 * 100) / 100
+      : 0
+
+    const ownerShares = Math.max(0, totalShares - offeringTotal)
+    const sharePrice = N(p.share_price)
+    const currentPrice = p.current_market_price == null ? sharePrice : N(p.current_market_price)
+    const totalValue = N(p.total_value)
+    const originalPrice = totalShares > 0 && totalValue > 0
+      ? Math.round(totalValue / totalShares)
+      : sharePrice
+
+    const tag = p.discover_tag as string | null
+
+    return {
+      // Form fields
+      id: String(p.id),
+      name: String(p.name ?? ""),
+      short_description: (p.short_description as string | null) ?? null,
+      description: (p.description as string | null) ?? null,
+      project_type: (p.project_type as string | null) ?? null,
+      symbol: (p.symbol as string | null) ?? null,
+      logo_url: (p.logo_url as string | null) ?? null,
+      cover_url: (p.cover_url as string | null) ?? null,
+      status: (p.status as string | null) ?? null,
+      risk_level: (p.risk_level as string | null) ?? null,
+      distribution_type: (p.distribution_type as string | null) ?? null,
+      expected_return_min: N(p.expected_return_min),
+      expected_return_max: N(p.expected_return_max),
+      duration_open: (p.duration_open as boolean | null) ?? null,
+      duration_months: (p.duration_months as number | null) ?? null,
+      offering_start_date: (p.offering_start_date as string | null) ?? null,
+      offering_end_date: (p.offering_end_date as string | null) ?? null,
+      created_at: String(p.created_at ?? new Date().toISOString()),
+
+      // Dynamic ratios
+      total_shares: totalShares,
+      offering_total: offeringTotal,
+      offering_available: offeringAvailable,
+      owner_shares: ownerShares,
+      offering_sold: offeringSold,
+      funding_pct: fundingPct,
+
+      // Market
+      original_price: originalPrice,
+      share_price: sharePrice,
+      current_market_price: currentPrice,
+      total_value: totalValue,
+      investor_count: investorCount,
+      dividends_total: dividendsTotal,
+
+      // Suspension
+      trading_suspended: !!p.trading_suspended,
+      trading_suspension_reason: (p.trading_suspension_reason as string | null) ?? null,
+      offering_suspended: !!p.offering_suspended,
+      offering_suspension_reason: (p.offering_suspension_reason as string | null) ?? null,
+      discover_tag:
+        tag === "trending" || tag === "coming_soon" || tag === "new"
+          ? tag
+          : null,
+    }
   } catch {
     return null
   }
