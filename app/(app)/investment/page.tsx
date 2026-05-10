@@ -75,7 +75,14 @@ function InvestmentPageContent() {
 
   // ─── Live state ──────────────────────────────────────────────────
   const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[]>([])
-  const [loadingHistory, setLoadingHistory] = useState(false)
+  // Phase 13.18 — starts TRUE so the chart shows a skeleton on first
+  // mount instead of flashing the "no history" empty state. Flips to
+  // false only after the first fetch resolves.
+  const [loadingHistory, setLoadingHistory] = useState(true)
+  // Tracks whether the network round-trip for the SELECTED project
+  // has finished at least once. The chart uses this to decide
+  // skeleton vs. real empty state.
+  const [historyFetched, setHistoryFetched] = useState(false)
   const [investorsCount, setInvestorsCount] = useState(0)
   const [dividendsTotal, setDividendsTotal] = useState<number>(-1) // -1 = unknown
 
@@ -101,6 +108,10 @@ function InvestmentPageContent() {
   // selected project. Re-runs on project change + on realtime ticks. ─
   const refreshSelected = useCallback(async (projectId: string) => {
     setLoadingHistory(true)
+    setHistoryFetched(false)  // reset for the new project
+    setPriceHistory([])       // drop previous project's points so the
+                              // chart never shows stale data while
+                              // loading the new project.
     setError(null)
     const supabase = createClient()
 
@@ -143,6 +154,7 @@ function InvestmentPageContent() {
     }
 
     setLoadingHistory(false)
+    setHistoryFetched(true)
   }, [])
 
   useEffect(() => {
@@ -303,8 +315,13 @@ function InvestmentPageContent() {
         {/* 2. Hero: chart + status + actions — only when a project is selected */}
         {selected && (
           <div className="space-y-3 sm:space-y-4">
-            {/* Chart */}
+            {/* Chart — Phase 13.18: explicit hasFetched so the empty
+                 state never shows during the initial fetch. The
+                 `key` prop forces a clean remount when the user picks
+                 a different project so internal chart state (period,
+                 mode) doesn't bleed across projects. */}
             <ProjectChart
+              key={selected.id}
               points={priceHistory}
               currentPrice={Number(
                 (selected as Project & { current_market_price?: number }).current_market_price ??
@@ -312,6 +329,7 @@ function InvestmentPageContent() {
                   0,
               )}
               loading={loadingHistory}
+              hasFetched={historyFetched}
               symbol={selected.symbol}
             />
 
