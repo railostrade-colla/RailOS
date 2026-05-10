@@ -206,20 +206,40 @@ export async function enrichProjectsWithSales(
     }
   } catch { /* best-effort */ }
 
-  // 2. Distinct investor count per project
+  // 2. Distinct investor count per project — Phase 13.12.
+  //
+  // Direct SELECT on `holdings` is blocked by RLS for non-admin
+  // viewers (the discover page is public and the home tab is open
+  // to any signed-in user, so the row policy returns 0 rows for
+  // most callers). The new SECURITY DEFINER RPC bypasses RLS and
+  // returns ONLY (project_id, count) — no user_ids, no share
+  // amounts — so it's safe to expose publicly. Falls back to the
+  // legacy direct query for any DB that doesn't yet have the RPC.
   try {
-    const { data } = await supabase
-      .from("holdings")
-      .select("project_id, user_id")
-      .in("project_id", ids)
-      .gt("shares", 0)
-    const seen = new Map<string, Set<string>>()
-    for (const h of (data ?? []) as Array<{ project_id: string; user_id: string }>) {
-      if (!seen.has(h.project_id)) seen.set(h.project_id, new Set())
-      seen.get(h.project_id)!.add(h.user_id)
-    }
-    for (const [pid, set] of seen) {
-      investorsMap.set(pid, set.size)
+    const { data: rpcRows, error: rpcErr } = await supabase.rpc(
+      "get_public_investor_counts",
+      { p_project_ids: ids },
+    )
+    if (!rpcErr && Array.isArray(rpcRows)) {
+      for (const row of rpcRows as Array<{ project_id: string; investor_count: number | string }>) {
+        investorsMap.set(row.project_id, Number(row.investor_count ?? 0))
+      }
+    } else {
+      // Legacy fallback (will likely return empty under RLS, but
+      // keep it in case the RPC is missing on a stale DB).
+      const { data } = await supabase
+        .from("holdings")
+        .select("project_id, user_id")
+        .in("project_id", ids)
+        .gt("shares", 0)
+      const seen = new Map<string, Set<string>>()
+      for (const h of (data ?? []) as Array<{ project_id: string; user_id: string }>) {
+        if (!seen.has(h.project_id)) seen.set(h.project_id, new Set())
+        seen.get(h.project_id)!.add(h.user_id)
+      }
+      for (const [pid, set] of seen) {
+        investorsMap.set(pid, set.size)
+      }
     }
   } catch { /* best-effort */ }
 

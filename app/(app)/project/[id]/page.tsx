@@ -168,13 +168,28 @@ export default function ProjectDetailPage() {
       try {
         const { createClient } = await import("@/lib/supabase/client")
         const sb = createClient()
-        // Distinct investors in this project
-        const { count } = await sb
-          .from("holdings")
-          .select("user_id", { count: "exact", head: true })
-          .eq("project_id", id)
-          .gt("shares", 0)
-        if (!cancelled) setInvestors(count ?? 0)
+        // Phase 13.12 — distinct investors via the public RPC so the
+        // count survives RLS on `holdings`. Falls back to a direct
+        // count query if the RPC is missing on a stale DB.
+        try {
+          const { data: rpcRows, error: rpcErr } = await sb.rpc(
+            "get_public_investor_counts",
+            { p_project_ids: [id] },
+          )
+          if (!rpcErr && Array.isArray(rpcRows) && rpcRows.length > 0) {
+            const row = rpcRows[0] as { investor_count: number | string }
+            if (!cancelled) setInvestors(Number(row.investor_count ?? 0))
+          } else {
+            const { count } = await sb
+              .from("holdings")
+              .select("user_id", { count: "exact", head: true })
+              .eq("project_id", id)
+              .gt("shares", 0)
+            if (!cancelled) setInvestors(count ?? 0)
+          }
+        } catch {
+          /* keep zero */
+        }
 
         // My shares in this project (if signed in)
         const { data: auth } = await sb.auth.getUser()
