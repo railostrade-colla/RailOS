@@ -195,6 +195,16 @@ function PortfolioContent() {
   const [monthlySpent, setMonthlySpent] = useState<number>(0)
 
   const refresh = async () => {
+    // Phase 13.43 — bust the SWR cache so a fresh DB read happens.
+    // Previously a 15s TTL meant cancelling a pending request and
+    // calling refresh() returned the OLD data with the request
+    // still "pending", so the UI bounced right back. Now we
+    // invalidate first, then fetch.
+    try {
+      const { invalidateCache } = await import("@/lib/data/cache")
+      invalidateCache("portfolio:data:v3")
+    } catch { /* ignore */ }
+
     const [fresh, freshPnl, spent] = await Promise.all([
       getPortfolioData(),
       getUserPnLSummary(),
@@ -204,6 +214,11 @@ function PortfolioContent() {
     setPnl(freshPnl)
     setMonthlySpent(spent)
     setLoading(false)
+
+    // Phase 13.43 — re-trigger the extraHistory effect so deals +
+    // transfers also reflect the new state (status flips, etc).
+    // The effect runs once on mount; we bump a tick to force re-run.
+    setHistoryTick((t) => t + 1)
   }
 
   useEffect(() => {
@@ -337,8 +352,49 @@ function PortfolioContent() {
     created_at: string
   }
   const [extraHistory, setExtraHistory] = useState<HistoryEntry[]>([])
+  // Phase 13.43 — bumped by refresh() so the extraHistory effect
+  // re-runs and pulls fresh deal / transfer rows after a cancel.
+  const [historyTick, setHistoryTick] = useState(0)
   // Phase 11.08 — click-to-view-details modal for history rows
   const [historyDetail, setHistoryDetail] = useState<HistoryEntry | null>(null)
+  // Phase 13.43 — soft-hidden history entries (per-device).
+  // The history feed pulls from immutable audit tables (deals,
+  // fee_unit_transactions, share_transfers); we don't actually
+  // delete those — instead we remember the hidden ids in
+  // localStorage so the rows just don't render for THIS user on
+  // THIS browser. Clearing localStorage restores them.
+  const HIDDEN_HISTORY_KEY = "railos:portfolio:hidden-history-ids:v1"
+  const [hiddenHistoryIds, setHiddenHistoryIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set()
+    try {
+      const raw = window.localStorage.getItem(HIDDEN_HISTORY_KEY)
+      if (!raw) return new Set()
+      const arr = JSON.parse(raw) as unknown
+      return Array.isArray(arr) ? new Set(arr.filter((v) => typeof v === "string")) : new Set()
+    } catch {
+      return new Set()
+    }
+  })
+  const [confirmHideEntry, setConfirmHideEntry] = useState<HistoryEntry | null>(null)
+  const persistHiddenIds = (next: Set<string>) => {
+    setHiddenHistoryIds(next)
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(
+          HIDDEN_HISTORY_KEY,
+          JSON.stringify(Array.from(next)),
+        )
+      } catch { /* quota — ignore */ }
+    }
+  }
+  const handleConfirmHide = () => {
+    if (!confirmHideEntry) return
+    const next = new Set(hiddenHistoryIds)
+    next.add(confirmHideEntry.id)
+    persistHiddenIds(next)
+    setConfirmHideEntry(null)
+    showSuccess("تم مسح الحركة من السجل")
+  }
 
   // Phase 10.96 — pendingCount = pending fee requests + pending shares
   // (deals/transfers awaiting buyer/seller/admin action). The history feed
@@ -473,7 +529,9 @@ function PortfolioContent() {
       } catch { /* ignore */ }
     })()
     return () => { cancelled = true }
-  }, [])
+    // Phase 13.43 — historyTick re-fires the effect after refresh()
+    // so cancelled deals / transfers stop showing as "pending".
+  }, [historyTick])
 
   const unifiedHistory: HistoryEntry[] = useMemo(() => {
     const out: HistoryEntry[] = [...extraHistory]
@@ -1112,56 +1170,123 @@ function PortfolioContent() {
                  • feeRequests      (charge requests, all statuses)
                  • share_transfers  (sent/received)
                Sorted newest first. */}
-          {tab === "history" && (
-            unifiedHistory.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="text-5xl mb-4">📋</div>
-                <div className="text-sm text-neutral-400">لا توجد عمليات مسجّلة بعد</div>
-              </div>
-            ) : (
+          {tab === "history" && (() => {
+            // Phase 13.43 — apply the local hide-list before rendering.
+            const visible = unifiedHistory.filter((e) => !hiddenHistoryIds.has(e.id))
+            if (visible.length === 0) {
+              return (
+                <div className="text-center py-12">
+                  <div className="text-5xl mb-4">📋</div>
+                  <div className="text-sm text-neutral-400">
+                    {unifiedHistory.length === 0
+                      ? "لا توجد عمليات مسجّلة بعد"
+                      : "كل الحركات مخفيّة — يمكنك استرجاعها بمسح بيانات المتصفّح"}
+                  </div>
+                </div>
+              )
+            }
+            return (
               <div className="space-y-2">
-                {unifiedHistory.map((entry) => (
-                  <button
+                {visible.map((entry) => (
+                  <div
                     key={entry.id}
-                    onClick={() => setHistoryDetail(entry)}
                     className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl p-3 flex items-center gap-3 hover:bg-white/[0.07] active:bg-white/[0.08] transition-colors text-right"
                   >
-                    <div className={cn(
-                      "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 border",
-                      entry.kind === "deal" ? "bg-blue-400/[0.1] border-blue-400/[0.25]" :
-                      entry.kind === "fee" ? "bg-yellow-400/[0.1] border-yellow-400/[0.25]" :
-                      entry.kind === "request" ? "bg-purple-400/[0.1] border-purple-400/[0.25]" :
-                      "bg-green-400/[0.1] border-green-400/[0.25]",
-                    )}>
-                      <span className="text-base">{entry.icon}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm text-white truncate">{entry.title}</div>
-                      <div className="text-[10px] text-neutral-500 mt-0.5">
-                        {entry.subtitle ? entry.subtitle + " • " : ""}{fmtDate(entry.created_at)}
+                    <button
+                      onClick={() => setHistoryDetail(entry)}
+                      className="contents text-right"
+                    >
+                      <div className={cn(
+                        "w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 border",
+                        entry.kind === "deal" ? "bg-blue-400/[0.1] border-blue-400/[0.25]" :
+                        entry.kind === "fee" ? "bg-yellow-400/[0.1] border-yellow-400/[0.25]" :
+                        entry.kind === "request" ? "bg-purple-400/[0.1] border-purple-400/[0.25]" :
+                        "bg-green-400/[0.1] border-green-400/[0.25]",
+                      )}>
+                        <span className="text-base">{entry.icon}</span>
                       </div>
-                    </div>
-                    <div className={cn(
-                      "text-sm font-bold font-mono",
-                      entry.amount === undefined ? "text-neutral-500" :
-                      entry.amount >= 0 ? "text-green-400" : "text-red-400",
-                    )}>
-                      {entry.amount !== undefined && (
-                        <>
-                          {entry.amount >= 0 ? "+" : ""}
-                          {fmtIQD(entry.amount)}
-                        </>
-                      )}
-                      {entry.statusBadge && (
-                        <span className="text-[9px] block text-neutral-400 mt-0.5">
-                          {entry.statusBadge}
-                        </span>
-                      )}
-                    </div>
-                  </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-white truncate">{entry.title}</div>
+                        <div className="text-[10px] text-neutral-500 mt-0.5">
+                          {entry.subtitle ? entry.subtitle + " • " : ""}{fmtDate(entry.created_at)}
+                        </div>
+                      </div>
+                      <div className={cn(
+                        "text-sm font-bold font-mono",
+                        entry.amount === undefined ? "text-neutral-500" :
+                        entry.amount >= 0 ? "text-green-400" : "text-red-400",
+                      )}>
+                        {entry.amount !== undefined && (
+                          <>
+                            {entry.amount >= 0 ? "+" : ""}
+                            {fmtIQD(entry.amount)}
+                          </>
+                        )}
+                        {entry.statusBadge && (
+                          <span className="text-[9px] block text-neutral-400 mt-0.5">
+                            {entry.statusBadge}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                    {/* Phase 13.43 — delete (hide) button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setConfirmHideEntry(entry)
+                      }}
+                      className="w-7 h-7 rounded-lg bg-red-400/[0.06] border border-red-400/[0.2] hover:bg-red-400/[0.12] flex items-center justify-center text-red-400 flex-shrink-0"
+                      aria-label="مسح من السجل"
+                      title="مسح من السجل"
+                    >
+                      <X className="w-3.5 h-3.5" strokeWidth={2.5} />
+                    </button>
+                  </div>
                 ))}
               </div>
             )
+          })()}
+
+          {/* Phase 13.43 — confirm-hide modal */}
+          {confirmHideEntry && (
+            <div
+              className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+              onClick={() => setConfirmHideEntry(null)}
+            >
+              <div
+                className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl w-full max-w-sm overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="px-5 py-4 border-b border-white/[0.06]">
+                  <div className="text-base font-bold text-white">🗑️ مسح من السجل</div>
+                  <div className="text-[10px] text-neutral-500 mt-0.5">
+                    {confirmHideEntry.title}
+                  </div>
+                </div>
+                <div className="px-5 py-4 text-xs text-neutral-300 leading-relaxed">
+                  هل تريد مسح هذه الحركة من سجلّ محفظتك؟
+                  <div className="mt-2 text-[10px] text-neutral-500">
+                    💡 الحركة لن تُحذف من قاعدة البيانات (سجلّ المحاسبة محفوظ)،
+                    فقط لن تظهر هنا على هذا الجهاز.
+                  </div>
+                </div>
+                <div className="px-5 py-3 border-t border-white/[0.06] flex gap-2">
+                  <button
+                    onClick={() => setConfirmHideEntry(null)}
+                    className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    onClick={handleConfirmHide}
+                    className="flex-1 py-2.5 rounded-xl bg-red-500/[0.15] border border-red-500/[0.3] text-red-300 text-sm font-bold hover:bg-red-500/[0.2]"
+                  >
+                    🗑️ تأكيد المسح
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Fee Units Tab */}
