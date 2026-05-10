@@ -47,16 +47,10 @@ import {
 } from "@/lib/data/admin-monitor"
 import { getAllProjects } from "@/lib/data/projects"
 import { EmbeddedTabsHub } from "./EmbeddedTabsHub"
-// Phase 12 — engine + commission + protection panels.
-import { EngineDashboardCard } from "@/components/admin/market-engine/EngineDashboardCard"
-import { CommissionsManagementPanel } from "@/components/admin/market-engine/CommissionsManagementPanel"
-import { SectorCapsTable } from "@/components/admin/market-engine/SectorCapsTable"
-import { FreezeManagementPanel } from "@/components/admin/market-engine/FreezeManagementPanel"
-import { TransfersMonitoringPanel } from "@/components/admin/market-engine/TransfersMonitoringPanel"
-import { ProtectionMonitoringPanel } from "@/components/admin/market-engine/ProtectionMonitoringPanel"
-import { AdminDecisionsLog } from "@/components/admin/market-engine/AdminDecisionsLog"
-// Phase 12.9 — manual price-rise control (the founder's primary action).
-import { RaiseMarketPricePanel } from "@/components/admin/market-engine/RaiseMarketPricePanel"
+// Phase 13.45 — collapsed from 7 admin sub-panels to 1 unified
+// MarketEnginePanelV2 (built in Phase 13.46) covering both the
+// dynamic-mode toggle/conditions and the manual price rise.
+import { MarketEnginePanelV2 } from "@/components/admin/market-engine/MarketEnginePanelV2"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 const fmtTime = (iso: string) => {
@@ -364,101 +358,26 @@ function MonitorOverviewTab() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Tab 2 — Raise market price (founder's primary action)
-// ─────────────────────────────────────────────────────────────
-
-function MonitorRaisePriceTab() {
-  return (
-    <div className="p-6 max-w-screen-2xl">
-      <SectionHeader
-        title="📈 رفع سعر السوق"
-        subtitle="رفع يدوي للسعر المعروض في السوق · إظهار الشروط الطبيعية + خيار override"
-      />
-      <RaiseMarketPricePanel />
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────
-// Tab 3 — Engine + sector caps
+// Tab 2 — Market Engine (unified, Phase 13.45+)
 // ─────────────────────────────────────────────────────────────
 
 function MonitorEngineTab() {
   return (
     <div className="p-6 max-w-screen-2xl">
-      <SectionHeader
-        title="⚙️ المحرّك والقواعد"
-        subtitle="حالة محرّك السوق + سقوف الرفع الشهرية حسب القطاع"
-      />
-      <div className="space-y-4">
-        <EngineDashboardCard />
-        <SectorCapsTable />
-      </div>
+      <MarketEnginePanelV2 />
     </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────────
-// Tab 4 — Commissions
-// ─────────────────────────────────────────────────────────────
-
-function MonitorCommissionsTab() {
-  return (
-    <div className="p-6 max-w-screen-2xl">
-      <SectionHeader
-        title="💰 إدارة العمولات"
-        subtitle="التحكم بكل عمولة بشكل مستقل · شرطين · سقوف"
-      />
-      <CommissionsManagementPanel />
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────
-// Tab 5 — Protection (freeze + transfers + protection)
-// ─────────────────────────────────────────────────────────────
-
-function MonitorProtectionTab() {
-  return (
-    <div className="p-6 max-w-screen-2xl">
-      <SectionHeader
-        title="🛡️ الحماية والمراقبة"
-        subtitle="تجميد المشاريع · مراقبة إرسالات النظام · حماية المستخدمين"
-      />
-      <div className="space-y-4">
-        <FreezeManagementPanel />
-        <TransfersMonitoringPanel />
-        <ProtectionMonitoringPanel />
-      </div>
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────
-// Tab 6 — Decisions log (audit trail)
-// ─────────────────────────────────────────────────────────────
-
-function MonitorDecisionsLogTab() {
-  return (
-    <div className="p-6 max-w-screen-2xl">
-      <SectionHeader
-        title="📜 سجلّ القرارات"
-        subtitle="كل قرار إداري على المحرّك (override / freeze / commission change …)"
-      />
-      <AdminDecisionsLog />
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────
-// Hub
+// Hub — Phase 13.45 collapsed from 6 tabs to 2
 // ─────────────────────────────────────────────────────────────
 
 export function MonitorPanel() {
   return (
     <EmbeddedTabsHub
       title="📡 مراقبة السوق"
-      subtitle="بيانات السوق + رفع الأسعار + المحرّك + العمولات + الحماية + سجلّ القرارات"
+      subtitle="نظرة عامة على السوق + محرّك التسعير (يدوي + ديناميكي)"
       tabs={[
         {
           key: "overview",
@@ -467,34 +386,10 @@ export function MonitorPanel() {
           Panel: MonitorOverviewTab,
         },
         {
-          key: "raise_price",
-          label: "📈 رفع السعر",
-          hint: "رفع يدوي لسعر السوق لأي مشروع — مع التحقّق + الـ override",
-          Panel: MonitorRaisePriceTab,
-        },
-        {
           key: "engine",
-          label: "⚙️ المحرّك",
-          hint: "حالة محرّك السوق + سقوف الرفع حسب القطاع",
+          label: "⚙️ محرّك التسعير",
+          hint: "تشغيل/إيقاف الديناميكي + الشروط + الرفع اليدوي",
           Panel: MonitorEngineTab,
-        },
-        {
-          key: "commissions",
-          label: "💰 العمولات",
-          hint: "إدارة كل عمولة بشكل مستقل (شرطَين + سقوف)",
-          Panel: MonitorCommissionsTab,
-        },
-        {
-          key: "protection",
-          label: "🛡️ الحماية",
-          hint: "تجميد المشاريع + مراقبة الإرسالات + حماية المستخدمين",
-          Panel: MonitorProtectionTab,
-        },
-        {
-          key: "log",
-          label: "📜 السجلّ",
-          hint: "كل قرار إداري على المحرّك — مع التاريخ + الفاعل",
-          Panel: MonitorDecisionsLogTab,
         },
       ]}
     />

@@ -22,14 +22,12 @@ import {
 } from "@/lib/data/system-market"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
-// Phase 12 — market engine + commissions + transfers + protection panels.
-import { EngineDashboardCard } from "@/components/admin/market-engine/EngineDashboardCard"
-import { CommissionsManagementPanel } from "@/components/admin/market-engine/CommissionsManagementPanel"
-import { SectorCapsTable } from "@/components/admin/market-engine/SectorCapsTable"
-import { FreezeManagementPanel } from "@/components/admin/market-engine/FreezeManagementPanel"
-import { TransfersMonitoringPanel } from "@/components/admin/market-engine/TransfersMonitoringPanel"
-import { ProtectionMonitoringPanel } from "@/components/admin/market-engine/ProtectionMonitoringPanel"
-import { AdminDecisionsLog } from "@/components/admin/market-engine/AdminDecisionsLog"
+// Phase 13.45 — the seven Phase-12 sub-panels (engine dashboard,
+// commissions, sector caps, freezes, transfers monitor, protection,
+// decisions log) were collapsed into a single MarketEnginePanelV2
+// living under "📡 مراقبة السوق → ⚙️ محرّك التسعير". This panel
+// now focuses on its original concern: open/close the system-wide
+// market state.
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
@@ -232,34 +230,10 @@ export function MarketStatePanel() {
         )}
       </div>
 
-      {/* ═══ Phase 12 — Market engine sections ═══ */}
-      <div className="mt-8 space-y-5">
-        <SectionHeader
-          title="⚙️ محرك السوق + إدارة العمولات (Phase 12)"
-          subtitle="التحكم بكل عمولة بشكل مستقل · الشرطين · السقوف الشهرية · التجميد · الإرسالات · الحماية"
-        />
-
-        {/* 1. Engine state */}
-        <EngineDashboardCard />
-
-        {/* 2. Commissions (the new core) */}
-        <CommissionsManagementPanel />
-
-        {/* 3. Sector caps */}
-        <SectorCapsTable />
-
-        {/* 4. Manual freezes */}
-        <FreezeManagementPanel />
-
-        {/* 5. Transfers monitoring */}
-        <TransfersMonitoringPanel />
-
-        {/* 6. Protection telemetry */}
-        <ProtectionMonitoringPanel />
-
-        {/* 7. Decisions log */}
-        <AdminDecisionsLog />
-      </div>
+      {/* Phase 13.45 — the seven Phase-12 sub-sections that used
+           to live here (engine dashboard / commissions / sector
+           caps / freezes / transfers / protection / decisions log)
+           moved to "📡 مراقبة السوق → ⚙️ محرّك التسعير". */}
 
       {/* Toggle confirmation modal */}
       {showToggle && (
