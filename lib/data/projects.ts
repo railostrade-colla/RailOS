@@ -542,7 +542,10 @@ export async function adminUpdateProject(
   }
 }
 
-/** Drop cached project lists — call after any admin mutation. */
+/** Drop cached project lists — call after any admin mutation.
+ *  Phase 13.34 — invalidate both v2 (legacy) and v3 (current) keys
+ *  so any stale empty results from before the fallback fix are
+ *  evicted on the next user mutation. */
 function invalidateProjectCaches(): void {
   // Lazy import to keep the module tree-shake friendly.
   import("./cache").then(({ invalidateCache }) => {
@@ -550,7 +553,10 @@ function invalidateProjectCaches(): void {
     for (let i = 1; i <= 12; i++) {
       invalidateCache(`projects:new:${i}`)
       invalidateCache(`projects:trending:${i}`)
-      invalidateCache(`projects:coming_soon:${i}`)  // Phase 13.17
+      invalidateCache(`projects:coming_soon:${i}`)
+      invalidateCache(`projects:new:v3:${i}`)         // Phase 13.34
+      invalidateCache(`projects:trending:v3:${i}`)
+      invalidateCache(`projects:coming_soon:v3:${i}`)
     }
   })
 }
@@ -660,7 +666,7 @@ async function getDiscoverProjectsViaDirectQuery(
 }
 
 export async function getNewProjects(limit = 6): Promise<Project[]> {
-  return dedupCache(`projects:new:${limit}`, async () => {
+  return dedupCache(`projects:new:v3:${limit}`, async () => {
     // Phase 13.30 — try the RPC first; if it returns 0 rows (older
     // migration still filtering by status='active'), fall back to
     // the permissive direct query so the founder's project surfaces
@@ -672,7 +678,7 @@ export async function getNewProjects(limit = 6): Promise<Project[]> {
 }
 
 export async function getTrendingProjects(limit = 6): Promise<Project[]> {
-  return dedupCache(`projects:trending:${limit}`, async () => {
+  return dedupCache(`projects:trending:v3:${limit}`, async () => {
     // Phase 13.30 — same dual-path strategy as getNewProjects.
     const viaRpc = await getDiscoverProjectsViaRPC("trending", limit)
     if (viaRpc && viaRpc.length > 0) return viaRpc
@@ -684,7 +690,7 @@ export async function getTrendingProjects(limit = 6): Promise<Project[]> {
  *  offering_start_date). New surface for the "قريباً" tab.
  *  Phase 13.30 — same dual-path as trending/new. */
 export async function getComingSoonProjects(limit = 6): Promise<Project[]> {
-  return dedupCache(`projects:coming_soon:${limit}`, async () => {
+  return dedupCache(`projects:coming_soon:v3:${limit}`, async () => {
     const viaRpc = await getDiscoverProjectsViaRPC("coming_soon", limit)
     if (viaRpc && viaRpc.length > 0) return viaRpc
     // Direct query: only projects with a future offering_start_date.

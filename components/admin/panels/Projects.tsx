@@ -228,6 +228,10 @@ function ProjectsListPanel() {
   const [mainTab, setMainTab] = useState<MainTab>("list")
   const [filter, setFilter] = useState<string>("all")
   const [deleteTarget, setDeleteTarget] = useState<EntityRow | null>(null)
+  // Phase 13.34 — flips to false the first time a discover_tag write
+  // fails because the column doesn't exist. Subsequent rows then
+  // render a disabled "تلقائي" pill instead of triggering more errors.
+  const [discoverTagAvailable, setDiscoverTagAvailable] = useState(true)
   const [confirmText, setConfirmText] = useState("")
   const [selectedEntity, setSelectedEntity] = useState<EntityRow | null>(null)
 
@@ -673,9 +677,20 @@ function ProjectsListPanel() {
                   {p.entity_type === "project" ? (
                     <DiscoverTagSelect
                       value={p.discover_tag}
+                      disabled={!discoverTagAvailable}
                       onChange={async (tag) => {
                         const r = await adminSetDiscoverTag(p.id, tag)
                         if (!r.success) {
+                          // Phase 13.34 — detect "column missing"
+                          // and disable the dropdown for the rest
+                          // of the session instead of error-spamming.
+                          if (r.error?.includes("discover_tag") || r.error?.includes("Phase 13.17")) {
+                            setDiscoverTagAvailable(false)
+                            showError(
+                              "ميزة تثبيت الواجهة غير مفعّلة في قاعدة البيانات — أضف عمود discover_tag إلى projects",
+                            )
+                            return
+                          }
                           showError(
                             r.error === "not_admin"
                               ? "صلاحياتك لا تسمح"
@@ -891,9 +906,13 @@ const TAG_OPTIONS: { value: DiscoverTag; label: string; icon: string; color: str
 function DiscoverTagSelect({
   value,
   onChange,
+  disabled,
 }: {
   value: DiscoverTag
   onChange: (tag: DiscoverTag) => void | Promise<void>
+  /** Phase 13.34 — pass true when the schema doesn't have the
+   *  discover_tag column yet so the trigger renders inert. */
+  disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -909,21 +928,24 @@ function DiscoverTagSelect({
   }, [open])
 
   const current = TAG_OPTIONS.find((o) => o.value === value) ?? TAG_OPTIONS[0]
+  const lockedOut = !!disabled
 
   return (
     <div ref={ref} className="relative inline-block" onClick={(e) => e.stopPropagation()}>
       <button
-        onClick={() => setOpen((v) => !v)}
-        disabled={busy}
+        onClick={() => { if (!lockedOut) setOpen((v) => !v) }}
+        disabled={busy || lockedOut}
         className={cn(
           "px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-colors flex items-center gap-1.5 min-w-[110px] justify-center",
           value
             ? "bg-white/[0.06] border-white/[0.12] hover:bg-white/[0.1]"
             : "bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.05]",
-          busy && "opacity-50 cursor-wait",
+          (busy || lockedOut) && "opacity-50 cursor-not-allowed",
           current.color,
         )}
-        title="ضع المشروع في الرائج / قريباً / جديد"
+        title={lockedOut
+          ? "أضف عمود discover_tag إلى جدول projects لتفعيل التثبيت"
+          : "ضع المشروع في الرائج / قريباً / جديد"}
       >
         <span className="text-[12px]">{current.icon}</span>
         <span>{current.label}</span>
