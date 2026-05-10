@@ -22,6 +22,8 @@ import {
   adminSuspendOffering,
   adminResumeOffering,
   getAllProjectWalletsAdmin,
+  adminMoveShares,
+  type ShareBucket,
 } from "@/lib/data/admin-utilities"
 import { createClient } from "@/lib/supabase/client"
 import { showSuccess, showError } from "@/lib/utils/toast"
@@ -38,6 +40,20 @@ const fmtNum = (n: number) => n.toLocaleString("en-US")
 type WalletAction = null | "freeze" | "unfreeze" | "release" | "add_shares"
   | "suspend_trading" | "resume_trading"
   | "suspend_offering" | "resume_offering"
+  // Phase 13.41 — generic 4-way movement modes. The source button
+  // determines the source bucket; the destination radios let admin
+  // pick where to send the shares.
+  | "move_from_reserve"
+  | "move_to_reserve"
+
+// Phase 13.41 — Arabic labels for bucket names used in confirm
+// banners and success toasts.
+const BUCKET_LABEL: Record<ShareBucket, string> = {
+  owner:      "👤 المالك (المحفظة الرئيسية)",
+  offering:   "💎 الطرح",
+  reserve:    "🏦 الاحتياطي",
+  ambassador: "🌟 السفراء",
+}
 
 export function ProjectWalletsPanel() {
   const [filter, setFilter] = useState<string>("all")
@@ -46,6 +62,9 @@ export function ProjectWalletsPanel() {
   const [action, setAction] = useState<WalletAction>(null)
   const [reason, setReason] = useState("")
   const [releaseAmount, setReleaseAmount] = useState("")
+  // Phase 13.41 — for the new move modals: which bucket the
+  // destination (or source) radio is set to.
+  const [moveCounterpart, setMoveCounterpart] = useState<ShareBucket>("offering")
 
   // Production mode — real DB. Loaded async on mount; refresh after
   // each freeze/unfreeze/release.
@@ -229,48 +248,38 @@ export function ProjectWalletsPanel() {
       }
     }
 
-    if (action === "release") {
+    // Phase 13.41 — generic 4-way move (unified handler).
+    if (action === "move_from_reserve" || action === "move_to_reserve") {
       const amt = Math.floor(Number(releaseAmount))
       if (!amt || amt <= 0) return showError("الكمية غير صحيحة")
-      // The panel currently displays mock wallet rows — `selected.id` is
-      // the wallet id, but the RPC works at the project level. The
-      // ProjectWallet type doesn't expose project_id, so we use the
-      // wallet id as a proxy ONLY when the row came from DB (UUID).
-      // Mock rows can't release in production.
-      const isUuid = /^[0-9a-f-]{36}$/i.test(selected.id)
-      if (!isUuid) {
-        return showError("المحفظة الحالية للعرض فقط — اختر محفظة من DB")
-      }
-      // Use selected.project_id when present; mock shape is missing it,
-      // but DB-shape rows expose it.
       const projectId =
         (selected as ProjectWallet & { project_id?: string }).project_id ?? selected.id
-      const result = await adminReleaseSharesToMarket(projectId, amt, reason.trim() || undefined)
+
+      const from: ShareBucket =
+        action === "move_from_reserve" ? "reserve" : moveCounterpart
+      const to: ShareBucket =
+        action === "move_from_reserve" ? moveCounterpart : "reserve"
+
+      const result = await adminMoveShares(projectId, from, to, amt, reason.trim() || undefined)
       if (!result.success) {
-        const map: Record<string, string> = {
-          unauthenticated: "يجب تسجيل الدخول أولاً",
-          super_admin_only: "هذا الإجراء يتطلّب صلاحية Super Admin فقط",
-          not_admin: "صلاحياتك لا تسمح بهذا الإجراء",
+        const reasonMap: Record<string, string> = {
+          unauthenticated: "يجب تسجيل الدخول",
+          not_admin: "صلاحياتك لا تسمح",
           invalid_amount: "الكمية غير صحيحة",
-          reserve_wallet_missing: "محفظة الاحتياطي غير موجودة — طبّق Migration 10.51",
-          offering_wallet_missing: "محفظة العرض غير موجودة — طبّق Migration 10.51",
-          reserve_wallet_frozen: "محفظة الاحتياطي مُجمَّدة — افكّ التجميد أوّلاً",
-          offering_wallet_frozen: "محفظة العرض مُجمَّدة — افكّ التجميد أوّلاً",
-          insufficient_reserve_shares: `متاح في الاحتياطي: ${result.available ?? "؟"} حصة فقط`,
-          missing_table: "الجداول غير منشورة — طبّق Migration 10.58",
-          rls: "ليس لديك صلاحية لهذا الإجراء",
+          same_source_and_destination: "اختر وجهة مختلفة عن المصدر",
+          invalid_bucket: "اختيار غير صالح",
+          project_not_found: "المشروع غير موجود",
+          source_wallet_missing: "المحفظة المصدر غير موجودة",
+          insufficient_owner_shares: `متاح من حصص المالك: ${fmtNum(result.available ?? 0)}`,
+          insufficient_source_shares: `متاح في المصدر: ${fmtNum(result.available ?? 0)}`,
+          missing_rpc: result.error ?? "RPC غير موجود",
         }
-        // eslint-disable-next-line no-console
-        console.warn("[release] failure:", result)
-        showError(
-          map[result.reason ?? ""] ??
-            `فشل إطلاق الحصص${result.reason ? ` (${result.reason})` : ""}`,
-        )
-        return
+        return showError(reasonMap[result.reason ?? ""] ?? result.error ?? "فشل النقل")
       }
-      showSuccess(
-        `📤 تم إطلاق ${fmtNum(amt)} حصة للسوق · باق في الاحتياطي: ${fmtNum(result.reserve_remaining ?? 0)}`,
-      )
+
+      const fromLabel = BUCKET_LABEL[from]
+      const toLabel = BUCKET_LABEL[to]
+      showSuccess(`📤 تم نقل ${fmtNum(amt)} حصة من ${fromLabel} إلى ${toLabel}`)
     }
 
     // ── Phase 10.93: Trading suspension ──────────────────────────
@@ -668,10 +677,32 @@ export function ProjectWalletsPanel() {
                     onClick={() => setAction("add_shares")}
                     disabled={selected.status !== "active"}
                   />
+                  {/* Phase 13.41 — replaces the old 'release' single
+                       direction with a generic move modal. Source =
+                       reserve, destination is picked inside the modal
+                       (offering / owner). */}
                   <ActionBtn
                     label="📤 نقل من الاحتياطي"
                     color="blue"
-                    onClick={() => setAction("release")}
+                    onClick={() => {
+                      setMoveCounterpart("offering")
+                      setReleaseAmount("")
+                      setReason("")
+                      setAction("move_from_reserve")
+                    }}
+                    disabled={selected.status !== "active"}
+                  />
+                  {/* Phase 13.41 — new: add shares to reserve.
+                       Source = offering or owner (picked inside modal). */}
+                  <ActionBtn
+                    label="➕ إضافة إلى الاحتياطي"
+                    color="purple"
+                    onClick={() => {
+                      setMoveCounterpart("offering")
+                      setReleaseAmount("")
+                      setReason("")
+                      setAction("move_to_reserve")
+                    }}
                     disabled={selected.status !== "active"}
                   />
                   {/* Phase 10.93: Trading suspension */}
@@ -704,6 +735,8 @@ export function ProjectWalletsPanel() {
               {action === "unfreeze" && "✅ فكّ التجميد"}
               {action === "release" && "📤 نقل من الاحتياطي للعرض"}
               {action === "add_shares" && "➕ إضافة حصص للطرح من حصص الشركة"}
+              {action === "move_from_reserve" && "📤 نقل من الاحتياطي"}
+              {action === "move_to_reserve" && "➕ إضافة إلى الاحتياطي"}
               {action === "suspend_trading" && "⏸️ تعليق التداول الكلي"}
               {action === "resume_trading" && "▶️ استئناف التداول"}
               {action === "suspend_offering" && "🔒 تعليق الحصص المتبقية للشراء"}
@@ -837,6 +870,66 @@ export function ProjectWalletsPanel() {
                 <div className="bg-blue-400/[0.04] border border-blue-400/[0.15] rounded-lg p-2.5 text-[11px] text-blue-300 mb-4 leading-relaxed">
                   💡 الحصص ستُنقل من <b className="text-white">محفظة الاحتياطي</b> إلى{" "}
                   <b className="text-white">محفظة العرض</b> (السوق)، فتصبح متاحة للتداول.
+                </div>
+              </>
+            )}
+
+            {/* Phase 13.41 — generic move modals (from-reserve / to-reserve). */}
+            {(action === "move_from_reserve" || action === "move_to_reserve") && (
+              <>
+                <label className="text-xs text-neutral-400 mb-2 block font-bold">
+                  {action === "move_from_reserve" ? "🎯 الوجهة" : "🎯 المصدر"}
+                </label>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  {([
+                    { key: "offering" as const, label: "💎 الطرح", hint: "الحصص المعروضة للبيع" },
+                    { key: "owner"   as const, label: "👤 المالك", hint: "المحفظة الرئيسية" },
+                  ]).map((opt) => {
+                    const isPicked = moveCounterpart === opt.key
+                    return (
+                      <button
+                        key={opt.key}
+                        onClick={() => setMoveCounterpart(opt.key)}
+                        className={cn(
+                          "px-3 py-2.5 rounded-xl border text-right transition-colors",
+                          isPicked
+                            ? "bg-blue-400/[0.1] border-blue-400/[0.4]"
+                            : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]",
+                        )}
+                      >
+                        <div className="text-xs font-bold text-white">{opt.label}</div>
+                        <div className="text-[10px] text-neutral-400 mt-0.5">{opt.hint}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <label className="text-xs text-neutral-400 mb-2 block font-bold">عدد الحصص</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={releaseAmount}
+                  onChange={(e) => setReleaseAmount(e.target.value)}
+                  placeholder="مثلاً: 1000"
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-white/20 mb-3"
+                />
+
+                <label className="text-xs text-neutral-400 mb-2 block font-bold">السبب (اختياري)</label>
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  rows={2}
+                  placeholder="مثلاً: استرداد بعد إعادة التقييم..."
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20 resize-none mb-3"
+                />
+
+                <div className="bg-blue-400/[0.04] border border-blue-400/[0.15] rounded-lg p-2.5 text-[11px] text-blue-300 mb-4 leading-relaxed">
+                  💡 من <b className="text-white">
+                    {action === "move_from_reserve" ? "🏦 الاحتياطي" : BUCKET_LABEL[moveCounterpart]}
+                  </b> إلى <b className="text-white">
+                    {action === "move_from_reserve" ? BUCKET_LABEL[moveCounterpart] : "🏦 الاحتياطي"}
+                  </b>.
                 </div>
               </>
             )}

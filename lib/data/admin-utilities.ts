@@ -1054,6 +1054,87 @@ export async function adminAddSharesToOffering(
   }
 }
 
+// ─── Phase 13.41 — unified 4-way share movement ─────────────────
+//
+// One helper for any source-destination pair across the four
+// "buckets" (owner / offering / reserve / ambassador). Wraps the
+// admin_move_shares RPC. Replaces the three earlier helpers
+// (release / add_shares / freeze-wallet) for *movement* — those
+// remain for their other side-effects.
+
+export type ShareBucket = "owner" | "offering" | "reserve" | "ambassador"
+
+export interface AdminMoveSharesResult {
+  success: boolean
+  reason?: string
+  error?: string
+  available?: number
+  destination_total_after?: number
+  destination_available_after?: number
+}
+
+export async function adminMoveShares(
+  projectId: string,
+  from: ShareBucket,
+  to: ShareBucket,
+  amount: number,
+  reason?: string,
+): Promise<AdminMoveSharesResult> {
+  if (!projectId || !from || !to || amount <= 0) {
+    return { success: false, reason: "invalid_input" }
+  }
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("admin_move_shares", {
+      p_project_id: projectId,
+      p_from: from,
+      p_to: to,
+      p_amount: amount,
+      p_reason: reason ?? null,
+    })
+    if (error) {
+      // RPC missing on a stale DB — surface a clear hint.
+      const m = (error.message || "").toLowerCase()
+      if (
+        m.includes("could not find the function") ||
+        m.includes("schema cache") ||
+        error.code === "PGRST202" ||
+        error.code === "42883"
+      ) {
+        return {
+          success: false,
+          reason: "missing_rpc",
+          error: "طبّق migration 20260510_phase13_41_admin_move_shares.sql في Supabase",
+        }
+      }
+      return { success: false, reason: "rpc_error", error: error.message }
+    }
+    type Row = {
+      success?: boolean; error?: string; available?: number
+      destination_total_after?: number; destination_available_after?: number
+    }
+    const r = (data ?? {}) as Row
+    if (!r.success) {
+      return {
+        success: false,
+        reason: r.error ?? "unknown",
+        available: r.available,
+      }
+    }
+    return {
+      success: true,
+      destination_total_after: r.destination_total_after,
+      destination_available_after: r.destination_available_after,
+    }
+  } catch (err) {
+    return {
+      success: false,
+      reason: "exception",
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
 // ─── Admin role checks (Phase 10.12) ────────────────────────────
 
 /** Calls the `is_admin()` SQL helper. Returns false on any failure. */
