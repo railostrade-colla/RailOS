@@ -76,13 +76,27 @@ export async function getProjectPriceTimeline(
   const supabase = createClient()
 
   // ── 1. project metadata for the anchor points ─────────────────
+  // Phase 13.20 — projects.share_price is MUTABLE: admin price-rises
+  // and dynamic-pricing triggers update it over time, so it doesn't
+  // represent the original offering price. We need a stable
+  // "original" price for the creation anchor. Strategy:
+  //   1. Derive from total_value / total_shares (the founder spec is
+  //      that total_value is set once at creation, so the ratio
+  //      gives the original per-share price).
+  //   2. Fallback: first price_history.old_price (when an admin has
+  //      ever changed the price, the very first old_price IS the
+  //      original).
+  //   3. Last-ditch: current share_price (chart will be flat but at
+  //      least it renders).
   let createdAt: string | null = null
-  let offeringPrice = 0
+  let originalPrice = 0
   let currentPrice = 0
+  let totalShares = 0
+  let totalValue = 0
   try {
     const { data } = await supabase
       .from("projects")
-      .select("created_at, share_price, current_market_price")
+      .select("created_at, share_price, current_market_price, total_shares, total_value")
       .eq("id", projectId)
       .maybeSingle()
     if (data) {
@@ -90,10 +104,25 @@ export async function getProjectPriceTimeline(
         created_at?: string | null
         share_price?: number | string | null
         current_market_price?: number | string | null
+        total_shares?: number | string | null
+        total_value?: number | string | null
       }
       createdAt = row.created_at ?? null
-      offeringPrice = Number(row.share_price ?? 0)
-      currentPrice = Number(row.current_market_price ?? offeringPrice)
+      const sharePrice = Number(row.share_price ?? 0)
+      currentPrice = Number(row.current_market_price ?? sharePrice)
+      totalShares = Number(row.total_shares ?? 0)
+      totalValue = Number(row.total_value ?? 0)
+
+      // Derive original price from total_value / total_shares.
+      // Both are set at creation; total_value is generated/immutable
+      // for the offering math, so the ratio is reliable.
+      if (totalShares > 0 && totalValue > 0) {
+        const derived = Math.round(totalValue / totalShares)
+        if (derived > 0) originalPrice = derived
+      }
+      // If still unset, fall back to current share price (the chart
+      // will still render, just flat).
+      if (!originalPrice) originalPrice = sharePrice
     }
   } catch { /* best-effort */ }
 
@@ -104,6 +133,25 @@ export async function getProjectPriceTimeline(
 
   // ── 2. price_history (admin-set changes) ──────────────────────
   const history = await getPriceHistory(projectId, limit)
+
+  // Phase 13.20 — second-chance derivation of the original price:
+  // if total_value/total_shares was not set up correctly but
+  // price_history has at least one row, the very first old_price
+  // is the original offering price (the price BEFORE the first
+  // change). This catches projects that pre-date the immutable
+  // total_value contract.
+  if (history.length > 0) {
+    const firstOldPrice = history
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(a.recorded_at).getTime() -
+          new Date(b.recorded_at).getTime(),
+      )[0]?.old_price ?? 0
+    if (firstOldPrice > 0 && (originalPrice === 0 || originalPrice === currentPrice)) {
+      originalPrice = firstOldPrice
+    }
+  }
 
   // ── 3. completed deals — each one is a real-market data point ─
   type DealRow = {
@@ -129,11 +177,12 @@ export async function getProjectPriceTimeline(
   const points: PriceHistoryPoint[] = []
 
   // Anchor: project creation at the original offering price
+  // (derived above from total_value/total_shares, with fallbacks).
   points.push({
     id: `anchor-create-${projectId}`,
     project_id: projectId,
-    old_price: offeringPrice,
-    new_price: offeringPrice,
+    old_price: originalPrice,
+    new_price: originalPrice,
     change_pct: 0,
     recorded_at: createdAt,
     phase: "offering",
