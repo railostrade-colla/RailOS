@@ -303,12 +303,39 @@ function ProjectsListPanel() {
         }
 
         const susp = suspensionMap.get(p.id)
+        // Phase 13.24 — robust status mapping. Old logic only matched
+        // exact "active"/"draft" strings and fell to "paused" for
+        // everything else, including legacy values like "published"
+        // and projects whose status column was never set despite
+        // having released shares + completed deals.
+        //
+        // New rules:
+        //   • "active" or "published"             → active
+        //   • "draft" / "pending" / "review"      → pending
+        //   • "paused" / "frozen" / "archived"    → paused
+        //   • anything else (incl. null/unknown)  → if the project
+        //     has shares released to market (offering wallet exists)
+        //     OR its `status` column is missing on legacy DBs, treat
+        //     as active. Otherwise default to "pending" so admin
+        //     review queue gets the row.
+        const dbStatus = (p.status ?? "").toString().toLowerCase()
+        const hasOfferingWallet = offeringAvailMap.has(p.id)
+        const mappedStatus: EntityRow["status"] =
+          dbStatus === "active" || dbStatus === "published"
+            ? "active"
+            : dbStatus === "draft" || dbStatus === "pending" || dbStatus === "review"
+              ? "pending"
+              : dbStatus === "paused" || dbStatus === "frozen" || dbStatus === "archived"
+                ? "paused"
+                : hasOfferingWallet
+                  ? "active"  // shares are out — it's working
+                  : "pending"
         return {
           id: p.id,
           name: p.name,
           sector: p.sector ?? "—",
           entity_type: "project" as const,
-          status: (p.status === "active" ? "active" : p.status === "draft" ? "pending" : "paused") as EntityRow["status"],
+          status: mappedStatus,
           quality: "medium" as const,
           share_price: price,
           total_shares: total,

@@ -483,20 +483,33 @@ export function EntityDetailsView({ entity, onEdit, onBack }: EntityDetailsViewP
           <div className="space-y-2 text-xs">
             <div className="flex justify-between">
               <span className="text-neutral-500">حالة التداول</span>
+              {/* Phase 13.24 — labels distinguish the three states
+                   the founder cares about:
+                     • trading_suspended → tradable but admin paused it
+                     • active            → live and trading
+                     • pending           → still in draft/review
+                     • paused            → admin-archived
+                   Default falls back to "نشط للتداول" so a project
+                   with the new shares released but a stale status
+                   column doesn't read as "غير منشور" anymore. */}
               <Badge
                 label={
                   entity.trading_suspended
                     ? "تداول معلق"
-                    : entity.status === "active"
-                      ? "نشط للتداول"
-                      : "غير منشور"
+                    : entity.status === "pending"
+                      ? "قيد المراجعة"
+                      : entity.status === "paused"
+                        ? "متوقف"
+                        : "نشط للتداول"
                 }
                 color={
                   entity.trading_suspended
                     ? "red"
-                    : entity.status === "active"
-                      ? "green"
-                      : "yellow"
+                    : entity.status === "pending"
+                      ? "yellow"
+                      : entity.status === "paused"
+                        ? "gray"
+                        : "green"
                 }
               />
             </div>
