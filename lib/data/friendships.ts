@@ -40,6 +40,7 @@ export interface DBFriend {
   success_rate: number
   trust_score: number
   since: string // friendship.created_at
+  is_partner: boolean // Phase 13.53 — promoted to partner for contracts
 }
 
 interface ProfileRef {
@@ -72,6 +73,7 @@ function avatarInitial(name: string | null | undefined): string {
 function profileToFriend(
   friendshipId: string,
   since: string,
+  isPartner: boolean,
   p: ProfileRef | null,
 ): DBFriend {
   const name =
@@ -91,6 +93,7 @@ function profileToFriend(
     success_rate: rate,
     trust_score: Math.round(num(p?.rating_average) * 20),
     since,
+    is_partner: isPartner,
   }
 }
 
@@ -111,9 +114,12 @@ export async function getMyFriends(): Promise<DBFriend[]> {
     // so names/levels came back as "—". The fix: fetch friendships
     // first, then batch-fetch the safe profile fields from
     // `profiles_public` for all peer user_ids in one round-trip.
+    // Phase 13.53 — added is_partner so the community page can
+    // segregate the Partners tab and the contract-create page can
+    // pick from confirmed partners.
     const { data: friendships, error } = await supabase
       .from("friendships")
-      .select("id, user_id_a, user_id_b, created_at")
+      .select("id, user_id_a, user_id_b, created_at, is_partner")
       .or(`user_id_a.eq.${user.id},user_id_b.eq.${user.id}`)
       .order("created_at", { ascending: false })
 
@@ -124,6 +130,7 @@ export async function getMyFriends(): Promise<DBFriend[]> {
       user_id_a: string
       user_id_b: string
       created_at: string
+      is_partner?: boolean | null
     }
     const rows = friendships as FriendshipRow[]
 
@@ -146,7 +153,7 @@ export async function getMyFriends(): Promise<DBFriend[]> {
     return rows.map((r) => {
       const otherId = r.user_id_a === user.id ? r.user_id_b : r.user_id_a
       const other = profileMap.get(otherId) ?? null
-      return profileToFriend(r.id, r.created_at, other)
+      return profileToFriend(r.id, r.created_at, !!r.is_partner, other)
     })
   } catch {
     return []
@@ -335,5 +342,18 @@ export async function unfriend(
 ): Promise<FriendsRpcResult> {
   return callRpc("unfriend", {
     p_other_user_id: otherUserId,
+  })
+}
+
+/** Phase 13.53 — flip the `is_partner` flag on the friendship row
+ *  between the caller and `otherUserId`. Used by the Partners tab
+ *  toggle in /community and by the contract-create partner picker. */
+export async function markFriendAsPartner(
+  otherUserId: string,
+  isPartner: boolean,
+): Promise<FriendsRpcResult> {
+  return callRpc("mark_friend_as_partner", {
+    p_other_user_id: otherUserId,
+    p_is_partner: isPartner,
   })
 }

@@ -18,12 +18,13 @@ const fmtIQD = (n: number) => n.toLocaleString("en-US")
 
 import {
   mockProfileLite as mockProfile,
-  mockUsersDB,
   FEE_BALANCE_CONTRACTS as mockFeeBalance,
 } from "@/lib/mock-data"
 import { createContract as createContractDB } from "@/lib/data/contracts"
 import { hasUnusedGift, redeemFreeContractGift } from "@/lib/data/gifts"
-import { Gift } from "lucide-react"
+import { getMyFriends, type DBFriend } from "@/lib/data/friendships"
+import { createClient } from "@/lib/supabase/client"
+import { Gift, Handshake, Hash } from "lucide-react"
 
 // رسوم العقد - 2% من قيمة الاستثمار
 const CONTRACT_FEE_PERCENT = 2
@@ -49,27 +50,67 @@ export default function CreateContractPage() {
   const [loading, setLoading] = useState(false)
   const [showFeeBlock, setShowFeeBlock] = useState(false)
 
+  // Phase 13.53 — replace the legacy mockUsersDB search with two
+  // real picker modes:
+  //   • "partners" — pick from friends marked is_partner=TRUE (live
+  //                  from /community → الأصدقاء → ترقية إلى شريك)
+  //   • "id"      — paste a user UUID directly (for off-list partners)
+  const [pickerMode, setPickerMode] = useState<"partners" | "id">("partners")
+  const [myPartners, setMyPartners] = useState<DBFriend[]>([])
+  const [idInput, setIdInput] = useState("")
+  const [idLookupLoading, setIdLookupLoading] = useState(false)
+
   // Phase 9.6 — gift state
   const [hasGift, setHasGift] = useState(false)
   const [useGift, setUseGift] = useState(false)
 
+  // Initial loads + realtime on friendships so a new partner promoted
+  // in another tab appears here without refresh.
   useEffect(() => {
     let cancelled = false
+
     hasUnusedGift("free_contract").then((has) => {
       if (!cancelled) setHasGift(has)
     })
+
+    const loadPartners = () => {
+      getMyFriends().then((all) => {
+        if (cancelled) return
+        setMyPartners(all.filter((f) => f.is_partner))
+      })
+    }
+    loadPartners()
+
+    const supabase = createClient()
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const scheduleReload = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => { if (!cancelled) loadPartners() }, 200)
+    }
+    const channel = supabase
+      .channel("contracts-create:partners")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "friendships" },
+        () => scheduleReload(),
+      )
+      .subscribe()
+
     return () => {
       cancelled = true
+      if (timer) clearTimeout(timer)
+      supabase.removeChannel(channel).catch(() => {})
     }
   }, [])
 
-  // Search results
-  const searchResults = searchQuery.length > 0
-    ? mockUsersDB.filter(
-        (u) =>
-          u.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-          !partners.some((p) => p.user.id === u.id)
-      ).slice(0, 5)
+  // Search the partners list by name/username when in "partners" mode.
+  const searchResults = pickerMode === "partners" && searchQuery.length > 0
+    ? myPartners
+        .filter((p) =>
+          p.user_name.toLowerCase().includes(searchQuery.toLowerCase())
+          && !partners.some((existing) => existing.user.id === p.user_id),
+        )
+        .slice(0, 8)
     : []
 
   // إعادة توزيع متساوية
@@ -79,7 +120,10 @@ export default function CreateContractPage() {
     return list.map((p) => ({ ...p, share_percentage: equalShare }))
   }
 
-  const addPartner = (user: typeof mockUsersDB[0]) => {
+  // Phase 13.53 — generic add. Accepts the minimal user shape used by
+  // the Partner type. Both the partners-list picker and the user-ID
+  // lookup converge here.
+  const addPartner = (user: Partner["user"]) => {
     if (partners.some((p) => p.user.id === user.id)) {
       showError("هذا الشخص مضاف بالفعل")
       return
@@ -91,6 +135,69 @@ export default function CreateContractPage() {
       setPartners(newList)
     }
     setSearchQuery("")
+    setIdInput("")
+  }
+
+  const addPartnerFromFriend = (f: DBFriend) => {
+    addPartner({
+      id: f.user_id,
+      name: f.user_name,
+      reputation_score: f.trust_score,
+      is_verified: f.is_verified,
+      level: f.level as Partner["user"]["level"],
+    })
+  }
+
+  const addPartnerById = async () => {
+    const id = idInput.trim()
+    // UUID v4 pattern (loose — accepts any v1-v5).
+    const uuidPat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!uuidPat.test(id)) {
+      showError("معرّف غير صالح — يجب أن يكون UUID")
+      return
+    }
+    if (partners.some((p) => p.user.id === id)) {
+      showError("هذا الشخص مضاف بالفعل")
+      return
+    }
+    setIdLookupLoading(true)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("profiles_public")
+        .select("id, full_name, username, level, kyc_status")
+        .eq("id", id)
+        .maybeSingle()
+      if (error || !data) {
+        showError("لم يُعثر على مستخدم بهذا المعرّف")
+        return
+      }
+      type Row = {
+        id: string
+        full_name: string | null
+        username: string | null
+        level: string | null
+        kyc_status: string | null
+      }
+      const r = data as Row
+      const name = r.full_name?.trim() || r.username?.trim() || id.slice(0, 8)
+      const safeLevel: Partner["user"]["level"] =
+        r.level === "advanced" ? "advanced" :
+        r.level === "pro" || r.level === "elite" ? "pro" :
+        "basic"
+      addPartner({
+        id: r.id,
+        name,
+        reputation_score: 0,
+        is_verified: r.kyc_status === "approved",
+        level: safeLevel,
+      })
+      showSuccess("تمت إضافة الشريك ✓")
+    } catch {
+      showError("فشل البحث — تحقّق من الاتصال")
+    } finally {
+      setIdLookupLoading(false)
+    }
   }
 
   const removePartner = (id: string) => {
@@ -287,55 +394,124 @@ export default function CreateContractPage() {
             )}
           </div>
 
-          {/* إضافة شركاء */}
+          {/* إضافة شركاء — Phase 13.53: مُد modes (partners list OR ID) */}
           <div className="mb-4">
             <label className="text-xs text-neutral-400 mb-2 block font-bold">إضافة شركاء</label>
-            <div className="relative">
-              <Search className="w-4 h-4 text-neutral-500 absolute right-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ابحث بالاسم..."
-                className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl pr-10 pl-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
-              />
 
-              {searchResults.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-[#1c1c1c] border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
-                  {searchResults.map((u) => (
-                    <button
-                      key={u.id}
-                      onClick={() => addPartner(u)}
-                      className="w-full p-3 hover:bg-white/[0.06] transition-colors flex items-center gap-3 border-b border-white/[0.04] last:border-0 text-right"
-                    >
-                      <div className="w-9 h-9 rounded-full bg-white/[0.09] flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
-                        {u.name.charAt(0)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-bold text-white truncate">{u.name}</span>
-                          {u.is_verified && (
-                            <span className="bg-green-400/10 border border-green-400/20 text-green-400 px-1 py-0.5 rounded text-[9px] font-bold flex-shrink-0">
-                              ✓
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10px] text-neutral-500 mt-0.5">
-                          نقاط السمعة: <span className="font-mono text-yellow-400">{u.reputation_score}</span>
-                        </div>
-                      </div>
-                      <Plus className="w-4 h-4 text-white flex-shrink-0" strokeWidth={2} />
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {searchQuery && searchResults.length === 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-[#1c1c1c] border border-white/[0.1] rounded-xl p-4 text-center text-xs text-neutral-500">
-                  لا توجد نتائج
-                </div>
-              )}
+            {/* Mode toggle */}
+            <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] rounded-xl p-1 mb-2 max-w-md">
+              <button
+                onClick={() => setPickerMode("partners")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold transition-colors",
+                  pickerMode === "partners"
+                    ? "bg-white/[0.1] text-white"
+                    : "text-neutral-400 hover:text-white",
+                )}
+              >
+                <Handshake className="w-3 h-3" strokeWidth={2} />
+                من شركائي ({myPartners.length})
+              </button>
+              <button
+                onClick={() => setPickerMode("id")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold transition-colors",
+                  pickerMode === "id"
+                    ? "bg-white/[0.1] text-white"
+                    : "text-neutral-400 hover:text-white",
+                )}
+              >
+                <Hash className="w-3 h-3" strokeWidth={2} />
+                إدخال معرّف UUID
+              </button>
             </div>
+
+            {pickerMode === "partners" ? (
+              myPartners.length === 0 ? (
+                <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 text-center">
+                  <Handshake className="w-7 h-7 text-neutral-600 mx-auto mb-1.5" strokeWidth={1.5} />
+                  <div className="text-xs text-neutral-400 leading-relaxed">
+                    لا يوجد شركاء بعد. اذهب إلى{" "}
+                    <button
+                      type="button"
+                      onClick={() => router.push("/community")}
+                      className="text-blue-400 underline-offset-2 hover:underline"
+                    >
+                      المجتمع → الأصدقاء
+                    </button>{" "}
+                    ورقّ صديقاً إلى شريك ليظهر هنا، أو استخدم الإدخال بالـ UUID.
+                  </div>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="w-4 h-4 text-neutral-500 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="ابحث في شركائك بالاسم..."
+                    className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl pr-10 pl-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
+                  />
+
+                  {searchResults.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-[#1c1c1c] border border-white/[0.1] rounded-xl shadow-2xl overflow-hidden">
+                      {searchResults.map((f) => (
+                        <button
+                          key={f.user_id}
+                          onClick={() => addPartnerFromFriend(f)}
+                          className="w-full p-3 hover:bg-white/[0.06] transition-colors flex items-center gap-3 border-b border-white/[0.04] last:border-0 text-right"
+                        >
+                          <div className="w-9 h-9 rounded-full bg-white/[0.09] flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
+                            {f.avatar_initial}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-bold text-white truncate">{f.user_name}</span>
+                              {f.is_verified && (
+                                <span className="bg-green-400/10 border border-green-400/20 text-green-400 px-1 py-0.5 rounded text-[9px] font-bold flex-shrink-0">
+                                  ✓
+                                </span>
+                              )}
+                              <span className="bg-[#deff9a]/[0.12] border border-[#deff9a]/[0.25] text-[#deff9a] px-1 py-0.5 rounded text-[9px] font-bold flex-shrink-0">
+                                شريك
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-neutral-500 mt-0.5">
+                              ثقة: <span className="font-mono text-yellow-400">{f.trust_score}</span> · {f.total_trades} صفقة
+                            </div>
+                          </div>
+                          <Plus className="w-4 h-4 text-white flex-shrink-0" strokeWidth={2} />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {searchQuery && searchResults.length === 0 && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-[#1c1c1c] border border-white/[0.1] rounded-xl p-4 text-center text-xs text-neutral-500">
+                      لا يطابق أيّ من شركائك. جرّب إدخال UUID مباشر.
+                    </div>
+                  )}
+                </div>
+              )
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={idInput}
+                  onChange={(e) => setIdInput(e.target.value)}
+                  placeholder="00000000-0000-0000-0000-000000000000"
+                  dir="ltr"
+                  className="flex-1 bg-white/[0.05] border border-white/[0.1] rounded-xl px-4 py-3 text-xs text-white placeholder:text-neutral-600 outline-none focus:border-white/20 font-mono"
+                />
+                <button
+                  onClick={addPartnerById}
+                  disabled={idLookupLoading || !idInput.trim()}
+                  className="bg-white text-black px-4 py-3 rounded-xl text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-200 transition-colors"
+                >
+                  {idLookupLoading ? "..." : "+ إضافة"}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* قائمة الشركاء */}

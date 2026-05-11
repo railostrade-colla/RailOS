@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Search, MessageCircle, UserPlus, UserMinus, X, Check } from "lucide-react"
+import { Search, MessageCircle, UserPlus, UserMinus, X, Check, Handshake } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
+import { createClient } from "@/lib/supabase/client"
 // Chats DB schema isn't built yet — empty list until then.
 const mockChats: Array<{
   id: string
@@ -16,13 +17,15 @@ const mockChats: Array<{
 }> = []
 import { getCommunityUsers, type CommunityUserRow } from "@/lib/data/community"
 import {
-  getFriendIdSet,
+  getMyFriends,
   getOutgoingPendingSet,
   getMyFriendRequests,
   sendFriendRequest,
   respondToFriendRequest,
   cancelFriendRequest,
   unfriend,
+  markFriendAsPartner,
+  type DBFriend,
   type DBFriendRequest,
 } from "@/lib/data/friendships"
 import { cn } from "@/lib/utils/cn"
@@ -36,7 +39,10 @@ export default function CommunityPage() {
   const router = useRouter()
   const [tab, setTab] = useState<CommunityTab>("all")
   const [search, setSearch] = useState("")
-  const [friendIds, setFriendIds] = useState<Set<string>>(new Set())
+  // Phase 13.53 — track full friend objects (including is_partner) so
+  // the Partners tab + the per-card partner toggle don't need extra
+  // round-trips.
+  const [friends, setFriends] = useState<DBFriend[]>([])
   const [pendingOutgoing, setPendingOutgoing] = useState<Set<string>>(new Set())
   const [requests, setRequests] = useState<{ incoming: DBFriendRequest[]; outgoing: DBFriendRequest[] }>({
     incoming: [],
@@ -47,42 +53,72 @@ export default function CommunityPage() {
   // Real users from DB only (production mode).
   const [users, setUsers] = useState<CommunityUserRow[]>([])
 
-  // Pull users + friend graph in parallel.
-  // Phase 13.51 — bumped limit to 500 so the community page reflects
-  // the full registered-users registry (active + non-banned). Each
-  // setState fires independently so the user list paints as soon as
-  // it returns, without waiting for the friend-graph queries.
+  // Derived sets (memo-light — small list, cheap each render).
+  const friendIds = new Set(friends.map((f) => f.user_id))
+  const partnerIds = new Set(friends.filter((f) => f.is_partner).map((f) => f.user_id))
+
+  // Phase 13.53 — refresh helper used by initial mount, mutations,
+  // AND realtime subscription events. Fetches in parallel; each
+  // setState fires independently so a slow query doesn't stall the UI.
+  const refreshGraph = useCallback(async () => {
+    const [friendsList, outIds, reqs] = await Promise.all([
+      getMyFriends(),
+      getOutgoingPendingSet(),
+      getMyFriendRequests(),
+    ])
+    setFriends(friendsList)
+    setPendingOutgoing(outIds)
+    setRequests(reqs)
+  }, [])
+
+  // Initial paint + realtime subscription.
+  // Phase 13.53 — subscribe to friend_requests + friendships so an
+  // incoming request appears WITHOUT a manual refresh, and the
+  // accepter / sender both see the new friendship instantly.
   useEffect(() => {
     let cancelled = false
+
+    // Paint the community list immediately.
     getCommunityUsers(500).then((rows) => {
       if (cancelled) return
       setUsers(rows)
     })
-    Promise.all([
-      getFriendIdSet(),
-      getOutgoingPendingSet(),
-      getMyFriendRequests(),
-    ]).then(([fIds, outIds, reqs]) => {
-      if (cancelled) return
-      setFriendIds(fIds)
-      setPendingOutgoing(outIds)
-      setRequests(reqs)
-    })
+
+    // First friend-graph load.
+    refreshGraph()
+
+    // Realtime subscription — debounce refetches to coalesce bursts
+    // (multi-step accept = INSERT friendship + UPDATE request).
+    const supabase = createClient()
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const scheduleRefresh = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        if (cancelled) return
+        refreshGraph()
+      }, 200)
+    }
+
+    const channel = supabase
+      .channel("community:friend-graph")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "friend_requests" },
+        () => scheduleRefresh(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "friendships" },
+        () => scheduleRefresh(),
+      )
+      .subscribe()
+
     return () => {
       cancelled = true
+      if (timer) clearTimeout(timer)
+      supabase.removeChannel(channel).catch(() => {})
     }
-  }, [])
-
-  const refreshGraph = async () => {
-    const [fIds, outIds, reqs] = await Promise.all([
-      getFriendIdSet(),
-      getOutgoingPendingSet(),
-      getMyFriendRequests(),
-    ])
-    setFriendIds(fIds)
-    setPendingOutgoing(outIds)
-    setRequests(reqs)
-  }
+  }, [refreshGraph])
 
   const addFriend = async (id: string) => {
     // Optimistic
@@ -116,12 +152,32 @@ export default function CommunityPage() {
       showError("فشلت إزالة الصديق")
       return
     }
-    setFriendIds((prev) => {
-      const s = new Set(prev)
-      s.delete(id)
-      return s
-    })
+    // Optimistic — realtime will reconcile within ~200ms.
+    setFriends((prev) => prev.filter((f) => f.user_id !== id))
     showSuccess("تمت إزالة الصديق")
+  }
+
+  // Phase 13.53 — toggle the is_partner flag on a friendship.
+  const togglePartner = async (otherUserId: string, makePartner: boolean) => {
+    // Optimistic flip.
+    setFriends((prev) =>
+      prev.map((f) => (f.user_id === otherUserId ? { ...f, is_partner: makePartner } : f))
+    )
+    const result = await markFriendAsPartner(otherUserId, makePartner)
+    if (!result.success) {
+      // Roll back.
+      setFriends((prev) =>
+        prev.map((f) => (f.user_id === otherUserId ? { ...f, is_partner: !makePartner } : f))
+      )
+      const map: Record<string, string> = {
+        unauthenticated: "سجّل دخولك أولاً",
+        invalid_user: "مستخدم غير صالح",
+        not_friends: "يجب أن تكونا صديقَين أوّلاً",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل التحديث")
+      return
+    }
+    showSuccess(makePartner ? "تمت إضافته كشريك ✅" : "تمت إزالته من الشركاء")
   }
 
   const handleAcceptRequest = async (requestId: string) => {
@@ -156,8 +212,11 @@ export default function CommunityPage() {
     !search || u.name.toLowerCase().includes(search.toLowerCase())
   )
 
-  const friends = users.filter((u) => friendIds.has(u.id))
-  const partners = users.filter((u) => u.level === "pro" || u.level === "advanced")
+  // Phase 13.53 — friends tab shows confirmed friendships from DB.
+  // Partners tab is the SUBSET marked is_partner=TRUE (no longer
+  // a level-based filter).
+  const friendsList = users.filter((u) => friendIds.has(u.id))
+  const partnersList = users.filter((u) => partnerIds.has(u.id))
 
   const tabs: { key: CommunityTab; label: string; badge?: number }[] = [
     { key: "all", label: "المجتمع" },
@@ -204,9 +263,24 @@ export default function CommunityPage() {
           </div>
         </div>
         {showActions && (
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 flex-wrap justify-end">
             {friendIds.has(u.id) ? (
               <>
+                {/* Phase 13.53 — partner toggle for friends. Shows
+                    a filled ✓ pill if already a partner. */}
+                <button
+                  onClick={() => togglePartner(u.id, !partnerIds.has(u.id))}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1.5 text-[10px] flex items-center gap-1 border",
+                    partnerIds.has(u.id)
+                      ? "bg-[#deff9a]/[0.15] border-[#deff9a]/[0.35] text-[#deff9a]"
+                      : "bg-white/[0.05] border-white/[0.12] text-neutral-300 hover:bg-white/[0.08]",
+                  )}
+                  title={partnerIds.has(u.id) ? "إزالة من الشركاء" : "ترقية إلى شريك"}
+                >
+                  <Handshake className="w-3 h-3" strokeWidth={2} />
+                  {partnerIds.has(u.id) ? "شريك ✓" : "شريك"}
+                </button>
                 <button
                   onClick={() => router.push(`/exchange?with=${u.id}&name=${encodeURIComponent(u.name)}`)}
                   className="bg-blue-400/[0.12] border border-blue-400/[0.25] text-blue-400 rounded-lg px-2.5 py-1.5 text-[10px] flex items-center gap-1"
@@ -305,7 +379,7 @@ export default function CommunityPage() {
 
           {/* Friends Tab */}
           {tab === "friends" && (
-            friends.length === 0 ? (
+            friendsList.length === 0 ? (
               <div className="text-center py-12">
                 <UserPlus className="w-12 h-12 text-neutral-600 mx-auto mb-3" strokeWidth={1.5} />
                 <div className="text-sm font-bold text-white mb-1">لا يوجد أصدقاء بعد</div>
@@ -313,7 +387,7 @@ export default function CommunityPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {friends.map((u) => <UserCard key={u.id} u={u} />)}
+                {friendsList.map((u) => <UserCard key={u.id} u={u} />)}
               </div>
             )
           )}
@@ -394,11 +468,15 @@ export default function CommunityPage() {
 
           {/* Partners Tab */}
           {tab === "partners" && (
-            partners.length === 0 ? (
-              <div className="text-center py-12 text-sm text-neutral-500">لا يوجد شركاء بعد</div>
+            partnersList.length === 0 ? (
+              <div className="text-center py-12">
+                <Handshake className="w-12 h-12 text-neutral-600 mx-auto mb-3" strokeWidth={1.5} />
+                <div className="text-sm font-bold text-white mb-1">لا يوجد شركاء بعد</div>
+                <div className="text-xs text-neutral-500">رقّ أحد أصدقائك إلى شريك من تبويب «الأصدقاء» ليظهر هنا</div>
+              </div>
             ) : (
               <div className="space-y-2">
-                {partners.map((u) => <UserCard key={u.id} u={u} />)}
+                {partnersList.map((u) => <UserCard key={u.id} u={u} />)}
               </div>
             )
           )}
