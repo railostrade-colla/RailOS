@@ -50,6 +50,15 @@ export default function CommunityPage() {
   })
   const [selectedUser, setSelectedUser] = useState<CommunityUserRow | null>(null)
 
+  // Phase 13.57 — confirmation state when user clicks "تم الإرسال"
+  // on a card with a pending outgoing request. Clicking the chip
+  // opens this modal; confirming calls cancel_friend_request.
+  const [cancelTarget, setCancelTarget] = useState<{
+    user: CommunityUserRow
+    requestId: string
+  } | null>(null)
+  const [cancelSubmitting, setCancelSubmitting] = useState(false)
+
   // Real users from DB only (production mode).
   const [users, setUsers] = useState<CommunityUserRow[]>([])
 
@@ -208,6 +217,47 @@ export default function CommunityPage() {
     refreshGraph()
   }
 
+  // Phase 13.57 — open the cancel-confirmation modal when the user
+  // clicks the "تم الإرسال" chip on a community card. We look up the
+  // matching outgoing request by recipient_id; if it's gone (stale UI
+  // race), we just clear the pending set so the card flips back to
+  // "+ إضافة".
+  const openCancelModal = (u: CommunityUserRow) => {
+    const r = requests.outgoing.find((x) => x.recipient_id === u.id)
+    if (!r) {
+      setPendingOutgoing((prev) => {
+        const s = new Set(prev)
+        s.delete(u.id)
+        return s
+      })
+      return
+    }
+    setCancelTarget({ user: u, requestId: r.id })
+  }
+
+  const confirmCancelRequest = async () => {
+    if (!cancelTarget) return
+    setCancelSubmitting(true)
+    // Optimistic — clear pending immediately; realtime will reconcile.
+    const userId = cancelTarget.user.id
+    setPendingOutgoing((prev) => {
+      const s = new Set(prev)
+      s.delete(userId)
+      return s
+    })
+    const result = await cancelFriendRequest(cancelTarget.requestId)
+    setCancelSubmitting(false)
+    if (!result.success) {
+      // Roll back optimistic update.
+      setPendingOutgoing((prev) => new Set([...prev, userId]))
+      showError("فشل إلغاء الطلب")
+      return
+    }
+    showSuccess("تم إلغاء طلب الصداقة")
+    setCancelTarget(null)
+    refreshGraph()
+  }
+
   const filteredUsers = users.filter((u) =>
     !search || u.name.toLowerCase().includes(search.toLowerCase())
   )
@@ -296,11 +346,17 @@ export default function CommunityPage() {
                 </button>
               </>
             ) : pendingOutgoing.has(u.id) ? (
+              // Phase 13.57 — clicking flips to the cancel-confirm modal.
+              // Chip becomes red on hover to hint at the destructive action.
               <button
-                disabled
-                className="bg-yellow-400/[0.08] border border-yellow-400/[0.2] text-yellow-400 rounded-lg px-2.5 py-1.5 text-[10px] cursor-not-allowed"
+                onClick={() => openCancelModal(u)}
+                className="group bg-yellow-400/[0.1] border border-yellow-400/[0.3] text-yellow-400 hover:bg-red-400/[0.12] hover:border-red-400/[0.3] hover:text-red-400 rounded-lg px-2.5 py-1.5 text-[10px] flex items-center gap-1 transition-colors"
+                title="اضغط لإلغاء الطلب"
               >
-                طلب مرسل
+                <Check className="w-3 h-3 group-hover:hidden" strokeWidth={2.5} />
+                <X className="w-3 h-3 hidden group-hover:inline" strokeWidth={2.5} />
+                <span className="group-hover:hidden">تم الإرسال</span>
+                <span className="hidden group-hover:inline">إلغاء الطلب</span>
               </button>
             ) : (
               <button
@@ -524,6 +580,52 @@ export default function CommunityPage() {
       </div>
 
       {/* User profile modal */}
+      {/* Phase 13.57 — confirm cancel of outgoing friend request */}
+      {cancelTarget && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border border-red-400/[0.3] rounded-t-3xl lg:rounded-2xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex items-center gap-2">
+                <UserMinus className="w-5 h-5 text-red-400" />
+                <div className="text-base font-bold text-white">إلغاء طلب الصداقة</div>
+              </div>
+              <button
+                onClick={() => setCancelTarget(null)}
+                disabled={cancelSubmitting}
+                className="text-neutral-500 hover:text-white disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-red-400/[0.05] border border-red-400/[0.2] rounded-xl p-3 mb-4 text-xs text-red-300 leading-relaxed">
+              ⚠ هل أنت متأكّد من إلغاء طلب الصداقة المُرسَل إلى{" "}
+              <span className="font-bold text-white">{cancelTarget.user.name}</span>؟
+              <span className="block mt-1 text-red-300/80 text-[11px]">
+                سيختفي الطلب من جانب المستقبِل، ويمكنك إعادة إرساله لاحقاً.
+              </span>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCancelTarget(null)}
+                disabled={cancelSubmitting}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
+              >
+                تراجع
+              </button>
+              <button
+                onClick={confirmCancelRequest}
+                disabled={cancelSubmitting}
+                className="flex-1 py-3 rounded-xl bg-red-500/[0.15] border border-red-500/[0.3] text-red-400 text-sm font-bold hover:bg-red-500/[0.2] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {cancelSubmitting ? "جارٍ..." : "نعم، ألغِ الطلب"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedUser && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-t-3xl lg:rounded-2xl p-6 w-full max-w-md">
@@ -593,11 +695,19 @@ export default function CommunityPage() {
                 </button>
               </div>
             ) : pendingOutgoing.has(selectedUser.id) ? (
+              // Phase 13.57 — same clickable cancel-request flow as the
+              // card chips; closes the profile modal first so both
+              // modals don't stack.
               <button
-                disabled
-                className="w-full py-3 rounded-xl bg-yellow-400/[0.08] border border-yellow-400/[0.2] text-yellow-400 text-sm font-bold cursor-not-allowed"
+                onClick={() => {
+                  const target = selectedUser
+                  setSelectedUser(null)
+                  openCancelModal(target)
+                }}
+                className="w-full py-3 rounded-xl bg-yellow-400/[0.1] border border-yellow-400/[0.3] text-yellow-400 hover:bg-red-400/[0.12] hover:border-red-400/[0.3] hover:text-red-400 text-sm font-bold transition-colors flex items-center justify-center gap-2"
               >
-                طلب الصداقة مرسل
+                <UserMinus className="w-4 h-4" />
+                طلب الصداقة مرسل — اضغط لإلغائه
               </button>
             ) : (
               <button
