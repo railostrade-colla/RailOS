@@ -159,6 +159,30 @@ export async function getUnreadCountForCurrentUser(): Promise<number> {
 }
 
 /**
+ * Phase 13.62 — bulk delete every notification for the current user.
+ * Returns true on success (or when there was nothing to delete).
+ * Goes through RLS — the user can only delete their own rows.
+ */
+export async function deleteAllNotifications(): Promise<boolean> {
+  try {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return false
+
+    const { error } = await supabase
+      .from("notifications")
+      .delete()
+      .eq("user_id", user.id)
+    if (!error) invalidateNotificationCaches()
+    return !error
+  } catch {
+    return false
+  }
+}
+
+/**
  * Marks every unread notification for the current user as read. Uses the
  * `mark_all_notifications_read` RPC when present, falling back to a
  * direct UPDATE.
