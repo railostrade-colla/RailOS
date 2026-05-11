@@ -29,6 +29,7 @@ import {
   Badge,
   SectionHeader,
 } from "@/components/admin/ui"
+import { StrategicAdvisorCard } from "@/components/admin/StrategicAdvisorCard"
 import {
   TrendingUp,
   TrendingDown,
@@ -352,6 +353,15 @@ function MonitorOverviewTab() {
             }
           />
         </div>
+      </div>
+
+      {/* Phase 13.56 — strategic advisor compact card directly under
+          the health strip. Reads the same RPC as the full version in
+          the Market Engine panel; auto-refreshes every 30s. Gives the
+          admin actionable next-steps right where they see the health
+          numbers. */}
+      <div className="mb-3">
+        <StrategicAdvisorCard variant="compact" />
       </div>
     </div>
   )

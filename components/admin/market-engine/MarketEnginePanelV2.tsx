@@ -27,6 +27,7 @@ import {
 } from "lucide-react"
 import { SectionHeader } from "@/components/admin/ui"
 import { RaiseMarketPricePanel } from "@/components/admin/market-engine/RaiseMarketPricePanel"
+import { StrategicAdvisorCard } from "@/components/admin/StrategicAdvisorCard"
 import {
   getMarketEngineConfig,
   setMarketEngineState,
@@ -234,7 +235,14 @@ function DynamicSection() {
         </div>
       </div>
 
-      {/* Market Watch advisor */}
+      {/* Phase 13.56 — strategic advisor (full mode: snapshot + unlocks
+          + prioritised advice). Replaces the standalone Market Watch
+          card; the legacy MarketWatchCard sub-component below is kept
+          for the lightweight progress preview inside the conditions
+          block. */}
+      <StrategicAdvisorCard variant="full" />
+
+      {/* Market Watch advisor (legacy small preview) */}
       <MarketWatchCard
         advice={advice}
         loading={adviceLoading}
