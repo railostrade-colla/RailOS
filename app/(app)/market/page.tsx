@@ -247,7 +247,11 @@ function MarketContent() {
               {news.map((n) => {
                 const meta = NEWS_TYPE_META[n.type]
                 return (
-                  <Card key={n.id} onClick={() => setOpenNews(n)} className="flex items-start gap-3">
+                  // Phase 13.63 — navigate to dedicated /news/[id] page
+                  // with image, reactions, comments. The legacy
+                  // setOpenNews modal is kept as a fallback if the
+                  // route can't load (and for offline-first cached views).
+                  <Card key={n.id} onClick={() => router.push(`/news/${n.id}`)} className="flex items-start gap-3">
                     <div className="w-12 h-12 rounded-xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-2xl flex-shrink-0">
                       {n.icon}
                     </div>

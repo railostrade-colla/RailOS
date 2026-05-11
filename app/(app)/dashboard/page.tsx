@@ -1050,8 +1050,11 @@ export default function DashboardPage() {
 
               <div className="space-y-1">
                 {news.map((n, i) => (
+                  // Phase 13.63 — clickable, navigates to /news/[id]
+                  // detail page (image, full content, reactions, comments).
                   <button
                     key={n.id}
+                    onClick={() => router.push(`/news/${n.id}`)}
                     className={cn(
                       "w-full flex items-start gap-2.5 p-2.5 bg-white/[0.04] hover:bg-white/[0.06] rounded-lg transition-colors text-right",
                       i < news.length - 1 && "mb-1",

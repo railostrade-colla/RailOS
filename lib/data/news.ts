@@ -44,6 +44,28 @@ export async function getLatestNews(limit = 4): Promise<DBNews[]> {
   return getAllNews(limit)
 }
 
+/**
+ * Phase 13.63 — admin view: every news row regardless of is_published.
+ * Bypasses dedupCache so the admin panel always sees fresh data after
+ * a mutation. RLS is expected to allow admin reads (or fall back to
+ * `is_published = true` for non-admins — RLS handles this).
+ */
+export async function adminGetAllNews(limit = 100): Promise<DBNews[]> {
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from("news")
+      .select("*")
+      .order("is_pinned", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(limit)
+    if (error || !data) return []
+    return data
+  } catch {
+    return []
+  }
+}
+
 export async function getNewsById(id: string): Promise<DBNews | null> {
   try {
     const supabase = createClient()
