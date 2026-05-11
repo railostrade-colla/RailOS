@@ -67,8 +67,44 @@ export default function ContractDetailPage() {
       if (uid) setCurrentUserId(uid)
       setMembers(m)
     })
+
+    // Phase 13.58 — realtime: any change to contract_members (a
+    // partner accepts/declines, creator adds a new member) refreshes
+    // the status badges + contract header without a page reload.
+    // 200ms debounce coalesces the trigger-driven UPDATE bursts.
+    const supabase = createClient()
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const scheduleRefresh = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(async () => {
+        if (cancelled) return
+        const [c2, m2] = await Promise.all([
+          getContractById(id),
+          getContractMembersFull(id),
+        ])
+        if (cancelled) return
+        if (c2) setContract(c2)
+        setMembers(m2)
+      }, 200)
+    }
+    const channel = supabase
+      .channel(`contract:${id}:members`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "contract_members", filter: `contract_id=eq.${id}` },
+        () => scheduleRefresh(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "partnership_contracts", filter: `id=eq.${id}` },
+        () => scheduleRefresh(),
+      )
+      .subscribe()
+
     return () => {
       cancelled = true
+      if (timer) clearTimeout(timer)
+      supabase.removeChannel(channel).catch(() => {})
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
@@ -227,27 +263,50 @@ export default function ContractDetailPage() {
               <Users className="w-4 h-4 text-neutral-400" strokeWidth={1.5} />
               <div className="text-sm font-bold text-white">الشركاء ({contract.members.length})</div>
             </div>
+            {/* Phase 13.58 — status badge next to each partner, fed by
+                the realtime `members` array (which has invite_status). */}
             <div className="space-y-2">
-              {contract.members.map((m) => (
-                <div key={m.user_id} className="flex items-center gap-3 p-3 bg-white/[0.04] border border-white/[0.06] rounded-xl">
-                  <div className="w-10 h-10 rounded-full bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-base font-bold text-white flex-shrink-0">
-                    {m.name.charAt(0)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-sm font-bold text-white truncate">{m.name}</span>
-                      <span className="text-[10px]">{LEVEL_ICONS[m.level]}</span>
-                      <span className="text-[10px] text-neutral-500">{LEVEL_LABELS[m.level]}</span>
+              {contract.members.map((m) => {
+                const memberFull = members.find((x) => x.user_id === m.user_id)
+                const status = memberFull?.invite_status ?? "accepted"
+                const statusBadgeStyle =
+                  status === "accepted"
+                    ? "bg-green-400/[0.12] border-green-400/[0.3] text-green-400"
+                    : status === "pending"
+                      ? "bg-yellow-400/[0.12] border-yellow-400/[0.3] text-yellow-400"
+                      : "bg-red-400/[0.12] border-red-400/[0.3] text-red-400"
+                const statusIcon =
+                  status === "accepted" ? "✓" : status === "pending" ? "⏳" : "✗"
+                const statusLabel =
+                  status === "accepted" ? "وافق" : status === "pending" ? "قيد الانتظار" : "رفض"
+                return (
+                  <div key={m.user_id} className="flex items-center gap-3 p-3 bg-white/[0.04] border border-white/[0.06] rounded-xl">
+                    <div className="w-10 h-10 rounded-full bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-base font-bold text-white flex-shrink-0">
+                      {m.name.charAt(0)}
                     </div>
-                    <div className="text-[10px] text-neutral-500 mt-0.5">
-                      حصة: <span className="text-yellow-400 font-mono font-bold">{m.share_percent}%</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-bold text-white truncate">{m.name}</span>
+                        <span className="text-[10px]">{LEVEL_ICONS[m.level]}</span>
+                        <span className="text-[10px] text-neutral-500">{LEVEL_LABELS[m.level]}</span>
+                        <span className={cn(
+                          "text-[9px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1",
+                          statusBadgeStyle,
+                        )}>
+                          <span>{statusIcon}</span>
+                          <span>{statusLabel}</span>
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-neutral-500 mt-0.5">
+                        حصة: <span className="text-yellow-400 font-mono font-bold">{m.share_percent}%</span>
+                      </div>
+                    </div>
+                    <div className="text-base font-bold text-white font-mono flex-shrink-0">
+                      {m.share_percent}%
                     </div>
                   </div>
-                  <div className="text-base font-bold text-white font-mono flex-shrink-0">
-                    {m.share_percent}%
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 

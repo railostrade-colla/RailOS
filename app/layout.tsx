@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Toaster } from "react-hot-toast"
 import { RealtimeProvider } from "@/lib/realtime/RealtimeProvider"
 import { DealRequestModal } from "@/components/deals/DealRequestModal"
+import { ContractInviteModal } from "@/components/contracts/ContractInviteModal"
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt"
 import "./globals.css"
 
@@ -34,6 +35,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <RealtimeProvider>
           {children}
           <DealRequestModal />
+          {/* Phase 13.58 — global popup for pending contract invites. */}
+          <ContractInviteModal />
           <PWAInstallPrompt />
         </RealtimeProvider>
         <Toaster
