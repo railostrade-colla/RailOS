@@ -53,11 +53,6 @@ interface ProfileRef {
   rating_average?: number | string | null
 }
 
-function unwrap<T>(v: T | T[] | null | undefined): T | null {
-  if (!v) return null
-  return Array.isArray(v) ? v[0] ?? null : v
-}
-
 function num(v: unknown, fallback = 0): number {
   if (v == null) return fallback
   const x = typeof v === "string" ? Number(v) : (v as number)
@@ -109,37 +104,48 @@ export async function getMyFriends(): Promise<DBFriend[]> {
     } = await supabase.auth.getUser()
     if (!user) return []
 
-    // friendships are canonicalized (user_a < user_b); pull both columns
-    // and select the OTHER profile from each row.
-    const { data, error } = await supabase
+    // Phase 13.52 — split the FK embed into a two-query pattern.
+    // PostgREST's `profiles!user_id_a` embed reads the underlying
+    // `profiles` table, which is now strict-RLS (Phase 13.50). For
+    // a regular user, that returns NULL for the OTHER user's row,
+    // so names/levels came back as "—". The fix: fetch friendships
+    // first, then batch-fetch the safe profile fields from
+    // `profiles_public` for all peer user_ids in one round-trip.
+    const { data: friendships, error } = await supabase
       .from("friendships")
-      .select(
-        `id, user_id_a, user_id_b, created_at,
-         a:profiles!user_id_a (
-           id, full_name, username, level, kyc_status,
-           total_trades, successful_trades, rating_average
-         ),
-         b:profiles!user_id_b (
-           id, full_name, username, level, kyc_status,
-           total_trades, successful_trades, rating_average
-         )`,
-      )
+      .select("id, user_id_a, user_id_b, created_at")
       .or(`user_id_a.eq.${user.id},user_id_b.eq.${user.id}`)
       .order("created_at", { ascending: false })
 
-    if (error || !data) return []
+    if (error || !friendships || friendships.length === 0) return []
 
-    interface Row {
+    interface FriendshipRow {
       id: string
       user_id_a: string
       user_id_b: string
       created_at: string
-      a?: ProfileRef | ProfileRef[] | null
-      b?: ProfileRef | ProfileRef[] | null
+    }
+    const rows = friendships as FriendshipRow[]
+
+    const peerIds = Array.from(new Set(
+      rows.map((r) => r.user_id_a === user.id ? r.user_id_b : r.user_id_a)
+        .filter(Boolean)
+    ))
+
+    const profileMap = new Map<string, ProfileRef>()
+    if (peerIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles_public")
+        .select("id, full_name, username, level, kyc_status, total_trades, successful_trades, rating_average")
+        .in("id", peerIds)
+      for (const p of (profiles ?? []) as ProfileRef[]) {
+        if (p.id) profileMap.set(p.id, p)
+      }
     }
 
-    return (data as Row[]).map((r) => {
-      const other = r.user_id_a === user.id ? unwrap(r.b) : unwrap(r.a)
+    return rows.map((r) => {
+      const otherId = r.user_id_a === user.id ? r.user_id_b : r.user_id_a
+      const other = profileMap.get(otherId) ?? null
       return profileToFriend(r.id, r.created_at, other)
     })
   } catch {
@@ -161,13 +167,15 @@ export async function getMyFriendRequests(): Promise<FriendRequestsBucket> {
     } = await supabase.auth.getUser()
     if (!user) return empty
 
+    // Phase 13.52 — same split-pattern as getMyFriends. The previous
+    // `sender:profiles!sender_id (...)` embed silently returned NULL
+    // for the OTHER party under strict RLS, so the requests card
+    // showed "—" with no avatar. Switching to a two-step
+    // friend_requests → profiles_public batch lookup fixes both
+    // sides (incoming + outgoing).
     const { data, error } = await supabase
       .from("friend_requests")
-      .select(
-        `id, sender_id, recipient_id, status, message, created_at,
-         sender:profiles!sender_id ( id, full_name, username ),
-         recipient:profiles!recipient_id ( id, full_name, username )`,
-      )
+      .select("id, sender_id, recipient_id, status, message, created_at")
       .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`)
       .eq("status", "pending")
       .order("created_at", { ascending: false })
@@ -181,23 +189,42 @@ export async function getMyFriendRequests(): Promise<FriendRequestsBucket> {
       status: "pending" | "accepted" | "declined" | "cancelled"
       message?: string | null
       created_at: string
-      sender?: ProfileRef | ProfileRef[] | null
-      recipient?: ProfileRef | ProfileRef[] | null
+    }
+    const rows = data as Row[]
+    if (rows.length === 0) return empty
+
+    // Collect every peer id, batch-fetch their public profile.
+    const peerIds = Array.from(new Set(
+      rows.flatMap((r) =>
+        [r.sender_id, r.recipient_id].filter((id) => id && id !== user.id)
+      )
+    ))
+
+    const profileMap = new Map<string, ProfileRef>()
+    if (peerIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles_public")
+        .select("id, full_name, username, level, kyc_status")
+        .in("id", peerIds)
+      for (const p of (profiles ?? []) as ProfileRef[]) {
+        if (p.id) profileMap.set(p.id, p)
+      }
     }
 
     const incoming: DBFriendRequest[] = []
     const outgoing: DBFriendRequest[] = []
 
-    for (const r of data as Row[]) {
+    for (const r of rows) {
       const isIncoming = r.recipient_id === user.id
-      const other = unwrap(isIncoming ? r.sender : r.recipient)
+      const otherId = isIncoming ? r.sender_id : r.recipient_id
+      const other = profileMap.get(otherId) ?? null
       const name =
         other?.full_name?.trim() || other?.username?.trim() || "—"
       const entry: DBFriendRequest = {
         id: r.id,
         sender_id: r.sender_id,
         recipient_id: r.recipient_id,
-        other_user_id: other?.id ?? "",
+        other_user_id: other?.id ?? otherId,
         other_user_name: name,
         other_user_avatar: avatarInitial(name),
         direction: isIncoming ? "incoming" : "outgoing",
