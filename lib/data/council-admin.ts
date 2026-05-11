@@ -108,6 +108,45 @@ export async function adminAnnounceElection(input: {
   })
 }
 
+/**
+ * Phase 13.61 — one-click election kick-off.
+ *
+ * Announces a new election with the candidacy door OPEN immediately
+ * (registration_starts = now) and reasonable default windows:
+ *   • registration window: now → +14 days
+ *   • voting window:       +14 days → +21 days
+ *
+ * Used by the "إجراء انتخابات وفتح باب الترشيح" button in the
+ * admin council panel so the founder doesn't have to fill the
+ * scheduling form for a regular cycle.
+ */
+export async function adminQuickStartElection(input: {
+  title?: string
+  seats_available?: number
+  registration_days?: number
+  voting_days?: number
+}): Promise<AdminRpcResult> {
+  const now = new Date()
+  const regDays = Math.max(1, input.registration_days ?? 14)
+  const voteDays = Math.max(1, input.voting_days ?? 7)
+  const regStart = now
+  const regEnd = new Date(now.getTime() + regDays * 86_400_000)
+  const voteStart = regEnd
+  const voteEnd = new Date(voteStart.getTime() + voteDays * 86_400_000)
+  const title =
+    input.title?.trim() ||
+    `انتخابات المجلس — ${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}`
+
+  return adminAnnounceElection({
+    title,
+    registration_starts: regStart.toISOString(),
+    registration_ends:   regEnd.toISOString(),
+    voting_starts:       voteStart.toISOString(),
+    voting_ends:         voteEnd.toISOString(),
+    seats_available:     Math.max(1, input.seats_available ?? 5),
+  })
+}
+
 export async function adminFinalizeProposal(
   proposalId: string,
   decision: "approved" | "rejected",

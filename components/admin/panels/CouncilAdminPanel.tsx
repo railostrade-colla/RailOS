@@ -32,6 +32,7 @@ import {
   adminRemoveCouncilMember,
   adminUpdateCouncilMember,
   adminAnnounceElection,
+  adminQuickStartElection,
   adminFinalizeProposal,
 } from "@/lib/data/council-admin"
 import { UserPicker } from "@/components/admin/UserPicker"
@@ -186,6 +187,13 @@ export function CouncilAdminPanel() {
   const [voteStart, setVoteStart] = useState("")
   const [voteEnd, setVoteEnd] = useState("")
   const [seatsCount, setSeatsCount] = useState("3")
+
+  // Phase 13.61 — one-click "open elections now" flow
+  const [showQuickStart, setShowQuickStart] = useState(false)
+  const [quickSeats, setQuickSeats] = useState("5")
+  const [quickRegDays, setQuickRegDays] = useState("14")
+  const [quickVoteDays, setQuickVoteDays] = useState("7")
+  const [quickStarting, setQuickStarting] = useState(false)
   const [conditions, setConditions] = useState("")
   const [publishOfficial, setPublishOfficial] = useState(true)
 
@@ -226,6 +234,42 @@ export function CouncilAdminPanel() {
     setElectionTitle(""); setRegStart(""); setRegEnd(""); setVoteStart(""); setVoteEnd("")
     setSeatsCount("3"); setConditions(""); setPublishOfficial(true)
     setSubmitting(false)
+    refresh()
+  }
+
+  // Phase 13.61 — one-click election open + candidacy door.
+  const handleQuickStartElection = async () => {
+    const seats = Number(quickSeats)
+    const regDays = Number(quickRegDays)
+    const voteDays = Number(quickVoteDays)
+    if (!Number.isFinite(seats) || seats < 1 || seats > 30) {
+      return showError("عدد المقاعد يجب أن يكون بين 1 و 30")
+    }
+    if (!Number.isFinite(regDays) || regDays < 1 || regDays > 90) {
+      return showError("مدّة الترشيح يجب أن تكون بين 1 و 90 يوماً")
+    }
+    if (!Number.isFinite(voteDays) || voteDays < 1 || voteDays > 30) {
+      return showError("مدّة التصويت يجب أن تكون بين 1 و 30 يوماً")
+    }
+    setQuickStarting(true)
+    const result = await adminQuickStartElection({
+      seats_available: seats,
+      registration_days: regDays,
+      voting_days: voteDays,
+    })
+    setQuickStarting(false)
+    if (!result.success) {
+      const map: Record<string, string> = {
+        not_admin: "صلاحياتك لا تسمح",
+        invalid_seats: "عدد المقاعد غير صحيح",
+        invalid_dates: "التواريخ غير صحيحة",
+        missing_table: "الجداول غير منشورة",
+      }
+      showError(map[result.reason ?? ""] ?? "فشل الإنشاء")
+      return
+    }
+    showSuccess(`✅ تم إجراء الانتخابات — باب الترشيح مفتوح الآن لمدّة ${regDays} يوماً`)
+    setShowQuickStart(false)
     refresh()
   }
 
@@ -519,7 +563,13 @@ export function CouncilAdminPanel() {
         <>
           {/* Top action buttons */}
           <div className="flex flex-wrap gap-2 mb-4">
-            <ActionBtn label="📢 إعلان انتخابات جديدة" color="purple" onClick={() => setShowAnnounceElection(true)} />
+            {/* Phase 13.61 — one-click open elections + nominations door */}
+            <ActionBtn
+              label="🚀 إجراء انتخابات وفتح باب الترشيح"
+              color="green"
+              onClick={() => setShowQuickStart(true)}
+            />
+            <ActionBtn label="📢 إعلان انتخابات مجدوَلة" color="purple" onClick={() => setShowAnnounceElection(true)} />
             <ActionBtn label="📢 ترويج مرشّح" color="blue" onClick={() => setShowPromoCandidate(true)} />
           </div>
 
@@ -1042,6 +1092,111 @@ export function CouncilAdminPanel() {
                 className="flex-1 py-3 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-400 text-sm font-bold hover:bg-blue-500/[0.2] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? "جارٍ..." : "تنفيذ"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════ QUICK-START ELECTION MODAL (Phase 13.61) ═══════ */}
+      {showQuickStart && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border-2 border-green-400/40 rounded-2xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex items-start gap-2">
+                <div className="w-10 h-10 rounded-xl bg-green-400/[0.12] border border-green-400/[0.3] flex items-center justify-center flex-shrink-0">
+                  <span className="text-xl">🚀</span>
+                </div>
+                <div>
+                  <div className="text-base font-bold text-white">إجراء انتخابات الآن</div>
+                  <div className="text-[11px] text-neutral-400">باب الترشيح يُفتح فوراً</div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowQuickStart(false)}
+                disabled={quickStarting}
+                className="text-neutral-500 hover:text-white disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-green-400/[0.06] border border-green-400/[0.2] rounded-xl p-3 mb-4 text-xs text-green-300 leading-relaxed">
+              ✅ سيتم إنشاء انتخابات جديدة بعنوان "<span className="font-bold text-white">انتخابات المجلس — {new Date().getFullYear()}/{String(new Date().getMonth() + 1).padStart(2, "0")}</span>".
+              <span className="block mt-1 text-green-300/80 text-[11px]">
+                باب الترشيح يفتح فوراً ويبقى مفتوحاً للمدّة المُحدَّدة، ثم يبدأ التصويت تلقائياً.
+              </span>
+            </div>
+
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="text-xs text-neutral-400 mb-1.5 block font-bold">
+                  عدد المقاعد المُتاحة
+                </label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={30}
+                  value={quickSeats}
+                  onChange={(e) => setQuickSeats(e.target.value)}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-green-400/40"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-neutral-400 mb-1.5 block font-bold">
+                    مدّة الترشيح (يوم)
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={90}
+                    value={quickRegDays}
+                    onChange={(e) => setQuickRegDays(e.target.value)}
+                    className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-3 text-sm text-white font-mono outline-none focus:border-green-400/40"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-neutral-400 mb-1.5 block font-bold">
+                    مدّة التصويت (يوم)
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={30}
+                    value={quickVoteDays}
+                    onChange={(e) => setQuickVoteDays(e.target.value)}
+                    className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-3 text-sm text-white font-mono outline-none focus:border-green-400/40"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 mb-4 text-[11px] text-neutral-400 leading-relaxed">
+              📅 الجدول التلقائي:
+              <ul className="list-disc list-inside mt-1 space-y-0.5">
+                <li>الترشيح: من <span className="text-green-300 font-mono">الآن</span> إلى <span className="text-green-300 font-mono">+{quickRegDays || 0} يوم</span></li>
+                <li>التصويت: من <span className="text-green-300 font-mono">+{quickRegDays || 0} يوم</span> إلى <span className="text-green-300 font-mono">+{Number(quickRegDays || 0) + Number(quickVoteDays || 0)} يوم</span></li>
+              </ul>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowQuickStart(false)}
+                disabled={quickStarting}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleQuickStartElection}
+                disabled={quickStarting}
+                className="flex-1 py-3 rounded-xl bg-green-500/[0.18] border border-green-500/[0.4] text-green-300 text-sm font-bold hover:bg-green-500/[0.25] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {quickStarting ? "جارٍ..." : "🚀 ابدأ + افتح الترشيح"}
               </button>
             </div>
           </div>
