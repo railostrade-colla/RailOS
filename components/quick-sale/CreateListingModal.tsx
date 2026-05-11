@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { X, Tag, ShoppingCart, Lock } from "lucide-react"
+import { X, Tag, ShoppingCart, Lock, Building2, Users as UsersIcon, Zap } from "lucide-react"
 import {
   createSellListing,
   createBuyListing,
@@ -9,11 +9,17 @@ import {
   QS_BUY_DISCOUNT_MIN,
   QS_BUY_DISCOUNT_MAX,
 } from "@/lib/data/quick-sale"
+import {
+  getProjectQuickBuyStatus,
+  executeAdminQuickBuy,
+  type QuickBuyStatus,
+} from "@/lib/data/admin-quick-buy"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { createClient } from "@/lib/supabase/client"
 // Phase 11.27 — IntegerInput prevents wheel/arrow-key/spinner from
 // silently mutating share-count inputs.
 import { IntegerInput } from "@/components/ui/IntegerInput"
+import { cn } from "@/lib/utils/cn"
 
 interface CreateListingModalProps {
   onClose: () => void
@@ -31,6 +37,14 @@ const fmtIQD = (n: number) => n.toLocaleString("en-US")
 
 export function CreateListingModal({ onClose, onSuccess }: CreateListingModalProps) {
   const [tab, setTab] = useState<"sell" | "buy">("sell")
+  // Phase 13.59 — when tab === "sell" the user picks WHO they sell to:
+  //   • "users"  — existing P2P listing (the legacy flow)
+  //   • "system" — instant sale to the platform at a fixed discount
+  //                (requires admin toggle on the project)
+  const [sellTarget, setSellTarget] = useState<"users" | "system">("users")
+  const [quickBuyStatus, setQuickBuyStatus] = useState<QuickBuyStatus | null>(null)
+  const [statusLoading, setStatusLoading] = useState(false)
+
   const [projects, setProjects] = useState<ProjectOption[]>([])
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [projectId, setProjectId] = useState<string>("")
@@ -39,6 +53,23 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
   const [discount, setDiscount] = useState<number>(QS_BUY_DISCOUNT_MIN)
   const [note, setNote] = useState("")
   const [submitting, setSubmitting] = useState(false)
+
+  // Refresh the system-buy status whenever the project or mode changes.
+  useEffect(() => {
+    if (tab !== "sell" || sellTarget !== "system" || !projectId) {
+      setQuickBuyStatus(null)
+      return
+    }
+    let cancelled = false
+    setStatusLoading(true)
+    getProjectQuickBuyStatus(projectId).then((s) => {
+      if (!cancelled) {
+        setQuickBuyStatus(s)
+        setStatusLoading(false)
+      }
+    })
+    return () => { cancelled = true }
+  }, [tab, sellTarget, projectId])
 
   // Load projects from Supabase
   useEffect(() => {
@@ -65,25 +96,56 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
   )
 
   const marketPrice = selectedProject?.current_market_price ?? 0
-  const effectiveDiscount = tab === "sell" ? QS_SELL_DISCOUNT : discount
+  // Phase 13.59 — when selling to the system, the discount comes from
+  // the project's admin_quick_buy_discount_pct (per-project, admin-set).
+  const isSystemMode = tab === "sell" && sellTarget === "system"
+  const effectiveDiscount =
+    isSystemMode ? (quickBuyStatus?.discount_pct ?? 15) :
+    tab === "sell" ? QS_SELL_DISCOUNT :
+    discount
   const finalPrice = Math.floor((marketPrice * (100 - effectiveDiscount)) / 100)
 
   const sharesNum = unlimited ? 0 : parseInt(shares) || 0
 
+  // The system mode requires a specific (non-unlimited) share count
+  // AND the feature must be ON for this project.
   const canSubmit =
     !!projectId &&
-    (unlimited || sharesNum > 0) &&
-    !submitting
+    !submitting &&
+    (isSystemMode
+      ? (sharesNum > 0 && !!quickBuyStatus?.enabled && !statusLoading)
+      : (unlimited || sharesNum > 0))
 
   async function handleSubmit() {
     if (!canSubmit || !selectedProject) return
 
     setSubmitting(true)
     try {
-      if (tab === "sell") {
+      if (isSystemMode) {
+        // Phase 13.59 — instant sell to platform.
+        const r = await executeAdminQuickBuy(projectId, sharesNum)
+        if (!r.success) {
+          const map: Record<string, string> = {
+            unauthenticated: "سجّل دخولك أولاً",
+            invalid_input: "مدخلات غير صحيحة",
+            project_not_found: "المشروع غير موجود",
+            feature_disabled: "ميزة البيع للنظام غير متوفّرة لهذا المشروع",
+            no_market_price: "لا يوجد سعر سوق محدَّد للمشروع",
+            no_holdings: "لا تملك حصصاً في هذا المشروع",
+            insufficient_shares:
+              `الحصص المتاحة ${r.free_shares ?? 0} وطلبت ${r.requested ?? sharesNum}`,
+          }
+          showError(map[r.error ?? ""] ?? r.error ?? "فشل البيع")
+          setSubmitting(false)
+          return
+        }
+        showSuccess(
+          `✅ تم بيع ${r.shares} حصّة للنظام بمبلغ ${(r.total_amount ?? 0).toLocaleString("en-US")} IQD`,
+        )
+      } else if (tab === "sell") {
         await createSellListing({
           project_id: projectId,
-          total_shares: unlimited ? 1 : sharesNum, // placeholder when unlimited
+          total_shares: unlimited ? 1 : sharesNum,
           is_unlimited: unlimited,
           note: note.trim() || undefined,
         })
@@ -156,6 +218,49 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
               ? `🔥 الخصم ثابت ${QS_SELL_DISCOUNT}% (يحدّده النظام)`
               : `💰 أنت تحدّد نسبة الخصم (${QS_BUY_DISCOUNT_MIN}% إلى ${QS_BUY_DISCOUNT_MAX}%)`}
           </div>
+
+          {/* Phase 13.59 — sell-target picker (only in sell tab) */}
+          {tab === "sell" && (
+            <div className="mt-3">
+              <div className="text-[10px] text-neutral-500 mb-1.5 font-bold">
+                إلى مَن تبيع؟
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setSellTarget("users")}
+                  className={cn(
+                    "py-2.5 rounded-xl border text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5",
+                    sellTarget === "users"
+                      ? "bg-white/[0.08] border-white/[0.15] text-white"
+                      : "bg-white/[0.03] border-white/[0.06] text-neutral-400 hover:bg-white/[0.05]",
+                  )}
+                >
+                  <UsersIcon className="w-3.5 h-3.5" strokeWidth={2} />
+                  للمستخدمين (تفاوض)
+                </button>
+                <button
+                  onClick={() => setSellTarget("system")}
+                  className={cn(
+                    "py-2.5 rounded-xl border text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5",
+                    sellTarget === "system"
+                      ? "bg-[#deff9a]/[0.12] border-[#deff9a]/[0.4] text-[#deff9a]"
+                      : "bg-white/[0.03] border-white/[0.06] text-neutral-400 hover:bg-white/[0.05]",
+                  )}
+                >
+                  <Building2 className="w-3.5 h-3.5" strokeWidth={2} />
+                  للنظام (فوري)
+                </button>
+              </div>
+              <div className={cn(
+                "mt-1.5 text-[10px] leading-relaxed",
+                sellTarget === "system" ? "text-[#deff9a]" : "text-neutral-500",
+              )}>
+                {sellTarget === "system"
+                  ? "⚡ بيع فوري للنظام بسعر ثابت (-15% من سعر السوق). يتطلّب تفعيل الميزة على المشروع."
+                  : "📝 إعلان للمستخدمين بسعر -15%؛ يمكنهم القبول والتفاوض."}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Body */}
@@ -190,34 +295,64 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
             )}
           </div>
 
-          {/* Quantity type */}
+          {/* Phase 13.59 — system mode unavailable banner */}
+          {isSystemMode && projectId && (
+            <>
+              {statusLoading ? (
+                <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 text-xs text-neutral-400 animate-pulse text-center">
+                  جاري التحقّق من حالة الميزة…
+                </div>
+              ) : !quickBuyStatus?.enabled ? (
+                <div className="bg-red-500/[0.06] border border-red-500/[0.2] rounded-xl p-3 text-xs text-red-300 leading-relaxed">
+                  ⛔ <span className="font-bold">غير متوفّر حالياً</span>
+                  <span className="block mt-1 text-red-300/80">
+                    البيع المباشر للنظام مُعطَّل على هذا المشروع.
+                    استخدم خيار "للمستخدمين" أو اطلب من الإدارة تفعيل الميزة.
+                  </span>
+                </div>
+              ) : (
+                <div className="bg-[#deff9a]/[0.06] border border-[#deff9a]/[0.25] rounded-xl p-3 text-xs text-[#deff9a] leading-relaxed flex items-start gap-2">
+                  <Zap className="w-4 h-4 flex-shrink-0 mt-0.5" strokeWidth={2.5} />
+                  <span>
+                    البيع المباشر <b>مفعَّل</b> لهذا المشروع.
+                    خصم: <span className="font-mono">{quickBuyStatus.discount_pct}%</span> ·
+                    السعر للحصّة: <span className="font-mono">{fmtIQD(quickBuyStatus.price_per_share)} IQD</span>
+                  </span>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Quantity type — system mode forces a specific count */}
           <div>
             <label className="text-xs text-neutral-400 mb-1.5 block font-bold">
-              نوع الكمية
+              {isSystemMode ? "عدد الحصص للبيع" : "نوع الكمية"}
             </label>
-            <div className="grid grid-cols-2 gap-2 mb-2">
-              <button
-                onClick={() => setUnlimited(false)}
-                className={`py-2.5 rounded-xl text-xs font-bold border transition-colors ${
-                  !unlimited
-                    ? "bg-white/[0.08] text-white border-white/[0.15]"
-                    : "bg-white/[0.03] text-neutral-400 border-white/[0.06] hover:bg-white/[0.05]"
-                }`}
-              >
-                كمية محدّدة
-              </button>
-              <button
-                onClick={() => setUnlimited(true)}
-                className={`py-2.5 rounded-xl text-xs font-bold border transition-colors ${
-                  unlimited
-                    ? "bg-white/[0.08] text-white border-white/[0.15]"
-                    : "bg-white/[0.03] text-neutral-400 border-white/[0.06] hover:bg-white/[0.05]"
-                }`}
-              >
-                🌊 كميات مفتوحة
-              </button>
-            </div>
-            {!unlimited && (
+            {!isSystemMode && (
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <button
+                  onClick={() => setUnlimited(false)}
+                  className={`py-2.5 rounded-xl text-xs font-bold border transition-colors ${
+                    !unlimited
+                      ? "bg-white/[0.08] text-white border-white/[0.15]"
+                      : "bg-white/[0.03] text-neutral-400 border-white/[0.06] hover:bg-white/[0.05]"
+                  }`}
+                >
+                  كمية محدّدة
+                </button>
+                <button
+                  onClick={() => setUnlimited(true)}
+                  className={`py-2.5 rounded-xl text-xs font-bold border transition-colors ${
+                    unlimited
+                      ? "bg-white/[0.08] text-white border-white/[0.15]"
+                      : "bg-white/[0.03] text-neutral-400 border-white/[0.06] hover:bg-white/[0.05]"
+                  }`}
+                >
+                  🌊 كميات مفتوحة
+                </button>
+              </div>
+            )}
+            {(!unlimited || isSystemMode) && (
               <IntegerInput
                 value={shares}
                 onValueChange={setShares}
@@ -288,6 +423,17 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
                   {fmtIQD(finalPrice)} د.ع
                 </span>
               </div>
+              {/* Phase 13.59 — total proceeds for system mode */}
+              {isSystemMode && sharesNum > 0 && (
+                <div className="flex justify-between text-sm border-t border-[#deff9a]/[0.15] pt-2 mt-1">
+                  <span className="text-[#deff9a] font-bold">
+                    إجمالي المبلغ ({sharesNum.toLocaleString("en-US")} حصّة)
+                  </span>
+                  <span className="font-mono font-bold text-[#deff9a]">
+                    {fmtIQD(finalPrice * sharesNum)} IQD
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
@@ -317,13 +463,18 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
           <button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className={`flex-1 py-3 rounded-xl text-sm font-bold transition-opacity ${
+            className={cn(
+              "flex-1 py-3 rounded-xl text-sm font-bold transition-opacity",
               canSubmit
-                ? "bg-gradient-to-r from-[#FB923C] to-[#F87171] text-white hover:opacity-90"
-                : "bg-neutral-800 text-neutral-500 cursor-not-allowed"
-            }`}
+                ? (isSystemMode
+                    ? "bg-[#deff9a] text-black hover:opacity-90"
+                    : "bg-gradient-to-r from-[#FB923C] to-[#F87171] text-white hover:opacity-90")
+                : "bg-neutral-800 text-neutral-500 cursor-not-allowed",
+            )}
           >
-            {submitting ? "جاري النشر..." : "إنشاء الإعلان"}
+            {submitting
+              ? (isSystemMode ? "جاري التنفيذ..." : "جاري النشر...")
+              : isSystemMode ? "⚡ بيع فوري للنظام" : "إنشاء الإعلان"}
           </button>
         </div>
       </div>

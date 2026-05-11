@@ -20,6 +20,7 @@ import { adminCreateProject, adminUpdateProject, getAllProjects } from "@/lib/da
 import { getAllCompanies } from "@/lib/data/companies"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { calculateTotalShares, calculateOfferedShares } from "@/lib/utils/finance"
+import { AdminQuickBuyToggle } from "@/components/admin/panels/AdminQuickBuyToggle"
 import { generateSymbol } from "@/lib/utils/symbol-generator"
 import {
   loadCurrentDraft,
@@ -1666,6 +1667,19 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
             مثال: عقد التأسيس، الترخيص التجاري، شهادة الملكية، الميزانية الأخيرة...
           </div>
         </div>
+
+        {/* Phase 13.59 — Admin quick-buy toggle (per-project).
+            Only relevant when editing an existing project (we need
+            a real project_id for the RPC). Its own save flow means
+            it doesn't depend on the main form submit. */}
+        {isEdit && isProject && initialData?.id && (
+          <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5">
+            <div className="text-sm font-bold text-white mb-3">
+              ⚡ البيع المباشر للنظام
+            </div>
+            <AdminQuickBuyToggle projectId={initialData.id} />
+          </div>
+        )}
 
       </div>
 
