@@ -96,11 +96,24 @@ function profileRowToCommunity(row: ProfileRow): CommunityUserRow {
 }
 
 /**
- * Fetch up to `limit` other users for the community discovery list.
- * Excludes the signed-in user. Empty array on any failure.
+ * Fetch up to `limit` registered users for the community discovery list.
+ *
+ * Phase 13.51 — primary path is the `get_community_users` RPC which:
+ *   • bypasses RLS via SECURITY DEFINER (works under the strict
+ *     profiles policy added in 13.50)
+ *   • adapts to schema drift (returns stable shape regardless of
+ *     which optional columns the DB has)
+ *   • filters banned + inactive accounts + the caller themselves
+ *   • orders by created_at DESC (newest sign-ups first)
+ *
+ * Two fallbacks for legacy DBs (no Phase 13.50/13.51 yet):
+ *   1. `profiles_public` view (Phase 13.50 only)
+ *   2. `user_stats_view` (pre-13.50)
+ *
+ * Each path logs to console on failure so the founder can diagnose.
  */
 export async function getCommunityUsers(
-  limit: number = 50,
+  limit: number = 500,
 ): Promise<CommunityUserRow[]> {
   try {
     const supabase = createClient()
@@ -109,7 +122,48 @@ export async function getCommunityUsers(
     } = await supabase.auth.getUser()
     const myId = user?.id ?? null
 
-    // Primary: the rich view with success_rate already computed.
+    // ─── Primary: SECURITY DEFINER RPC ────────────────────────────
+    try {
+      const { data, error } = await supabase.rpc("get_community_users", {
+        p_limit: limit,
+      })
+      if (!error && Array.isArray(data)) {
+        return (data as ProfileRow[]).map(profileRowToCommunity)
+      }
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.warn("[community] get_community_users RPC:", error.message)
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[community] RPC threw:", err)
+    }
+
+    // ─── Fallback 1: profiles_public view (Phase 13.50) ───────────
+    try {
+      let q = supabase
+        .from("profiles_public")
+        .select(
+          "id, full_name, username, level, kyc_status, total_trades, successful_trades, rating_average, created_at",
+        )
+        .order("created_at", { ascending: false, nullsFirst: false })
+        .limit(limit)
+      if (myId) q = q.neq("id", myId)
+      const { data, error } = await q
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return (data as ProfileRow[]).map(profileRowToCommunity)
+      }
+      if (error) {
+        // eslint-disable-next-line no-console
+        console.warn("[community] profiles_public read:", error.message)
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[community] profiles_public threw:", err)
+    }
+
+    // ─── Fallback 2: legacy user_stats_view ───────────────────────
     try {
       let q = supabase
         .from("user_stats_view")
@@ -125,27 +179,10 @@ export async function getCommunityUsers(
         return (data as ViewRow[]).map(viewRowToCommunity)
       }
     } catch {
-      /* fall through to profiles fallback */
+      /* falls through — return empty */
     }
 
-    // Fallback: plain profiles query (for databases without migration 10).
-    let q2 = supabase
-      .from("profiles")
-      .select(
-        "id, full_name, username, level, kyc_status, total_trades, successful_trades, rating_average",
-      )
-      .order("rating_average", { ascending: false, nullsFirst: false })
-      .limit(limit)
-    if (myId) q2 = q2.neq("id", myId)
-    const { data: pdata, error: perr } = await q2
-
-    if (perr || !pdata) {
-      if (perr)
-        // eslint-disable-next-line no-console
-        console.warn("[community] profiles fallback:", perr.message)
-      return []
-    }
-    return (pdata as ProfileRow[]).map(profileRowToCommunity)
+    return []
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[community] getCommunityUsers threw:", err)

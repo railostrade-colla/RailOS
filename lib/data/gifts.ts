@@ -188,8 +188,10 @@ export async function searchUsersForGift(query: string): Promise<UserSearchRow[]
   try {
     const supabase = createClient()
     const q = `%${query.trim()}%`
+    // Phase 13.50 — read from the safe-columns view; the underlying
+    // `profiles` table is now strict-RLS (self + admin only).
     const { data, error } = await supabase
-      .from("profiles")
+      .from("profiles_public")
       .select("id, full_name, username")
       .or(`full_name.ilike.${q},username.ilike.${q}`)
       .limit(10)

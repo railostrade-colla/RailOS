@@ -95,6 +95,27 @@ function configureWebPush(): boolean {
 
 export async function POST(req: NextRequest) {
   try {
+    // Phase 13.50 — gate the endpoint with a shared secret. Previously
+    // anyone could POST to /api/push/send and impersonate the platform
+    // (phishing via push). Internal callers (server actions, scheduled
+    // jobs, future webhook flows) must include
+    // `Authorization: Bearer ${INTERNAL_PUSH_SECRET}`. The secret lives
+    // in Railway env vars only — never exposed to the browser.
+    const expectedSecret = process.env.INTERNAL_PUSH_SECRET
+    if (!expectedSecret) {
+      return NextResponse.json(
+        { error: "INTERNAL_PUSH_SECRET not configured on the server" },
+        { status: 500 },
+      )
+    }
+    const authHeader = req.headers.get("authorization") ?? ""
+    if (authHeader !== `Bearer ${expectedSecret}`) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 },
+      )
+    }
+
     if (!configureWebPush()) {
       return NextResponse.json(
         { error: "VAPID keys are not configured on the server" },

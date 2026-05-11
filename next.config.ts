@@ -16,12 +16,50 @@ const nextConfig: NextConfig = {
   // Static asset caching — browser keeps fonts/images around for 30
   // days, which is the biggest win for repeat-visitor performance.
   async headers() {
+    // Phase 13.50 — security headers on every response.
+    // CSP allows Supabase + Sentry + same-origin assets; tightened to
+    // block iframe embedding (clickjacking) and content-type sniffing.
+    // `'unsafe-inline'` on script-src is required for Next.js inline
+    // hydration scripts (no nonce support yet); we will tighten when
+    // Next adds nonce middleware.
+    const csp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co https://*.sentry.io https://browser.sentry-cdn.com",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data:",
+      "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://*.sentry.io https://*.ingest.sentry.io",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "object-src 'none'",
+      "upgrade-insecure-requests",
+    ].join("; ")
+
+    const securityHeaders = [
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), interest-cohort=()" },
+      { key: "Content-Security-Policy", value: csp },
+      // Cross-Origin isolation — keeps the page safe when third-party
+      // scripts get loaded from CDNs.
+      { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+      { key: "X-DNS-Prefetch-Control", value: "off" },
+    ]
+
     return [
       {
         source: "/:all*(svg|jpg|jpeg|png|webp|avif|gif|ico|woff|woff2)",
         headers: [
           { key: "Cache-Control", value: "public, max-age=2592000, immutable" },
         ],
+      },
+      {
+        // Apply security headers to every other route.
+        source: "/:path*",
+        headers: securityHeaders,
       },
     ]
   },

@@ -47,7 +47,13 @@ import { getActiveAds, type DBAd } from "@/lib/data/ads"
 import type { Ad } from "@/lib/mock-data/types"
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/data/profile"
 import { getPortfolioData, type PortfolioSummary as DBPortfolioSummary } from "@/lib/data/portfolio"
-import { readPersistedSync } from "@/lib/data/cache"
+import {
+  getPortfolioChangeMetrics,
+  EMPTY_PORTFOLIO_CHANGE_METRICS,
+  type PortfolioChangeMetrics,
+} from "@/lib/data/portfolio-change-metrics"
+import { readPersistedSync, invalidateCache } from "@/lib/data/cache"
+import { createClient } from "@/lib/supabase/client"
 import { ProjectCardSkeleton } from "@/components/skeletons/ProjectCardSkeleton"
 import { LEVEL_LABELS, LEVEL_ICONS } from "@/lib/utils/contractLimits"
 import { cn } from "@/lib/utils/cn"
@@ -63,10 +69,70 @@ function fmtCompact(n: number): string {
   return Math.round(n || 0).toLocaleString("en-US")
 }
 
+// Phase 13.49 — keep big-IQD/SHR tile values inside their containers on
+// mobile by shrinking the font as the number's magnitude grows. Founder
+// spec: "اي رقم يصل المليار صغّره 30%، والذي يصل المليون صغّره 15%".
+// Base size in the tile grid is `text-base` (16px), so:
+//   • ≥ 1B   → 16 × 0.70 ≈ 11.2px  → text-[11px]
+//   • ≥ 1M   → 16 × 0.85 ≈ 13.6px  → text-[13px]
+//   • else   → text-base
+function tileValueSize(n: number): string {
+  const abs = Math.abs(Number(n) || 0)
+  if (abs >= 1_000_000_000) return "text-[11px]"
+  if (abs >= 1_000_000) return "text-[13px]"
+  return "text-base"
+}
+
 function getGreeting(): string {
   const h = new Date().getHours()
   if (h >= 5 && h < 12) return "صباح الخير"
   return "مساء الخير"
+}
+
+// ─── Phase 13.48 — wallet-header change pills ──────────────────
+function pillTone(positive: boolean, neutral: boolean) {
+  if (neutral) return "text-neutral-400"
+  return positive ? "text-green-400" : "text-red-400"
+}
+
+function ChangePill({ valueIqd, label }: { valueIqd: number; label: string }) {
+  const v = Math.round(valueIqd || 0)
+  const positive = v > 0
+  const neutral = v === 0
+  return (
+    <span className={cn("text-xs font-bold flex items-center gap-1", pillTone(positive, neutral))}>
+      {positive
+        ? <TrendingUp className="w-3 h-3" strokeWidth={2.5} />
+        : v < 0
+          ? <TrendingDown className="w-3 h-3" strokeWidth={2.5} />
+          : null}
+      <span dir="ltr" className="font-mono">
+        {positive ? "+" : ""}{v.toLocaleString("en-US")}
+      </span>
+      <span className="text-[10px] text-neutral-500">IQD</span>
+      <span className="text-[10px] text-neutral-500 font-normal">{label}</span>
+    </span>
+  )
+}
+
+function ChangePillPct({ pct, label }: { pct: number; label: string }) {
+  const v = Number(pct || 0)
+  const positive = v > 0
+  const neutral = v === 0
+  const formatted = (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2)).replace(/\.00$/, "")
+  return (
+    <span className={cn("text-xs font-bold flex items-center gap-1", pillTone(positive, neutral))}>
+      {positive
+        ? <TrendingUp className="w-3 h-3" strokeWidth={2.5} />
+        : v < 0
+          ? <TrendingDown className="w-3 h-3" strokeWidth={2.5} />
+          : null}
+      <span dir="ltr" className="font-mono">
+        {positive ? "+" : ""}{formatted}%
+      </span>
+      <span className="text-[10px] text-neutral-500 font-normal">{label}</span>
+    </span>
+  )
 }
 
 /** Map a DB ad row → the slider's legacy Ad shape (Phase N). */
@@ -238,6 +304,11 @@ export default function DashboardPage() {
   const [dbProjects, setDbProjects] = useState<Project[]>(cachedAllProj)
   // Phase N — real ads from the `ads` table (mock fallback when empty).
   const [dbAds, setDbAds] = useState<Ad[]>([])
+  // Phase 13.48 — portfolio change metrics for the hero card indicator
+  // (reference delta IQD + daily % + weekly %).
+  const [changeMetrics, setChangeMetrics] = useState<PortfolioChangeMetrics>(
+    EMPTY_PORTFOLIO_CHANGE_METRICS,
+  )
 
   // Seed trending/new from persisted cache too — same instant-paint trick.
   useEffect(() => {
@@ -265,26 +336,56 @@ export default function DashboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ─── Phase 13.49 — decoupled fetchers + realtime + focus refresh ──
+  // Previously, all 9 fetchers were awaited via a single Promise.all,
+  // which meant the slowest call (typically getPortfolioData → 4-6
+  // round-trips) blocked EVERY UI section from updating, including
+  // the active-project card. Splitting them lets each piece paint as
+  // soon as its own data is ready.
+  //
+  // We also subscribe to `projects` postgres_changes so admin
+  // edits (price changes, new projects) reach the dashboard
+  // instantly without a manual reload, and refresh on tab focus to
+  // catch anything missed while the tab was hidden.
   useEffect(() => {
     let cancelled = false
-    Promise.all([
-      dbGetTrendingProjects(3),
-      dbGetNewProjects(3),
-      dbGetComingSoonProjects(3),
-      dbGetLatestNews(4),
-      getCurrentUserProfile(),
-      getPortfolioData(),
-      dbGetAllProjects(),
-      getActiveAds("dashboard"),
-    ])
-      .then(([t, n, cs, ns, prof, port, allProj, ads]) => {
+
+    // Active-project list — the one the user complained about.
+    // Fired FIRST so it has the best chance to paint before the
+    // expensive portfolio aggregation finishes.
+    const loadProjects = (force = false) => {
+      if (force) invalidateCache("projects:active:all")
+      dbGetAllProjects().then((allProj) => {
+        if (cancelled) return
+        setDbProjects(allProj)
+        if (allProj.length > 0) {
+          setSelectedProject((cur) => cur ?? allProj[0])
+        }
+        setLoading(false)
+      }).catch(() => { if (!cancelled) setLoading(false) })
+    }
+
+    const loadDiscover = () => {
+      dbGetTrendingProjects(3).then((t) => {
         if (cancelled) return
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setTrending(t as any as ProjectCardData[])
+      }).catch(() => {})
+      dbGetNewProjects(3).then((n) => {
+        if (cancelled) return
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setNewProjects(n as any as ProjectCardData[])
+      }).catch(() => {})
+      dbGetComingSoonProjects(3).then((cs) => {
+        if (cancelled) return
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         setClosing(cs as any as ProjectCardData[])
+      }).catch(() => {})
+    }
+
+    const loadNews = () => {
+      dbGetLatestNews(4).then((ns) => {
+        if (cancelled) return
         setNews(ns.map((row) => ({
           id: row.id,
           icon: row.news_type === "feature" ? "🎉" : row.news_type === "promo" ? "🎁" : row.news_type === "alert" ? "⚠️" : "📢",
@@ -292,25 +393,92 @@ export default function DashboardPage() {
           date: row.published_at?.split("T")[0] ?? "—",
           is_new: row.published_at ? (Date.now() - new Date(row.published_at).getTime()) < 7 * 86_400_000 : false,
         })))
+      }).catch(() => {})
+    }
 
-        if (prof) setUserProfile(prof)
-        if (port) setDbPortfolio(port.summary)
-        // Persistence to localStorage happens automatically — both
-        // getCurrentUserProfile + getPortfolioData are wrapped in
-        // dedupCache (Phase 11.18) which writes through to storage.
-        setDbProjects(allProj)
-        // Auto-select first DB project if none chosen yet.
-        if (allProj.length > 0) {
-          setSelectedProject((cur) => cur ?? allProj[0])
-        }
-        setDbAds(ads.map(dbAdToMockShape))
-        setLoading(false)
-      })
-      .catch(() => {
+    const loadProfile = () => {
+      getCurrentUserProfile().then((prof) => {
+        if (cancelled || !prof) return
+        setUserProfile(prof)
+      }).catch(() => {})
+    }
+
+    const loadPortfolio = (force = false) => {
+      if (force) invalidateCache("portfolio:data:v3")
+      getPortfolioData().then((port) => {
         if (cancelled) return
-        setLoading(false)
-      })
-    return () => { cancelled = true }
+        if (port) setDbPortfolio(port.summary)
+      }).catch(() => {})
+      getPortfolioChangeMetrics().then((metrics) => {
+        if (cancelled) return
+        setChangeMetrics(metrics)
+      }).catch(() => {})
+    }
+
+    const loadAds = () => {
+      getActiveAds("dashboard").then((ads) => {
+        if (cancelled) return
+        setDbAds(ads.map(dbAdToMockShape))
+      }).catch(() => {})
+    }
+
+    // Kick off everything in parallel — no one blocks anyone else.
+    loadProjects()
+    loadDiscover()
+    loadNews()
+    loadProfile()
+    loadPortfolio()
+    loadAds()
+
+    // ─── Realtime subscription on projects ──────────────────────
+    // Any admin price/state edit pushes a postgres_changes event.
+    // We invalidate the cache and refetch — debounced via a 250ms
+    // timer so a burst of trigger updates doesn't refetch 5x.
+    const supabase = createClient()
+    let refetchTimer: ReturnType<typeof setTimeout> | null = null
+    const scheduleRefetch = () => {
+      if (refetchTimer) clearTimeout(refetchTimer)
+      refetchTimer = setTimeout(() => {
+        if (cancelled) return
+        loadProjects(true)
+        loadPortfolio(true)
+      }, 250)
+    }
+
+    const channel = supabase
+      .channel("dashboard:projects+price-history")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "projects" },
+        () => scheduleRefetch(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "price_history" },
+        () => scheduleRefetch(),
+      )
+      .subscribe()
+
+    // ─── Tab-focus refresh ──────────────────────────────────────
+    // When the user switches back to the tab after it was hidden,
+    // realtime may have re-connected with no cached events — force
+    // a full refetch to catch up.
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        loadProjects(true)
+        loadPortfolio(true)
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility)
+    window.addEventListener("focus", handleVisibility)
+
+    return () => {
+      cancelled = true
+      if (refetchTimer) clearTimeout(refetchTimer)
+      supabase.removeChannel(channel).catch(() => {})
+      document.removeEventListener("visibilitychange", handleVisibility)
+      window.removeEventListener("focus", handleVisibility)
+    }
   }, [])
 
   // ─── Resolved values (production — DB only, zero defaults) ────
@@ -342,7 +510,6 @@ export default function DashboardPage() {
     (p) => !searchQuery.trim() || p.name.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
-  const dailyUp = portfolio.dailyChange >= 0
   const discoverItems = discoverTab === "trending" ? trending : discoverTab === "closing" ? closing : newProjects
   const discoverEmptyMsg =
     discoverTab === "trending" ? "لا توجد مشاريع رائجة حالياً" :
@@ -487,11 +654,27 @@ export default function DashboardPage() {
                   <span className="text-xs text-neutral-500">IQD</span>
                 </div>
 
-                <div className={cn("text-xs font-bold flex items-center gap-1 mb-3", dailyUp ? "text-green-400" : "text-red-400")}>
-                  {dailyUp ? <TrendingUp className="w-3 h-3" strokeWidth={2.5} /> : <TrendingDown className="w-3 h-3" strokeWidth={2.5} />}
-                  <span>{dailyUp ? "+" : ""}{Math.round(portfolio.dailyChange || 0).toLocaleString("en-US")} د.ع</span>
-                  <span className="text-neutral-600 font-normal">·</span>
-                  <span>{dailyUp ? "+" : ""}{portfolio.dailyChangePercent}% اليوم</span>
+                {/* Phase 13.48 — three-line wallet indicator:
+                      • reference delta in IQD (current market vs founder's
+                        reference share_price)
+                      • today's % change (resets at 06:00)
+                      • this week's % change (rolling 7d)
+                    Each pill is colour-coded independently (green/red/grey). */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
+                  <ChangePill
+                    valueIqd={changeMetrics.reference_delta_iqd}
+                    label="عن السعر المرجعي"
+                  />
+                  <span className="text-neutral-700 text-[10px] hidden sm:inline">·</span>
+                  <ChangePillPct
+                    pct={changeMetrics.daily_change_pct}
+                    label="اليوم"
+                  />
+                  <span className="text-neutral-700 text-[10px] hidden sm:inline">·</span>
+                  <ChangePillPct
+                    pct={changeMetrics.weekly_change_pct}
+                    label="الأسبوع"
+                  />
                 </div>
 
                 <div className="flex gap-2 flex-wrap mb-4">
@@ -641,14 +824,20 @@ export default function DashboardPage() {
               const available = selectedProject.available_shares ?? 0
               const soldCount = Math.max(0, offering - available)
               const tradingVolume = soldCount * livePrice
+              const tiles: Array<{
+                label: string
+                raw: number
+                unit: string
+                highlight?: boolean
+              }> = [
+                { label: "حجم تداول الحصة", raw: tradingVolume, unit: "IQD" },
+                { label: "حصص الشركة", raw: selectedProject.total_shares - offering, unit: "SHR" },
+                { label: "الحصص المتداولة", raw: soldCount, unit: "SHR", highlight: true },
+                { label: "القيمة السوقية", raw: selectedProject.project_value ?? 0, unit: "IQD" },
+              ]
               return (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
-                  {[
-                    { label: "حجم تداول الحصة", value: fmtCompact(tradingVolume), unit: "IQD" },
-                    { label: "حصص الشركة", value: (selectedProject.total_shares - offering).toLocaleString("en-US"), unit: "SHR" },
-                    { label: "الحصص المتداولة", value: soldCount.toLocaleString("en-US"), unit: "SHR", highlight: true },
-                    { label: "القيمة السوقية", value: fmtCompact(selectedProject.project_value ?? 0), unit: "IQD" },
-                  ].map((item, i) => (
+                  {tiles.map((item, i) => (
                 <div
                   key={i}
                   onClick={() => item.highlight && router.push("/exchange")}
@@ -660,8 +849,8 @@ export default function DashboardPage() {
                   )}
                 >
                   <div className="text-[10px] text-neutral-500 mb-1">{item.label}</div>
-                  <div className="text-base font-bold text-white font-mono">
-                    {item.value} <span className="text-[10px] text-neutral-500 font-sans">{item.unit}</span>
+                  <div className={cn("font-bold text-white font-mono leading-tight", tileValueSize(item.raw))}>
+                    {fmtCompact(item.raw)} <span className="text-[10px] text-neutral-500 font-sans">{item.unit}</span>
                   </div>
                 </div>
               ))}
@@ -731,17 +920,17 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-3 gap-2 mb-4">
                   <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
                     <div className="text-[10px] text-neutral-500 mb-1">القيمة الإجمالية</div>
-                    <div className="text-base font-bold text-white font-mono">
+                    <div className={cn("font-bold text-white font-mono leading-tight", tileValueSize(totalVolume))}>
                       {fmtCompact(totalVolume)} <span className="text-[10px] text-neutral-500 font-sans">IQD</span>
                     </div>
                   </div>
                   <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
                     <div className="text-[10px] text-neutral-500 mb-1">مشاريع نشطة</div>
-                    <div className="text-base font-bold text-white font-mono">{dbProjects.length}</div>
+                    <div className={cn("font-bold text-white font-mono leading-tight", tileValueSize(dbProjects.length))}>{dbProjects.length}</div>
                   </div>
                   <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
                     <div className="text-[10px] text-neutral-500 mb-1">حصص متداولة</div>
-                    <div className="text-base font-bold text-white font-mono">
+                    <div className={cn("font-bold text-white font-mono leading-tight", tileValueSize(totalSold))}>
                       {totalSold.toLocaleString("en-US")}
                     </div>
                   </div>

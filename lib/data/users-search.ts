@@ -58,8 +58,10 @@ export async function searchUsers(
     const limit = Math.max(1, Math.min(options.limit ?? 10, 50))
     const q = `%${trimmed.replace(/[%_]/g, "\\$&")}%`
 
+    // Phase 13.50 — read from the safe-columns view; the underlying
+    // `profiles` table is now strict-RLS (self + admin only).
     let req = supabase
-      .from("profiles")
+      .from("profiles_public")
       .select("id, full_name, username, level, role")
       .or(`full_name.ilike.${q},username.ilike.${q}`)
       .limit(limit)

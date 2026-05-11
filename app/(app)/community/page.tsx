@@ -48,16 +48,22 @@ export default function CommunityPage() {
   const [users, setUsers] = useState<CommunityUserRow[]>([])
 
   // Pull users + friend graph in parallel.
+  // Phase 13.51 — bumped limit to 500 so the community page reflects
+  // the full registered-users registry (active + non-banned). Each
+  // setState fires independently so the user list paints as soon as
+  // it returns, without waiting for the friend-graph queries.
   useEffect(() => {
     let cancelled = false
+    getCommunityUsers(500).then((rows) => {
+      if (cancelled) return
+      setUsers(rows)
+    })
     Promise.all([
-      getCommunityUsers(50),
       getFriendIdSet(),
       getOutgoingPendingSet(),
       getMyFriendRequests(),
-    ]).then(([rows, fIds, outIds, reqs]) => {
+    ]).then(([fIds, outIds, reqs]) => {
       if (cancelled) return
-      setUsers(rows)
       setFriendIds(fIds)
       setPendingOutgoing(outIds)
       setRequests(reqs)
@@ -243,7 +249,9 @@ export default function CommunityPage() {
 
           <PageHeader
             title="المجتمع"
-            subtitle="مستثمرون · أصدقاء · شركاء · دردشات"
+            subtitle={users.length > 0
+              ? `${users.length.toLocaleString("en-US")} مستخدم مسجَّل · أصدقاء · شركاء · دردشات`
+              : "مستثمرون · أصدقاء · شركاء · دردشات"}
             showBack={false}
           />
 

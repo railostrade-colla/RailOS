@@ -408,6 +408,33 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
       showError("الحد الأقصى لكل وثيقة 5MB")
       return
     }
+    // Phase 13.50 — strict white-list of MIME types. Previously the
+    // accept= attribute filtered by extension only; the browser still
+    // happily set file.type from a forged extension, so a `.txt`
+    // could carry text/html bytes and become a stored XSS via the
+    // data: URL link. This list rejects HTML / SVG / scripts at the
+    // boundary.
+    const ALLOWED_MIME = new Set<string>([
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "application/zip",
+      "application/x-zip-compressed",
+      "application/x-rar-compressed",
+      "application/vnd.rar",
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "text/plain",
+    ])
+    if (!ALLOWED_MIME.has(file.type)) {
+      showError("نوع الملف غير مسموح. الأنواع المتاحة: PDF / Word / Excel / PPT / ZIP / RAR / صور / TXT")
+      return
+    }
     const reader = new FileReader()
     reader.onload = (ev) => {
       const url = ev.target?.result
@@ -869,13 +896,20 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
             <input
               ref={logoInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0]
                 if (!file) return
                 if (file.size > 2 * 1024 * 1024) {
                   showError("الحجم الأقصى 2MB")
+                  return
+                }
+                // Phase 13.50 — strict white-list. Excludes
+                // image/svg+xml because SVG can carry script tags.
+                const ALLOWED = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"])
+                if (!ALLOWED.has(file.type)) {
+                  showError("نوع غير مسموح للشعار (PNG/JPEG/WEBP فقط)")
                   return
                 }
                 const reader = new FileReader()
@@ -901,7 +935,7 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
                 <>
                   <Upload className="w-7 h-7 text-neutral-400" strokeWidth={1.5} />
                   <span className="text-xs text-neutral-300 font-bold">رفع الشعار</span>
-                  <span className="text-[10px] text-neutral-500">PNG / SVG / JPG</span>
+                  <span className="text-[10px] text-neutral-500">PNG / JPG / WEBP</span>
                 </>
               )}
             </button>
@@ -984,16 +1018,25 @@ export function EntityFormPanel({ mode, entityType, initialData: initialDataProp
             <input
               ref={galleryInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
               multiple
               className="hidden"
               onChange={(e) => {
                 const files = e.target.files
                 if (!files || files.length === 0) return
                 const MAX_BYTES = 3 * 1024 * 1024
+                // Phase 13.50 — defence in depth: even if accept= is
+                // bypassed, reject anything that isn't a raster image.
+                // Excludes image/svg+xml (script-bearing) and any
+                // non-image MIME the browser might let through.
+                const ALLOWED = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"])
                 Array.from(files).forEach((file) => {
                   if (file.size > MAX_BYTES) {
                     showError(`${file.name}: أكبر من 3MB`)
+                    return
+                  }
+                  if (!ALLOWED.has(file.type)) {
+                    showError(`${file.name}: نوع غير مسموح (PNG/JPEG/WEBP فقط)`)
                     return
                   }
                   const reader = new FileReader()
