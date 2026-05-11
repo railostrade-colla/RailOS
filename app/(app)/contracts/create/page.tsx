@@ -16,13 +16,11 @@ import { IntegerInput } from "@/components/ui/IntegerInput"
 
 const fmtIQD = (n: number) => n.toLocaleString("en-US")
 
-import {
-  mockProfileLite as mockProfile,
-  FEE_BALANCE_CONTRACTS as mockFeeBalance,
-} from "@/lib/mock-data"
+import { FEE_BALANCE_CONTRACTS as mockFeeBalance } from "@/lib/mock-data"
 import { createContract as createContractDB } from "@/lib/data/contracts"
 import { hasUnusedGift, redeemFreeContractGift } from "@/lib/data/gifts"
 import { getMyFriends, type DBFriend } from "@/lib/data/friendships"
+import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/data/profile"
 import { createClient } from "@/lib/supabase/client"
 import { Gift, Handshake, Hash } from "lucide-react"
 
@@ -42,9 +40,13 @@ export default function CreateContractPage() {
   const [description, setDescription] = useState("")
   const [investment, setInvestment] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
-  const [partners, setPartners] = useState<Partner[]>([
-    { user: { id: mockProfile.id, name: mockProfile.name, reputation_score: mockProfile.reputation_score, is_verified: true, level: mockProfile.level }, role: "creator", share_percentage: 100 },
-  ])
+
+  // Phase 13.53 — real signed-in user is the creator. Loaded on
+  // mount (see useEffect below); until then `currentUser` is null
+  // and the partners array stays empty so we don't seed a placeholder
+  // "Ahmed Mohamed" row from the legacy mock.
+  const [currentUser, setCurrentUser] = useState<CurrentUserProfile | null>(null)
+  const [partners, setPartners] = useState<Partner[]>([])
   const [distMode, setDistMode] = useState<"equal" | "manual">("equal")
   const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -71,6 +73,34 @@ export default function CreateContractPage() {
 
     hasUnusedGift("free_contract").then((has) => {
       if (!cancelled) setHasGift(has)
+    })
+
+    // Phase 13.53 — seed the partners array with the REAL signed-in
+    // user as the contract creator. Maps the profile's raw level
+    // (basic|advanced|pro|elite) onto the contract UI's 3-tier
+    // enum (`elite` collapses to `pro`).
+    getCurrentUserProfile().then((p) => {
+      if (cancelled || !p) return
+      setCurrentUser(p)
+      const safeLevel: InvestorLevel =
+        p.level === "advanced" ? "advanced" :
+        p.level === "pro" || p.level === "elite" ? "pro" :
+        "basic"
+      const displayName =
+        p.full_name?.trim() || p.username?.trim() || p.email?.split("@")[0] || "—"
+      setPartners([
+        {
+          user: {
+            id: p.id,
+            name: displayName,
+            reputation_score: p.trust_score,
+            is_verified: p.is_verified,
+            level: safeLevel,
+          },
+          role: "creator",
+          share_percentage: 100,
+        },
+      ])
     })
 
     const loadPartners = () => {
@@ -294,11 +324,31 @@ export default function CreateContractPage() {
             backHref="/contracts"
           />
 
-          {/* معلومات تلقائية */}
+          {/* معلومات تلقائية — Phase 13.53: real creator from auth */}
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4 mb-4">
             <div className="flex justify-between items-center text-xs">
               <span className="text-neutral-500">منشئ العقد</span>
-              <span className="text-white font-bold">{mockProfile.name}</span>
+              {currentUser ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-white font-bold">
+                    {currentUser.full_name?.trim()
+                      || currentUser.username?.trim()
+                      || currentUser.email?.split("@")[0]
+                      || "—"}
+                  </span>
+                  {currentUser.is_verified && (
+                    <span className="bg-green-400/10 border border-green-400/20 text-green-400 px-1 py-0.5 rounded text-[9px] font-bold">
+                      ✓ موثّق
+                    </span>
+                  )}
+                  <span className="bg-white/[0.08] border border-white/[0.12] text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                    <span>{currentUser.level_icon}</span>
+                    <span className="text-neutral-200">{currentUser.level_label}</span>
+                  </span>
+                </div>
+              ) : (
+                <span className="text-neutral-500 text-[11px] animate-pulse">جاري التحميل…</span>
+              )}
             </div>
             <div className="h-px bg-white/[0.05] my-2.5" />
             <div className="flex justify-between items-center text-xs">
