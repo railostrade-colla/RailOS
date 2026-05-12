@@ -754,8 +754,8 @@ export default function ContractDetailPage() {
 
       {/* Phase 13.66 — cancel pending contract confirmation */}
       {showCancelPending && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border-2 border-red-400/40 rounded-t-3xl lg:rounded-2xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border-2 border-red-400/40 rounded-2xl p-6 w-full max-w-md">
             <div className="flex justify-between items-start mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 rounded-xl bg-red-400/[0.12] border border-red-400/[0.3] flex items-center justify-center">

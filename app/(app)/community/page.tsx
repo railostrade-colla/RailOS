@@ -582,8 +582,8 @@ export default function CommunityPage() {
       {/* User profile modal */}
       {/* Phase 13.57 — confirm cancel of outgoing friend request */}
       {cancelTarget && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-red-400/[0.3] rounded-t-3xl lg:rounded-2xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border border-red-400/[0.3] rounded-2xl p-6 w-full max-w-md">
             <div className="flex justify-between items-start mb-4">
               <div className="flex items-center gap-2">
                 <UserMinus className="w-5 h-5 text-red-400" />
@@ -627,8 +627,8 @@ export default function CommunityPage() {
       )}
 
       {selectedUser && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center p-4">
-          <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-t-3xl lg:rounded-2xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-w-md">
             <div className="flex justify-between items-start mb-5">
               <div className="flex items-center gap-3">
                 <div className="w-16 h-16 rounded-full bg-white/[0.08] border-2 border-white/[0.1] flex items-center justify-center text-2xl font-bold text-white">
