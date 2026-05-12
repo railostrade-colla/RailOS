@@ -146,12 +146,12 @@ export function ContractInviteModal() {
 
   return (
     <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-[#0a0a0a] border-2 border-[#deff9a]/40 rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-300">
+      <div className="bg-[#0a0a0a] border-2 border-[#4ADE80]/40 rounded-3xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-300">
         {/* Header */}
         <div className="flex justify-between items-start mb-4">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-[#deff9a]/[0.12] border border-[#deff9a]/[0.3] flex items-center justify-center flex-shrink-0">
-              <FileText className="w-5 h-5 text-[#deff9a]" strokeWidth={2} />
+            <div className="w-10 h-10 rounded-xl bg-[#4ADE80]/[0.12] border border-[#4ADE80]/[0.3] flex items-center justify-center flex-shrink-0">
+              <FileText className="w-5 h-5 text-[#4ADE80]" strokeWidth={2} />
             </div>
             <div>
               <div className="text-base font-bold text-white">📄 دعوة شراكة جديدة</div>
@@ -194,10 +194,10 @@ export function ContractInviteModal() {
             </div>
             <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-2.5">
               <div className="flex items-center gap-1 mb-1">
-                <Percent className="w-3 h-3 text-[#deff9a]" />
+                <Percent className="w-3 h-3 text-[#4ADE80]" />
                 <span className="text-[10px] text-neutral-500">حصّتك المقترَحة</span>
               </div>
-              <div className="text-sm font-bold text-[#deff9a] font-mono">
+              <div className="text-sm font-bold text-[#4ADE80] font-mono">
                 {invite.share_percent.toFixed(1)}%
               </div>
             </div>
@@ -264,7 +264,7 @@ export function ContractInviteModal() {
               disabled={submitting}
               className={cn(
                 "flex-1 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2",
-                "bg-[#deff9a] text-black hover:bg-[#c9eb78] active:scale-[0.98]",
+                "bg-[#4ADE80] text-black hover:bg-[#22c55e] active:scale-[0.98]",
                 "disabled:opacity-50 disabled:cursor-not-allowed",
               )}
             >

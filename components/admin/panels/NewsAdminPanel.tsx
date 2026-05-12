@@ -211,7 +211,7 @@ export function NewsAdminPanel() {
                 key={n.id}
                 className={cn(
                   "bg-white/[0.04] border rounded-2xl p-4 flex items-start gap-3",
-                  n.is_pinned ? "border-[#deff9a]/30" : "border-white/[0.08]",
+                  n.is_pinned ? "border-[#4ADE80]/30" : "border-white/[0.08]",
                 )}
               >
                 {n.cover_image_url ? (
@@ -225,7 +225,7 @@ export function NewsAdminPanel() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-sm font-bold text-white truncate">{n.title}</span>
-                    {n.is_pinned && <Pin className="w-3 h-3 text-[#deff9a]" strokeWidth={2.5} />}
+                    {n.is_pinned && <Pin className="w-3 h-3 text-[#4ADE80]" strokeWidth={2.5} />}
                     <span className={cn(
                       "text-[9px] font-bold px-1.5 py-0.5 rounded border",
                       n.is_published
@@ -372,9 +372,9 @@ export function NewsAdminPanel() {
                       type="checkbox"
                       checked={form.is_pinned}
                       onChange={(e) => setForm((f) => ({ ...f, is_pinned: e.target.checked }))}
-                      className="w-4 h-4 accent-[#deff9a]"
+                      className="w-4 h-4 accent-[#4ADE80]"
                     />
-                    <Pin className="w-3.5 h-3.5 text-[#deff9a]" />
+                    <Pin className="w-3.5 h-3.5 text-[#4ADE80]" />
                     تثبيت
                   </label>
                   <label className="flex items-center gap-2 text-xs text-neutral-300 cursor-pointer">

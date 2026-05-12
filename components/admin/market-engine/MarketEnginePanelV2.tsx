@@ -196,7 +196,7 @@ function DynamicSection() {
         className={cn(
           "border-2 rounded-2xl p-5 transition-colors",
           enabled
-            ? "bg-[#deff9a]/[0.04] border-[#deff9a]/30"
+            ? "bg-[#4ADE80]/[0.04] border-[#4ADE80]/30"
             : "bg-white/[0.03] border-white/[0.08]",
         )}
       >
@@ -204,7 +204,7 @@ function DynamicSection() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <Power
-                className={cn("w-4 h-4", enabled ? "text-[#deff9a]" : "text-neutral-500")}
+                className={cn("w-4 h-4", enabled ? "text-[#4ADE80]" : "text-neutral-500")}
                 strokeWidth={2}
               />
               <div className="text-sm font-bold text-white">
@@ -222,7 +222,7 @@ function DynamicSection() {
             onClick={() => setEnabled((v) => !v)}
             className={cn(
               "relative w-14 h-7 rounded-full transition-colors flex-shrink-0",
-              enabled ? "bg-[#deff9a]" : "bg-white/[0.1]",
+              enabled ? "bg-[#4ADE80]" : "bg-white/[0.1]",
             )}
           >
             <span
@@ -302,7 +302,7 @@ function DynamicSection() {
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-[#deff9a]" strokeWidth={2} />
+            <TrendingUp className="w-4 h-4 text-[#4ADE80]" strokeWidth={2} />
             <div className="text-sm font-bold text-white">شروط فتح الارتفاع</div>
           </div>
           <span className="text-[10px] text-neutral-500">
@@ -399,7 +399,7 @@ function DynamicSection() {
           className={cn(
             "w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors",
             dirty && !saving
-              ? "bg-[#deff9a] text-black hover:bg-[#c9eb78] active:scale-[0.98]"
+              ? "bg-[#4ADE80] text-black hover:bg-[#22c55e] active:scale-[0.98]"
               : "bg-white/[0.05] border border-white/[0.08] text-neutral-500 cursor-not-allowed",
           )}
         >
@@ -430,7 +430,7 @@ function MarketWatchCard({
 }) {
   const healthStyles = (() => {
     const h = advice?.health ?? "good"
-    if (h === "great") return { ring: "border-[#deff9a]/40", bg: "bg-[#deff9a]/[0.05]", icon: "text-[#deff9a]" }
+    if (h === "great") return { ring: "border-[#4ADE80]/40", bg: "bg-[#4ADE80]/[0.05]", icon: "text-[#4ADE80]" }
     if (h === "warn")  return { ring: "border-amber-400/40", bg: "bg-amber-400/[0.05]", icon: "text-amber-400" }
     return { ring: "border-blue-400/30", bg: "bg-blue-400/[0.04]", icon: "text-blue-400" }
   })()
@@ -491,7 +491,7 @@ function MarketWatchCard({
           <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 mb-3 flex items-center justify-between">
             <div>
               <div className="text-[11px] text-neutral-400">الارتفاع المُفتَّح حالياً</div>
-              <div className="text-base font-bold text-[#deff9a] font-mono">
+              <div className="text-base font-bold text-[#4ADE80] font-mono">
                 +{advice.progress.combined_unlock_pct.toFixed(2)}%
               </div>
             </div>
@@ -512,7 +512,7 @@ function MarketWatchCard({
                 key={i}
                 className={cn(
                   "rounded-xl p-3 border flex gap-3",
-                  m.kind === "good" && "bg-[#deff9a]/[0.06] border-[#deff9a]/20",
+                  m.kind === "good" && "bg-[#4ADE80]/[0.06] border-[#4ADE80]/20",
                   m.kind === "info" && "bg-blue-400/[0.06] border-blue-400/20",
                   m.kind === "warn" && "bg-amber-400/[0.06] border-amber-400/20",
                 )}
@@ -598,7 +598,7 @@ function ConditionInput({
           step={step}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white font-mono outline-none focus:border-[#deff9a]/40"
+          className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white font-mono outline-none focus:border-[#4ADE80]/40"
         />
         <span className="text-[10px] text-neutral-500 flex-shrink-0">{unit}</span>
       </div>
@@ -635,7 +635,7 @@ function ConditionGroup({
         </div>
         <div className="text-left flex-shrink-0" dir="ltr">
           <div className="text-[10px] text-neutral-500">unlock</div>
-          <div className={cn("text-xs font-mono font-bold", fullyMet ? "text-[#deff9a]" : "text-white")}>
+          <div className={cn("text-xs font-mono font-bold", fullyMet ? "text-[#4ADE80]" : "text-white")}>
             +{unlockPct.toFixed(2)}% / {maxRisePct.toFixed(2)}%
           </div>
         </div>
@@ -645,7 +645,7 @@ function ConditionGroup({
       <div>
         <div className="flex items-center justify-between mb-1">
           <span className="text-[10px] text-neutral-400">التقدّم: {progressLabel}</span>
-          <span className={cn("text-[10px] font-mono font-bold", fullyMet ? "text-[#deff9a]" : "text-neutral-300")}>
+          <span className={cn("text-[10px] font-mono font-bold", fullyMet ? "text-[#4ADE80]" : "text-neutral-300")}>
             {pct.toFixed(1)}%
           </span>
         </div>
@@ -653,7 +653,7 @@ function ConditionGroup({
           <div
             className={cn(
               "h-full rounded-full transition-all",
-              fullyMet ? "bg-[#deff9a]" : "bg-blue-400",
+              fullyMet ? "bg-[#4ADE80]" : "bg-blue-400",
             )}
             style={{ width: `${pct}%` }}
           />

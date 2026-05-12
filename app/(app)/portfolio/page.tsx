@@ -1077,7 +1077,7 @@ function PortfolioContent() {
                     { label: "إجمالي الاستثمار", value: fmtIQD(lifetime.total_ever_invested), unit: "IQD", hint: "تراكميّ — يبقى حتى بعد البيع" },
                     { label: "إجمالي الأرباح", value: (isUp ? "+" : "") + fmtIQD(netProfit), unit: "IQD", color: isUp ? "text-green-400" : "text-red-400", hint: "محقَّق — بعد العمولات" },
                     { label: "عدد الاستثمارات", value: String(lifetime.investment_events), unit: "صفقة", hint: "كم مرّة اشتريت حصصاً" },
-                    { label: "الاستثمارات المحفوظة", value: String(holdings.length), unit: "مشروع", hint: "تجلب لك العوائد", color: "text-[#deff9a]" },
+                    { label: "الاستثمارات المحفوظة", value: String(holdings.length), unit: "مشروع", hint: "تجلب لك العوائد", color: "text-[#4ADE80]" },
                   ].map((s, i) => (
                     <div key={i} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4">
                       <div className="text-[10px] text-neutral-500 mb-2">{s.label}</div>
@@ -1094,9 +1094,9 @@ function PortfolioContent() {
                      investments. Visible only when the user has at
                      least one open holding. */}
                 {holdings.length > 0 && (
-                  <div className="bg-gradient-to-l from-[#deff9a]/[0.06] to-white/[0.03] border border-[#deff9a]/[0.2] rounded-2xl p-4">
+                  <div className="bg-gradient-to-l from-[#4ADE80]/[0.06] to-white/[0.03] border border-[#4ADE80]/[0.2] rounded-2xl p-4">
                     <div className="flex items-center gap-2 mb-3">
-                      <Sparkles className="w-3.5 h-3.5 text-[#deff9a]" strokeWidth={2} />
+                      <Sparkles className="w-3.5 h-3.5 text-[#4ADE80]" strokeWidth={2} />
                       <div className="text-xs font-bold text-white">حالة الاستثمارات المحفوظة</div>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -1128,7 +1128,7 @@ function PortfolioContent() {
                           <div
                             className={cn(
                               "text-sm font-bold font-mono",
-                              t.accent ? "text-[#deff9a]" : "text-white",
+                              t.accent ? "text-[#4ADE80]" : "text-white",
                             )}
                           >
                             {t.value}

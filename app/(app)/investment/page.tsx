@@ -361,7 +361,7 @@ function InvestmentPageContent() {
                 onClick={() => goToExchange("buy")}
                 className={cn(
                   "py-3.5 sm:py-4 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all",
-                  "bg-[#deff9a] text-black hover:bg-[#c9eb78] active:scale-[0.98]",
+                  "bg-[#4ADE80] text-black hover:bg-[#22c55e] active:scale-[0.98]",
                   "shadow-[0_0_24px_rgba(222,255,154,0.15)]",
                 )}
               >
@@ -476,7 +476,7 @@ function ProjectInfoCard({
           <div className="text-[10px] sm:text-[11px] text-neutral-500 mt-0.5 flex items-center gap-2 flex-wrap">
             {project.sector && <span>{project.sector}</span>}
             {symbol && (
-              <span className="font-mono text-[#deff9a]" dir="ltr">
+              <span className="font-mono text-[#4ADE80]" dir="ltr">
                 {symbol}
               </span>
             )}
@@ -485,7 +485,7 @@ function ProjectInfoCard({
         {(annualMin > 0 || annualMax > 0) && (
           <div className="text-left flex-shrink-0">
             <div className="text-[9px] text-neutral-500">العائد المتوقّع</div>
-            <div className="text-xs font-bold text-[#deff9a] font-mono mt-0.5">
+            <div className="text-xs font-bold text-[#4ADE80] font-mono mt-0.5">
               {annualMin}-{annualMax}%
               <span className="text-[9px] text-neutral-500 mr-1">سنويّاً</span>
             </div>

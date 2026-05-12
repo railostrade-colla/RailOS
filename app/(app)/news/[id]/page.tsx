@@ -340,7 +340,7 @@ export default function NewsDetailPage() {
                   className={cn(
                     "px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5",
                     !posting && commentText.trim()
-                      ? "bg-[#deff9a] text-black hover:bg-[#c9eb78]"
+                      ? "bg-[#4ADE80] text-black hover:bg-[#22c55e]"
                       : "bg-white/[0.05] border border-white/[0.08] text-neutral-500 cursor-not-allowed",
                   )}
                 >

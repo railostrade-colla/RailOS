@@ -115,14 +115,14 @@ export function AdminQuickBuyToggle({
     <div className={cn(
       "border-2 rounded-2xl p-5 transition-colors",
       enabled
-        ? "bg-[#deff9a]/[0.04] border-[#deff9a]/30"
+        ? "bg-[#4ADE80]/[0.04] border-[#4ADE80]/30"
         : "bg-white/[0.03] border-white/[0.08]",
     )}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-start gap-2 min-w-0">
           <div className={cn(
             "mt-0.5 flex-shrink-0",
-            enabled ? "text-[#deff9a]" : "text-neutral-500",
+            enabled ? "text-[#4ADE80]" : "text-neutral-500",
           )}>
             <Zap className="w-4 h-4" strokeWidth={2} />
           </div>
@@ -130,7 +130,7 @@ export function AdminQuickBuyToggle({
             <div className="text-sm font-bold text-white flex items-center gap-2">
               ⚡ البيع المباشر للنظام
               {enabled ? (
-                <span className="bg-[#deff9a]/[0.15] border border-[#deff9a]/[0.3] text-[#deff9a] text-[9px] font-bold px-1.5 py-0.5 rounded">
+                <span className="bg-[#4ADE80]/[0.15] border border-[#4ADE80]/[0.3] text-[#4ADE80] text-[9px] font-bold px-1.5 py-0.5 rounded">
                   مفعَّل
                 </span>
               ) : (
@@ -150,7 +150,7 @@ export function AdminQuickBuyToggle({
           onClick={() => setEnabled((v) => !v)}
           className={cn(
             "relative w-12 h-6 rounded-full transition-colors flex-shrink-0",
-            enabled ? "bg-[#deff9a]" : "bg-white/[0.1]",
+            enabled ? "bg-[#4ADE80]" : "bg-white/[0.1]",
           )}
           aria-label={enabled ? "إيقاف الميزة" : "تفعيل الميزة"}
         >
@@ -177,7 +177,7 @@ export function AdminQuickBuyToggle({
             value={discountPct}
             onChange={(e) => setDiscountPct(e.target.value)}
             disabled={!enabled}
-            className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white font-mono outline-none focus:border-[#deff9a]/40 disabled:opacity-50"
+            className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white font-mono outline-none focus:border-[#4ADE80]/40 disabled:opacity-50"
           />
           <span className="text-[10px] text-neutral-500 flex-shrink-0">%</span>
         </div>
@@ -192,7 +192,7 @@ export function AdminQuickBuyToggle({
         className={cn(
           "w-full mt-3 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors",
           dirty && !saving
-            ? "bg-[#deff9a] text-black hover:bg-[#c9eb78]"
+            ? "bg-[#4ADE80] text-black hover:bg-[#22c55e]"
             : "bg-white/[0.05] border border-white/[0.08] text-neutral-500 cursor-not-allowed",
         )}
       >

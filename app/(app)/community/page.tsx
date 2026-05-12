@@ -323,7 +323,7 @@ export default function CommunityPage() {
                   className={cn(
                     "rounded-lg px-2.5 py-1.5 text-[10px] flex items-center gap-1 border",
                     partnerIds.has(u.id)
-                      ? "bg-[#deff9a]/[0.15] border-[#deff9a]/[0.35] text-[#deff9a]"
+                      ? "bg-[#4ADE80]/[0.15] border-[#4ADE80]/[0.35] text-[#4ADE80]"
                       : "bg-white/[0.05] border-white/[0.12] text-neutral-300 hover:bg-white/[0.08]",
                   )}
                   title={partnerIds.has(u.id) ? "إزالة من الشركاء" : "ترقية إلى شريك"}

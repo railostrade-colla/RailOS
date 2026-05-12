@@ -243,7 +243,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
                   className={cn(
                     "py-2.5 rounded-xl border text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5",
                     sellTarget === "system"
-                      ? "bg-[#deff9a]/[0.12] border-[#deff9a]/[0.4] text-[#deff9a]"
+                      ? "bg-[#4ADE80]/[0.12] border-[#4ADE80]/[0.4] text-[#4ADE80]"
                       : "bg-white/[0.03] border-white/[0.06] text-neutral-400 hover:bg-white/[0.05]",
                   )}
                 >
@@ -253,7 +253,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
               </div>
               <div className={cn(
                 "mt-1.5 text-[10px] leading-relaxed",
-                sellTarget === "system" ? "text-[#deff9a]" : "text-neutral-500",
+                sellTarget === "system" ? "text-[#4ADE80]" : "text-neutral-500",
               )}>
                 {sellTarget === "system"
                   ? "⚡ بيع فوري للنظام بسعر ثابت (-15% من سعر السوق). يتطلّب تفعيل الميزة على المشروع."
@@ -311,7 +311,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
                   </span>
                 </div>
               ) : (
-                <div className="bg-[#deff9a]/[0.06] border border-[#deff9a]/[0.25] rounded-xl p-3 text-xs text-[#deff9a] leading-relaxed flex items-start gap-2">
+                <div className="bg-[#4ADE80]/[0.06] border border-[#4ADE80]/[0.25] rounded-xl p-3 text-xs text-[#4ADE80] leading-relaxed flex items-start gap-2">
                   <Zap className="w-4 h-4 flex-shrink-0 mt-0.5" strokeWidth={2.5} />
                   <span>
                     البيع المباشر <b>مفعَّل</b> لهذا المشروع.
@@ -425,11 +425,11 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
               </div>
               {/* Phase 13.59 — total proceeds for system mode */}
               {isSystemMode && sharesNum > 0 && (
-                <div className="flex justify-between text-sm border-t border-[#deff9a]/[0.15] pt-2 mt-1">
-                  <span className="text-[#deff9a] font-bold">
+                <div className="flex justify-between text-sm border-t border-[#4ADE80]/[0.15] pt-2 mt-1">
+                  <span className="text-[#4ADE80] font-bold">
                     إجمالي المبلغ ({sharesNum.toLocaleString("en-US")} حصّة)
                   </span>
-                  <span className="font-mono font-bold text-[#deff9a]">
+                  <span className="font-mono font-bold text-[#4ADE80]">
                     {fmtIQD(finalPrice * sharesNum)} IQD
                   </span>
                 </div>
@@ -467,7 +467,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
               "flex-1 py-3 rounded-xl text-sm font-bold transition-opacity",
               canSubmit
                 ? (isSystemMode
-                    ? "bg-[#deff9a] text-black hover:opacity-90"
+                    ? "bg-[#4ADE80] text-black hover:opacity-90"
                     : "bg-gradient-to-r from-[#FB923C] to-[#F87171] text-white hover:opacity-90")
                 : "bg-neutral-800 text-neutral-500 cursor-not-allowed",
             )}

@@ -8,7 +8,7 @@
  * project. The dropdown is a self-contained popover; the parent
  * decides what to do with the selection.
  *
- * Design: matches the Raylos dark-mode aesthetic with the #deff9a
+ * Design: matches the Raylos dark-mode aesthetic with the #4ADE80
  * accent on the active row. Searches by name OR symbol.
  */
 
@@ -84,7 +84,7 @@ export function ProjectSelector({ projects, value, onChange, label, className }:
               <div className="text-sm font-bold text-white truncate">{value.name}</div>
               <div className="text-[10px] text-neutral-500 mt-0.5 flex items-center gap-1.5">
                 {value.symbol && (
-                  <span className="font-mono text-[#deff9a]" dir="ltr">{value.symbol}</span>
+                  <span className="font-mono text-[#4ADE80]" dir="ltr">{value.symbol}</span>
                 )}
                 <span>·</span>
                 <span>{value.sector}</span>
@@ -143,7 +143,7 @@ export function ProjectSelector({ projects, value, onChange, label, className }:
                     className={cn(
                       "w-full flex items-center gap-2.5 px-3 py-2 transition-colors text-right",
                       active
-                        ? "bg-[#deff9a]/[0.08]"
+                        ? "bg-[#4ADE80]/[0.08]"
                         : "hover:bg-white/[0.04]",
                     )}
                   >
@@ -152,7 +152,7 @@ export function ProjectSelector({ projects, value, onChange, label, className }:
                       <div
                         className={cn(
                           "text-xs font-bold truncate",
-                          active ? "text-[#deff9a]" : "text-white",
+                          active ? "text-[#4ADE80]" : "text-white",
                         )}
                       >
                         {p.name}
@@ -177,7 +177,7 @@ export function ProjectSelector({ projects, value, onChange, label, className }:
                         )}
                       </div>
                     </div>
-                    {active && <Check className="w-3.5 h-3.5 text-[#deff9a] flex-shrink-0" />}
+                    {active && <Check className="w-3.5 h-3.5 text-[#4ADE80] flex-shrink-0" />}
                   </button>
                 )
               })

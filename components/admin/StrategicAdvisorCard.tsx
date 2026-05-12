@@ -56,8 +56,8 @@ const priorityStyles: Record<AdvicePriority, { badge: string; ring: string; bg: 
     ring: "border-blue-500/25", bg: "bg-blue-500/[0.04]", iconCol: "text-blue-300",
   },
   good: {
-    badge: "bg-[#deff9a]/[0.15] border-[#deff9a]/[0.4] text-[#deff9a]",
-    ring: "border-[#deff9a]/30", bg: "bg-[#deff9a]/[0.04]", iconCol: "text-[#deff9a]",
+    badge: "bg-[#4ADE80]/[0.15] border-[#4ADE80]/[0.4] text-[#4ADE80]",
+    ring: "border-[#4ADE80]/30", bg: "bg-[#4ADE80]/[0.04]", iconCol: "text-[#4ADE80]",
   },
 }
 
@@ -92,7 +92,7 @@ export function StrategicAdvisorCard({ variant = "full", className }: Props) {
   }, [reload])
 
   const healthTone =
-    data.health_score >= 75 ? "text-[#deff9a]" :
+    data.health_score >= 75 ? "text-[#4ADE80]" :
     data.health_score >= 50 ? "text-blue-400" :
     data.health_score >= 30 ? "text-amber-400" : "text-red-400"
 
@@ -110,7 +110,7 @@ export function StrategicAdvisorCard({ variant = "full", className }: Props) {
       <div className={cn("bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4", className)}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-[#deff9a]" strokeWidth={2} />
+            <Sparkles className="w-4 h-4 text-[#4ADE80]" strokeWidth={2} />
             <div>
               <div className="text-sm font-bold text-white">🧭 المرشد الاستراتيجي</div>
               <div className="text-[10px] text-neutral-500">{verdict}</div>
@@ -140,7 +140,7 @@ export function StrategicAdvisorCard({ variant = "full", className }: Props) {
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2">
-          <Sparkles className="w-5 h-5 text-[#deff9a] mt-0.5" strokeWidth={2} />
+          <Sparkles className="w-5 h-5 text-[#4ADE80] mt-0.5" strokeWidth={2} />
           <div>
             <div className="text-sm font-bold text-white">🧭 المستشار الاقتصادي الاستراتيجي</div>
             <div className="text-[11px] text-neutral-400 leading-relaxed">
@@ -162,7 +162,7 @@ export function StrategicAdvisorCard({ variant = "full", className }: Props) {
       {/* Health score banner */}
       <div className={cn(
         "border-2 rounded-xl p-4",
-        data.health_score >= 75 ? "border-[#deff9a]/40 bg-[#deff9a]/[0.05]" :
+        data.health_score >= 75 ? "border-[#4ADE80]/40 bg-[#4ADE80]/[0.05]" :
         data.health_score >= 50 ? "border-blue-400/35 bg-blue-400/[0.05]" :
         data.health_score >= 30 ? "border-amber-400/40 bg-amber-400/[0.06]" :
                                   "border-red-400/40 bg-red-400/[0.06]",
@@ -190,7 +190,7 @@ export function StrategicAdvisorCard({ variant = "full", className }: Props) {
           <KpiTile icon={<Activity className="w-3 h-3 text-emerald-400" />} label="نشط 24س"        value={fmtNum(data.snapshot.active_users_24h)} hint={`${fmtNum(data.snapshot.active_users_7d)} نشط 7 أيّام`} />
           <KpiTile icon={<ShieldCheck className="w-3 h-3 text-blue-400" />} label="موثَّقون KYC"   value={fmtNum(data.snapshot.kyc_approved)} hint={`${fmtNum(data.snapshot.kyc_pending)} بانتظار`} />
           <KpiTile icon={<Users className="w-3 h-3 text-purple-400" />} label="متداولون"          value={fmtNum(data.snapshot.dealing_users_lifetime)} hint={`${fmtNum(data.snapshot.dealing_users_7d)} هذا الأسبوع`} />
-          <KpiTile icon={<TrendingUp className="w-3 h-3 text-[#deff9a]" />} label="صفقات 24س"      value={fmtNum(data.snapshot.deals_24h)} hint={`${fmtNum(data.snapshot.deals_7d)} هذا الأسبوع`} />
+          <KpiTile icon={<TrendingUp className="w-3 h-3 text-[#4ADE80]" />} label="صفقات 24س"      value={fmtNum(data.snapshot.deals_24h)} hint={`${fmtNum(data.snapshot.deals_7d)} هذا الأسبوع`} />
           <KpiTile icon={<Banknote className="w-3 h-3 text-emerald-400" />} label="تداول 24س"      value={fmtCompactIqd(data.snapshot.traded_value_24h)} hint={`متوسّط ${fmtCompactIqd(data.snapshot.avg_deal_size)}`} unit="IQD" />
           <KpiTile icon={<ShoppingCart className="w-3 h-3 text-amber-400" />} label="طلب معلَّق" value={fmtCompactIqd(data.snapshot.open_demand_value)} hint={`${fmtNum(data.snapshot.open_demand_count)} طلب`} unit="IQD" />
           <KpiTile icon={<Package className="w-3 h-3 text-cyan-400" />} label="عرض متاح"         value={fmtCompactIqd(data.snapshot.supply_value)} hint={`${fmtNum(data.snapshot.supply_shares)} حصّة`} unit="IQD" />
@@ -215,7 +215,7 @@ export function StrategicAdvisorCard({ variant = "full", className }: Props) {
                           {u.missing > 0 ? (
                             <>السوق يحتاج <span className="text-amber-300 font-bold font-mono">{fmtNum(u.missing)}</span> {u.unit} إضافي للوصول إلى الهدف</>
                           ) : (
-                            <span className="text-[#deff9a]">الشرط مكتمل ✓</span>
+                            <span className="text-[#4ADE80]">الشرط مكتمل ✓</span>
                           )}
                         </div>
                       </div>
@@ -223,7 +223,7 @@ export function StrategicAdvisorCard({ variant = "full", className }: Props) {
                     <div className="text-left flex-shrink-0">
                       <div className={cn(
                         "text-xs font-mono font-bold",
-                        fullyMet ? "text-[#deff9a]" : "text-white",
+                        fullyMet ? "text-[#4ADE80]" : "text-white",
                       )}>
                         {fmtNum(u.current)} / {fmtNum(u.target)}
                       </div>
@@ -237,7 +237,7 @@ export function StrategicAdvisorCard({ variant = "full", className }: Props) {
                   <div className="h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
                     <div
                       className={cn("h-full rounded-full transition-all",
-                        fullyMet ? "bg-[#deff9a]" : "bg-blue-400")}
+                        fullyMet ? "bg-[#4ADE80]" : "bg-blue-400")}
                       style={{ width: `${Math.min(100, u.pct_complete)}%` }}
                     />
                   </div>
@@ -274,7 +274,7 @@ function AdviceList({ data, loading }: { data: StrategicAdvisorResult; loading: 
   }
   if (data.advice.length === 0) {
     return (
-      <div className="bg-[#deff9a]/[0.06] border border-[#deff9a]/[0.2] rounded-xl p-3 text-xs text-[#deff9a] flex items-center gap-2">
+      <div className="bg-[#4ADE80]/[0.06] border border-[#4ADE80]/[0.2] rounded-xl p-3 text-xs text-[#4ADE80] flex items-center gap-2">
         <CheckCircle2 className="w-4 h-4" strokeWidth={2.5} />
         لا توصيات حاليّة — السوق ضمن المعايير المستهدفة.
       </div>

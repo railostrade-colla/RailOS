@@ -231,7 +231,7 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
     return [Math.max(0, Math.floor(min - pad)), Math.ceil(max + pad)]
   }, [series, candles, mode, currentPrice])
 
-  const accent = "#deff9a"
+  const accent = "#4ADE80"
   const trendColor = trend.up ? "#4ade80" : "#f87171"
 
   return (
@@ -521,7 +521,7 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
 //
 // Phase 13.23 colors (matching the founder's Binance-style reference
 // + Raylos brand):
-//   • Bullish (close > open) → #deff9a — the app's signature green.
+//   • Bullish (close > open) → #4ADE80 — the app's signature green.
 //                                Body filled solid for visibility.
 //   • Bearish (close < open) → #f87171 — soft red. Body filled solid
 //                                so it reads at a glance, even at the
@@ -556,7 +556,7 @@ function Candle(props: CandleShapeProps) {
   // Raylos green for bullish, red for bearish. Phase 13.25 — when
   // the bucket has only 1 observation (O=H=L=C), use the Raylos
   // accent so the doji is visible AND visually tied to the brand.
-  const color = bullish ? "#deff9a" : bearish ? "#f87171" : "#deff9a"
+  const color = bullish ? "#4ADE80" : bearish ? "#f87171" : "#4ADE80"
 
   // ─── Phase 13.25 — minimum-visibility guards ─────────────────
   // A doji or single-point bucket gives bodyHeight=0 and wick of

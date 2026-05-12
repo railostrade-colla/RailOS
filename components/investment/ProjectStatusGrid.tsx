@@ -102,12 +102,12 @@ function Tile({
   bar?: number
 }) {
   const toneClass = {
-    green: "border-[#deff9a]/[0.25] bg-[#deff9a]/[0.04] text-[#deff9a]",
+    green: "border-[#4ADE80]/[0.25] bg-[#4ADE80]/[0.04] text-[#4ADE80]",
     blue: "border-blue-400/[0.2] bg-blue-400/[0.04] text-blue-400",
     yellow: "border-yellow-400/[0.2] bg-yellow-400/[0.04] text-yellow-400",
   }[tone]
   const barColor = {
-    green: "bg-[#deff9a]",
+    green: "bg-[#4ADE80]",
     blue: "bg-blue-400",
     yellow: "bg-yellow-400",
   }[tone]

@@ -522,7 +522,7 @@ export default function CreateContractPage() {
                                   ✓
                                 </span>
                               )}
-                              <span className="bg-[#deff9a]/[0.12] border border-[#deff9a]/[0.25] text-[#deff9a] px-1 py-0.5 rounded text-[9px] font-bold flex-shrink-0">
+                              <span className="bg-[#4ADE80]/[0.12] border border-[#4ADE80]/[0.25] text-[#4ADE80] px-1 py-0.5 rounded text-[9px] font-bold flex-shrink-0">
                                 شريك
                               </span>
                             </div>
