@@ -317,7 +317,7 @@ BEGIN
   END IF;
 
   UPDATE public.contract_members
-     SET invite_status  = (CASE WHEN p_accept THEN 'accepted' ELSE 'declined' END)::contract_member_invite_status,
+     SET invite_status  = (CASE WHEN p_accept THEN 'accepted' ELSE 'declined' END)::member_invite_status,
          joined_at      = CASE WHEN p_accept THEN NOW() ELSE joined_at END,
          declined_at    = CASE WHEN NOT p_accept THEN NOW() ELSE declined_at END,
          decline_reason = CASE WHEN NOT p_accept THEN p_decline_reason ELSE decline_reason END

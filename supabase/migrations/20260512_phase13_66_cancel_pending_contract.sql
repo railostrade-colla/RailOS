@@ -60,7 +60,7 @@ BEGIN
   -- trg_notify_contract_invite_responded fires per-row to tell
   -- invitees that the contract was withdrawn.
   UPDATE public.contract_members
-     SET invite_status  = 'declined'::contract_member_invite_status,
+     SET invite_status  = 'declined'::member_invite_status,
          declined_at    = NOW(),
          decline_reason = COALESCE(
            NULLIF(TRIM(p_reason), ''),
@@ -71,7 +71,7 @@ BEGIN
 
   -- Flip the contract itself to cancelled.
   UPDATE public.partnership_contracts
-     SET status              = 'cancelled'::partnership_contract_status,
+     SET status              = 'cancelled'::contract_status,
          cancelled_at        = NOW(),
          cancellation_reason = NULLIF(TRIM(p_reason), ''),
          updated_at          = NOW()
