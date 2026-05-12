@@ -9,6 +9,7 @@ import { AppLayout } from "@/components/layout/AppLayout"
 // background as the rest of the app.
 import { PageHeader } from "@/components/layout/PageHeader"
 import { ContractLimitCard } from "@/components/contracts/ContractLimitCard"
+import { ContractWalletSection } from "@/components/contracts/ContractWalletSection"
 import { Card, Modal, Badge } from "@/components/ui"
 import { LEVEL_LABELS, LEVEL_ICONS } from "@/lib/utils/contractLimits"
 import {
@@ -467,6 +468,11 @@ export default function ContractDetailPage() {
           <div className="mb-4">
             <ContractLimitCard members={contract.members.map((m) => ({ name: m.name, level: m.level }))} />
           </div>
+
+          {/* Phase 13.71 — Contract wallet (in-contract investments,
+              activity log, source breakdown). Visible to creator +
+              members + admin (RLS-enforced). */}
+          <ContractWalletSection contractId={contract.id} />
 
           {/* قائمة الأعضاء التفصيلية */}
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-4">
