@@ -1,179 +1,194 @@
 "use client"
 
 /**
- * Admin force-rise market price (Phase 12.9).
+ * Admin manual market-price control (Phase 14.05).
  *
- * Two RPCs wrapped here:
- *   • getRiseStatus(projectId)      — read-only, returns conditions + blockers
- *   • forceMarketRise(input)        — write, applies rise (with optional override)
+ * After the Phase 14 V7 cleanup, the admin's price tool is radically
+ * simpler than the old Phase 12.9 version:
+ *
+ *   • No more `getRiseStatus` — the `admin_get_rise_status` RPC was
+ *     dropped in Migration 14.02 along with the rest of the V7 engine.
+ *     The natural-rise calculation now lives entirely inside the
+ *     `trg_update_market_price_on_deal_complete` trigger.
+ *
+ *   • `forceMarketRise` calls the new 3-arg RPC
+ *     `admin_force_market_rise(p_project_id UUID, p_rise_pct NUMERIC,
+ *     p_reason TEXT)` introduced in Migration 14.02.
+ *
+ *   • `risePct` is now a PERCENTAGE (5 = 5%, -3 = -3%), not the old
+ *     decimal form. Range is -100 ≤ pct ≤ 100; negative values let
+ *     the founder correct an upward overshoot.
+ *
+ *   • `reason` is REQUIRED (≥ 10 chars). Every manual price change
+ *     is audited in `price_history` with `trigger_type='admin_manual'`.
  */
 
 import { createClient } from "@/lib/supabase/client"
 
-export type EngineMode = "initial" | "permanent" | "frozen"
-
-export interface RiseConditions {
-  total_holders: number
-  distinct_pairs: number
-  pair_ratio: number     // 0..1
-  c1_score: number       // 0..1 — distinct-pair condition
-  hold_score: number     // 0..1
-  balance_score: number  // 0..1
-  c2_score: number       // 0..1 — combined hold+balance
-}
-
-export interface RiseStatus {
-  success: boolean
-  error?: string
-  project: {
-    id: string
-    name: string
-    share_price: number
-    current_market_price: number
-    percent_above_par: number
-  }
-  engine_mode: EngineMode
-  is_frozen: boolean
-  conditions: RiseConditions
-  monthly_accumulated: number   // 0..1 (e.g. 0.04 = 4%)
-  monthly_cap: number           // 0..1
-  today_rises: number
-  /** What the engine would naturally apply NOW (0 if blocked). */
-  allowed_natural_rise: number
-  blockers: string[]
-  can_rise_naturally: boolean
-}
-
-export async function getRiseStatus(
-  projectId: string,
-): Promise<RiseStatus | null> {
-  if (!projectId) return null
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase.rpc("admin_get_rise_status", {
-      p_project_id: projectId,
-    })
-    if (error) {
-      // eslint-disable-next-line no-console
-      console.warn("[admin-rise] status read failed:", error.message)
-      return null
-    }
-    if (!data) return null
-    const r = data as RiseStatus
-    if (!r.success) {
-      // eslint-disable-next-line no-console
-      console.warn("[admin-rise] status error:", r.error)
-      return null
-    }
-    // Coerce numeric strings (Supabase serialises NUMERIC as string).
-    r.project.share_price = Number(r.project.share_price)
-    r.project.current_market_price = Number(r.project.current_market_price)
-    r.project.percent_above_par = Number(r.project.percent_above_par)
-    r.monthly_accumulated = Number(r.monthly_accumulated)
-    r.monthly_cap = Number(r.monthly_cap)
-    r.allowed_natural_rise = Number(r.allowed_natural_rise)
-    r.today_rises = Number(r.today_rises)
-    return r
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error("[admin-rise] status threw:", err)
-    return null
-  }
-}
-
 export interface ForceRiseInput {
   projectId: string
-  /** Decimal percentage (0.05 = 5%). Pass null to use the natural rise. */
-  risePct?: number | null
-  /** Bypass condition checks. Required when blockers > 0. */
-  override?: boolean
-  reason?: string
+  /** Percentage to apply. 5 = +5%, -3 = -3%. Range: [-100, 100]. */
+  risePct: number
+  /** Required justification. Stored in the RPC response + Supabase logs. */
+  reason: string
 }
 
 export interface ForceRiseResult {
   success: boolean
+  /** Arabic-friendly error message for the toast. */
   error?: string
+  /** Machine-readable error code from the RPC (`not_super_admin`, ...). */
   reason?: string
-  /** Arabic-friendly message for the toast. */
+  /** Arabic-friendly success message for the toast. */
   message?: string
   data?: {
     old_price: number
     new_price: number
-    rise_pct: number
-    override_used: boolean
-    blockers_at_apply: string[]
+    /** Percentage actually applied (e.g. 5.0 = +5%, -3.0 = -3%). */
+    change_pct: number
+    /** True when old == new (the RPC's no_op short-circuit fired). */
+    no_op: boolean
   }
 }
 
+/** Maps the new RPC's error codes → Arabic messages. */
 const ARABIC_ERROR: Record<string, string> = {
   unauthenticated: "يجب تسجيل الدخول",
-  not_admin: "هذا الإجراء مقصور على الأدمن",
+  not_super_admin: "هذا الإجراء مقصور على المدير الأعلى",
+  invalid_project: "معرّف المشروع مفقود",
+  invalid_rise_pct: "نسبة التعديل خارج المدى المسموح (-100 إلى 100)",
   project_not_found: "المشروع غير موجود",
-  no_rise_to_apply: "لا توجد قيمة رفع لتطبيقها",
-  rise_too_large: "نسبة الرفع تتجاوز الحد المسموح (50%)",
-  conditions_not_met: "الشروط غير مستوفاة — استخدم override أو انتظر",
+  no_base_price: "المشروع لا يملك سعراً مرجعياً صالحاً",
 }
 
+/** Local validation thresholds — must match RPC server-side bounds. */
+export const RISE_PCT_MIN = -100
+export const RISE_PCT_MAX = 100
+export const REASON_MIN_LEN = 10
+export const REASON_MAX_LEN = 300
+
+/**
+ * Applies a manual price change.
+ *
+ * Returns a discriminated result — never throws.
+ * The caller (RaiseMarketPricePanel) is responsible for the
+ * confirmation modal and big-change warnings.
+ */
 export async function forceMarketRise(
   input: ForceRiseInput,
 ): Promise<ForceRiseResult> {
+  // ─── Client-side pre-flight (mirrors RPC bounds, fails fast) ──
   if (!input.projectId) {
     return {
       success: false,
-      error: "معرّف المشروع مفقود",
-      reason: "missing_project",
+      reason: "invalid_project",
+      error: ARABIC_ERROR.invalid_project,
     }
   }
+  if (
+    !Number.isFinite(input.risePct) ||
+    input.risePct < RISE_PCT_MIN ||
+    input.risePct > RISE_PCT_MAX
+  ) {
+    return {
+      success: false,
+      reason: "invalid_rise_pct",
+      error: ARABIC_ERROR.invalid_rise_pct,
+    }
+  }
+  const trimmedReason = (input.reason ?? "").trim()
+  if (trimmedReason.length < REASON_MIN_LEN) {
+    return {
+      success: false,
+      reason: "reason_required",
+      error: `يجب كتابة سبب (${REASON_MIN_LEN}+ حرف)`,
+    }
+  }
+  if (trimmedReason.length > REASON_MAX_LEN) {
+    return {
+      success: false,
+      reason: "reason_too_long",
+      error: `السبب طويل جداً (الحدّ الأقصى ${REASON_MAX_LEN} حرف)`,
+    }
+  }
+
+  // ─── RPC call ─────────────────────────────────────────────────
   try {
     const supabase = createClient()
     const { data, error } = await supabase.rpc("admin_force_market_rise", {
       p_project_id: input.projectId,
-      p_rise_pct: input.risePct ?? null,
-      p_override: input.override ?? false,
-      p_reason: input.reason ?? null,
+      p_rise_pct: input.risePct,
+      p_reason: trimmedReason,
     })
+
     if (error) {
-      return { success: false, error: error.message, reason: "rpc_error" }
+      return {
+        success: false,
+        reason: "rpc_error",
+        error: error.message || "تعذّر الاتصال بقاعدة البيانات",
+      }
     }
+
     const r = (data ?? {}) as {
       success?: boolean
       error?: string
-      blockers?: string[]
-      project_name?: string
       old_price?: number | string
       new_price?: number | string
-      rise_pct?: number | string
-      override_used?: boolean
-      blockers_at_apply?: string[]
+      change_pct?: number | string
+      project_id?: string
+      project_name?: string
+      note?: string
+      reason?: string | null
     }
+
     if (!r.success) {
       const code = r.error ?? "unknown"
       return {
         success: false,
         reason: code,
-        error: ARABIC_ERROR[code] ?? `تعذّر الرفع (${code})`,
+        error: ARABIC_ERROR[code] ?? `تعذّر التطبيق (${code})`,
       }
     }
 
-    const newPrice = Number(r.new_price)
-    const oldPrice = Number(r.old_price)
-    const risePct = Number(r.rise_pct)
+    const oldPrice = Number(r.old_price ?? 0)
+    const newPrice = Number(r.new_price ?? 0)
+    const changePct = Number(r.change_pct ?? 0)
+    const noOp = r.note === "no_op" || oldPrice === newPrice
+
+    const projName = r.project_name ?? ""
+    const sign = changePct >= 0 ? "+" : ""
+    const verb = changePct >= 0 ? "📈 رفع" : "📉 خفض"
+
     return {
       success: true,
-      message: `📈 تم رفع سعر ${r.project_name ?? ""} من ${oldPrice.toLocaleString("en-US")} إلى ${newPrice.toLocaleString("en-US")} د.ع (+${(risePct * 100).toFixed(1)}%)`,
+      message: noOp
+        ? `لا تغيير — السعر بقي ${newPrice.toLocaleString("en-US")} د.ع`
+        : `${verb} سعر ${projName} من ${oldPrice.toLocaleString("en-US")} إلى ${newPrice.toLocaleString("en-US")} د.ع (${sign}${changePct.toFixed(2)}%)`,
       data: {
         old_price: oldPrice,
         new_price: newPrice,
-        rise_pct: risePct,
-        override_used: !!r.override_used,
-        blockers_at_apply: r.blockers_at_apply ?? [],
+        change_pct: changePct,
+        no_op: noOp,
       },
     }
   } catch (err) {
     return {
       success: false,
-      error: err instanceof Error ? err.message : "خطأ غير متوقّع",
       reason: "exception",
+      error: err instanceof Error ? err.message : "خطأ غير متوقّع",
     }
   }
+}
+
+/**
+ * Computes the projected new price for the UI preview (no DB hit).
+ * Uses the same ROUND/GREATEST rule as the RPC so the preview matches
+ * the eventual stored value exactly:
+ *   new_price = GREATEST(1, ROUND(old × (1 + pct/100)))
+ */
+export function previewNewPrice(oldPrice: number, risePct: number): number {
+  if (!Number.isFinite(oldPrice) || oldPrice <= 0) return 0
+  if (!Number.isFinite(risePct)) return oldPrice
+  const raw = Math.round(oldPrice * (1 + risePct / 100))
+  return Math.max(1, raw)
 }
