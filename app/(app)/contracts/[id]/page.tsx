@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { Users, Calendar, Coins, FileText, AlertTriangle, X, Check } from "lucide-react"
+import { Users, Calendar, Coins, FileText, AlertTriangle, X, Check, UserCheck, UserX, Ban } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 // Phase 13.65 — GridBackground removed per founder spec; the
 // contract detail page now uses the same plain-black AppLayout
@@ -21,10 +21,12 @@ import type { ContractDetail } from "@/lib/mock-data/types"
 import {
   getContractById,
   endContract,
+  cancelPendingContract,
   getContractMembersFull,
   updateMemberPermission,
   type ContractMemberFull,
 } from "@/lib/data/contracts"
+import { respondToContractInvite } from "@/lib/data/contract-invites"
 import { createClient } from "@/lib/supabase/client"
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
@@ -137,6 +139,16 @@ export default function ContractDetailPage() {
   const [confirmCheck, setConfirmCheck] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
+  // Phase 13.66 — partner-side response (accept / decline) from
+  // the contract detail page itself, mirroring the global modal.
+  const [respondingInvite, setRespondingInvite] = useState<"accept" | "decline" | null>(null)
+  const [showDeclineForm, setShowDeclineForm] = useState(false)
+  const [declineReason, setDeclineReason] = useState("")
+
+  // Phase 13.66 — creator-side: cancel a still-pending contract.
+  const [showCancelPending, setShowCancelPending] = useState(false)
+  const [cancellingPending, setCancellingPending] = useState(false)
+
   // Real ownership check — derived from the user_contracts list.
   // Falls back to mock string-match for the seed contract.
   const [creatorContractIds, setCreatorContractIds] = useState<Set<string>>(new Set())
@@ -196,6 +208,71 @@ export default function ContractDetailPage() {
     setShowEndModal(false)
   }
 
+  // Phase 13.66 — partner-side accept invite (in-page).
+  const handleAcceptInvite = async () => {
+    setRespondingInvite("accept")
+    const r = await respondToContractInvite(contract.id, true)
+    setRespondingInvite(null)
+    if (!r.success) {
+      const map: Record<string, string> = {
+        unauthenticated: "سجّل دخولك أولاً",
+        no_pending_invite: "الدعوة لم تعد متاحة",
+        invalid_input: "مدخلات غير صحيحة",
+      }
+      showError(map[r.reason ?? ""] ?? r.reason ?? "فشلت الموافقة")
+      return
+    }
+    showSuccess("✅ تمت الموافقة على عقد الشراكة")
+    refreshMembers()
+  }
+
+  const handleDeclineInvite = async () => {
+    setRespondingInvite("decline")
+    const r = await respondToContractInvite(
+      contract.id,
+      false,
+      declineReason.trim() || undefined,
+    )
+    setRespondingInvite(null)
+    if (!r.success) {
+      const map: Record<string, string> = {
+        unauthenticated: "سجّل دخولك أولاً",
+        no_pending_invite: "الدعوة لم تعد متاحة",
+      }
+      showError(map[r.reason ?? ""] ?? "فشل الرفض")
+      return
+    }
+    showSuccess("تم رفض الدعوة")
+    setShowDeclineForm(false)
+    setDeclineReason("")
+    refreshMembers()
+  }
+
+  // Phase 13.66 — creator-side cancel a still-pending contract.
+  const handleCancelPending = async () => {
+    setCancellingPending(true)
+    const r = await cancelPendingContract(contract.id)
+    setCancellingPending(false)
+    if (!r.success) {
+      const map: Record<string, string> = {
+        unauthenticated: "سجّل دخولك أولاً",
+        not_owner: "فقط منشئ العقد يقدر يلغيه",
+        not_pending: "العقد ليس في حالة قيد الانتظار",
+        not_found: "العقد غير موجود",
+        missing_table: "الميزة غير منشورة على الخادم بعد",
+      }
+      showError(map[r.reason ?? ""] ?? r.error ?? "تعذّر إلغاء العقد")
+      return
+    }
+    showSuccess("تم إلغاء العقد")
+    setShowCancelPending(false)
+    setTimeout(() => router.push("/contracts"), 500)
+  }
+
+  // Derived state for action buttons.
+  const myMember = members.find((m) => m.user_id === currentUserId)
+  const iAmPendingInvitee = !!myMember && myMember.invite_status === "pending"
+
   return (
     <AppLayout>
       <div className="relative">
@@ -206,6 +283,83 @@ export default function ContractDetailPage() {
             subtitle={contract.title}
             backHref="/contracts"
           />
+
+          {/* Phase 13.66 — partner-side accept/reject banner.
+              Shown whenever the signed-in user is an invitee with
+              invite_status='pending'. Lets them respond from this
+              page (in case they dismissed the global popup). */}
+          {iAmPendingInvitee && (
+            <div className="bg-gradient-to-br from-green-400/[0.08] to-green-400/[0.03] border-2 border-green-400/[0.3] rounded-2xl p-5 mb-4">
+              <div className="flex items-start gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-green-400/[0.12] border border-green-400/[0.3] flex items-center justify-center flex-shrink-0">
+                  <FileText className="w-5 h-5 text-[#4ADE80]" strokeWidth={2} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-white mb-1">
+                    📩 دعوة شراكة بانتظار ردّك
+                  </div>
+                  <div className="text-[11px] text-neutral-300 leading-relaxed">
+                    أنت مدعوّ للانضمام إلى هذا العقد بحصّة{" "}
+                    <span className="font-bold text-[#4ADE80] font-mono">{myMember?.share_percent}%</span>.
+                    وافق للدخول أو ارفض الدعوة.
+                  </div>
+                </div>
+              </div>
+
+              {showDeclineForm ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[11px] text-neutral-400 mb-1.5 block">
+                      سبب الرفض (اختياري)
+                    </label>
+                    <textarea
+                      value={declineReason}
+                      onChange={(e) => setDeclineReason(e.target.value)}
+                      rows={3}
+                      placeholder="مثال: مشغول حالياً، حصّة غير مناسبة..."
+                      className="w-full bg-white/[0.04] border border-white/[0.1] rounded-xl px-3 py-2 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 resize-none"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setShowDeclineForm(false); setDeclineReason("") }}
+                      disabled={respondingInvite !== null}
+                      className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-xs hover:bg-white/[0.08] disabled:opacity-50"
+                    >
+                      تراجع
+                    </button>
+                    <button
+                      onClick={handleDeclineInvite}
+                      disabled={respondingInvite !== null}
+                      className="flex-1 py-2.5 rounded-xl bg-red-500/[0.15] border border-red-500/[0.3] text-red-400 text-xs font-bold hover:bg-red-500/[0.2] disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      <UserX className="w-3.5 h-3.5" strokeWidth={2.5} />
+                      {respondingInvite === "decline" ? "جارٍ..." : "تأكيد الرفض"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowDeclineForm(true)}
+                    disabled={respondingInvite !== null}
+                    className="flex-1 py-2.5 rounded-xl bg-red-500/[0.1] border border-red-500/[0.25] text-red-400 text-xs font-bold hover:bg-red-500/[0.15] disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    <UserX className="w-3.5 h-3.5" strokeWidth={2.5} />
+                    رفض
+                  </button>
+                  <button
+                    onClick={handleAcceptInvite}
+                    disabled={respondingInvite !== null}
+                    className="flex-1 py-2.5 rounded-xl bg-[#4ADE80] text-black text-xs font-bold hover:bg-[#22c55e] disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" strokeWidth={2.5} />
+                    {respondingInvite === "accept" ? "جارٍ..." : "الموافقة على الانضمام"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Contract info card */}
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-4">
@@ -390,6 +544,18 @@ export default function ContractDetailPage() {
             </button>
           )}
 
+          {/* Phase 13.66 — cancel pending contract (creator only).
+              Used to withdraw invites + abort before activation. */}
+          {isCreator && contract.status === "pending" && (
+            <button
+              onClick={() => setShowCancelPending(true)}
+              className="w-full bg-red-500/[0.1] border border-red-500/30 hover:bg-red-500/[0.15] text-red-400 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors mb-6"
+            >
+              <Ban className="w-4 h-4" strokeWidth={2} />
+              إنهاء العقد وسحب الدعوات
+            </button>
+          )}
+
         </div>
       </div>
 
@@ -521,6 +687,58 @@ export default function ContractDetailPage() {
             </label>
           </div>
         </Modal>
+      )}
+
+      {/* Phase 13.66 — cancel pending contract confirmation */}
+      {showCancelPending && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end lg:items-center justify-center p-4">
+          <div className="bg-[#0a0a0a] border-2 border-red-400/40 rounded-t-3xl lg:rounded-2xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 rounded-xl bg-red-400/[0.12] border border-red-400/[0.3] flex items-center justify-center">
+                  <Ban className="w-5 h-5 text-red-400" strokeWidth={2} />
+                </div>
+                <div>
+                  <div className="text-base font-bold text-white">إنهاء العقد المعلَّق</div>
+                  <div className="text-[11px] text-neutral-400">سحب الدعوات وإلغاء العقد</div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCancelPending(false)}
+                disabled={cancellingPending}
+                className="text-neutral-500 hover:text-white disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-red-400/[0.05] border border-red-400/[0.2] rounded-xl p-3 mb-4 text-xs text-red-300 leading-relaxed">
+              ⚠ سيتم إلغاء العقد "<b className="text-white">{contract.title}</b>" وسحب الدعوات
+              المرسَلة. سيُخطَر كل من تلقّى دعوة بأنّك قمت بسحبها.
+              <span className="block mt-1 text-red-300/80 text-[11px]">
+                لا توجد رسوم — العقد لم يتفعّل بعد. الإجراء نهائي.
+              </span>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowCancelPending(false)}
+                disabled={cancellingPending}
+                className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
+              >
+                تراجع
+              </button>
+              <button
+                onClick={handleCancelPending}
+                disabled={cancellingPending}
+                className="flex-1 py-3 rounded-xl bg-red-500/[0.18] border border-red-500/[0.4] text-red-300 text-sm font-bold hover:bg-red-500/[0.25] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <Ban className="w-4 h-4" strokeWidth={2.5} />
+                {cancellingPending ? "جارٍ..." : "نعم، ألغِ العقد"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AppLayout>
   )

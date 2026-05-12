@@ -647,6 +647,52 @@ export async function getContractMembersFull(
 
 // ─── End-contract (existing) ──────────────────────────────────
 
+/**
+ * Phase 13.66 — abort a contract while still in `pending` status.
+ * Mirrors endContract's shape so the page can reuse the same UI
+ * patterns. Pending member invites are auto-declined by the RPC.
+ */
+export async function cancelPendingContract(
+  contractId: string,
+  reason?: string,
+): Promise<EndContractResult> {
+  if (!contractId) return { success: false, reason: "not_found" }
+  try {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return { success: false, reason: "unauthenticated" }
+
+    const { data, error } = await supabase.rpc("cancel_pending_contract", {
+      p_contract_id: contractId,
+      p_reason: reason ?? null,
+    })
+    if (error) {
+      const code = error.code ?? ""
+      const msg = error.message ?? ""
+      if (code === "42883" || code === "42P01")
+        return { success: false, reason: "missing_table", error: msg }
+      if (code === "42501") return { success: false, reason: "rls", error: msg }
+      return { success: false, reason: "unknown", error: msg }
+    }
+    const result = (data ?? {}) as { success?: boolean; error?: string }
+    if (!result.success) {
+      return {
+        success: false,
+        reason: (result.error as EndContractResult["reason"]) ?? "unknown",
+      }
+    }
+    return { success: true }
+  } catch (err) {
+    return {
+      success: false,
+      reason: "unknown",
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
 export async function endContract(contractId: string): Promise<EndContractResult> {
   if (!contractId) return { success: false, reason: "not_found" }
   try {
