@@ -104,7 +104,10 @@ export function ContractInviteModal() {
         no_pending_invite: "الدعوة لم تعد متاحة",
         invalid_input: "مدخلات غير صحيحة",
       }
-      showError(map[r.reason ?? ""] ?? "فشلت الموافقة")
+      // Phase 13.68 — if the reason isn't in our known list, surface
+      // the raw DB error string so the founder can diagnose schema /
+      // RLS issues instead of seeing a generic "فشلت الموافقة".
+      showError(map[r.reason ?? ""] ?? `فشلت الموافقة: ${r.reason ?? "خطأ غير معروف"}`)
       return
     }
     showSuccess("✅ تمت الموافقة على عقد الشراكة")
