@@ -109,8 +109,20 @@ export interface ContractDistribution {
  * `share_percent`. Total shares are derived from total_investment using a
  * conventional share unit price (100,000 IQD).
  */
-export function calculateContractDistribution(contractId: string): ContractDistribution | null {
-  const contract = mockContract.id === contractId ? mockContract : null
+/**
+ * Phase 13.67 — computes distribution directly from a real
+ * ContractDetail object (the legacy variant compared against
+ * mockContract.id which made every non-mock contract return null).
+ */
+export function calculateContractDistribution(
+  arg: string | ContractDetail | null | undefined,
+): ContractDistribution | null {
+  let contract: ContractDetail | null = null
+  if (arg && typeof arg === "object") {
+    contract = arg
+  } else if (typeof arg === "string") {
+    contract = mockContract.id === arg ? mockContract : null
+  }
   if (!contract) return null
 
   const totalValue = contract.total_investment
@@ -129,7 +141,7 @@ export function calculateContractDistribution(contractId: string): ContractDistr
   })
 
   return {
-    contract_id: contractId,
+    contract_id: contract.id,
     total_shares: totalShares,
     total_value: totalValue,
     end_fee: endFee,

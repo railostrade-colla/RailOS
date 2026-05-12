@@ -12,7 +12,6 @@ import { ContractLimitCard } from "@/components/contracts/ContractLimitCard"
 import { Card, Modal, Badge } from "@/components/ui"
 import { LEVEL_LABELS, LEVEL_ICONS } from "@/lib/utils/contractLimits"
 import {
-  mockContract,
   calculateContractDistribution,
   endContract as endContractMock,
   CONTRACT_END_FEE_PCT,
@@ -47,8 +46,12 @@ export default function ContractDetailPage() {
   const params = useParams()
   const id = (params?.id as string) || "ct1"
 
-  // Mock first-paint, real DB on mount.
-  const [contract, setContract] = useState<ContractDetail>(mockContract)
+  // Phase 13.67 — start with null so we never paint the legacy
+  // mockContract's hardcoded 4 partners. A loading screen shows
+  // until getContractById returns; a "not found" screen shows if
+  // it stays null.
+  const [contract, setContract] = useState<ContractDetail | null>(null)
+  const [contractLoading, setContractLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string>("")
   const [members, setMembers] = useState<ContractMemberFull[]>([])
   const [savingPermFor, setSavingPermFor] = useState<string | null>(null)
@@ -66,7 +69,8 @@ export default function ContractDetailPage() {
       getContractMembersFull(id),
     ]).then(([c, u, m]) => {
       if (cancelled) return
-      if (c) setContract(c)
+      setContract(c)               // c may be null → loading→not-found below
+      setContractLoading(false)
       const uid = u.data.user?.id ?? ""
       if (uid) setCurrentUserId(uid)
       setMembers(m)
@@ -87,7 +91,7 @@ export default function ContractDetailPage() {
           getContractMembersFull(id),
         ])
         if (cancelled) return
-        if (c2) setContract(c2)
+        setContract(c2)
         setMembers(m2)
       }, 200)
     }
@@ -167,14 +171,20 @@ export default function ContractDetailPage() {
     }
   }, [])
 
-  const isCreator =
-    creatorContractIds.has(contract.id) ||
-    (!currentUserId && contract.creator === "أحمد محمد")
+  // Phase 13.67 — every read off `contract` must be null-safe; the
+  // page renders a loading/not-found state when contract is null.
+  const isCreator = contract
+    ? creatorContractIds.has(contract.id)
+    : false
 
-  const distribution = calculateContractDistribution(contract.id)
+  // Pass the contract OBJECT (not just id) so the distribution
+  // helper computes from real DB data instead of the old mock match.
+  const distribution = contract
+    ? calculateContractDistribution(contract)
+    : null
 
   const handleEndContract = async () => {
-    if (!distribution) return
+    if (!contract || !distribution) return
     if (!confirmCheck) {
       showError("أكّد رغبتك في إنهاء العقد أولاً")
       return
@@ -210,6 +220,7 @@ export default function ContractDetailPage() {
 
   // Phase 13.66 — partner-side accept invite (in-page).
   const handleAcceptInvite = async () => {
+    if (!contract) return
     setRespondingInvite("accept")
     const r = await respondToContractInvite(contract.id, true)
     setRespondingInvite(null)
@@ -227,6 +238,7 @@ export default function ContractDetailPage() {
   }
 
   const handleDeclineInvite = async () => {
+    if (!contract) return
     setRespondingInvite("decline")
     const r = await respondToContractInvite(
       contract.id,
@@ -250,6 +262,7 @@ export default function ContractDetailPage() {
 
   // Phase 13.66 — creator-side cancel a still-pending contract.
   const handleCancelPending = async () => {
+    if (!contract) return
     setCancellingPending(true)
     const r = await cancelPendingContract(contract.id)
     setCancellingPending(false)
@@ -272,6 +285,50 @@ export default function ContractDetailPage() {
   // Derived state for action buttons.
   const myMember = members.find((m) => m.user_id === currentUserId)
   const iAmPendingInvitee = !!myMember && myMember.invite_status === "pending"
+
+  // Phase 13.67 — loading / not-found guards before the main render.
+  // Previously the page seeded `contract` from mockContract, so a
+  // failed fetch silently rendered the hardcoded 4-partner "Ahmed
+  // Mohamed / Ali Hassan / ..." mock screen.
+  if (contractLoading) {
+    return (
+      <AppLayout>
+        <div className="relative">
+          <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
+            <PageHeader title="تفاصيل العقد" subtitle="…" backHref="/contracts" />
+            <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-12 text-center">
+              <div className="text-xs text-neutral-500 animate-pulse">جاري تحميل العقد…</div>
+            </div>
+          </div>
+        </div>
+      </AppLayout>
+    )
+  }
+
+  if (!contract) {
+    return (
+      <AppLayout>
+        <div className="relative">
+          <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
+            <PageHeader title="تفاصيل العقد" subtitle="—" backHref="/contracts" />
+            <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-12 text-center">
+              <FileText className="w-12 h-12 text-neutral-600 mx-auto mb-3" strokeWidth={1.5} />
+              <div className="text-sm font-bold text-white mb-1">العقد غير موجود</div>
+              <div className="text-xs text-neutral-500 mb-4">
+                ربّما حُذف، أو ليست لديك صلاحية لعرضه.
+              </div>
+              <button
+                onClick={() => router.push("/contracts")}
+                className="text-xs text-blue-400 hover:text-blue-300"
+              >
+                العودة إلى قائمة العقود
+              </button>
+            </div>
+          </div>
+        </div>
+      </AppLayout>
+    )
+  }
 
   return (
     <AppLayout>
