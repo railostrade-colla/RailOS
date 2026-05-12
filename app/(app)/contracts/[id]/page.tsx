@@ -4,7 +4,9 @@ import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Users, Calendar, Coins, FileText, AlertTriangle, X, Check } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { GridBackground } from "@/components/layout/GridBackground"
+// Phase 13.65 — GridBackground removed per founder spec; the
+// contract detail page now uses the same plain-black AppLayout
+// background as the rest of the app.
 import { PageHeader } from "@/components/layout/PageHeader"
 import { ContractLimitCard } from "@/components/contracts/ContractLimitCard"
 import { Card, Modal, Badge } from "@/components/ui"
@@ -197,8 +199,6 @@ export default function ContractDetailPage() {
   return (
     <AppLayout>
       <div className="relative">
-        <GridBackground showCircles={false} />
-
         <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
 
           <PageHeader
