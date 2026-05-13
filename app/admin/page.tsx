@@ -3,7 +3,9 @@
 import { useSearchParams } from "next/navigation"
 import { type AdminTab } from "@/lib/admin/types"
 import { DashboardPanel } from "@/components/admin/panels/Dashboard"
-import { MonitorPanel } from "@/components/admin/panels/Monitor"
+// Phase 14.08.2 — MonitorPanel deleted. Its job is now done by the
+// App-Router page /admin/engine-monitor (Phase 14.08f). Legacy
+// ?tab=monitor URLs fall through to the unknown-tab placeholder.
 import { AlertsPanel } from "@/components/admin/panels/Alerts"
 import { LogPanel } from "@/components/admin/panels/Log"
 import { ProjectsPanel } from "@/components/admin/panels/Projects"
@@ -65,7 +67,8 @@ export default function AdminPage() {
 
   const panels: Record<string, React.ReactNode> = {
     dashboard: <DashboardPanel />,
-    monitor: <MonitorPanel />,
+    // Phase 14.08.2 — monitor tab removed (panel deleted). Use the
+    // App-Router page at /admin/engine-monitor instead.
     alerts: <AlertsPanel />,
     log: <LogPanel />,
     projects: <ProjectsPanel />,

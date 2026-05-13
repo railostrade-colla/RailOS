@@ -232,6 +232,91 @@ export interface ManualTriggerResult {
   skippedReason?: string
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// Emergency rise (Phase 14.08.2) — admin-only manual override.
+//
+// Calls the rewritten `admin_force_market_rise(uuid, numeric, boolean,
+// text)` RPC introduced in the Phase 14.08.2 Step 2 consolidation.
+// The server enforces:
+//   • super_admin or admin role
+//   • rise > 0 and ≤ 0.50 (50%) — up-only philosophy
+//   • reason length ≥ 10 chars
+//   • writes price_history (trigger_type='admin_force_rise')
+//   • writes admin_decisions_log
+//
+// `risePctPercent` is the human-friendly percentage (5 = 5%). This
+// wrapper converts it to the decimal the RPC expects (5 → 0.05).
+// ═══════════════════════════════════════════════════════════════════
+
+export interface ForceRiseResult {
+  success: boolean
+  error?: string
+  oldPrice?: number
+  newPrice?: number
+  risePctPercent?: number
+}
+
+export const EMERGENCY_RISE_MAX_PERCENT = 50
+export const EMERGENCY_REASON_MIN_LEN = 10
+
+export async function forceEmergencyRise(
+  projectId: string,
+  risePctPercent: number,
+  reason: string,
+): Promise<ForceRiseResult> {
+  if (!projectId) return { success: false, error: "missing_project" }
+  if (
+    !Number.isFinite(risePctPercent) ||
+    risePctPercent <= 0 ||
+    risePctPercent > EMERGENCY_RISE_MAX_PERCENT
+  ) {
+    return {
+      success: false,
+      error: `النسبة يجب أن تكون أكبر من 0 وأقل أو يساوي ${EMERGENCY_RISE_MAX_PERCENT}%`,
+    }
+  }
+  const trimmed = (reason ?? "").trim()
+  if (trimmed.length < EMERGENCY_REASON_MIN_LEN) {
+    return {
+      success: false,
+      error: `السبب يجب أن يكون ${EMERGENCY_REASON_MIN_LEN} أحرف على الأقل`,
+    }
+  }
+
+  try {
+    const supabase = createClient()
+    const { data, error } = await supabase.rpc("admin_force_market_rise", {
+      p_project_id: projectId,
+      p_rise_pct: risePctPercent / 100, // human % → decimal the RPC expects
+      p_override: false,
+      p_reason: trimmed,
+    })
+    if (error) return { success: false, error: error.message }
+
+    const r = (data ?? {}) as {
+      success?: boolean
+      error?: string
+      old_price?: number | string
+      new_price?: number | string
+      rise_pct?: number | string
+    }
+    if (r.success !== true) {
+      return { success: false, error: r.error ?? "unknown" }
+    }
+    return {
+      success: true,
+      oldPrice: num(r.old_price),
+      newPrice: num(r.new_price),
+      risePctPercent: num(r.rise_pct) * 100,
+    }
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
 export async function manualTriggerDailyEngine(
   projectId?: string,
   force = false,

@@ -23,12 +23,18 @@ import {
   RefreshCw,
   Loader2,
   Zap,
+  Siren,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react"
 import {
   getProjectLayers,
   getRecentRuns,
   getMonthlyRiseTable,
   manualTriggerDailyEngine,
+  forceEmergencyRise,
+  EMERGENCY_RISE_MAX_PERCENT,
+  EMERGENCY_REASON_MIN_LEN,
   type AllLayers,
   type EngineDailyRun,
   type MonthlyRiseRow,
@@ -48,6 +54,14 @@ export default function EngineMonitorPage() {
   const [loadingRuns, setLoadingRuns] = useState(true)
   const [loadingLayers, setLoadingLayers] = useState(false)
   const [firing, setFiring] = useState(false)
+
+  // ─── Emergency-rise state (Phase 14.08.2) ──────────────────────
+  // Hidden behind a collapsible section so it doesn't crowd the
+  // read-only monitor. Default-closed; only super-admins will open it.
+  const [emergencyOpen, setEmergencyOpen] = useState(false)
+  const [emergencyRiseInput, setEmergencyRiseInput] = useState("")
+  const [emergencyReason, setEmergencyReason] = useState("")
+  const [emergencyFiring, setEmergencyFiring] = useState(false)
 
   // ─── Initial loads ────────────────────────────────────────────
   const reloadRows = useCallback(async () => {
@@ -94,6 +108,60 @@ export default function EngineMonitorPage() {
     () => rows.find((r) => r.project_id === selectedId) ?? null,
     [rows, selectedId],
   )
+
+  // ─── Emergency-rise handler ───────────────────────────────────
+  const handleEmergencyRise = async () => {
+    if (emergencyFiring) return
+    if (!selectedId) {
+      showError("اختر مشروعاً من الجدول أعلاه أوّلاً")
+      return
+    }
+    const risePct = Number(emergencyRiseInput)
+    if (!Number.isFinite(risePct) || risePct <= 0) {
+      showError("النسبة يجب أن تكون رقماً موجباً")
+      return
+    }
+    if (risePct > EMERGENCY_RISE_MAX_PERCENT) {
+      showError(`الحدّ الأقصى ${EMERGENCY_RISE_MAX_PERCENT}%`)
+      return
+    }
+    const trimmedReason = emergencyReason.trim()
+    if (trimmedReason.length < EMERGENCY_REASON_MIN_LEN) {
+      showError(`السبب يجب أن يكون ${EMERGENCY_REASON_MIN_LEN} أحرف على الأقل`)
+      return
+    }
+    const projName = selectedRow?.project_name ?? "المشروع المحدّد"
+    const oldPrice = selectedRow?.current_price ?? 0
+    const projectedNew = Math.max(1, Math.round(oldPrice * (1 + risePct / 100)))
+    const confirmMsg =
+      `🚨 رفع طوارئ على «${projName}»\n\n` +
+      `النسبة: +${risePct.toFixed(2)}%\n` +
+      `السعر الحالي: ${oldPrice.toLocaleString("en-US")} د.ع\n` +
+      `السعر المتوقَّع: ${projectedNew.toLocaleString("en-US")} د.ع\n\n` +
+      `السبب: ${trimmedReason}\n\n` +
+      `هذا الإجراء يتجاوز المحرّك ويُسجَّل دائماً في سجلّ القرارات. متأكّد؟`
+    if (!window.confirm(confirmMsg)) return
+
+    setEmergencyFiring(true)
+    const result = await forceEmergencyRise(selectedId, risePct, trimmedReason)
+    setEmergencyFiring(false)
+    if (!result.success) {
+      showError(result.error ?? "فشل تنفيذ الرفع")
+      return
+    }
+    showSuccess(
+      `✅ تمّ — السعر ${result.oldPrice?.toLocaleString("en-US")} → ${result.newPrice?.toLocaleString("en-US")} د.ع`,
+    )
+    // Refresh all surfaces so the new price reflects everywhere.
+    setEmergencyRiseInput("")
+    setEmergencyReason("")
+    void reloadRows()
+    void reloadRuns()
+    if (selectedId) {
+      const l = await getProjectLayers(selectedId)
+      setLayers(l)
+    }
+  }
 
   // ─── Manual trigger ───────────────────────────────────────────
   // Phase 14.08.1 — `force` bypasses the one-run-per-day idempotency
@@ -460,6 +528,131 @@ export default function EngineMonitorPage() {
             </table>
           )}
         </div>
+      </section>
+
+      {/* ─── Emergency Rise (Phase 14.08.2) ──────────────────────
+          Collapsible section, default-closed. Calls the rewritten
+          admin_force_market_rise RPC directly. Server-side rules:
+            • admin or super_admin role required
+            • rise > 0 and ≤ 50%
+            • reason ≥ 10 chars
+            • writes price_history + admin_decisions_log
+       */}
+      <section className="border border-red-400/20 bg-red-400/[0.04] rounded-2xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setEmergencyOpen((v) => !v)}
+          className="w-full px-4 py-3 flex items-center justify-between gap-3 hover:bg-red-400/[0.06] transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Siren className="w-4 h-4 text-red-400" strokeWidth={2} />
+            <h2 className="text-sm font-bold text-white">رفع طوارئ — تجاوز يدويّ</h2>
+            <span className="text-[10px] text-red-300/80 bg-red-400/10 border border-red-400/20 rounded-full px-2 py-0.5">
+              للسوبر-أدمن فقط
+            </span>
+          </div>
+          {emergencyOpen ? (
+            <ChevronUp className="w-4 h-4 text-neutral-400" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-neutral-400" />
+          )}
+        </button>
+
+        {emergencyOpen && (
+          <div className="px-4 pb-4 pt-1 border-t border-red-400/15 space-y-3">
+            <div className="text-[11px] text-neutral-400 leading-relaxed bg-white/[0.02] rounded-lg p-3">
+              <strong className="text-red-300">⚠ تحذير:</strong> هذا الإجراء يتجاوز
+              المحرّك التلقائي ويُطبّق رفعاً يدوياً على
+              <strong className="text-white"> {selectedRow?.project_name ?? "المشروع المحدّد"}</strong>.
+              يُسجَّل في <code className="font-mono">price_history</code> بعلامة
+              <code className="font-mono text-red-300"> admin_force_rise</code> وفي
+              <code className="font-mono"> admin_decisions_log</code>. لا يُستخدم
+              إلّا في حالات طارئة (تصحيح خطأ، حدث استثنائي).
+            </div>
+
+            {!selectedRow && (
+              <div className="text-[11px] text-yellow-300 bg-yellow-400/[0.08] border border-yellow-400/20 rounded-lg p-3">
+                اختر مشروعاً من جدول «ارتفاع كل مشروع هذا الشهر» أعلاه أوّلاً.
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] text-neutral-500 mb-1 font-bold">
+                  النسبة (%) — أكبر من 0 وأقل أو يساوي {EMERGENCY_RISE_MAX_PERCENT}
+                </label>
+                <input
+                  type="number"
+                  min="0.01"
+                  max={EMERGENCY_RISE_MAX_PERCENT}
+                  step="0.01"
+                  value={emergencyRiseInput}
+                  onChange={(e) => setEmergencyRiseInput(e.target.value)}
+                  placeholder="مثل: 1.5"
+                  disabled={!selectedRow || emergencyFiring}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-red-400/40 disabled:opacity-50"
+                  dir="ltr"
+                />
+                {selectedRow && Number(emergencyRiseInput) > 0 && (
+                  <div className="text-[10px] text-neutral-500 mt-1" dir="ltr">
+                    {fmtNum(selectedRow.current_price)} → {" "}
+                    {fmtNum(
+                      Math.max(
+                        1,
+                        Math.round(
+                          selectedRow.current_price *
+                            (1 + Number(emergencyRiseInput) / 100),
+                        ),
+                      ),
+                    )}{" "}
+                    د.ع
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-neutral-500 mb-1 font-bold">
+                  السبب — {EMERGENCY_REASON_MIN_LEN} أحرف على الأقل
+                </label>
+                <input
+                  type="text"
+                  value={emergencyReason}
+                  onChange={(e) => setEmergencyReason(e.target.value)}
+                  placeholder="مثل: تصحيح بعد تأخّر صفقة كبيرة"
+                  disabled={!selectedRow || emergencyFiring}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-400/40 disabled:opacity-50"
+                />
+                <div className="text-[10px] text-neutral-500 mt-1">
+                  {emergencyReason.trim().length} / {EMERGENCY_REASON_MIN_LEN} حرف
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleEmergencyRise}
+              disabled={
+                !selectedRow ||
+                emergencyFiring ||
+                !Number(emergencyRiseInput) ||
+                emergencyReason.trim().length < EMERGENCY_REASON_MIN_LEN
+              }
+              className={cn(
+                "text-xs font-bold rounded-xl px-4 py-2.5 flex items-center gap-2 transition-colors",
+                emergencyFiring
+                  ? "bg-white/[0.04] text-neutral-500 cursor-wait"
+                  : "bg-red-500/20 text-red-300 border border-red-400/30 hover:bg-red-500/30 disabled:opacity-40 disabled:cursor-not-allowed",
+              )}
+            >
+              {emergencyFiring ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Siren className="w-3.5 h-3.5" strokeWidth={2.5} />
+              )}
+              تنفيذ الرفع الطارئ
+            </button>
+          </div>
+        )}
       </section>
 
       <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 flex items-start gap-2 text-[11px] text-neutral-400">

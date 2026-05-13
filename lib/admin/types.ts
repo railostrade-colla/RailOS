@@ -114,7 +114,12 @@ export const ADMIN_NAV: AdminNavItem[] = [
   // (?tab=requests_hub) keep resolving for anyone who has them
   // bookmarked.
   { key: "dashboard",    label: "لوحة التحكم",    icon: "◈",  section: "نظرة عامة", requiredPermission: "view_dashboard" },
-  { key: "monitor",      label: "مراقبة السوق",   icon: "📡", section: "نظرة عامة", requiredPermission: "manage_market" },
+  // Phase 14.08.2 — `monitor` entry removed from sidebar. Its UI
+  // (MonitorPanel + MarketEnginePanelV2 + StrategicAdvisorCard +
+  // RaiseMarketPricePanel) was the OLD engine surface; the NEW
+  // 3-layer engine is fully covered by /admin/engine-monitor below.
+  // The AdminTab "monitor" enum value stays so legacy ?tab=monitor
+  // URLs still resolve (to the unknown-tab placeholder).
   // Phase 14.07c — new App-Router page at /admin/market-settings.
   // The `href` field tells the sidebar to push a full path instead
   // of the legacy ?tab=<key> routing.
