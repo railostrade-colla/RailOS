@@ -47,7 +47,11 @@ BEGIN
       h.first_acquired_at,
       h.last_acquired_at,
       proj.name           AS project_name,
-      proj.sector::TEXT   AS project_sector,
+      -- Phase 14.08.2 fix: this schema has `project_type` (enum) but
+      -- NOT `sector`. The original Phase 10.71 file referenced sector
+      -- which broke the RPC on existing DBs. Phase 11.26 fixed it but
+      -- this file's later filename re-broke it. Patched in source.
+      proj.project_type::TEXT AS project_sector,
       proj.share_price    AS project_share_price,
       COALESCE(
         (SELECT current_price FROM public.market_state WHERE project_id = proj.id LIMIT 1),
