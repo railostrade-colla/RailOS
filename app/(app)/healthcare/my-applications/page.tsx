@@ -6,8 +6,8 @@ import { Plus, Hospital } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Badge, EmptyState } from "@/components/ui"
+// Phase 15.04 — labels + types only. Runtime via DB.
 import {
-  getMyApplications,
   APP_STATUS_LABELS,
   DISEASE_LABELS,
   type HealthcareApplication,
@@ -18,9 +18,8 @@ const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 export default function MyApplicationsPage() {
   const router = useRouter()
-  const [apps, setApps] = useState<HealthcareApplication[]>(
-    getMyApplications("abc123def456"),
-  )
+  // Phase 15.04 — DB only.
+  const [apps, setApps] = useState<HealthcareApplication[]>([])
   useEffect(() => {
     let cancelled = false
     getMyHealthcareApplications().then((rows) => {

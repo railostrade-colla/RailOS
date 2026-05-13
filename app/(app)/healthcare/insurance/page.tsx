@@ -5,9 +5,12 @@ import { Shield, Check, X } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, Modal, Badge } from "@/components/ui"
+// Phase 15.04 — plan-definition constants + types only. The plan
+// catalog (MOCK_INSURANCE_PLANS) is a stable list of offerings; no
+// DB equivalent exists yet, so it stays as a constant source of truth
+// for the pricing/limit UI.
 import {
   MOCK_INSURANCE_PLANS,
-  getMyInsurance as getMyInsuranceMock,
   type InsurancePlan,
   type InsuranceSubscription,
 } from "@/lib/mock-data/healthcare"
@@ -43,10 +46,8 @@ function fmtAnnualLimit(n: number): string {
 }
 
 export default function InsurancePage() {
-  // Mock first-paint, real DB on mount.
-  const [myInsurance, setMyInsurance] = useState<InsuranceSubscription | null>(
-    getMyInsuranceMock() ?? null,
-  )
+  // Phase 15.04 — DB only.
+  const [myInsurance, setMyInsurance] = useState<InsuranceSubscription | null>(null)
   const [selectedPlan, setSelectedPlan] = useState<InsurancePlan | null>(null)
   const [submitting, setSubmitting] = useState(false)
 

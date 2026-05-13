@@ -6,8 +6,8 @@ import { Search, Heart } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Tabs, Badge, EmptyState } from "@/components/ui"
+// Phase 15.04 — labels + types only. Runtime is DB-only.
 import {
-  MOCK_HEALTHCARE_CASES,
   CASE_STATUS_LABELS,
   DISEASE_LABELS,
   type CaseStatus,
@@ -21,13 +21,13 @@ export default function HealthcareCasesPage() {
   const router = useRouter()
   const [tab, setTab] = useState<CaseStatus>("urgent")
   const [search, setSearch] = useState("")
-  const [allCases, setAllCases] = useState<HealthcareCase[]>(MOCK_HEALTHCARE_CASES)
+  // Phase 15.04 — DB only.
+  const [allCases, setAllCases] = useState<HealthcareCase[]>([])
 
   useEffect(() => {
     let cancelled = false
     getHealthcareCases().then((rows) => {
-      if (cancelled) return
-      if (rows.length > 0) setAllCases(rows)
+      if (!cancelled) setAllCases(rows)
     })
     return () => {
       cancelled = true

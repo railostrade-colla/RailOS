@@ -7,9 +7,8 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, StatCard, SectionHeader, Badge, Modal, EmptyState } from "@/components/ui"
+// Phase 15.04 — labels + types only. Runtime via DB.
 import {
-  getCaseById,
-  getCaseDonors,
   CASE_STATUS_LABELS,
   DISEASE_LABELS,
   type HealthcareCase,
@@ -29,11 +28,9 @@ const QUICK_AMOUNTS = [5_000, 10_000, 25_000, 50_000, 100_000]
 export default function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  // Mock first-paint fallback, real DB on mount.
-  const [c, setC] = useState<HealthcareCase | null>(getCaseById(id) ?? null)
-  const [donors, setDonors] = useState<HealthcareDonation[]>(
-    c ? getCaseDonors(c.id) : [],
-  )
+  // Phase 15.04 — DB only.
+  const [c, setC] = useState<HealthcareCase | null>(null)
+  const [donors, setDonors] = useState<HealthcareDonation[]>([])
   const [showDonate, setShowDonate] = useState(false)
   const [amount, setAmount] = useState<number>(25_000)
   const [customAmount, setCustomAmount] = useState("")
@@ -45,8 +42,8 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
       getHealthcareCaseById(id),
       getDonationsForCase(id),
     ])
-    if (fresh) setC(fresh)
-    if (d.length > 0) setDonors(d)
+    setC(fresh)
+    setDonors(d)
   }
 
   useEffect(() => {

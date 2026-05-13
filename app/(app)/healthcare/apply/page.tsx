@@ -6,7 +6,13 @@ import { Send, Paperclip } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Modal } from "@/components/ui"
-import { CURRENT_USER } from "@/lib/mock-data/profile"
+// Phase 15.04 — real profile from Supabase. Was reading the mock
+// CURRENT_USER which always showed the same fixture user; now we
+// pull the signed-in user's actual KYC + level + governorate.
+import {
+  getCurrentUserProfile,
+  type CurrentUserProfile,
+} from "@/lib/data/profile"
 import {
   DISEASE_LABELS,
   type DiseaseType,
@@ -14,6 +20,7 @@ import {
 import { submitHealthcareApplication } from "@/lib/data/healthcare"
 import { showError, showSuccess } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
+import { useEffect } from "react"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
@@ -26,6 +33,16 @@ const ATTACHMENTS = [
 
 export default function HealthcareApplyPage() {
   const router = useRouter()
+  // Phase 15.04 — real signed-in user (was CURRENT_USER mock fixture).
+  const [profile, setProfile] = useState<CurrentUserProfile | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    getCurrentUserProfile().then((p) => {
+      if (!cancelled) setProfile(p)
+    })
+    return () => { cancelled = true }
+  }, [])
+
   const [disease, setDisease] = useState<DiseaseType | "">("")
   const [diagnosis, setDiagnosis] = useState("")
   const [doctor, setDoctor] = useState("")
@@ -113,20 +130,20 @@ export default function HealthcareApplyPage() {
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
                 <div className="text-[10px] text-neutral-500 mb-1">الاسم</div>
-                <div className="text-white font-bold">{CURRENT_USER.name}</div>
+                <div className="text-white font-bold">{(profile?.full_name?.trim() || profile?.username?.trim() || "—")}</div>
               </div>
               <div>
                 <div className="text-[10px] text-neutral-500 mb-1">المستوى</div>
-                <div className="text-white">{CURRENT_USER.level}</div>
+                <div className="text-white">{(profile?.level ?? "basic")}</div>
               </div>
               <div>
                 <div className="text-[10px] text-neutral-500 mb-1">المحافظة</div>
-                <div className="text-white">{CURRENT_USER.governorate}</div>
+                <div className="text-white">{((profile as { governorate?: string } | null)?.governorate ?? "—")}</div>
               </div>
               <div>
                 <div className="text-[10px] text-neutral-500 mb-1">KYC</div>
-                <div className={CURRENT_USER.kyc_status === "verified" ? "text-green-400 font-bold" : "text-yellow-400"}>
-                  {CURRENT_USER.kyc_status === "verified" ? "✓ موثَّق" : "⚠️ غير موثَّق"}
+                <div className={profile?.kyc_status === "approved" ? "text-green-400 font-bold" : "text-yellow-400"}>
+                  {profile?.kyc_status === "approved" ? "✓ موثَّق" : "⚠️ غير موثَّق"}
                 </div>
               </div>
             </div>

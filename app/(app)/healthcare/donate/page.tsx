@@ -6,8 +6,8 @@ import { Heart } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card } from "@/components/ui"
+// Phase 15.04 — labels + types only. Runtime via DB.
 import {
-  getActiveCases,
   DISEASE_LABELS,
   type HealthcareCase,
 } from "@/lib/mock-data/healthcare"
@@ -23,14 +23,14 @@ const QUICK_AMOUNTS = [5_000, 10_000, 25_000, 50_000, 100_000, 250_000]
 
 export default function HealthcareDonatePage() {
   const router = useRouter()
-  // Mock first-paint, then real DB.
-  const [cases, setCases] = useState<HealthcareCase[]>(getActiveCases())
+  // Phase 15.04 — DB only, active cases filter applied locally.
+  const [cases, setCases] = useState<HealthcareCase[]>([])
   useEffect(() => {
     let cancelled = false
     getHealthcareCases().then((rows) => {
       if (cancelled) return
       const active = rows.filter((c) => c.status === "urgent" || c.status === "active")
-      if (active.length > 0) setCases(active)
+      setCases(active)
     })
     return () => {
       cancelled = true
