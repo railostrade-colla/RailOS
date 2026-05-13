@@ -6,8 +6,8 @@ import { Plus, Eye } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Tabs, Badge, EmptyState, Modal } from "@/components/ui"
+// Phase 15.01 — type + label constants only. Runtime is DB-only.
 import {
-  getMyCoupons as getMyCouponsMock,
   COUPON_STATUS_LABELS,
   type UserCoupon,
 } from "@/lib/mock-data/discounts"
@@ -56,17 +56,19 @@ export default function MyCouponsPage() {
   const router = useRouter()
   const [tab, setTab] = useState<"active" | "used" | "expired">("active")
   const [zoomCoupon, setZoomCoupon] = useState<UserCoupon | null>(null)
-  const [allCoupons, setAllCoupons] = useState<UserCoupon[]>(
-    getMyCouponsMock("abc123def456"),
-  )
+  // Phase 15.01 — DB only, empty initial state.
+  const [allCoupons, setAllCoupons] = useState<UserCoupon[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancelled = false
-    getMyCoupons().then((rows) => {
-      if (cancelled) return
-      // Show real list always — empty means user has no coupons.
-      setAllCoupons(rows)
-    })
+    getMyCoupons()
+      .then((rows) => {
+        if (!cancelled) setAllCoupons(rows)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
     return () => {
       cancelled = true
     }
@@ -105,7 +107,11 @@ export default function MyCouponsPage() {
             />
           </div>
 
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-12 text-sm text-neutral-500">
+              جاري تحميل قسائمك...
+            </div>
+          ) : filtered.length === 0 ? (
             <EmptyState
               icon="🎟️"
               title={tab === "active" ? "لا توجد قسائم نشطة" : tab === "used" ? "لم تستخدم قسائم بعد" : "لا توجد قسائم منتهية"}

@@ -7,15 +7,15 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, Modal, Badge, EmptyState } from "@/components/ui"
+// Phase 15.01 — types + label constants only. Runtime is DB-only.
 import {
-  getDiscountById,
   CATEGORY_LABELS,
   LEVEL_LABELS,
   type UserCoupon,
   type Discount,
 } from "@/lib/mock-data/discounts"
 import {
-  getDiscountById as getDiscountByIdDB,
+  getDiscountById,
   claimDiscount,
 } from "@/lib/data/discounts-real"
 import { showError, showSuccess } from "@/lib/utils/toast"
@@ -46,21 +46,40 @@ function Barcode({ value }: { value: string }) {
 export default function DiscountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  const [discount, setDiscount] = useState<Discount | null>(getDiscountById(id) ?? null)
+  // Phase 15.01 — null initial state, populated from DB only.
+  const [discount, setDiscount] = useState<Discount | null>(null)
+  const [loading, setLoading] = useState(true)
   const [showCoupon, setShowCoupon] = useState<UserCoupon | null>(null)
   const [copied, setCopied] = useState(false)
   const [claiming, setClaiming] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    getDiscountByIdDB(id).then((d) => {
-      if (cancelled) return
-      if (d) setDiscount(d)
-    })
+    setLoading(true)
+    getDiscountById(id)
+      .then((d) => {
+        if (!cancelled) setDiscount(d)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
     return () => {
       cancelled = true
     }
   }, [id])
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="relative">
+          <GridBackground showCircles={false} />
+          <div className="relative z-10 px-3 lg:px-8 py-12 max-w-3xl mx-auto text-center">
+            <div className="text-sm text-neutral-500">جاري تحميل الخصم...</div>
+          </div>
+        </div>
+      </AppLayout>
+    )
+  }
 
   if (!discount) {
     return (
