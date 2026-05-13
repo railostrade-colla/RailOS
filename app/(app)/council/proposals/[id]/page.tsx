@@ -7,14 +7,13 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, Badge, Modal, EmptyState } from "@/components/ui"
-import {
-  getProposalById as getProposalByIdMock,
-  getProposalVotes as getProposalVotesMock,
-  type VoteChoice,
-  type ProposalStatus,
-  type ProposalType,
-  type CouncilVote,
-  type CouncilProposal,
+// Phase 15.02 — types only. Runtime is DB-only via lib/data/council.
+import type {
+  VoteChoice,
+  ProposalStatus,
+  ProposalType,
+  CouncilVote,
+  CouncilProposal,
 } from "@/lib/mock-data"
 import {
   getProposalById as dbGetProposalById,
@@ -75,14 +74,12 @@ export default function ProposalDetailsPage() {
   const params = useParams()
   const proposalId = (params?.id as string) ?? ""
 
-  // Mock first-paint, real DB on mount.
-  const [proposal, setProposal] = useState<CouncilProposal | undefined>(
-    () => getProposalByIdMock(proposalId),
-  )
-  const [initialVotes, setInitialVotes] = useState<CouncilVote[]>(
-    () => getProposalVotesMock(proposalId),
-  )
-  const [votes, setVotes] = useState<CouncilVote[]>(initialVotes)
+  // Phase 15.02 — DB only. `proposal === undefined` while loading,
+  // `null` if not found (handled below). Empty votes array until DB
+  // resolves; the UI shows zero counts which is honest.
+  const [proposal, setProposal] = useState<CouncilProposal | undefined>(undefined)
+  const [loading, setLoading] = useState(true)
+  const [votes, setVotes] = useState<CouncilVote[]>([])
   const [choice, setChoice] = useState<VoteChoice | null>(null)
   const [reason, setReason] = useState("")
   const [showConfirm, setShowConfirm] = useState(false)
@@ -133,16 +130,35 @@ export default function ProposalDetailsPage() {
           reason: v.reason ?? undefined,
           voted_at: v.voted_at,
         }))
-        setInitialVotes(mapped)
         setVotes(mapped)
       }
       setIsMember(member)
       if (mine) setHasVoted(true)
-    }).catch(() => { /* keep mock */ })
+    })
+    .catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn("[council/proposals/[id]] DB fetch failed:", err)
+    })
+    .finally(() => {
+      if (!cancelled) setLoading(false)
+    })
     return () => { cancelled = true }
   }, [proposalId])
 
   const countdown = useCountdown(proposal?.voting_ends_at ?? new Date().toISOString())
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="relative">
+          <GridBackground showCircles={false} />
+          <div className="relative z-10 px-3 lg:px-8 py-12 max-w-3xl mx-auto text-center text-sm text-neutral-500">
+            جاري تحميل القرار...
+          </div>
+        </div>
+      </AppLayout>
+    )
+  }
 
   if (!proposal) {
     return (
@@ -169,13 +185,17 @@ export default function ProposalDetailsPage() {
   const canVote = isMember && proposal.status === "voting" && !hasVoted
   void canVote
 
-  // Live counts (incorporating new vote if cast)
+  // Phase 15.02 — live counts derived straight from the loaded
+  // `votes` array. The previous version diff'd against `initialVotes`
+  // to overlay a locally-cast vote on top of the proposal.votes_*
+  // tallies; now that we always paint from DB (no mock seeding) the
+  // simpler filter is exact.
   const liveCounts = useMemo(() => {
-    const approve = votes.filter((v) => v.choice === "approve").length + (proposal.votes_approve - initialVotes.filter((v) => v.choice === "approve").length)
-    const object = votes.filter((v) => v.choice === "object").length + (proposal.votes_object - initialVotes.filter((v) => v.choice === "object").length)
-    const abstain = votes.filter((v) => v.choice === "abstain").length + (proposal.votes_abstain - initialVotes.filter((v) => v.choice === "abstain").length)
+    const approve = votes.filter((v) => v.choice === "approve").length
+    const object = votes.filter((v) => v.choice === "object").length
+    const abstain = votes.filter((v) => v.choice === "abstain").length
     return { approve, object, abstain, total: approve + object + abstain }
-  }, [votes, initialVotes, proposal])
+  }, [votes])
 
   const handleSubmitVote = async () => {
     if (!choice) {
