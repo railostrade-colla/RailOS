@@ -56,6 +56,9 @@ export type AdminTab =
   // href on its AdminNavItem so the sidebar router pushes the full
   // path instead of resolving a tab via app/admin/page.tsx.
   | "market_settings_registry"
+  // Phase 14.08f — App-Router page /admin/engine-monitor showing
+  // layer progress + recent cron runs + manual trigger.
+  | "engine_monitor"
 
 /** Capability vocabulary kept in sync with lib/data/admin-permissions.ts. */
 export type AdminPermission =
@@ -117,6 +120,9 @@ export const ADMIN_NAV: AdminNavItem[] = [
   // of the legacy ?tab=<key> routing.
   { key: "market_settings_registry", label: "إعدادات السوق", icon: "⚙️", section: "نظرة عامة",
     requiredPermission: "manage_market", href: "/admin/market-settings" },
+  // Phase 14.08f — engine monitor (3-layer progress + cron history).
+  { key: "engine_monitor", label: "مراقبة المحرّك", icon: "📊", section: "نظرة عامة",
+    requiredPermission: "manage_market", href: "/admin/engine-monitor" },
   { key: "log",          label: "سجل القرارات",   icon: "📋", section: "نظرة عامة", requiredPermission: "view_audit" },
 
   // ─── 2. العمليات والمالية ─────────────────────────────────────
