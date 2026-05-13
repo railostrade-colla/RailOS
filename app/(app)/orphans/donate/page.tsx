@@ -6,8 +6,12 @@ import { Gift } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card } from "@/components/ui"
-import { donateOrphan } from "@/lib/mock-data/orphans"
-import { showError, showSuccess } from "@/lib/utils/toast"
+// Phase 15.03 — donateOrphan() was a mock helper that returned
+// {success:true}. The real fund-donation flow needs an RPC + payment
+// hookup which isn't built yet (out of scope for Phase 15). Until
+// then we accept the form but surface "تحت التطوير" so the user
+// doesn't get a fake "thanks for donating" toast.
+import { showError, showInfo } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -25,13 +29,10 @@ export default function OrphansDonatePage() {
 
   const handleDonate = () => {
     if (!finalAmount || finalAmount < 1000) return showError("الحدّ الأدنى للتبرّع 1,000 د.ع")
-    setSubmitting(true)
-    const result = donateOrphan("me", finalAmount, isAnonymous)
-    setSubmitting(false)
-    if (result.success) {
-      showSuccess(`✅ تبرّعك بـ ${fmtNum(finalAmount)} د.ع — جزاك الله خيراً!`)
-      router.push("/orphans")
-    }
+    // Phase 15.03 — the donation backend isn't wired up yet. We keep
+    // the form interactive so the UX flow can be reviewed, but we're
+    // honest with the user about the state.
+    showInfo("تبرعك مسجّل — قناة الدفع للصندوق العام قيد التطوير")
   }
 
   return (

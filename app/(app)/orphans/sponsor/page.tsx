@@ -6,8 +6,8 @@ import { Heart } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Modal } from "@/components/ui"
+// Phase 15.03 — sponsorship-plan constants + types only.
 import {
-  MOCK_ORPHAN_CHILDREN,
   SPONSORSHIP_PLANS,
   type SponsorshipType,
   type OrphanChild,
@@ -23,13 +23,12 @@ function SponsorContent() {
   const router = useRouter()
   const initialChild = sp?.get("child") || ""
 
-  // Children list with mock first-paint fallback.
-  const [allChildren, setAllChildren] = useState<OrphanChild[]>(MOCK_ORPHAN_CHILDREN)
+  // Phase 15.03 — DB only.
+  const [allChildren, setAllChildren] = useState<OrphanChild[]>([])
   useEffect(() => {
     let cancelled = false
     getOrphanChildren().then((rows) => {
-      if (cancelled) return
-      if (rows.length > 0) setAllChildren(rows)
+      if (!cancelled) setAllChildren(rows)
     })
     return () => {
       cancelled = true

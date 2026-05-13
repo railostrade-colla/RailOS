@@ -6,8 +6,8 @@ import { Search, BookOpen } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Tabs, Badge, EmptyState } from "@/components/ui"
+// Phase 15.03 — types + label constants only. Runtime is DB-only.
 import {
-  MOCK_ORPHAN_CHILDREN,
   CHILD_STATUS_LABELS,
   EDUCATION_LABELS,
   type ChildSponsorshipStatus,
@@ -25,14 +25,18 @@ export default function ChildrenPage() {
   const [tab, setTab] = useState<FilterTab>("needs_sponsor")
   const [search, setSearch] = useState("")
 
-  // Real children list with mock first-paint fallback.
-  const [allChildren, setAllChildren] = useState<OrphanChild[]>(MOCK_ORPHAN_CHILDREN)
+  // Phase 15.03 — DB-only, empty initial state.
+  const [allChildren, setAllChildren] = useState<OrphanChild[]>([])
+  const [loading, setLoading] = useState(true)
   useEffect(() => {
     let cancelled = false
-    getOrphanChildren().then((rows) => {
-      if (cancelled) return
-      if (rows.length > 0) setAllChildren(rows)
-    })
+    getOrphanChildren()
+      .then((rows) => {
+        if (!cancelled) setAllChildren(rows)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
     return () => {
       cancelled = true
     }

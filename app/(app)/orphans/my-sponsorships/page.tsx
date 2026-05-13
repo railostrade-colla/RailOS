@@ -6,9 +6,8 @@ import { Plus, ChevronLeft, FileText } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Tabs, Badge, EmptyState, Modal } from "@/components/ui"
+// Phase 15.03 — labels + types only. Runtime via DB.
 import {
-  getMySponsorships as getMySponsorshipsMock,
-  getMyReports as getMyReportsMock,
   SPONSORSHIP_TYPE_LABELS,
   type Sponsorship,
   type OrphanReport,
@@ -25,19 +24,17 @@ const fmtNum = (n: number) => n.toLocaleString("en-US")
 export default function MySponsorshipsPage() {
   const router = useRouter()
   const [tab, setTab] = useState<"active" | "ended">("active")
-  // Mock first-paint, real on mount.
-  const [sponsorships, setSponsorships] = useState<Sponsorship[]>(
-    getMySponsorshipsMock("abc123def456"),
-  )
-  const [reports, setReports] = useState<OrphanReport[]>(
-    getMyReportsMock("abc123def456"),
-  )
+  // Phase 15.03 — DB only.
+  const [sponsorships, setSponsorships] = useState<Sponsorship[]>([])
+  const [reports, setReports] = useState<OrphanReport[]>([])
   const [showStopId, setShowStopId] = useState<string | null>(null)
 
   const refresh = async () => {
+    // Phase 15.03 — always set, even when empty, so deleting the last
+    // row reflects immediately instead of keeping a stale list.
     const [s, r] = await Promise.all([getMySponsorships(), getMyReports()])
-    if (s.length > 0) setSponsorships(s)
-    if (r.length > 0) setReports(r)
+    setSponsorships(s)
+    setReports(r)
   }
 
   useEffect(() => {

@@ -7,8 +7,8 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, StatCard, SectionHeader, Badge, EmptyState } from "@/components/ui"
+// Phase 15.03 — labels + types only. Runtime via DB.
 import {
-  getChildById,
   CHILD_STATUS_LABELS,
   EDUCATION_LABELS,
   type OrphanChild,
@@ -21,18 +21,23 @@ const fmtNum = (n: number) => n.toLocaleString("en-US")
 export default function ChildDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
-  // Mock first-paint, real DB on mount.
-  const [child, setChild] = useState<OrphanChild | null>(getChildById(id) ?? null)
+  // Phase 15.03 — DB only, null initial state.
+  const [child, setChild] = useState<OrphanChild | null>(null)
+  const [loading, setLoading] = useState(true)
   useEffect(() => {
     let cancelled = false
-    getOrphanChildById(id).then((c) => {
-      if (cancelled) return
-      if (c) setChild(c)
-    })
+    getOrphanChildById(id)
+      .then((c) => {
+        if (!cancelled) setChild(c)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
     return () => {
       cancelled = true
     }
   }, [id])
+  void loading
 
   if (!child) {
     return (
