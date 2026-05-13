@@ -59,7 +59,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         type: "deal_request",
         title: "تم إرسال طلب الصفقة",
         body: `بانتظار رد ${deal.seller_name} على طلب شراء ${deal.shares} حصة من ${deal.project_name}`,
-        link: `/deal-chat/${newDeal.id}`,
+        link: `/deals/${newDeal.id}`,
         read: false,
         created_at: new Date().toISOString(),
       },
@@ -84,7 +84,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         type: "deal_accepted",
         title: "✅ تمت الموافقة على الصفقة!",
         body: `${pendingDealAsSeller.seller_name} وافق على البيع. الدردشة مفتوحة الآن.`,
-        link: `/deal-chat/${dealId}`,
+        link: `/deals/${dealId}`,
         read: false,
         created_at: new Date().toISOString(),
       },
@@ -94,7 +94,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     setPendingDealAsSeller(null)
 
     // الانتقال لصفحة الدردشة فوراً
-    router.push(`/deal-chat/${dealId}`)
+    router.push(`/deals/${dealId}`)
   }, [pendingDealAsSeller, router])
 
   // البائع يرفض الصفقة

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { ShoppingCart, Heart, X, Image as ImageIcon, Clock, TrendingUp, TrendingDown, AlertCircle, Building2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -14,13 +14,9 @@ const sectorIcon = (s: string) => s?.includes("طب") ? "🏥" : s?.includes("ت
 const riskLabel = (r: string) => r === "low" ? "منخفض" : r === "medium" ? "متوسط" : "مرتفع"
 const riskColor = (r: string) => r === "low" ? "text-green-400" : r === "medium" ? "text-yellow-400" : "text-red-400"
 
-// Mock projects + trades — centralized
+// Mock projects — fallback ONLY (Phase 14.07.1: chart + history now real).
 import {
   projectsById as mockProjects,
-  projectRecentTrades as mockTrades,
-  getMarketStateByProject,
-  getProjectPublicStatus,
-  getPriceHistoryForChart,
   type Project as MockProject,
 } from "@/lib/mock-data"
 import { getProjectById } from "@/lib/data"
@@ -31,76 +27,40 @@ import {
   getProjectWalletStats,
   type ProjectWalletStats,
 } from "@/lib/data/project-wallet-stats"
-import { Card, SectionHeader, StatCard, Badge, SkeletonCard } from "@/components/ui"
-import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts"
-
-function genChart(base: number, days: number, seed = 1) {
-  const d: number[] = []
-  let p = base * 0.82
-  for (let i = 0; i < days; i++) {
-    p = Math.max(p + (Math.sin(i * seed * 0.3) * 0.018 + 0.002) * p, base * 0.7)
-    d.push(Math.round(p))
-  }
-  d.push(base)
-  return d
-}
-
-function LineChart({ data, color = "#fff" }: { data: number[]; color?: string }) {
-  const [tip, setTip] = useState<{ x: number; v: number } | null>(null)
-  const ref = useRef<SVGSVGElement>(null)
-  if (!data.length) return null
-
-  const W = 600
-  const H = 100
-  const min = Math.min(...data)
-  const max = Math.max(...data)
-  const range = max - min || 1
-  const pts = data.map((v, i) => ({ x: (i / (data.length - 1)) * W, y: H - ((v - min) / range) * (H - 16) - 8, v }))
-  const polyline = pts.map((p) => p.x + "," + p.y).join(" ")
-  const polygon = "0," + H + " " + polyline + " " + W + "," + H
-
-  return (
-    <div className="relative">
-      <svg
-        ref={ref}
-        width="100%"
-        height={H}
-        viewBox={"0 0 " + W + " " + H}
-        preserveAspectRatio="none"
-        onMouseMove={(e) => {
-          const r = ref.current?.getBoundingClientRect()
-          if (!r) return
-          const idx = Math.min(Math.max(Math.round((e.clientX - r.left) / r.width * (data.length - 1)), 0), data.length - 1)
-          setTip({ x: (e.clientX - r.left) / r.width * 100, v: pts[idx].v })
-        }}
-        onMouseLeave={() => setTip(null)}
-        className="cursor-crosshair"
-      >
-        <defs>
-          <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.18" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <polygon points={polygon} fill="url(#pg)" />
-        <polyline points={polyline} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        {tip && (
-          <line x1={tip.x / 100 * W} y1="0" x2={tip.x / 100 * W} y2={H} stroke="rgba(255,255,255,0.25)" strokeWidth="1" strokeDasharray="3 3" />
-        )}
-      </svg>
-      {tip && (
-        <div
-          className="absolute top-0 bg-white/[0.1] border border-white/[0.15] rounded-lg px-2.5 py-1 text-[11px] font-bold text-white pointer-events-none whitespace-nowrap"
-          style={{ left: Math.min(tip.x, 80) + "%" }}
-        >
-          {tip.v.toLocaleString("en-US")} IQD
-        </div>
-      )}
-    </div>
-  )
-}
+// Phase 14.07.1 — real price-history timeline (creation anchor + completed
+// deals + admin price changes + "now" snapshot). Replaces the legacy
+// genChart() sine wave that misled investors with synthetic data.
+import {
+  getProjectPriceTimeline,
+  type PriceHistoryPoint,
+} from "@/lib/data/price-history"
+// Phase 14.07.1 — real follow/unfollow against `follows` table.
+// Replaces the local-only useState toggle that lied to the user
+// (showed "متابَع" but never persisted).
+import {
+  isFollowing as isFollowingDB,
+  followTarget,
+  unfollowTarget,
+} from "@/lib/data/follows"
+import { SkeletonCard } from "@/components/ui"
+import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { createClient } from "@/lib/supabase/client"
 
 const galleryEmojis = ["🏗️", "🏛️", "📊", "🌾"]
+
+/**
+ * Phase 14.07.1 — recent completed deals for the History tab.
+ * Shape mirrors what we render: who/when/how-many/at-what-price.
+ */
+interface RecentDealRow {
+  id: string
+  shares: number
+  price_per_share: number
+  total_amount: number
+  completed_at: string | null
+  buyer_name: string | null
+  seller_name: string | null
+}
 
 export default function ProjectDetailPage() {
   const router = useRouter()
@@ -109,7 +69,15 @@ export default function ProjectDetailPage() {
 
   const [project, setProject] = useState<MockProject | null>(mockProjects[id] || null)
   const [loading, setLoading] = useState(true)
-  const trades = mockTrades
+
+  // Phase 14.07.1 — real price timeline (replaces the legacy genChart()
+  // sine wave) and real recent deals (replaces mockTrades). Loaded once
+  // per project id; the chart re-filters in-memory when the user picks
+  // a different period (1D/7D/30D/كل) so we don't hit the DB on each tab.
+  const [priceTimeline, setPriceTimeline] = useState<PriceHistoryPoint[]>([])
+  const [priceTimelineLoading, setPriceTimelineLoading] = useState(true)
+  const [recentDeals, setRecentDeals] = useState<RecentDealRow[]>([])
+  const [recentDealsLoading, setRecentDealsLoading] = useState(true)
   // Phase 10.80 (Task 20) — investor count + my shares now from real
   // DB instead of the hardcoded `247` and `0` placeholders.
   const [investors, setInvestors] = useState(0)
@@ -221,11 +189,143 @@ export default function ProjectDetailPage() {
     return () => { cancelled = true }
   }, [id])
 
+  // ─── Phase 14.07.1 — load real price timeline + recent deals ────
+  // The timeline drives the "حركة السعر" chart (no more genChart sine
+  // wave). The deals list drives the "السجل" tab (no more mockTrades).
+  // Both fall back to empty arrays so the UI shows the right empty
+  // state when the project has no trading history yet.
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    setPriceTimelineLoading(true)
+    getProjectPriceTimeline(id, 200)
+      .then((points) => {
+        if (!cancelled) setPriceTimeline(points)
+      })
+      .finally(() => {
+        if (!cancelled) setPriceTimelineLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [id])
+
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    setRecentDealsLoading(true)
+    ;(async () => {
+      try {
+        const sb = createClient()
+        // Pull the last 20 completed deals for this project. We pick up
+        // buyer/seller display names from profiles via two separate
+        // selects to dodge a Supabase embed that can be NULL under
+        // strict RLS (Phase 13.52 lesson learned).
+        const { data: rows } = await sb
+          .from("deals")
+          .select("id, shares, total_amount, completed_at, buyer_id, seller_id")
+          .eq("project_id", id)
+          .eq("status", "completed")
+          .order("completed_at", { ascending: false })
+          .limit(20)
+        if (cancelled || !rows) {
+          if (!cancelled) setRecentDeals([])
+          return
+        }
+        const deals = rows as Array<{
+          id: string
+          shares: number | string
+          total_amount: number | string
+          completed_at: string | null
+          buyer_id: string | null
+          seller_id: string | null
+        }>
+        const userIds = Array.from(
+          new Set(deals.flatMap((d) => [d.buyer_id, d.seller_id].filter(Boolean) as string[])),
+        )
+        let names: Record<string, string> = {}
+        if (userIds.length > 0) {
+          const { data: ppl } = await sb
+            .from("profiles_public")
+            .select("id, full_name, username")
+            .in("id", userIds)
+          if (Array.isArray(ppl)) {
+            names = Object.fromEntries(
+              (ppl as Array<{ id: string; full_name?: string | null; username?: string | null }>).map(
+                (p) => [p.id, p.full_name?.trim() || p.username?.trim() || "—"],
+              ),
+            )
+          }
+        }
+        if (cancelled) return
+        setRecentDeals(
+          deals.map((d) => {
+            const shares = Number(d.shares ?? 0)
+            const total = Number(d.total_amount ?? 0)
+            return {
+              id: d.id,
+              shares,
+              price_per_share: shares > 0 ? Math.round(total / shares) : 0,
+              total_amount: total,
+              completed_at: d.completed_at,
+              buyer_name: d.buyer_id ? names[d.buyer_id] ?? null : null,
+              seller_name: d.seller_id ? names[d.seller_id] ?? null : null,
+            }
+          }),
+        )
+      } catch {
+        if (!cancelled) setRecentDeals([])
+      } finally {
+        if (!cancelled) setRecentDealsLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [id])
+
   const [period, setPeriod] = useState<"1D" | "7D" | "30D" | "كل">("7D")
   const [tab, setTab] = useState<"info" | "updates" | "gallery" | "history">("info")
+  // Phase 14.07.1 — real follow state. `following` reflects the
+  // `follows` table; `followBusy` blocks double-taps while the RPC
+  // is in flight (and lets the button render a spinner).
   const [following, setFollowing] = useState(false)
+  const [followBusy, setFollowBusy] = useState(false)
   const [showBuyOptions, setShowBuyOptions] = useState(false)
   const [showCreateDeal, setShowCreateDeal] = useState(false)
+
+  // ─── Phase 14.07.1 — load real follow state on mount ────────────
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    isFollowingDB("project", id).then((v) => {
+      if (!cancelled) setFollowing(v)
+    })
+    return () => { cancelled = true }
+  }, [id])
+
+  // Toggle handler with optimistic update + rollback on RPC failure.
+  const handleToggleFollow = async () => {
+    if (!id || followBusy) return
+    const next = !following
+    setFollowing(next)            // optimistic
+    setFollowBusy(true)
+    const result = next
+      ? await followTarget("project", id)
+      : await unfollowTarget("project", id)
+    setFollowBusy(false)
+    if (!result.success) {
+      // Roll back the optimistic flip.
+      setFollowing(!next)
+      const code = result.reason ?? ""
+      const map: Record<string, string> = {
+        unauthenticated: "يجب تسجيل الدخول",
+        missing_target: "المشروع غير صالح",
+        missing_table:  "ميزة المتابعة غير منشورة بعد",
+        already_following: "أنت تتابع المشروع بالفعل",
+        not_following: "أنت لا تتابع المشروع",
+      }
+      showError(map[code] ?? "تعذّر حفظ المتابعة")
+      return
+    }
+    showSuccess(next ? "✅ تمت متابعة المشروع" : "تم إلغاء المتابعة")
+  }
 
   if (loading || !project) {
     return (
@@ -294,8 +394,37 @@ export default function ProjectDetailPage() {
       : "0.00"
   const isUp = parseFloat(priceChange) >= 0
 
-  const chartDays: Record<string, number> = { "1D": 24, "7D": 30, "30D": 60, "كل": 120 }
-  const chartData = genChart(project.share_price, chartDays[period] || 30, project.id?.charCodeAt(0) || 1)
+  // ─── Phase 14.07.1 — period filter for real timeline ────────────
+  // Window the loaded timeline based on the user's period selection.
+  // "كل" returns everything; the others cap relative to "now".
+  const chartData = useMemo(() => {
+    if (priceTimeline.length === 0) return [] as Array<{ ts: number; price: number; label: string }>
+    const now = Date.now()
+    const windowMs: Record<typeof period, number> = {
+      "1D": 86_400_000,
+      "7D": 7 * 86_400_000,
+      "30D": 30 * 86_400_000,
+      "كل": Number.POSITIVE_INFINITY,
+    }
+    const cutoff = now - (windowMs[period] ?? Number.POSITIVE_INFINITY)
+    const filtered = priceTimeline.filter((p) => {
+      const t = new Date(p.recorded_at).getTime()
+      return Number.isFinite(t) && t >= cutoff
+    })
+    // Ensure chart still renders even when the window is empty — we
+    // anchor on the latest known point so the user sees the live price.
+    const points = filtered.length > 0 ? filtered : priceTimeline.slice(-1)
+    return points.map((p) => ({
+      ts: new Date(p.recorded_at).getTime(),
+      price: Math.round(Number(p.new_price) || 0),
+      label: new Date(p.recorded_at).toLocaleString("ar-IQ", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    }))
+  }, [priceTimeline, period])
 
   return (
     <AppLayout>
@@ -311,18 +440,26 @@ export default function ProjectDetailPage() {
             subtitle={project.name}
             rightAction={
               <button
-                onClick={() => {
-                  setFollowing((f) => !f)
-                  showSuccess(following ? "تم إلغاء المتابعة" : "تتم المتابعة")
-                }}
+                onClick={handleToggleFollow}
+                disabled={followBusy}
+                aria-pressed={following}
+                aria-busy={followBusy}
                 className={cn(
                   "px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors border",
                   following
                     ? "bg-white/[0.05] border-white/[0.15] text-white hover:bg-white/[0.08]"
-                    : "bg-neutral-100 text-black border-transparent hover:bg-neutral-200"
+                    : "bg-neutral-100 text-black border-transparent hover:bg-neutral-200",
+                  followBusy && "opacity-70 cursor-wait",
                 )}
               >
-                <Heart className={cn("w-3.5 h-3.5", following && "fill-current")} strokeWidth={1.5} />
+                {followBusy ? (
+                  <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <Heart
+                    className={cn("w-3.5 h-3.5", following && "fill-current")}
+                    strokeWidth={1.5}
+                  />
+                )}
                 {following ? "متابَع" : "متابعة"}
               </button>
             }
@@ -422,10 +559,19 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
-          {/* Chart */}
+          {/* ═══ Chart — Phase 14.07.1: real price_history timeline ═══
+              Replaces the legacy genChart() sine-wave + the mock
+              "💹 حركة سعر الحصة" Card. Both fed synthetic data that
+              misled investors. Now: every point is a real datum from
+              creation, completed deals, or admin price changes. */}
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-3">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-sm font-bold text-white">حركة السعر</div>
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <div>
+                <div className="text-sm font-bold text-white">حركة السعر</div>
+                <div className="text-[10px] text-neutral-500 mt-0.5">
+                  بيانات حقيقية من سجل التداول
+                </div>
+              </div>
               <div className="flex gap-1">
                 {(["1D", "7D", "30D", "كل"] as const).map((p) => (
                   <button
@@ -433,7 +579,9 @@ export default function ProjectDetailPage() {
                     onClick={() => setPeriod(p)}
                     className={cn(
                       "px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors",
-                      period === p ? "bg-white text-black font-bold" : "bg-white/[0.04] text-neutral-400 hover:text-white"
+                      period === p
+                        ? "bg-white text-black font-bold"
+                        : "bg-white/[0.04] text-neutral-400 hover:text-white",
                     )}
                   >
                     {p}
@@ -441,78 +589,95 @@ export default function ProjectDetailPage() {
                 ))}
               </div>
             </div>
-            <LineChart data={chartData} color={isUp ? "#4ADE80" : "#F87171"} />
-          </div>
 
-          {/* ═══ Price Movement Card ═══ */}
-          {(() => {
-            const ms = getMarketStateByProject(String(project.id))
-            if (!ms) return null
-            const status = getProjectPublicStatus(String(project.id))
-            const chart = getPriceHistoryForChart(String(project.id), 30)
-            const trendUp = ms.total_growth_pct >= 0
-            return (
-              <Card className="mb-4">
-                <SectionHeader
-                  title="💹 حركة سعر الحصة"
-                  subtitle="السعر الحالي للحصة الواحدة"
-                  action={{ label: "تفاصيل أكثر", href: "/investment" }}
-                />
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
-                  <div className="flex flex-col gap-3">
-                    <StatCard
-                      label="السعر الحالي"
-                      value={ms.current_price.toLocaleString("en-US") + " IQD"}
-                      color="green"
-                      trend={{ value: ms.total_growth_pct, direction: trendUp ? "up" : "down" }}
-                      size="lg"
-                    />
-                    <div className="text-[10px] text-neutral-500">منذ الإطلاق</div>
-                    <Badge
-                      color={status.status === "frozen" ? "blue" : status.status === "review" ? "yellow" : "green"}
-                      variant="soft"
-                      size="sm"
-                    >
-                      {status.label}
-                    </Badge>
-                  </div>
-                  <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
-                    <div className="text-[10px] text-neutral-500 mb-2">آخر تحركات السعر</div>
-                    <div className="h-32 -mx-1">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={chart} margin={{ top: 5, right: 4, bottom: 0, left: 4 }}>
-                          <defs>
-                            <linearGradient id="pm-grad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#4ADE80" stopOpacity={0.4} />
-                              <stop offset="100%" stopColor="#4ADE80" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <XAxis dataKey="date" hide />
-                          <Tooltip
-                            cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }}
-                            contentStyle={{
-                              backgroundColor: "rgba(15,15,15,0.95)",
-                              border: "1px solid rgba(255,255,255,0.1)",
-                              borderRadius: "8px",
-                              fontSize: "11px",
-                            }}
-                            formatter={(value) => [`${Number(value).toLocaleString("en-US")} IQD`, "السعر"]}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="price"
-                            stroke="#4ADE80"
-                            strokeWidth={2}
-                            fill="url(#pm-grad)"
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
+            {priceTimelineLoading ? (
+              <div className="h-32 flex items-center justify-center text-[11px] text-neutral-500">
+                جاري تحميل سجل السعر...
+              </div>
+            ) : chartData.length < 2 ? (
+              <div className="h-32 flex flex-col items-center justify-center text-center px-4">
+                <div className="text-2xl mb-1 opacity-50">📉</div>
+                <div className="text-[11px] text-neutral-500 leading-relaxed">
+                  لا توجد بيانات تداول كافية لرسم المنحنى{" "}
+                  {period !== "كل" && "في هذه الفترة"}
                 </div>
-              </Card>
-            )
-          })()}
+                {period !== "كل" && (
+                  <button
+                    onClick={() => setPeriod("كل")}
+                    className="mt-2 text-[10px] text-green-400 hover:text-green-300 underline underline-offset-2"
+                  >
+                    عرض السجل الكامل
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="h-40 -mx-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={chartData}
+                    margin={{ top: 8, right: 8, bottom: 0, left: 8 }}
+                  >
+                    <defs>
+                      <linearGradient id="price-grad" x1="0" y1="0" x2="0" y2="1">
+                        <stop
+                          offset="0%"
+                          stopColor={isUp ? "#4ADE80" : "#F87171"}
+                          stopOpacity={0.35}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor={isUp ? "#4ADE80" : "#F87171"}
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <XAxis
+                      dataKey="ts"
+                      type="number"
+                      domain={["dataMin", "dataMax"]}
+                      tick={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      dataKey="price"
+                      domain={["auto", "auto"]}
+                      hide
+                    />
+                    <Tooltip
+                      cursor={{
+                        stroke: "rgba(255,255,255,0.15)",
+                        strokeWidth: 1,
+                        strokeDasharray: "3 3",
+                      }}
+                      contentStyle={{
+                        backgroundColor: "rgba(15,15,15,0.95)",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: "8px",
+                        fontSize: "11px",
+                      }}
+                      labelFormatter={(_value, payload) => {
+                        const p = payload?.[0]?.payload as
+                          | { label?: string }
+                          | undefined
+                        return p?.label ?? ""
+                      }}
+                      formatter={(value) => [
+                        `${Number(value ?? 0).toLocaleString("en-US")} د.ع`,
+                        "السعر",
+                      ]}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="price"
+                      stroke={isUp ? "#4ADE80" : "#F87171"}
+                      strokeWidth={2}
+                      fill="url(#price-grad)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
 
           {/* Tabs */}
           <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-3">
@@ -933,27 +1098,69 @@ export default function ProjectDetailPage() {
             )
           })()}
 
-          {/* History Tab */}
+          {/* History Tab — Phase 14.07.1: real completed deals for
+              this project. Replaces the legacy mockTrades constant.
+              Buyer/seller names come from profiles_public to respect
+              RLS (Phase 13.52 — the embed-join pattern returns NULL
+              under strict RLS, so we split into two queries). */}
           {tab === "history" && (
             <div className="space-y-2 mb-3">
-              {trades.length === 0 ? (
-                <div className="text-center py-12 text-sm text-neutral-500">لا توجد صفقات مسجلة</div>
-              ) : (
-                trades.map((t, i) => (
-                  <div
-                    key={i}
-                    className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3 flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="text-sm font-bold text-white">{t.shares} حصة</div>
-                      <div className="text-[10px] text-neutral-500 mt-0.5">{t.created_at}</div>
-                    </div>
-                    <div className="text-left">
-                      <div className="text-sm font-bold text-yellow-400 font-mono">{fmtIQD(t.price * t.shares)} IQD</div>
-                      <div className="text-[10px] text-neutral-500 font-mono">{t.price.toLocaleString("en-US")} /حصة</div>
-                    </div>
+              {recentDealsLoading ? (
+                <div className="text-center py-12 text-sm text-neutral-500">
+                  جاري تحميل سجل الصفقات...
+                </div>
+              ) : recentDeals.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="text-3xl mb-2 opacity-50">📜</div>
+                  <div className="text-sm text-neutral-400 mb-1">
+                    لا توجد صفقات مسجلة بعد
                   </div>
-                ))
+                  <div className="text-[11px] text-neutral-500 leading-relaxed">
+                    ستظهر هنا كل الصفقات المكتملة على هذا المشروع
+                  </div>
+                </div>
+              ) : (
+                recentDeals.map((d) => {
+                  const when = d.completed_at
+                    ? new Date(d.completed_at).toLocaleString("ar-IQ", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "—"
+                  return (
+                    <div
+                      key={d.id}
+                      className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-bold text-white">
+                            {d.shares.toLocaleString("en-US")} حصة
+                          </div>
+                          <div className="text-[10px] text-neutral-500 mt-0.5">{when}</div>
+                          {(d.buyer_name || d.seller_name) && (
+                            <div className="text-[10px] text-neutral-500 mt-1 truncate">
+                              {d.seller_name ?? "—"}
+                              <span className="mx-1 text-neutral-600">←</span>
+                              {d.buyer_name ?? "—"}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-left">
+                          <div className="text-sm font-bold text-yellow-400 font-mono">
+                            {fmtIQD(d.total_amount)} د.ع
+                          </div>
+                          <div className="text-[10px] text-neutral-500 font-mono">
+                            {d.price_per_share.toLocaleString("en-US")} /حصة
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
               )}
             </div>
           )}
