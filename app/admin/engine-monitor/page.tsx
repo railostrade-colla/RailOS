@@ -22,6 +22,7 @@ import {
   Play,
   RefreshCw,
   Loader2,
+  Zap,
 } from "lucide-react"
 import {
   getProjectLayers,
@@ -32,7 +33,7 @@ import {
   type EngineDailyRun,
   type MonthlyRiseRow,
 } from "@/lib/data/engine-monitor"
-import { showError, showSuccess } from "@/lib/utils/toast"
+import { showError, showSuccess, showInfo } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtPct = (n: number, digits = 2) => `${n.toFixed(digits)}%`
@@ -95,20 +96,40 @@ export default function EngineMonitorPage() {
   )
 
   // ─── Manual trigger ───────────────────────────────────────────
-  const handleManualTrigger = async (projectId?: string) => {
+  // Phase 14.08.1 — `force` bypasses the one-run-per-day idempotency
+  // guard. Only the dedicated "Force" buttons set it to true; the
+  // natural-path buttons stay safe.
+  const handleManualTrigger = async (projectId?: string, force = false) => {
     if (firing) return
     setFiring(true)
-    const result = await manualTriggerDailyEngine(projectId)
+    const result = await manualTriggerDailyEngine(projectId, force)
     setFiring(false)
     if (!result.success) {
       showError(result.error ?? "تعذّر التشغيل اليدوي")
       return
     }
-    showSuccess(
-      projectId
-        ? "✅ تم تشغيل المحرّك على المشروع المحدد"
-        : "✅ تم تشغيل المحرّك على كل المشاريع النشطة",
-    )
+    if (result.skipped) {
+      // Server returned skipped='already_ran_today' and force was off.
+      // Surface as info (not success) so the operator sees why nothing
+      // happened. They can press the Force button to override.
+      showInfo(
+        projectId
+          ? "ℹ️ هذا المشروع شُغِّل اليوم بالفعل — استخدم «تشغيل قسري» للتجاوز"
+          : "ℹ️ بعض المشاريع شُغِّلت اليوم بالفعل — استخدم «تشغيل قسري» للتجاوز",
+      )
+    } else if (force) {
+      showSuccess(
+        projectId
+          ? "⚡ تشغيل قسري ناجح على المشروع المحدد"
+          : "⚡ تشغيل قسري ناجح على كل المشاريع النشطة",
+      )
+    } else {
+      showSuccess(
+        projectId
+          ? "✅ تم تشغيل المحرّك على المشروع المحدد"
+          : "✅ تم تشغيل المحرّك على كل المشاريع النشطة",
+      )
+    }
     void reloadRows()
     void reloadRuns()
     if (selectedId) {
@@ -159,7 +180,7 @@ export default function EngineMonitorPage() {
                 ? "bg-white/[0.04] text-neutral-500 cursor-wait"
                 : "bg-green-500 text-black hover:bg-green-600",
             )}
-            title="تشغيل المحرّك يدوياً على كل المشاريع (للاختبار)"
+            title="تشغيل المحرّك يدوياً على كل المشاريع (مرة واحدة لكل يوم لكل مشروع)"
           >
             {firing ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -167,6 +188,35 @@ export default function EngineMonitorPage() {
               <Play className="w-3.5 h-3.5" strokeWidth={2.5} />
             )}
             تشغيل يدوي (الكل)
+          </button>
+          {/* Phase 14.08.1 — Force re-run: bypasses idempotency guard.
+              Clearly styled as a destructive/testing-only action. */}
+          <button
+            type="button"
+            onClick={() => {
+              if (
+                window.confirm(
+                  "⚡ تشغيل قسري على كل المشاريع النشطة؟\n\nهذا الزر يتجاوز حماية «مرة واحدة باليوم» ويُفعّل المحرّك مرة أخرى حتى لو شُغِّل اليوم. للاختبار فقط.",
+                )
+              ) {
+                void handleManualTrigger(undefined, true)
+              }
+            }}
+            disabled={firing}
+            className={cn(
+              "text-xs font-bold rounded-xl px-3 py-2 flex items-center gap-1.5 transition-colors border",
+              firing
+                ? "bg-white/[0.04] text-neutral-500 border-white/[0.08] cursor-wait"
+                : "bg-orange-400/15 text-orange-300 border-orange-400/30 hover:bg-orange-400/25",
+            )}
+            title="تجاوز الحماية اليومية وإعادة التشغيل — للاختبار فقط"
+          >
+            {firing ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Zap className="w-3.5 h-3.5" strokeWidth={2.5} />
+            )}
+            قسري (تجاوز)
           </button>
         </div>
       </header>
@@ -224,16 +274,35 @@ export default function EngineMonitorPage() {
                       {fmtNum(r.rise_events_count)}
                     </td>
                     <td className="px-3 py-2 text-left">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleManualTrigger(r.project_id)
-                        }}
-                        disabled={firing}
-                        className="text-[10px] text-green-400 hover:text-green-300 underline underline-offset-2 disabled:opacity-50"
-                      >
-                        تشغيل لهذا المشروع
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleManualTrigger(r.project_id)
+                          }}
+                          disabled={firing}
+                          className="text-[10px] text-green-400 hover:text-green-300 underline underline-offset-2 disabled:opacity-50"
+                        >
+                          تشغيل
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (
+                              window.confirm(
+                                `⚡ تشغيل قسري على «${r.project_name}»؟\n\nيتجاوز حماية «مرة واحدة باليوم». للاختبار فقط.`,
+                              )
+                            ) {
+                              void handleManualTrigger(r.project_id, true)
+                            }
+                          }}
+                          disabled={firing}
+                          className="text-[10px] text-orange-300 hover:text-orange-200 underline underline-offset-2 disabled:opacity-50"
+                          title="تجاوز حماية اليوم — للاختبار فقط"
+                        >
+                          قسري
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -397,7 +466,8 @@ export default function EngineMonitorPage() {
         <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 mt-0.5 shrink-0" strokeWidth={2} />
         <span>
           الـ Cron التلقائي يعمل يومياً في الساعة المُحددة في <code className="font-mono">market_settings.cron_job_hour</code>.
-          استخدم زر التشغيل اليدوي للاختبار فقط.
+          كل مشروع يُشغَّل <strong className="text-neutral-300">مرة واحدة في اليوم</strong>؛
+          زر «تشغيل يدوي» يحترم هذه الحماية، أمّا <strong className="text-orange-300">«قسري (تجاوز)»</strong> فيتخطّاها للاختبار فقط.
         </span>
       </div>
     </div>

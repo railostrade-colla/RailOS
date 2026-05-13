@@ -215,6 +215,11 @@ export async function getMonthlyRiseTable(): Promise<MonthlyRiseRow[]> {
 /**
  * Manual cron trigger for testing — super_admin only (enforced
  * server-side by the SQL wrapper in Phase 14.08g).
+ *
+ * Phase 14.08.1: optional `force` flag bypasses the one-run-per-day
+ * idempotency guard. Default FALSE so the natural path is safe; the
+ * UI exposes a separate clearly-labelled button for the force case.
+ *
  * Passing projectId fires the per-project runner; omitting it runs
  * the full all-projects loop.
  */
@@ -222,21 +227,41 @@ export interface ManualTriggerResult {
   success: boolean
   error?: string
   payload?: Record<string, unknown>
+  /** True when the server skipped because already_ran_today and force was false. */
+  skipped?: boolean
+  skippedReason?: string
 }
 
 export async function manualTriggerDailyEngine(
   projectId?: string,
+  force = false,
 ): Promise<ManualTriggerResult> {
   try {
     const supabase = createClient()
     const { data, error } = await supabase.rpc("manual_trigger_daily_engine", {
       p_project_id: projectId ?? null,
+      p_force: force,
     })
     if (error) return { success: false, error: error.message }
     const payload = (data ?? {}) as Record<string, unknown>
     if (payload.ok === false) {
       return { success: false, error: String(payload.error ?? "unknown") }
     }
+
+    // Detect the "already_ran_today" early-return from the SQL runner
+    // so the UI can surface it as info, not success.
+    const result = payload.result as Record<string, unknown> | undefined
+    const skipped =
+      typeof result?.skipped === "string" ? result.skipped : undefined
+    if (skipped === "already_ran_today") {
+      return {
+        success: true,
+        skipped: true,
+        skippedReason: skipped,
+        payload,
+      }
+    }
+
     return { success: true, payload }
   } catch (err) {
     return {
