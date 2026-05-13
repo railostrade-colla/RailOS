@@ -3,18 +3,16 @@
 import Link from "next/link"
 import {
   Coins, Zap, Star, Shield, Settings, Newspaper,
-  HelpCircle, BookOpen, TrendingUp, FileText, Lock, Info, Heart,
+  HelpCircle, BookOpen, TrendingUp, FileText, Lock, Info, Heart, Building2,
+  HeartPulse, Users, Gift,
 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 
-// Phase 14.07e — Building2, HeartPulse, Users, Gift were the icons
-// for council / healthcare / orphans / discounts. Those four shortcuts
-// are temporarily hidden from this menu because their backing data
-// is still mock-only (see Phase 14.07 audit). The page code at
-// /council /healthcare /orphans /discounts stays intact for the future
-// migration; we just stop advertising the entry points so live users
-// don't land on synthetic data.
+// Phase 15.05 — restored Council / Healthcare / Orphans / Discounts
+// shortcuts. Phase 15.01-04 finished wiring each program's user pages
+// to the real DB layer (Phase 6.1/6.3 schemas + lib/data/* helpers),
+// so the routes no longer show synthetic data to live users.
 
 interface MenuItem {
   label: string
@@ -73,14 +71,44 @@ const menuItems: MenuItem[] = [
     iconBg: "bg-red-400/10",
     iconBorder: "border-red-400/30",
   },
+  {
+    label: "مجلس السوق",
+    description: "الجهة الرقابية والتصويت",
+    href: "/council",
+    icon: Building2,
+    iconColor: "text-purple-400",
+    iconBg: "bg-purple-400/10",
+    iconBorder: "border-purple-400/30",
+  },
 
-  // Phase 14.07e — hidden until DB-backed (mock-only today):
-  //   • مجلس السوق         (/council)      icon: Building2
-  //   • الرعاية الصحية      (/healthcare)   icon: HeartPulse
-  //   • رعاية الأيتام        (/orphans)      icon: Users
-  //   • الخصومات             (/discounts)    icon: Gift
-  // Restore by adding the entries back here (icons re-import from
-  // lucide-react) once each section's data layer is real.
+  // البرامج الاجتماعية — Phase 15.01-04 wired all three to real DB.
+  {
+    label: "الرعاية الصحية",
+    description: "علاج وتأمين وتبرّعات",
+    href: "/healthcare",
+    icon: HeartPulse,
+    iconColor: "text-red-400",
+    iconBg: "bg-red-400/10",
+    iconBorder: "border-red-400/30",
+  },
+  {
+    label: "رعاية الأيتام",
+    description: "كفالة طفل ودعم تعليمه",
+    href: "/orphans",
+    icon: Users,
+    iconColor: "text-blue-400",
+    iconBg: "bg-blue-400/10",
+    iconBorder: "border-blue-400/30",
+  },
+  {
+    label: "الخصومات",
+    description: "خصومات حصرية في الماركات",
+    href: "/discounts",
+    icon: Gift,
+    iconColor: "text-orange-400",
+    iconBg: "bg-orange-400/10",
+    iconBorder: "border-orange-400/30",
+  },
 
   // الإعدادات والمحتوى
   {
@@ -168,7 +196,7 @@ export default function MenuPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-screen-2xl mx-auto">
 
           <PageHeader
-            badge="MAIN MENU · 13 SHORTCUTS"
+            badge="MAIN MENU · 17 SHORTCUTS"
             title="القائمة الرئيسية"
             description="كل اختصارات Railos في مكان واحد"
             showBack={true}
@@ -206,7 +234,7 @@ export default function MenuPage() {
           {/* Footer info */}
           <div className="mt-10 text-center">
             <div className="text-[10px] text-neutral-600 tracking-wider font-mono">
-              RAILOS v2.0 · 13 SHORTCUTS · MORE COMING SOON
+              RAILOS v2.0 · 17 SHORTCUTS · MORE COMING SOON
             </div>
           </div>
         </div>
