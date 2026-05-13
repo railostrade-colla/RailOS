@@ -1,28 +1,31 @@
 "use client"
 
 /**
- * Market hub — focused on market state, health, settings, and auctions.
- * Phase 10.59: removed "Projects" + "Requests Hub" tabs (per user
- * request — Projects has its own dedicated section, and the Requests
- * Hub lives in the main sidebar).
+ * Market hub — Phase 14.07b cleanup.
+ *
+ * Removed: "📊 صحّة السوق" (MarketHealthPanel — mock-only, mislead
+ * admin with synthetic data via analyzeAllProjects) and
+ * "⚙️ إعدادات السوق" (MarketSettingsAdvancedPanel — pure mock
+ * with a fake save). Both were deleted in Phase 14.07b. Real
+ * settings live in /admin/market-settings (Phase 14.06 registry).
+ *
+ * Surviving tabs:
+ *   • 🔨 المزادات   — AuctionsAdminPanel (DB-backed)
+ *   • 🚦 حالة السوق  — MarketStatePanel (Phase 10.37 — DB-backed)
  */
 
 import { EmbeddedTabsHub } from "./EmbeddedTabsHub"
 import { AuctionsAdminPanel } from "./AuctionsAdminPanel"
 import { MarketStatePanel } from "./MarketState"
-import { MarketHealthPanel } from "./MarketHealthPanel"
-import { MarketSettingsAdvancedPanel } from "./MarketSettings"
 
 export function MarketPanel() {
   return (
     <EmbeddedTabsHub
       title="◉ السوق والمزادات"
-      subtitle="حالة السوق + المزادات + المؤشّرات + إعدادات التداول"
+      subtitle="إدارة المزادات + التحكم بحالة السوق على مستوى المنصة"
       tabs={[
         { key: "auctions", label: "🔨 المزادات", hint: "إنشاء + متابعة + إنهاء مبكر", Panel: AuctionsAdminPanel },
         { key: "state", label: "🚦 حالة السوق", hint: "إيقاف / تشغيل التداول", Panel: MarketStatePanel },
-        { key: "health", label: "📊 صحّة السوق", hint: "ضغط الشراء + الاحتكار", Panel: MarketHealthPanel },
-        { key: "settings", label: "⚙️ إعدادات السوق", hint: "حدود الأسعار + القواعد", Panel: MarketSettingsAdvancedPanel },
       ]}
     />
   )

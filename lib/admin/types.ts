@@ -51,6 +51,11 @@ export type AdminTab =
   | "gifts_admin"
   // Phase 13.2 — consolidated social-programs hub
   | "social_programs"
+  // Phase 14.07c — sidebar entry for the App-Router page
+  // /admin/market-settings (Phase 14.06 dynamic registry). Has an
+  // href on its AdminNavItem so the sidebar router pushes the full
+  // path instead of resolving a tab via app/admin/page.tsx.
+  | "market_settings_registry"
 
 /** Capability vocabulary kept in sync with lib/data/admin-permissions.ts. */
 export type AdminPermission =
@@ -75,6 +80,11 @@ export interface AdminNavItem {
   /** Phase 11.00 — capability needed to see this nav entry. super_admin
    *  bypasses (sees everything). undefined = always visible to any admin. */
   requiredPermission?: AdminPermission
+  /** Phase 14.07c — optional full-path override. When set, the sidebar
+   *  navigates with router.push(href) instead of the legacy
+   *  ?tab=<key> query-param routing. Used for App-Router pages that
+   *  live outside the tab-router (e.g. /admin/market-settings). */
+  href?: string
 }
 
 // ─── Phase 13.2 — reorganized into 4 logical sections ─────────────
@@ -102,6 +112,11 @@ export const ADMIN_NAV: AdminNavItem[] = [
   // bookmarked.
   { key: "dashboard",    label: "لوحة التحكم",    icon: "◈",  section: "نظرة عامة", requiredPermission: "view_dashboard" },
   { key: "monitor",      label: "مراقبة السوق",   icon: "📡", section: "نظرة عامة", requiredPermission: "manage_market" },
+  // Phase 14.07c — new App-Router page at /admin/market-settings.
+  // The `href` field tells the sidebar to push a full path instead
+  // of the legacy ?tab=<key> routing.
+  { key: "market_settings_registry", label: "إعدادات السوق", icon: "⚙️", section: "نظرة عامة",
+    requiredPermission: "manage_market", href: "/admin/market-settings" },
   { key: "log",          label: "سجل القرارات",   icon: "📋", section: "نظرة عامة", requiredPermission: "view_audit" },
 
   // ─── 2. العمليات والمالية ─────────────────────────────────────

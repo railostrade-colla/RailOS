@@ -13,9 +13,10 @@ import { FeesPanel } from "@/components/admin/panels/Fees"
 import { UsersPanel } from "@/components/admin/panels/Users"
 import { ContentPanel } from "@/components/admin/panels/Content"
 import { SystemPanel } from "@/components/admin/panels/System"
-import { MarketSettingsAdvancedPanel } from "@/components/admin/panels/MarketSettings"
+// Phase 14.07b — MarketSettings + FeeConfig mocks deleted. MarketState
+// stays (it's real Phase 10.37) and is still deep-linkable via
+// ?tab=market_state for legacy bookmarks.
 import { MarketStatePanel } from "@/components/admin/panels/MarketState"
-import { FeeConfigAdvancedPanel } from "@/components/admin/panels/FeeConfig"
 import { FeeUnitsAdminPanel } from "@/components/admin/panels/FeeUnitsAdmin"
 import { DealFeesAdminPanel } from "@/components/admin/panels/DealFeesAdmin"
 // Phase Admin-A
@@ -43,8 +44,9 @@ import { CreateCompanyPanel } from "@/components/admin/panels/CreateCompanyPanel
 import { ProjectWalletsPanel } from "@/components/admin/panels/ProjectWalletsPanel"
 import { LegalPagesEditorPanel } from "@/components/admin/panels/LegalPagesEditorPanel"
 import { AdminUsersPanel } from "@/components/admin/panels/AdminUsersPanel"
-// Phase Health
-import { MarketHealthPanel } from "@/components/admin/panels/MarketHealthPanel"
+// Phase 14.07b — Phase Health MarketHealthPanel was mock-only
+// (analyzeAllProjects against mock-data) and got deleted. A real
+// DB-backed replacement will land in a later phase.
 // Phase Levels
 import { LevelSettingsPanel } from "@/components/admin/panels/LevelSettingsPanel"
 import { UserStatsPanel } from "@/components/admin/panels/UserStatsPanel"
@@ -73,9 +75,10 @@ export default function AdminPage() {
     users: <UsersPanel />,
     content_mgmt: <ContentPanel />,
     system: <SystemPanel />,
-    market_settings_advanced: <MarketSettingsAdvancedPanel />,
+    // Phase 14.07b — market_settings_advanced + fee_config_advanced removed
+    // (panels were mock-only). Legacy bookmarks now hit the unknown-tab
+    // fallback below instead of seeing a fake "save successful" toast.
     market_state: <MarketStatePanel />,
-    fee_config_advanced: <FeeConfigAdvancedPanel />,
     fee_units_admin: <FeeUnitsAdminPanel />,
     deal_fees_admin: <DealFeesAdminPanel />,
     // Phase Admin-A
@@ -103,8 +106,7 @@ export default function AdminPage() {
     project_wallets: <ProjectWalletsPanel />,
     legal_editor: <LegalPagesEditorPanel />,
     admin_users: <AdminUsersPanel />,
-    // Phase Health
-    market_health: <MarketHealthPanel />,
+    // Phase 14.07b — market_health entry removed (panel was mock-only).
     // Phase Levels
     level_settings: <LevelSettingsPanel />,
     user_stats: <UserStatsPanel />,

@@ -247,67 +247,14 @@ export const mockAdminUsers = [
   { id: "a3", name: "Admin@2", phone: "+964 770 0000003", role: "viewer", permissions: 3, last_login: "2026-04-24", active: true },
 ]
 
-// ===== Fee Config Advanced (5 fees + history) =====
-export const mockFeeConfigAdvanced = {
-  id: 1,
-  listing_fee_percent: 1,
-  direct_buy_fee_percent: 1.5,
-  auction_fee_percent: 2,
-  contract_fee_percent: 2,
-  quick_sell_fee_percent: 2,
-  updated_at: "2026-04-20",
-  updated_by: "Admin@Main",
-}
-
-export const mockFeeConfigHistory = [
-  { id: "h1", changed_by: "Admin@Main", field: "auction_fee_percent", old_value: 1.5, new_value: 2, changed_at: "2026-04-20 14:00" },
-  { id: "h2", changed_by: "Admin@1", field: "listing_fee_percent", old_value: 0.5, new_value: 1, changed_at: "2026-04-15" },
-  { id: "h3", changed_by: "Admin@Main", field: "quick_sell_fee_percent", old_value: 1.5, new_value: 2, changed_at: "2026-04-10" },
-]
-
-// ===== Market State (current + history) =====
-export const mockMarketStateAdvanced = {
-  current_price: 100000,
-  base_price: 95000,
-  daily_change_pct: 5.2,
-  market_open: true,
-  trading_volume_24h: 45200000,
-  trades_count_24h: 87,
-  market_cap: 2400000000,
-  last_updated: "2026-04-25 14:30",
-}
-
-export const mockMarketPriceHistory = [
-  { id: "ph1", price: 100000, change: 2.3, recorded_at: "2026-04-25 14:00" },
-  { id: "ph2", price: 97700, change: 1.5, recorded_at: "2026-04-25 12:00" },
-  { id: "ph3", price: 96250, change: -0.8, recorded_at: "2026-04-25 10:00" },
-  { id: "ph4", price: 97000, change: 1.2, recorded_at: "2026-04-25 08:00" },
-  { id: "ph5", price: 95850, change: 0.5, recorded_at: "2026-04-25 06:00" },
-  { id: "ph6", price: 95380, change: -1.0, recorded_at: "2026-04-24 22:00" },
-  { id: "ph7", price: 96340, change: 1.8, recorded_at: "2026-04-24 20:00" },
-  { id: "ph8", price: 94640, change: -0.5, recorded_at: "2026-04-24 18:00" },
-]
-
-// ===== Market Settings Advanced =====
-export const mockMarketSettings = {
-  market_open: true,
-  auctions_enabled: true,
-  quick_sell_enabled: true,
-  direct_buy_enabled: true,
-  contracts_enabled: true,
-  trading_hours_start: "08:00",
-  trading_hours_end: "22:00",
-  deal_duration_minutes: 15,
-  auction_min_duration_hours: 1,
-  auction_max_duration_hours: 72,
-  max_daily_trades: 50,
-  min_trade_value: 10000,
-  max_trade_value: 250000000,
-  welcome_bonus: 1000,
-  referral_bonus_percent: 2,
-  min_kyc_for_pro: true,
-  auto_approve_kyc: false,
-}
+// Phase 14.07b — removed five dead mock constants:
+//   • mockFeeConfigAdvanced + mockFeeConfigHistory (consumed by the
+//     mock FeeConfig panel, now deleted)
+//   • mockMarketStateAdvanced + mockMarketPriceHistory (consumed by
+//     an even older market-state mock; the real Phase 10.37
+//     get_system_market_state RPC has supplied the data for months)
+//   • mockMarketSettings (consumed by the mock MarketSettings panel,
+//     replaced by /admin/market-settings registry in Phase 14.06)
 
 // ===== Fee Units Admin (extended) =====
 export const mockFeeUnitsRequestsAdmin = [

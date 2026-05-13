@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react"
 import Image from "next/image"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react"
-import { ADMIN_NAV, type AdminTab } from "@/lib/admin/types"
+import { ADMIN_NAV, type AdminTab, type AdminNavItem } from "@/lib/admin/types"
 import { getMyAdminPermissions, type AdminPermission } from "@/lib/data/admin-permissions"
 import { getDashboardOverview } from "@/lib/data/admin-utilities"
 import { createClient } from "@/lib/supabase/client"
@@ -18,8 +18,20 @@ export function AdminSidebar({
   onToggle: () => void
 }) {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const currentTab = (searchParams?.get("tab") || "dashboard") as AdminTab
+  // Phase 14.07c — for href-based items (App-Router pages outside the
+  // tab router), active state matches when the current pathname starts
+  // with the item's href.
+  const isItemActive = (item: AdminNavItem): boolean => {
+    if (item.href) {
+      return Boolean(pathname && pathname.startsWith(item.href))
+    }
+    // Default: tab-based active state — but only when we're on the
+    // /admin tab-router page (not on a deeper App-Router page).
+    return pathname === "/admin" && currentTab === item.key
+  }
 
   // Phase 11.00 — load the caller's permissions once and filter the
   // sidebar so a regular admin only sees the sections they were granted.
@@ -155,8 +167,15 @@ export function AdminSidebar({
   const visibleNav = ADMIN_NAV.filter(allowed)
   const visibleSections = Array.from(new Set(visibleNav.map((n) => n.section)))
 
-  const goTo = (tab: AdminTab) => {
-    router.push(`/admin?tab=${tab}`)
+  const goTo = (item: AdminNavItem) => {
+    // Phase 14.07c — items with an explicit href push the full path
+    // (App-Router pages like /admin/market-settings). Otherwise fall
+    // back to the legacy ?tab=<key> routing on /admin.
+    if (item.href) {
+      router.push(item.href)
+    } else {
+      router.push(`/admin?tab=${item.key}`)
+    }
   }
 
   const logout = () => {
@@ -248,11 +267,11 @@ export function AdminSidebar({
             )}
             {visibleNav.filter((n) => n.section === section).map((item) => {
               const badge = badges[item.key] ?? 0
-              const active = currentTab === item.key
+              const active = isItemActive(item)
               return (
                 <button
                   key={item.key}
-                  onClick={() => goTo(item.key)}
+                  onClick={() => goTo(item)}
                   title={!open ? item.label : undefined}
                   className={cn(
                     "group relative w-full flex items-center gap-2.5 px-3 py-2 transition-all text-right",

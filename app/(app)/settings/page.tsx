@@ -16,7 +16,10 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Tabs, Modal } from "@/components/ui"
 import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
-import { CURRENT_USER } from "@/lib/mock-data"
+// Phase 14.07d — removed `CURRENT_USER` mock import. The page now relies
+// exclusively on getCurrentUserProfile() (Supabase auth + profiles row);
+// before the profile resolves we render with safe neutral defaults
+// rather than someone else's mock identity.
 import { LEVEL_LIMITS, fmtLimit, type InvestorLevel } from "@/lib/utils/contractLimits"
 import {
   isBiometricSupported,
@@ -173,8 +176,9 @@ function SettingsContent() {
 
   // Real signed-in user — needed for biometric handle (WebAuthn keys are
   // bound to the auth.users.id) and for the finance tab's level-based
-  // monthly limit. Falls back to the mock fixture during the brief load
-  // window so the toggles remain interactive.
+  // monthly limit. Until getCurrentUserProfile() resolves we keep
+  // `profile` null and render with safe defaults — never another
+  // user's mock data (Phase 14.07d fix).
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null)
 
   // Security — biometric
@@ -183,14 +187,17 @@ function SettingsContent() {
   const [bioBusy, setBioBusy] = useState(false)
 
   // Resolve the user-id used by the biometric layer + level lookup.
-  const userId = profile?.id ?? CURRENT_USER.id
+  // `""` is the explicit "no signed-in user yet" sentinel; downstream
+  // actions (biometric toggle) check `profile` before firing so the
+  // empty id never reaches WebAuthn.
+  const userId = profile?.id ?? ""
   const userEmailOrName =
-    profile?.email ||
-    profile?.full_name ||
-    CURRENT_USER.email ||
-    CURRENT_USER.name
+    profile?.email?.trim() ||
+    profile?.full_name?.trim() ||
+    profile?.username?.trim() ||
+    ""
   const levelKey: InvestorLevel = (() => {
-    const raw = profile?.level ?? CURRENT_USER.level
+    const raw = profile?.level
     return raw === "advanced" || raw === "pro" ? raw : "basic"
   })()
 
@@ -214,6 +221,14 @@ function SettingsContent() {
   }, [userId])
 
   const handleToggleBiometric = async (next: boolean) => {
+    // Phase 14.07d — block the toggle until the real profile loads.
+    // Previously the fallback chain would run with CURRENT_USER.id
+    // (the mock fixture's UUID), registering a WebAuthn key against
+    // a phantom user that no other surface could verify against.
+    if (!profile || !userId) {
+      showError("جاري تحميل بياناتك — حاول بعد لحظة")
+      return
+    }
     setBioBusy(true)
     if (next) {
       const result = await registerBiometric(userId, userEmailOrName)
