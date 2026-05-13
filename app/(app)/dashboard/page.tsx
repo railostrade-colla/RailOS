@@ -14,28 +14,22 @@ import {
   TrendingDown,
   Briefcase,
 } from "lucide-react"
-import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts"
+import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { AdsSlider } from "@/components/common/AdsSlider"
 import { ProjectCard } from "@/components/cards"
 import { SectionHeader, Tabs, SkeletonCard } from "@/components/ui"
-import {
-  mockProjects,
-  mockAds,
-  mockStats,
-  CURRENT_USER,
-  HOLDINGS,
-  getPortfolioSummary,
-  getActiveAlerts,
-  getTrendingProjects as getTrendingProjectsMock,
-  getClosingSoonProjects,
-  getNewProjects as getNewProjectsMock,
-  getRecentNews,
-  getProjectCurrentPrice,
-  getProjectPriceTrend,
-  type ProjectCardData,
-} from "@/lib/mock-data"
-import type { Project } from "@/lib/mock-data/types"
+// Phase 14.07f — only type imports survive from mock-data. The 10 runtime
+// helpers that used to live here (mockProjects, mockAds, mockStats,
+// CURRENT_USER, HOLDINGS, getPortfolioSummary, getActiveAlerts,
+// getTrendingProjects, getClosingSoonProjects, getNewProjects,
+// getRecentNews) were already unused — the real DB equivalents in
+// "@/lib/data" took over months ago. The two that WERE still wired
+// (getProjectCurrentPrice / getProjectPriceTrend) returned synthetic
+// data; price now derives directly from project.current_market_price
+// and trend from priceTimeline (see derivePriceTrend below).
+import type { Project, Ad } from "@/lib/mock-data/types"
+import type { ProjectCardData } from "@/lib/mock-data"
 import {
   getNewProjects as dbGetNewProjects,
   getTrendingProjects as dbGetTrendingProjects,
@@ -44,7 +38,6 @@ import {
   getAllProjects as dbGetAllProjects,
 } from "@/lib/data"
 import { getActiveAds, type DBAd } from "@/lib/data/ads"
-import type { Ad } from "@/lib/mock-data/types"
 import { getCurrentUserProfile, type CurrentUserProfile } from "@/lib/data/profile"
 import { getPortfolioData, type PortfolioSummary as DBPortfolioSummary } from "@/lib/data/portfolio"
 import {
@@ -52,6 +45,12 @@ import {
   EMPTY_PORTFOLIO_CHANGE_METRICS,
   type PortfolioChangeMetrics,
 } from "@/lib/data/portfolio-change-metrics"
+// Phase 14.07f — real per-project price timeline for the Active Project
+// mini-chart. Same helper that powers the /project/[id] full chart.
+import {
+  getProjectPriceTimeline,
+  type PriceHistoryPoint,
+} from "@/lib/data/price-history"
 import { readPersistedSync, invalidateCache } from "@/lib/data/cache"
 import { createClient } from "@/lib/supabase/client"
 import { ProjectCardSkeleton } from "@/components/skeletons/ProjectCardSkeleton"
@@ -160,47 +159,24 @@ const sectorIcon = (s: string) => {
   return "🏢"
 }
 
-// ─── Sparkline (reusable mini chart) ──────────────────────────
-function Sparkline({ basePrice, height = 50 }: { basePrice: number; height?: number }) {
-  const points = useMemo(() => {
-    const data: number[] = []
-    let p = basePrice * 0.95
-    for (let i = 0; i < 7; i++) {
-      p = Math.max(p + (Math.sin(i * 0.7 + basePrice * 0.0001) * 0.025) * p, basePrice * 0.85)
-      data.push(p)
-    }
-    data.push(basePrice)
-    return data
-  }, [basePrice])
+// Phase 14.07f — the inline Sparkline component (Math.sin-driven SVG)
+// was removed. It fabricated price history that didn't exist in the
+// DB. The Active Project mini-chart now uses real
+// `getProjectPriceTimeline()` rendered via Recharts (below). The Hero
+// portfolio sparkline was deleted entirely since no portfolio-history
+// table exists — better an honest empty space than a synthetic curve.
 
-  const W = 200
-  const H = height
-  const min = Math.min(...points)
-  const max = Math.max(...points)
-  const range = max - min || 1
-  const path = points
-    .map((v, i) => {
-      const x = (i / (points.length - 1)) * W
-      const y = H - ((v - min) / range) * (H - 8) - 4
-      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`
-    })
-    .join(" ")
-  const trendUp = points[points.length - 1] >= points[0]
-  const color = trendUp ? "#4ADE80" : "#F87171"
-  const gradId = `spark-${trendUp ? "up" : "down"}`
-
-  return (
-    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="block">
-      <defs>
-        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={`${path} L${W},${H} L0,${H} Z`} fill={`url(#${gradId})`} />
-      <path d={path} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
+/** Derive an up/down/flat indicator from the live price vs the
+ *  founder's reference share_price. No DB call needed — both values
+ *  are already on the Project row. */
+function derivePriceTrend(
+  currentPrice: number,
+  referencePrice: number,
+): "up" | "down" | "flat" {
+  if (!Number.isFinite(currentPrice) || !Number.isFinite(referencePrice)) return "flat"
+  if (currentPrice > referencePrice) return "up"
+  if (currentPrice < referencePrice) return "down"
+  return "flat"
 }
 
 // 12-month volume — populated from DB analytics when wired (currently
@@ -309,6 +285,17 @@ export default function DashboardPage() {
   const [changeMetrics, setChangeMetrics] = useState<PortfolioChangeMetrics>(
     EMPTY_PORTFOLIO_CHANGE_METRICS,
   )
+
+  // Phase 14.07f — real price timeline for the currently selected
+  // project's mini-chart. Fetched only when selectedProject changes
+  // (debounced 200ms to coalesce rapid switches from the dropdown).
+  // Empty array ⇒ the chart slot shows an empty state instead of a
+  // synthetic curve.
+  const [selectedProjectTimeline, setSelectedProjectTimeline] = useState<
+    PriceHistoryPoint[]
+  >([])
+  const [selectedProjectTimelineLoading, setSelectedProjectTimelineLoading] =
+    useState<boolean>(false)
 
   // Seed trending/new from persisted cache too — same instant-paint trick.
   useEffect(() => {
@@ -481,6 +468,42 @@ export default function DashboardPage() {
     }
   }, [])
 
+  // ─── Phase 14.07f — selected-project price timeline ─────────────
+  // Loads real points (creation anchor + completed deals + admin
+  // changes + now snapshot) for the Active Project mini-chart.
+  // Debounced so flipping between projects in the dropdown doesn't
+  // spam the DB. Reset to [] immediately on switch so the user
+  // never sees the previous project's data while loading.
+  useEffect(() => {
+    if (!selectedProject?.id) {
+      setSelectedProjectTimeline([])
+      setSelectedProjectTimelineLoading(false)
+      return
+    }
+    const projectId = selectedProject.id
+    let cancelled = false
+    setSelectedProjectTimeline([])
+    setSelectedProjectTimelineLoading(true)
+    const debounce = setTimeout(() => {
+      getProjectPriceTimeline(projectId, 30)
+        .then((points) => {
+          if (!cancelled) setSelectedProjectTimeline(points)
+        })
+        .catch((err) => {
+          // eslint-disable-next-line no-console
+          console.warn("[dashboard] price timeline fetch failed:", err)
+          if (!cancelled) setSelectedProjectTimeline([])
+        })
+        .finally(() => {
+          if (!cancelled) setSelectedProjectTimelineLoading(false)
+        })
+    }, 200)
+    return () => {
+      cancelled = true
+      clearTimeout(debounce)
+    }
+  }, [selectedProject?.id])
+
   // ─── Resolved values (production — DB only, zero defaults) ────
   const userName =
     userProfile?.full_name?.trim() ||
@@ -625,12 +648,16 @@ export default function DashboardPage() {
 
         <div className="px-4 lg:px-8 py-6 max-w-screen-2xl mx-auto">
 
-          {/* ═════════════ § 1: HERO — Welcome + Portfolio ═════════════ */}
+          {/* ═════════════ § 1: HERO — Welcome + Portfolio ═════════════
+              Phase 14.07f — dropped the right-hand Sparkline column.
+              It was a Math.sin curve labelled "آخر 7 أيام" but no
+              portfolio_history table exists in the DB to back it. We
+              promote the existing change pills (reference delta /
+              daily / weekly — all real from getPortfolioChangeMetrics)
+              as the only motion indicator and let the hero use full
+              width on desktop. */}
           <div className="bg-gradient-to-br from-white/[0.06] to-white/[0.04] border border-white/[0.08] rounded-2xl p-5 lg:p-6 mb-6 backdrop-blur">
-            <div className="grid lg:grid-cols-3 gap-5 items-center">
-
-              {/* Right column — text content (2/3 on lg) */}
-              <div className="lg:col-span-2 min-w-0">
+            <div className="min-w-0">
                 <div className="text-xs text-neutral-400 mb-1">{getGreeting()} 👋</div>
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <h1 className="text-base font-bold text-white truncate">{userName}</h1>
@@ -695,13 +722,6 @@ export default function DashboardPage() {
                   التفاصيل
                   <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
                 </button>
-              </div>
-
-              {/* Left column — Sparkline (1/3 on lg) */}
-              <div className="hidden lg:block">
-                <Sparkline basePrice={portfolio.totalValue / Math.max(1, portfolio.holdingsCount)} height={120} />
-                <div className="text-[10px] text-neutral-500 text-center mt-1">آخر 7 أيام</div>
-              </div>
             </div>
           </div>
 
@@ -782,16 +802,21 @@ export default function DashboardPage() {
             </div>
 
             {(() => {
-              // Phase 12.9 — prefer DB current_market_price (driven by
-              // admin force-rise + per-trade engine) over the legacy
-              // mock helper which always returns 0 in production.
+              // Phase 14.07f — live price from DB only; trend derived
+              // from current_market_price vs reference share_price.
+              // Both fields ship on every Project row, so no extra
+              // fetch needed for the arrow.
               const livePrice =
                 selectedProject.current_market_price ||
-                getProjectCurrentPrice(selectedProject.id) ||
                 selectedProject.share_price
-              const trend = getProjectPriceTrend(selectedProject.id)
+              const trend = derivePriceTrend(livePrice, selectedProject.share_price)
               const trendArrow = trend === "up" ? "↗" : trend === "down" ? "↘" : "→"
-              const trendColor = trend === "up" ? "text-green-400" : trend === "down" ? "text-red-400" : "text-neutral-500"
+              const trendColor =
+                trend === "up"
+                  ? "text-green-400"
+                  : trend === "down"
+                    ? "text-red-400"
+                    : "text-neutral-500"
               return (
                 <div className="mb-4">
                   <div className="text-[11px] text-neutral-500 mb-1">سعر الحصة الحالي</div>
@@ -813,11 +838,9 @@ export default function DashboardPage() {
                   soldCount  = offering_shares − available_shares
                   volumeIQD  = soldCount × current_market_price */}
             {(() => {
-              // Phase 12.9 — same fallback chain as above so the volume
-              // ربط reflects admin-raised prices.
+              // Phase 14.07f — same DB-only price chain as the header.
               const livePrice =
                 selectedProject.current_market_price ||
-                getProjectCurrentPrice(selectedProject.id) ||
                 selectedProject.share_price
               const offering =
                 selectedProject.offering_shares ?? selectedProject.available_shares ?? 0
@@ -858,16 +881,91 @@ export default function DashboardPage() {
               )
             })()}
 
+            {/* Phase 14.07f — real mini-chart fed by getProjectPriceTimeline
+                (creation anchor + completed deals + admin price changes
+                + "now" snapshot). Three states:
+                  loading  → labelled placeholder
+                  empty    → "لا توجد بيانات تداول بعد"
+                  data     → Recharts AreaChart, green-up / red-down. */}
             <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2.5 mb-4">
-              <div className="text-[10px] text-neutral-500 mb-1">آخر 7 أيام</div>
-              <Sparkline
-                basePrice={
-                  selectedProject.current_market_price ||
-                  getProjectCurrentPrice(selectedProject.id) ||
-                  selectedProject.share_price
+              <div className="text-[10px] text-neutral-500 mb-1.5">
+                حركة السعر — بيانات حقيقية
+              </div>
+              {(() => {
+                if (selectedProjectTimelineLoading) {
+                  return (
+                    <div className="h-[50px] flex items-center justify-center text-[10px] text-neutral-600">
+                      جاري التحميل...
+                    </div>
+                  )
                 }
-                height={50}
-              />
+                if (selectedProjectTimeline.length < 2) {
+                  return (
+                    <div className="h-[50px] flex items-center justify-center text-[10px] text-neutral-600">
+                      لا توجد بيانات تداول بعد
+                    </div>
+                  )
+                }
+                const refPrice = selectedProject.share_price ?? 0
+                const lastPrice =
+                  Number(
+                    selectedProjectTimeline[selectedProjectTimeline.length - 1]
+                      ?.new_price ?? refPrice,
+                  ) || refPrice
+                const miniIsUp = lastPrice >= refPrice
+                const miniData = selectedProjectTimeline.map((p) => ({
+                  ts: new Date(p.recorded_at).getTime(),
+                  price: Math.round(Number(p.new_price) || 0),
+                }))
+                return (
+                  <div className="h-[50px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart
+                        data={miniData}
+                        margin={{ top: 2, right: 2, bottom: 0, left: 2 }}
+                      >
+                        <defs>
+                          <linearGradient id="spark-grad" x1="0" y1="0" x2="0" y2="1">
+                            <stop
+                              offset="0%"
+                              stopColor={miniIsUp ? "#4ADE80" : "#F87171"}
+                              stopOpacity={0.3}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor={miniIsUp ? "#4ADE80" : "#F87171"}
+                              stopOpacity={0}
+                            />
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="ts" type="number" domain={["dataMin", "dataMax"]} hide />
+                        <YAxis domain={["auto", "auto"]} hide />
+                        <Tooltip
+                          cursor={{ stroke: "rgba(255,255,255,0.15)", strokeWidth: 1 }}
+                          contentStyle={{
+                            backgroundColor: "rgba(15,15,15,0.95)",
+                            border: "1px solid rgba(255,255,255,0.1)",
+                            borderRadius: "6px",
+                            fontSize: "10px",
+                          }}
+                          labelFormatter={() => ""}
+                          formatter={(value) => [
+                            `${Number(value ?? 0).toLocaleString("en-US")} د.ع`,
+                            "السعر",
+                          ]}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="price"
+                          stroke={miniIsUp ? "#4ADE80" : "#F87171"}
+                          strokeWidth={1.8}
+                          fill="url(#spark-grad)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )
+              })()}
             </div>
 
             <button
@@ -908,11 +1006,9 @@ export default function DashboardPage() {
               for (const p of dbProjects) {
                 const offering = p.offering_shares ?? p.available_shares ?? 0
                 const sold = Math.max(0, offering - (p.available_shares ?? 0))
-                const price =
-                  p.current_market_price ||
-                  getProjectCurrentPrice(p.id) ||
-                  p.share_price ||
-                  0
+                // Phase 14.07f — DB price only (current_market_price
+                // already drives all admin/engine adjustments).
+                const price = p.current_market_price || p.share_price || 0
                 totalSold   += sold
                 totalVolume += sold * price
               }

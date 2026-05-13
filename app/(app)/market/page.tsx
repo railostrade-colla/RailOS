@@ -7,14 +7,17 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { CompanyCard, ProjectCard } from "@/components/cards"
 import { Card, SectionHeader, Tabs, Badge, EmptyState, Modal, SkeletonCard } from "@/components/ui"
+// Phase 14.07f — types + constant lists only. Both ALL_COMPANIES and
+// ALL_PROJECTS were imported solely for `typeof` inference; we use the
+// proper Project / Company types now and drop the runtime arrays so
+// the bundler can tree-shake them away.
 import {
-  ALL_COMPANIES,
-  ALL_PROJECTS,
   SECTORS_LIST as SECTORS,
   RISK_LEVELS_AR as RISK_LEVELS,
   type PlatformNews,
   type NewsType,
 } from "@/lib/mock-data"
+import type { Project, Company } from "@/lib/mock-data/types"
 import { getAllProjects, getAllCompanies, getLatestNews } from "@/lib/data"
 import { readPersistedSync } from "@/lib/data/cache"
 import { cn } from "@/lib/utils/cn"
@@ -49,12 +52,15 @@ function MarketContent() {
   // AppLayout) so the market page paints with REAL projects on first
   // visit instead of an empty skeleton. The background fetch below
   // silently swaps in fresh data 1-2s later.
-  const cachedProjects = readPersistedSync<typeof ALL_PROJECTS>("projects:active:all") ?? []
-  const cachedCompanies = readPersistedSync<typeof ALL_COMPANIES>("companies:all") ?? []
+  // Phase 14.07f — proper Project[] / Company[] types (was `typeof
+  // ALL_PROJECTS` inferred off the deleted mock array, which forced
+  // ugly `as unknown as` casts on every DB call).
+  const cachedProjects = readPersistedSync<Project[]>("projects:active:all") ?? []
+  const cachedCompanies = readPersistedSync<Company[]>("companies:all") ?? []
   const cachedNews = readPersistedSync<PlatformNews[]>("news:latest:12") ?? []
 
-  const [projects, setProjects] = useState<typeof ALL_PROJECTS>(cachedProjects)
-  const [companies, setCompanies] = useState<typeof ALL_COMPANIES>(cachedCompanies)
+  const [projects, setProjects] = useState<Project[]>(cachedProjects)
+  const [companies, setCompanies] = useState<Company[]>(cachedCompanies)
   const [news, setNews] = useState<PlatformNews[]>(cachedNews)
   // Loading flag is OFF the moment we have any cached data — skeletons
   // only flash on a true cold start (first ever visit).
@@ -67,13 +73,18 @@ function MarketContent() {
     Promise.all([getAllProjects(), getAllCompanies(), getLatestNews(12)])
       .then(([p, c, n]) => {
         if (cancelled) return
-        setProjects(p as unknown as typeof ALL_PROJECTS)
-        setCompanies(c as unknown as typeof ALL_COMPANIES)
-        // Map DB news to PlatformNews shape (loose — fields overlap)
+        setProjects(p as Project[])
+        setCompanies(c as Company[])
+        // DB news rows are wider than PlatformNews but the fields the
+        // page renders (id/title/excerpt/type/icon/date/is_new) overlap.
+        // A direct cast keeps the news tab working until a dedicated
+        // DBNews type adapter lands in a later phase.
         setNews(n as unknown as PlatformNews[])
         setLoading(false)
       })
-      .catch(() => {
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn("[market] failed to load DB data:", err)
         if (cancelled) return
         setLoading(false)
       })
@@ -241,39 +252,56 @@ function MarketContent() {
             </>
           )}
 
-          {/* ═══ TAB CONTENT: 📰 News ═══ */}
+          {/* ═══ TAB CONTENT: 📰 News ═══
+              Phase 14.07f — added explicit loading + empty states.
+              Cold cache: 4 SkeletonCards while DB fetch is in flight.
+              Empty DB result: a friendly Arabic empty state instead
+              of an invisible "no children rendered" gap. */}
           {tab === "news" && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {news.map((n) => {
-                const meta = NEWS_TYPE_META[n.type]
-                return (
-                  // Phase 13.63 — navigate to dedicated /news/[id] page
-                  // with image, reactions, comments. The legacy
-                  // setOpenNews modal is kept as a fallback if the
-                  // route can't load (and for offline-first cached views).
-                  <Card key={n.id} onClick={() => router.push(`/news/${n.id}`)} className="flex items-start gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-2xl flex-shrink-0">
-                      {n.icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                        <Badge color={meta.color} variant="soft" size="xs">{meta.label}</Badge>
-                        {n.is_new && <Badge color="green" variant="soft" size="xs">جديد</Badge>}
-                        <span className="text-[9px] text-neutral-600 mr-auto flex items-center gap-1">
-                          <Calendar className="w-2.5 h-2.5" />
-                          {n.date}
-                        </span>
+            loading && news.length === 0 ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {[1, 2, 3, 4].map((i) => <SkeletonCard key={i} />)}
+              </div>
+            ) : news.length === 0 ? (
+              <EmptyState
+                icon="📰"
+                title="لا توجد أخبار بعد"
+                description="ستظهر هنا آخر إعلانات وتحديثات المنصة فور نشرها."
+                size="lg"
+              />
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {news.map((n) => {
+                  const meta = NEWS_TYPE_META[n.type]
+                  return (
+                    // Phase 13.63 — navigate to dedicated /news/[id] page
+                    // with image, reactions, comments. The legacy
+                    // setOpenNews modal is kept as a fallback if the
+                    // route can't load (and for offline-first cached views).
+                    <Card key={n.id} onClick={() => router.push(`/news/${n.id}`)} className="flex items-start gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center text-2xl flex-shrink-0">
+                        {n.icon}
                       </div>
-                      <div className="text-sm font-bold text-white mb-1 leading-snug">{n.title}</div>
-                      <div className="text-[11px] text-neutral-400 leading-relaxed line-clamp-2">{n.excerpt}</div>
-                      <button className="text-[11px] text-blue-400 hover:text-blue-300 mt-2 transition-colors">
-                        اقرأ المزيد ←
-                      </button>
-                    </div>
-                  </Card>
-                )
-              })}
-            </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                          <Badge color={meta.color} variant="soft" size="xs">{meta.label}</Badge>
+                          {n.is_new && <Badge color="green" variant="soft" size="xs">جديد</Badge>}
+                          <span className="text-[9px] text-neutral-600 mr-auto flex items-center gap-1">
+                            <Calendar className="w-2.5 h-2.5" />
+                            {n.date}
+                          </span>
+                        </div>
+                        <div className="text-sm font-bold text-white mb-1 leading-snug">{n.title}</div>
+                        <div className="text-[11px] text-neutral-400 leading-relaxed line-clamp-2">{n.excerpt}</div>
+                        <button className="text-[11px] text-blue-400 hover:text-blue-300 mt-2 transition-colors">
+                          اقرأ المزيد ←
+                        </button>
+                      </div>
+                    </Card>
+                  )
+                })}
+              </div>
+            )
           )}
 
           {/* ═══ TAB CONTENT: ✨ Offers (System only — user offers moved to /exchange + /quick-sale) ═══ */}
@@ -380,7 +408,12 @@ function MarketContent() {
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {filteredProjects.map((p) => (
-                  <ProjectCard key={p.id} project={p} variant="full" />
+                  // ProjectCardData has a few required fields (company_id,
+                  // city) that the DB Project type leaves optional. The
+                  // cards handle missing values internally — the cast
+                  // is the safer narrow than synthesising defaults here.
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  <ProjectCard key={p.id} project={p as any} variant="full" />
                 ))}
               </div>
             )
@@ -402,7 +435,9 @@ function MarketContent() {
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {filteredCompanies.map((c) => (
-                  <CompanyCard key={c.id} company={c} variant="full" />
+                  // Same narrowing concession as the Project cards.
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  <CompanyCard key={c.id} company={c as any} variant="full" />
                 ))}
               </div>
             )

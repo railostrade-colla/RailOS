@@ -6,6 +6,14 @@
  *
  * Each domain file keeps both canonical and legacy-aliased exports so
  * existing pages can switch over without changing local references.
+ *
+ * Phase 14.07g — eight domain files were removed entirely (0 importers
+ * after the Phase 14.07.1 / .e / .f cleanups):
+ *   adminUsers, ads, ambassador, deal, following,
+ *   notifications, trades, users
+ * Their re-exports are gone from this barrel. The 21 remaining modules
+ * still have real consumers (admin panels, social-program pages whose
+ * routes are hidden from navigation, type imports, …).
  */
 
 // Types
@@ -15,21 +23,14 @@ export * from "./types"
 export * from "./projects"
 export * from "./companies"
 export * from "./holdings"
-export * from "./users"
 export * from "./profile"
 export * from "./contracts"
-export * from "./trades"
-export * from "./notifications"
 export * from "./auctions"
-export * from "./ads"
 export * from "./listings"
-export * from "./ambassador"
 export * from "./support"
-export * from "./deal"
 export * from "./news"
 export * from "./market"
 export * from "./feeUnits"
-export * from "./following"
 export * from "./council"
 export * from "./kyc"
 export * from "./disputes"
@@ -42,4 +43,3 @@ export * from "./discounts"
 export * from "./projectWallets"
 export * from "./marketAdvisor"
 export * from "./legalPages"
-export * from "./adminUsers"

@@ -1,8 +1,11 @@
 /**
  * Market Council — members, proposals, voting, elections.
+ *
+ * Phase 14.07g — dropped the `USERS` import (./users.ts was deleted
+ * because it had 0 importers across the project). The only remaining
+ * reference here was a `void USERS;` placeholder kept "for future
+ * user-derived eligibility" which never materialised.
  */
-
-import { USERS } from "./users"
 
 // ──────────────────────────────────────────────────────────────────────────
 // Types
@@ -452,5 +455,5 @@ export function generateCouncilNotifications(_userId: string = "me"): CouncilNot
   ]
 }
 
-// Suppress unused import warning — kept for future user-derived eligibility
-void USERS
+// Phase 14.07g — `void USERS` placeholder removed alongside the
+// ./users.ts deletion (was 0-importer dead code).
