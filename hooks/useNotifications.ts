@@ -11,7 +11,10 @@ import {
 // + notification list. Same cache keys the global preloader warms on
 // AppLayout mount, so this hook serves cached values instantly while
 // the background fetch refreshes silently.
-import { readPersistedSync } from "@/lib/data/cache"
+// Phase 14.09 C — invalidateCache so realtime INSERT events force a
+// fresh fetch instead of returning the dedupCache TTL value (which
+// was the root cause of "notifications don't arrive until refresh").
+import { readPersistedSync, invalidateCache } from "@/lib/data/cache"
 
 /**
  * useNotifications
@@ -117,69 +120,128 @@ export function useNotifications(limit: number = 20) {
     }
   }, [limit])
 
+  // Phase 14.09 C — bust the dedupCache before reading so the realtime
+  // event actually surfaces the new row. Without this, the hook would
+  // call refresh() but getNotifications/getUnreadCount would return
+  // the cached value from up to 15s ago, and the bell badge would
+  // appear "stuck" until the cache TTL expired.
+  const refreshFromRealtime = useCallback(() => {
+    invalidateCache(`notif:list:${limit}`)
+    invalidateCache("notif:unreadCount")
+    return refresh()
+  }, [limit, refresh])
+
   useEffect(() => {
     mountedRef.current = true
     refresh().then(() => { initialLoadedRef.current = true })
 
     const supabase = createClient()
     let channelHandle: ReturnType<typeof supabase.channel> | null = null
+    // Phase 14.09 C — keep a reconnect timer reference outside the
+    // closure so we can cancel it on unmount + after a successful
+    // resubscribe. Naive exponential-ish backoff: 2s, then 5s, then
+    // 10s, capped at 30s.
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let reconnectAttempt = 0
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user || !mountedRef.current) return
+    const teardown = () => {
+      if (channelHandle) {
+        try {
+          supabase.removeChannel(channelHandle)
+        } catch { /* ignore */ }
+        channelHandle = null
+      }
+    }
 
-      channelHandle = supabase
-        .channel(`notifications:${user.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${user.id}`,
-          },
-          (payload) => {
-            // Phase 10.72 — play sound only for fresh INSERTs after
-            // the initial load. Avoids triggering on hydration.
-            if (initialLoadedRef.current) {
-              const row = (payload?.new ?? {}) as { is_read?: boolean }
-              // Only chime for unread (skip notifications that arrive
-              // already-read, e.g. system mass-marks).
-              if (row.is_read !== true) playNotifSound()
+    const subscribe = () => {
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (!user || !mountedRef.current) return
+
+        channelHandle = supabase
+          .channel(`notifications:${user.id}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "notifications",
+              filter: `user_id=eq.${user.id}`,
+            },
+            (payload) => {
+              // Phase 10.72 — play sound only for fresh INSERTs after
+              // the initial load. Avoids triggering on hydration.
+              if (initialLoadedRef.current) {
+                const row = (payload?.new ?? {}) as { is_read?: boolean }
+                // Only chime for unread (skip notifications that arrive
+                // already-read, e.g. system mass-marks).
+                if (row.is_read !== true) playNotifSound()
+              }
+              void refreshFromRealtime()
+            },
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "UPDATE",
+              schema: "public",
+              table: "notifications",
+              filter: `user_id=eq.${user.id}`,
+            },
+            () => void refreshFromRealtime(),
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "DELETE",
+              schema: "public",
+              table: "notifications",
+              filter: `user_id=eq.${user.id}`,
+            },
+            () => void refreshFromRealtime(),
+          )
+          .subscribe((status) => {
+            // Phase 14.09 C — track subscription health.
+            //   SUBSCRIBED         → channel is live; reset backoff
+            //   CHANNEL_ERROR      → server-side rejection
+            //   TIMED_OUT          → network blip or proxy dropped
+            //   CLOSED             → cleanly closed (usually our unmount)
+            // On any non-SUBSCRIBED status, schedule a reconnect.
+            if (status === "SUBSCRIBED") {
+              reconnectAttempt = 0
+              // Refresh once on a fresh connection to catch any rows
+              // that arrived while we were disconnected.
+              void refreshFromRealtime()
+              return
             }
-            refresh()
-          },
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => refresh(),
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "DELETE",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => refresh(),
-        )
-        .subscribe()
-    })
+            if (
+              !mountedRef.current ||
+              status === "CLOSED" // expected on teardown
+            ) {
+              return
+            }
+            // Tear down + try again with backoff.
+            teardown()
+            if (reconnectTimer) clearTimeout(reconnectTimer)
+            const delay = Math.min(
+              30_000,
+              2_000 * Math.pow(2, reconnectAttempt),
+            )
+            reconnectAttempt += 1
+            reconnectTimer = setTimeout(() => {
+              if (mountedRef.current) subscribe()
+            }, delay)
+          })
+      })
+    }
+
+    subscribe()
 
     return () => {
       mountedRef.current = false
-      if (channelHandle) {
-        const supabase = createClient()
-        supabase.removeChannel(channelHandle)
-      }
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      teardown()
     }
-  }, [refresh])
+  }, [refresh, refreshFromRealtime])
 
   return { notifications, unreadCount, loading, refresh }
 }
