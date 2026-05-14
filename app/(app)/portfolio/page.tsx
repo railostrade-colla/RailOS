@@ -42,6 +42,11 @@ import { useActiveAccount } from "@/contexts/ActiveAccountContext"
 import { ShareTransferModal } from "@/components/portfolio/ShareTransferModal"
 import { ArrowRightLeft } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+// Phase 14.10 D — resilient realtime for incoming/outgoing share
+// transfers. Without this the portfolio only saw transfers when the
+// user manually refreshed, because the previous realtime channel on
+// this page never subscribed to share_transfers at all.
+import { useRealtimeShareTransfers } from "@/lib/realtime/useRealtimeShareTransfers"
 // Phase 11.27 — IntegerInput prevents wheel/arrow-key/spinner from
 // silently mutating fee-unit / share inputs.
 import { IntegerInput } from "@/components/ui/IntegerInput"
@@ -130,6 +135,11 @@ function PortfolioContent() {
   const [paymentMethod, setPaymentMethod] = useState<"zaincash" | "mastercard" | "bank">("zaincash")
   // Phase 10.97 — payment proof captured inside the fee-request modal
   const [feeProofDataUrl, setFeeProofDataUrl] = useState<string | null>(null)
+
+  // Phase 14.10 D — track current user id so the share_transfers
+  // realtime hook can filter on sender/recipient. Resolved once in
+  // the same auth.getUser() call the existing realtime effect makes.
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   // Phase 4.2 — Real DB-backed portfolio data.
   // Phase 11.31 — hydrate synchronously from the SWR cache (warmed by
@@ -269,6 +279,9 @@ function PortfolioContent() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user || cancelled) return
       const uid = user.id
+      // Phase 14.10 D — surface the user id so the share-transfers
+      // realtime hook below can filter on sender/recipient.
+      if (!cancelled) setCurrentUserId(uid)
 
       const triggerRefresh = () => {
         if (!cancelled) {
@@ -303,6 +316,23 @@ function PortfolioContent() {
       }
     }
   }, [])
+
+  // Phase 14.10 D — share_transfers realtime. Two resilient channels
+  // (sender + recipient) auto-reconnect with exponential backoff if
+  // the websocket drops, so transfers that land during a brief
+  // disconnect surface as soon as the channel comes back. Every tick
+  // bump triggers a portfolio re-fetch.
+  const { tick: shareTransferTick } = useRealtimeShareTransfers(currentUserId)
+  useEffect(() => {
+    if (shareTransferTick === 0) return
+    let cancelled = false
+    getPortfolioData().then((d) => {
+      if (!cancelled && d) setData(d)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [shareTransferTick])
 
   // Derived state from real data (with safe zero defaults during loading).
   const holdings = data?.holdings ?? []

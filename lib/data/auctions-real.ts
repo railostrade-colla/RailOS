@@ -14,6 +14,7 @@
  */
 
 import { createClient } from "@/lib/supabase/client"
+import { dedupCache } from "./cache"
 import type {
   AuctionDetails,
   AuctionBid,
@@ -120,27 +121,39 @@ function rowToBid(r: BidRow, currentUserId: string | null): AuctionBid {
 
 // ─── Reads ───────────────────────────────────────────────────
 
+// Phase 14.10 D — wrapped in dedupCache so /auctions visits within
+// the TTL window paint instantly from the cache. Pair with
+// readPersistedSync("auctions:active") at the page level for the
+// classic SWR-style "show stale frame, refresh in background"
+// behavior. 15s TTL because auction state (countdowns + bid_count)
+// changes frequently and we want the next visit to feel live.
 export async function getActiveAuctions(): Promise<AuctionDetails[]> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from("auctions")
-      .select(
-        `
-        id, project_id, title, type, starting_price,
-        current_highest_bid, min_increment, shares_offered,
-        bid_count, starts_at, ends_at, status,
-        project:projects!project_id ( name )
-        `,
-      )
-      .in("status", ["active", "upcoming"])
-      .order("ends_at", { ascending: true })
+  return dedupCache(
+    "auctions:active",
+    async () => {
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from("auctions")
+          .select(
+            `
+            id, project_id, title, type, starting_price,
+            current_highest_bid, min_increment, shares_offered,
+            bid_count, starts_at, ends_at, status,
+            project:projects!project_id ( name )
+            `,
+          )
+          .in("status", ["active", "upcoming"])
+          .order("ends_at", { ascending: true })
 
-    if (error || !data) return []
-    return (data as AuctionRow[]).map(rowToAuction)
-  } catch {
-    return []
-  }
+        if (error || !data) return []
+        return (data as AuctionRow[]).map(rowToAuction)
+      } catch {
+        return []
+      }
+    },
+    15_000,
+  )
 }
 
 export async function getAuctionById(

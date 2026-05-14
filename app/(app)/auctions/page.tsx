@@ -6,6 +6,8 @@ import { Gavel, Clock, AlertCircle } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { getActiveAuctions } from "@/lib/data/auctions-real"
+import { readPersistedSync } from "@/lib/data/cache"
+import type { AuctionDetails } from "@/lib/mock-data/auctions"
 
 // Local auction list shape — independent from any mock module.
 interface AuctionListItem {
@@ -102,27 +104,39 @@ function AuctionCard({ auction, onClick }: { auction: AuctionListItem; onClick: 
   )
 }
 
+// Phase 14.10 D — same row-mapping the useEffect used to do inline,
+// now a pure helper so first paint and subsequent refreshes share
+// one transform. AuctionDetails is the row shape produced by
+// `lib/data/auctions-real.ts`.
+function mapAuctionRows(rows: AuctionDetails[]): AuctionListItem[] {
+  return rows.map((a) => ({
+    id: a.id,
+    title: `مزاد على ${a.project_name}`,
+    project: { name: a.project_name },
+    shares: a.shares_offered,
+    opening_price: a.starting_price,
+    current_price:
+      a.current_highest_bid > 0 ? a.current_highest_bid : a.starting_price,
+    ends_at: a.ends_at,
+    bids_count: a.bid_count,
+  }))
+}
+
 export default function AuctionsPage() {
   const router = useRouter()
-  // Production mode — DB only, empty state when no rows.
-  const [auctions, setAuctions] = useState<AuctionListItem[]>([])
+  // Phase 14.10 D — hydrate synchronously from the SWR cache so the
+  // page renders the previously-known list on first paint. The
+  // background fetcher then refreshes with the latest from the DB.
+  // Cache key matches `getActiveAuctions`'s dedupCache key.
+  const [auctions, setAuctions] = useState<AuctionListItem[]>(() => {
+    const cached = readPersistedSync<AuctionDetails[]>("auctions:active")
+    return cached ? mapAuctionRows(cached) : []
+  })
 
   useEffect(() => {
     let cancelled = false
     getActiveAuctions().then((rows) => {
-      if (cancelled) return
-      setAuctions(
-        rows.map((a) => ({
-          id: a.id,
-          title: `مزاد على ${a.project_name}`,
-          project: { name: a.project_name },
-          shares: a.shares_offered,
-          opening_price: a.starting_price,
-          current_price: a.current_highest_bid > 0 ? a.current_highest_bid : a.starting_price,
-          ends_at: a.ends_at,
-          bids_count: a.bid_count,
-        })),
-      )
+      if (!cancelled) setAuctions(mapAuctionRows(rows))
     })
     return () => {
       cancelled = true
