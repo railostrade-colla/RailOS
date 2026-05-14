@@ -562,19 +562,32 @@ function invalidateProjectCaches(): void {
   })
 }
 
+// Phase 14.10 C — wrapped in dedupCache so /project/[id] visits within
+// the TTL window paint instantly from the cache. 30s is short enough
+// that the page never feels stale (status / price / suspension flags
+// change on the order of minutes at fastest) and long enough that
+// rapid back-and-forth navigation between the project page and
+// related pages doesn't burn a DB round-trip every time.
 export async function getProjectById(id: string): Promise<Project | null> {
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase
-      .from("projects")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle()
-    if (error || !data) return null
-    return dbToProject(data)
-  } catch {
-    return null
-  }
+  if (!id) return null
+  return dedupCache(
+    `project:byId:${id}`,
+    async () => {
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase
+          .from("projects")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle()
+        if (error || !data) return null
+        return dbToProject(data)
+      } catch {
+        return null
+      }
+    },
+    30_000,
+  )
 }
 
 // Phase 13.38 — Discover surface (radically simplified).

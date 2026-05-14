@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import dynamic from "next/dynamic"
 import { useRouter, useParams } from "next/navigation"
 import { ShoppingCart, Heart, X, Image as ImageIcon, Clock, TrendingUp, TrendingDown, AlertCircle, Building2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -43,7 +44,24 @@ import {
   unfollowTarget,
 } from "@/lib/data/follows"
 import { SkeletonCard } from "@/components/ui"
-import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+// Phase 14.10 C — recharts is ~65 KB. Code-split it via next/dynamic
+// so the bundle is only fetched when /project/[id] is rendered, not
+// shipped with every other user-side page. ssr:false because the
+// chart depends on window measurements (ResponsiveContainer).
+const ProjectPriceChart = dynamic(
+  () =>
+    import("@/components/project/ProjectPriceChart").then(
+      (m) => m.ProjectPriceChart,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-40 flex items-center justify-center text-[11px] text-neutral-500">
+        جاري تحميل الرسم البيانيّ...
+      </div>
+    ),
+  },
+)
 import { createClient } from "@/lib/supabase/client"
 
 const galleryEmojis = ["🏗️", "🏛️", "📊", "🌾"]
@@ -127,18 +145,26 @@ export default function ProjectDetailPage() {
     return () => { cancelled = true }
   }, [id])
 
-  // Phase 10.80 — fetch real investor count + this user's holding for
-  // this project. Both are cheap COUNT/SELECT roundtrips.
+  // Phase 14.10 C — investor count + my shares + suspension flags all
+  // run in parallel now. Before this, they were three sequential
+  // awaits inside one async block; with Supabase round-trips of
+  // ~80-150ms each, that was a 300-500ms tax on cold load. The new
+  // Promise.all approach pays the cost of the slowest of the three
+  // instead of the sum.
   useEffect(() => {
     if (!id) return
     let cancelled = false
     ;(async () => {
-      try {
-        const { createClient } = await import("@/lib/supabase/client")
-        const sb = createClient()
-        // Phase 13.12 — distinct investors via the public RPC so the
-        // count survives RLS on `holdings`. Falls back to a direct
-        // count query if the RPC is missing on a stale DB.
+      const sb = createClient()
+      // Resolve auth.uid() once up front so the holdings query knows
+      // whether to fire. If the user is anonymous, we still want the
+      // other two fetches to proceed in parallel.
+      const { data: auth } = await sb.auth.getUser()
+      if (cancelled) return
+      const uid = auth?.user?.id ?? null
+
+      // (1) Distinct investor count — public RPC with a count fallback.
+      const investorsPromise = (async () => {
         try {
           const { data: rpcRows, error: rpcErr } = await sb.rpc(
             "get_public_investor_counts",
@@ -146,47 +172,72 @@ export default function ProjectDetailPage() {
           )
           if (!rpcErr && Array.isArray(rpcRows) && rpcRows.length > 0) {
             const row = rpcRows[0] as { investor_count: number | string }
-            if (!cancelled) setInvestors(Number(row.investor_count ?? 0))
-          } else {
-            const { count } = await sb
-              .from("holdings")
-              .select("user_id", { count: "exact", head: true })
-              .eq("project_id", id)
-              .gt("shares", 0)
-            if (!cancelled) setInvestors(count ?? 0)
+            return Number(row.investor_count ?? 0)
           }
-        } catch {
-          /* keep zero */
-        }
-
-        // My shares in this project (if signed in)
-        const { data: auth } = await sb.auth.getUser()
-        if (auth?.user?.id) {
-          const { data: my } = await sb
+          const { count } = await sb
             .from("holdings")
-            .select("shares")
+            .select("user_id", { count: "exact", head: true })
             .eq("project_id", id)
-            .eq("user_id", auth.user.id)
-            .maybeSingle()
-          if (!cancelled) setMyShares(Number((my as { shares?: number } | null)?.shares ?? 0))
+            .gt("shares", 0)
+          return count ?? 0
+        } catch {
+          return 0
         }
+      })()
 
-        // Phase 13.11 — direct-buy suspension flags (Phase 10.93 schema)
-        const { data: pflags } = await sb
-          .from("projects")
-          .select("offering_suspended, offering_suspension_reason")
-          .eq("id", id)
-          .maybeSingle()
-        if (!cancelled && pflags) {
-          const f = pflags as { offering_suspended?: boolean; offering_suspension_reason?: string | null }
-          setOfferingSuspended(Boolean(f.offering_suspended))
-          setOfferingSuspensionReason(f.offering_suspension_reason ?? null)
+      // (2) My holding row for this project.
+      const mySharesPromise = uid
+        ? (async () => {
+            try {
+              const { data: my } = await sb
+                .from("holdings")
+                .select("shares")
+                .eq("project_id", id)
+                .eq("user_id", uid)
+                .maybeSingle()
+              return Number(
+                (my as { shares?: number } | null)?.shares ?? 0,
+              )
+            } catch {
+              return 0
+            }
+          })()
+        : Promise.resolve(0)
+
+      // (3) Direct-buy suspension flags from `projects`.
+      const flagsPromise = (async () => {
+        try {
+          const { data: pflags } = await sb
+            .from("projects")
+            .select("offering_suspended, offering_suspension_reason")
+            .eq("id", id)
+            .maybeSingle()
+          return pflags as {
+            offering_suspended?: boolean
+            offering_suspension_reason?: string | null
+          } | null
+        } catch {
+          return null
         }
-      } catch {
-        /* ignore — keep zero defaults */
+      })()
+
+      const [investorsCount, myShareCount, flags] = await Promise.all([
+        investorsPromise,
+        mySharesPromise,
+        flagsPromise,
+      ])
+
+      if (cancelled) return
+      setInvestors(investorsCount)
+      setMyShares(myShareCount)
+      if (flags) {
+        setOfferingSuspended(Boolean(flags.offering_suspended))
+        setOfferingSuspensionReason(flags.offering_suspension_reason ?? null)
       }
     })()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [id])
 
   // ─── Phase 14.07.1 — load real price timeline + recent deals ────
@@ -611,71 +662,7 @@ export default function ProjectDetailPage() {
                 )}
               </div>
             ) : (
-              <div className="h-40 -mx-1">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={chartData}
-                    margin={{ top: 8, right: 8, bottom: 0, left: 8 }}
-                  >
-                    <defs>
-                      <linearGradient id="price-grad" x1="0" y1="0" x2="0" y2="1">
-                        <stop
-                          offset="0%"
-                          stopColor={isUp ? "#4ADE80" : "#F87171"}
-                          stopOpacity={0.35}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor={isUp ? "#4ADE80" : "#F87171"}
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <XAxis
-                      dataKey="ts"
-                      type="number"
-                      domain={["dataMin", "dataMax"]}
-                      tick={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      dataKey="price"
-                      domain={["auto", "auto"]}
-                      hide
-                    />
-                    <Tooltip
-                      cursor={{
-                        stroke: "rgba(255,255,255,0.15)",
-                        strokeWidth: 1,
-                        strokeDasharray: "3 3",
-                      }}
-                      contentStyle={{
-                        backgroundColor: "rgba(15,15,15,0.95)",
-                        border: "1px solid rgba(255,255,255,0.1)",
-                        borderRadius: "8px",
-                        fontSize: "11px",
-                      }}
-                      labelFormatter={(_value, payload) => {
-                        const p = payload?.[0]?.payload as
-                          | { label?: string }
-                          | undefined
-                        return p?.label ?? ""
-                      }}
-                      formatter={(value) => [
-                        `${Number(value ?? 0).toLocaleString("en-US")} د.ع`,
-                        "السعر",
-                      ]}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="price"
-                      stroke={isUp ? "#4ADE80" : "#F87171"}
-                      strokeWidth={2}
-                      fill="url(#price-grad)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+              <ProjectPriceChart data={chartData} isUp={isUp} />
             )}
           </div>
 
