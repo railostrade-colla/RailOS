@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { memo, useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Home, TrendingUp, BarChart3, Users, User } from "lucide-react"
@@ -31,8 +31,18 @@ const tabs: NavTab[] = [
  * - يظهر تلقائياً عند scroll up
  * - RTL support
  * - backdrop-blur للخلفية
+ *
+ * Phase 14.10 A — memo'd at the bottom of this file. Now that AppShell
+ * lives in the route layout and BottomNav is its direct child, every
+ * navigation triggers an AppShell re-render (usePathname changes).
+ * Without memo, BottomNav would re-render too — which would re-run its
+ * scroll-direction useEffect setup (fine), but more importantly would
+ * recompute the indicator position on every tab switch.
+ *
+ * BottomNav has zero props, so React.memo's default shallow comparison
+ * makes the memo a perfect identity short-circuit.
  */
-export function BottomNav() {
+function BottomNavImpl() {
   const pathname = usePathname()
   const [isVisible, setIsVisible] = useState(true)
   const lastScrollY = useRef(0)
@@ -158,3 +168,12 @@ export function BottomNav() {
     </nav>
   )
 }
+
+/**
+ * Phase 14.10 A — memo'd export. AppShell re-renders on every
+ * navigation (usePathname changes) but BottomNav has no props, so
+ * React.memo's default shallow comparison short-circuits the re-render
+ * entirely. The component's internal usePathname() still ticks to
+ * update the active-tab indicator — that's the only intentional work.
+ */
+export const BottomNav = memo(BottomNavImpl)
