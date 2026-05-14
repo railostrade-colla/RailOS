@@ -35,16 +35,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white" dir="rtl">
-      {/* Phase 14.09 B — Sidebar is mounted WITHOUT a Suspense wrapper.
-          Suspense around a client component that has no async children
-          / no React.lazy still re-mounts its subtree when the parent
-          layout re-renders during streaming navigations on React 19 +
-          Next 16. That re-mount restarts the sidebar's realtime
-          subscription, which is what caused the visual flicker on
-          every admin-page navigation. The component itself is
-          React.memo'd in its own file so prop-stable navigations
-          short-circuit before they touch its tree. */}
-      <AdminSidebar open={open} onToggle={toggleSidebar} />
+      {/* Phase 14.09 B — Sidebar uses useSearchParams() internally,
+          which Next.js 16 requires to be inside a Suspense boundary
+          during static generation. The Suspense itself does NOT
+          cause the flicker we were fighting — that was the
+          unstable onToggle prop (now wrapped in useCallback above)
+          causing AdminSidebar to re-render on every layout update.
+          With React.memo + stable callback in place, Suspense stays
+          dormant and the sidebar's subtree (realtime channel,
+          permissions cache, badge counts) survives every nav. */}
+      <Suspense fallback={null}>
+        <AdminSidebar open={open} onToggle={toggleSidebar} />
+      </Suspense>
       <main
         className="min-h-screen transition-all duration-200 relative"
         style={{ marginRight: sidebarWidth }}
