@@ -187,7 +187,7 @@ export function AuditLogPanel() {
         <div className="flex gap-2">
           <button
             onClick={() => setShowCleanup(true)}
-            className="flex items-center gap-1.5 bg-red-400/[0.08] border border-red-400/[0.25] text-red-400 hover:bg-red-400/[0.12] rounded-md px-3 py-1.5 text-xs font-bold transition-colors"
+            className="flex items-center gap-1.5 bg-red-400/15 border border-red-400/30 text-red-300 hover:bg-red-400/25 rounded-xl px-3 py-1.5 text-xs font-bold transition-colors"
             title="حذف السجلات الأقدم من N يوماً"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -195,7 +195,7 @@ export function AuditLogPanel() {
           </button>
           <button
             onClick={exportCSV}
-            className="flex items-center gap-1.5 bg-blue-400/[0.1] border border-blue-400/[0.25] text-blue-400 hover:bg-blue-400/[0.15] rounded-md px-3 py-1.5 text-xs font-bold transition-colors"
+            className="flex items-center gap-1.5 bg-blue-400/15 border border-blue-400/30 text-blue-300 hover:bg-blue-400/25 rounded-xl px-3 py-1.5 text-xs font-bold transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
             Export CSV
@@ -348,14 +348,14 @@ export function AuditLogPanel() {
                 <button
                   onClick={() => setPage(Math.max(0, page - 1))}
                   disabled={page === 0}
-                  className="px-3 py-1.5 text-xs rounded-md bg-white/[0.05] border border-white/[0.1] text-neutral-300 hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 text-xs rounded-xl bg-white/[0.04] border border-white/[0.08] text-neutral-300 hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   السابق
                 </button>
                 <button
                   onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
                   disabled={page >= totalPages - 1}
-                  className="px-3 py-1.5 text-xs rounded-md bg-white/[0.05] border border-white/[0.1] text-neutral-300 hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 text-xs rounded-xl bg-white/[0.04] border border-white/[0.08] text-neutral-300 hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   التالي
                 </button>

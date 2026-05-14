@@ -380,7 +380,7 @@ export function AuctionsAdminPanel() {
                 <ActionBtn label="❌ إلغاء قبل البدء" color="red" onClick={() => setActionMode("cancel")} />
                 <button
                   onClick={closeAll}
-                  className="py-2 rounded-md bg-white/[0.05] border border-white/[0.08] text-white text-xs hover:bg-white/[0.08]"
+                  className="py-2 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white text-xs hover:bg-white/[0.08]"
                 >
                   إغلاق
                 </button>

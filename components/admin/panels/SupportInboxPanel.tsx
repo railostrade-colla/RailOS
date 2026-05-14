@@ -462,7 +462,7 @@ export function SupportInboxPanel() {
                         </select>
                         <button
                           onClick={handleAssignToMe}
-                          className="px-2 py-2 text-xs rounded-md bg-blue-400/[0.1] border border-blue-400/[0.25] text-blue-400 hover:bg-blue-400/[0.15] whitespace-nowrap"
+                          className="px-2 py-2 text-xs rounded-xl bg-blue-400/15 border border-blue-400/30 text-blue-300 hover:bg-blue-400/25 whitespace-nowrap"
                           title="أسنِد إلى نفسي"
                         >
                           📌 أنا

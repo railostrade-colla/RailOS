@@ -406,7 +406,7 @@ export function AdminUsersPanel() {
         </Table>
       )}
 
-      <div className="mt-4 text-[11px] text-neutral-500 bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
+      <div className="mt-4 text-[11px] text-neutral-500 bg-white/[0.04] border border-white/[0.08] rounded-xl p-3">
         💡 الأدمن يرى فقط الأقسام التي مُنح صلاحية الوصول إليها. لتعديل صلاحيات
         أدمن موجود، اضغط <span className="font-bold text-white">🛠 الصلاحيات</span> أمام صفّه.
       </div>
@@ -540,7 +540,7 @@ export function AdminUsersPanel() {
                           "px-3 py-2 rounded-lg border text-right transition-colors",
                           isOn
                             ? "bg-blue-400/[0.08] border-blue-400/[0.3]"
-                            : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]",
+                            : "bg-white/[0.04] border-white/[0.08] hover:bg-white/[0.06]",
                         )}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -651,7 +651,7 @@ export function AdminUsersPanel() {
                         "px-3 py-2 rounded-lg border text-right transition-colors",
                         isOn
                           ? "bg-blue-400/[0.08] border-blue-400/[0.3]"
-                          : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]",
+                          : "bg-white/[0.04] border-white/[0.08] hover:bg-white/[0.06]",
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">

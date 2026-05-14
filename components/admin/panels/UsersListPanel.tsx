@@ -454,7 +454,7 @@ export function UsersListPanel() {
                         <div className="relative inline-block" ref={openMenu === `level-${u.id}` ? menuRef : null}>
                           <button
                             onClick={() => setOpenMenu(openMenu === `level-${u.id}` ? null : `level-${u.id}`)}
-                            className="px-2 py-1 text-[11px] rounded-md bg-purple-500/[0.15] border border-purple-500/[0.3] text-purple-400 hover:bg-purple-500/[0.2] flex items-center gap-1"
+                            className="px-2 py-1 text-[11px] rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 flex items-center gap-1"
                           >
                             📊 المستوى <ChevronDown className="w-3 h-3" />
                           </button>
@@ -504,7 +504,7 @@ export function UsersListPanel() {
                         <div className="relative inline-block" ref={openMenu === `ban-${u.id}` ? menuRef : null}>
                           <button
                             onClick={() => setOpenMenu(openMenu === `ban-${u.id}` ? null : `ban-${u.id}`)}
-                            className="px-2 py-1 text-[11px] rounded-md bg-red-500/[0.15] border border-red-500/[0.3] text-red-400 hover:bg-red-500/[0.2] flex items-center gap-1"
+                            className="px-2 py-1 text-[11px] rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 hover:bg-red-500/25 flex items-center gap-1"
                           >
                             🔒 حظر <ChevronDown className="w-3 h-3" />
                           </button>

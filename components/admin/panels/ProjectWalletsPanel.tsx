@@ -716,7 +716,7 @@ export function ProjectWalletsPanel() {
                   ) : (
                     <ActionBtn label="🔒 تعليق الحصص المتبقية" color="yellow" onClick={() => setAction("suspend_offering")} />
                   )}
-                  <button onClick={() => setSelected(null)} className="px-3 py-1.5 text-xs rounded-md bg-white/[0.05] border border-white/[0.1] text-neutral-300 hover:bg-white/[0.08]">إغلاق</button>
+                  <button onClick={() => setSelected(null)} className="px-3 py-1.5 text-xs rounded-xl bg-white/[0.04] border border-white/[0.08] text-neutral-300 hover:bg-white/[0.08]">إغلاق</button>
                 </div>
               )
             })()}
@@ -894,7 +894,7 @@ export function ProjectWalletsPanel() {
                           "px-3 py-2.5 rounded-xl border text-right transition-colors",
                           isPicked
                             ? "bg-blue-400/[0.1] border-blue-400/[0.4]"
-                            : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]",
+                            : "bg-white/[0.04] border-white/[0.08] hover:bg-white/[0.06]",
                         )}
                       >
                         <div className="text-xs font-bold text-white">{opt.label}</div>
@@ -973,7 +973,7 @@ export function ProjectWalletsPanel() {
                       "border rounded-lg p-3 mb-3 text-[11px] leading-relaxed",
                       exceeds90
                         ? "bg-red-400/[0.05] border-red-400/[0.2] text-red-300"
-                        : "bg-white/[0.03] border-white/[0.08] text-neutral-300"
+                        : "bg-white/[0.04] border-white/[0.08] text-neutral-300"
                     )}>
                       {exceeds90 && (
                         <div className="text-red-400 font-bold mb-2 text-xs">

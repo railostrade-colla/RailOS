@@ -413,8 +413,8 @@ export function ShareRequestsPanel({ compact = false }: ShareRequestsPanelProps 
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100">
                       <ZoomIn className="w-6 h-6 text-white" />
                     </div>
-                    <div className="absolute top-2 right-2 bg-green-400/[0.15] border border-green-400/[0.3] rounded-md px-2 py-0.5">
-                      <span className="text-[10px] text-green-400 font-bold">✓ تم الرفع</span>
+                    <div className="absolute top-2 right-2 bg-green-400/15 border border-green-400/30 rounded px-2 py-0.5">
+                      <span className="text-[10px] text-green-300 font-bold">✓ تم الرفع</span>
                     </div>
                   </button>
                 ) : (

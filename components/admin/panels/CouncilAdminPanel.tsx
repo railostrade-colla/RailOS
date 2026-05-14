@@ -740,7 +740,7 @@ export function CouncilAdminPanel() {
               )}
               <button
                 onClick={closeMember}
-                className="px-4 py-1.5 text-xs rounded-md bg-white/[0.05] border border-white/[0.1] text-white hover:bg-white/[0.08]"
+                className="px-4 py-1.5 text-xs rounded-xl bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.08]"
               >
                 إغلاق
               </button>
@@ -1175,7 +1175,7 @@ export function CouncilAdminPanel() {
               </div>
             </div>
 
-            <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 mb-4 text-[11px] text-neutral-400 leading-relaxed">
+            <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3 mb-4 text-[11px] text-neutral-400 leading-relaxed">
               📅 الجدول التلقائي:
               <ul className="list-disc list-inside mt-1 space-y-0.5">
                 <li>الترشيح: من <span className="text-green-300 font-mono">الآن</span> إلى <span className="text-green-300 font-mono">+{quickRegDays || 0} يوم</span></li>

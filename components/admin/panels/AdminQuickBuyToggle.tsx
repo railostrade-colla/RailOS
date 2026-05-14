@@ -116,7 +116,7 @@ export function AdminQuickBuyToggle({
       "border-2 rounded-2xl p-5 transition-colors",
       enabled
         ? "bg-[#4ADE80]/[0.04] border-[#4ADE80]/30"
-        : "bg-white/[0.03] border-white/[0.08]",
+        : "bg-white/[0.04] border-white/[0.08]",
     )}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-start gap-2 min-w-0">

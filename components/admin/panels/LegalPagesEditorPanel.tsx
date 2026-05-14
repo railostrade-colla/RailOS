@@ -191,7 +191,7 @@ export function LegalPagesEditorPanel() {
         {hasChanges && (
           <button
             onClick={() => setContent(originalContent)}
-            className="px-4 py-1.5 text-xs rounded-md bg-white/[0.05] border border-white/[0.1] text-neutral-300 hover:bg-white/[0.08]"
+            className="px-4 py-1.5 text-xs rounded-xl bg-white/[0.04] border border-white/[0.08] text-neutral-300 hover:bg-white/[0.08]"
           >
             تراجع عن التغييرات
           </button>
