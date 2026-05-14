@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import type { RealtimeChannel } from "@supabase/supabase-js"
+import { createResilientSubscription } from "./_resilientChannel"
 
 /**
  * useRealtimeListings — subscribes to *all* row events on the
@@ -13,40 +13,46 @@ import type { RealtimeChannel } from "@supabase/supabase-js"
  * Cheaper than fetching on every tick because we just bump a
  * counter; the page debounces its refetch via useEffect deps.
  *
- * Requires `listings` to be in `supabase_realtime` publication
+ * Phase 14.10 B — routed through `createResilientSubscription` so the
+ * channel auto-reconnects with exponential backoff after a network
+ * blip and the tick bumps once on every successful (re)SUBSCRIBED,
+ * forcing the page to re-fetch and catch anything that changed while
+ * we were offline.
+ *
+ * Requires `listings` in `supabase_realtime` publication
  * (added by 20260504_phase10_portfolio_history.sql).
  */
 export function useRealtimeListings() {
   const [tick, setTick] = useState(0)
-  const channelRef = useRef<RealtimeChannel | null>(null)
 
   useEffect(() => {
     let cancelled = false
     const supabase = createClient()
 
-    const channel = supabase
-      .channel("listings:all")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "listings",
-        },
-        () => {
-          if (!cancelled) setTick((t) => t + 1)
-        },
-      )
-      .subscribe()
+    const bump = () => {
+      if (!cancelled) setTick((t) => t + 1)
+    }
 
-    channelRef.current = channel
+    const handle = createResilientSubscription({
+      supabase,
+      buildChannel: () =>
+        supabase
+          .channel("listings:all")
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "listings",
+            },
+            bump,
+          ),
+      onReconnect: bump,
+    })
 
     return () => {
       cancelled = true
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current).catch(() => {})
-        channelRef.current = null
-      }
+      handle.teardown()
     }
   }, [])
 

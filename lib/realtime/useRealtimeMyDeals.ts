@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import type { RealtimeChannel } from "@supabase/supabase-js"
+import { createResilientSubscription } from "./_resilientChannel"
 
 /**
  * useRealtimeMyDeals — subscribes to all `deals` row events where the
@@ -13,12 +13,16 @@ import type { RealtimeChannel } from "@supabase/supabase-js"
  * use `tick` as a useEffect dependency to re-fetch the list. Each
  * channel firing increments the tick.
  *
- * Requires `deals` to be in `supabase_realtime` publication
+ * Phase 14.10 B — routes each channel through `createResilientSubscription`
+ * so network blips no longer silently kill the subscription. On every
+ * successful (re)SUBSCRIBED the tick bumps so the caller refreshes its
+ * cached list, catching any deals that changed while we were offline.
+ *
+ * Requires `deals` in `supabase_realtime` publication
  * (added by 20260504_phase10_portfolio_history.sql).
  */
 export function useRealtimeMyDeals(userId: string | null) {
   const [tick, setTick] = useState(0)
-  const channelsRef = useRef<RealtimeChannel[]>([])
 
   useEffect(() => {
     if (!userId) return
@@ -29,42 +33,46 @@ export function useRealtimeMyDeals(userId: string | null) {
       if (!cancelled) setTick((t) => t + 1)
     }
 
-    const buyerChan = supabase
-      .channel(`my-deals-buyer:${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "deals",
-          filter: `buyer_id=eq.${userId}`,
-        },
-        bump,
-      )
-      .subscribe()
+    const buyer = createResilientSubscription({
+      supabase,
+      buildChannel: () =>
+        supabase
+          .channel(`my-deals-buyer:${userId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "deals",
+              filter: `buyer_id=eq.${userId}`,
+            },
+            bump,
+          ),
+      onReconnect: bump,
+    })
 
-    const sellerChan = supabase
-      .channel(`my-deals-seller:${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "deals",
-          filter: `seller_id=eq.${userId}`,
-        },
-        bump,
-      )
-      .subscribe()
-
-    channelsRef.current = [buyerChan, sellerChan]
+    const seller = createResilientSubscription({
+      supabase,
+      buildChannel: () =>
+        supabase
+          .channel(`my-deals-seller:${userId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "deals",
+              filter: `seller_id=eq.${userId}`,
+            },
+            bump,
+          ),
+      onReconnect: bump,
+    })
 
     return () => {
       cancelled = true
-      channelsRef.current.forEach((c) => {
-        supabase.removeChannel(c).catch(() => {})
-      })
-      channelsRef.current = []
+      buyer.teardown()
+      seller.teardown()
     }
   }, [userId])
 
