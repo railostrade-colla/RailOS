@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { memo, useEffect, useState, useCallback } from "react"
 import Image from "next/image"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react"
@@ -10,7 +10,15 @@ import { getDashboardOverview } from "@/lib/data/admin-utilities"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils/cn"
 
-export function AdminSidebar({
+/**
+ * AdminSidebar — wrapped in React.memo at the bottom of this file
+ * (Phase 14.09 B). The two props `open` and `onToggle` are stable
+ * across layout re-renders (open is React state, onToggle is wrapped
+ * in useCallback in app/admin/layout.tsx) so the memo short-circuits
+ * on every page navigation. The sidebar keeps its mount + realtime
+ * channel + permissions cache untouched — no more flicker on nav.
+ */
+function AdminSidebarImpl({
   open,
   onToggle,
 }: {
@@ -338,3 +346,15 @@ export function AdminSidebar({
     </aside>
   )
 }
+
+/**
+ * Phase 14.09 B — memo'd export. Re-renders of the parent layout
+ * caused by `usePathname()` ticking on every admin navigation now
+ * short-circuit here, so the sidebar's realtime channel + permissions
+ * cache + badge counts all survive the navigation untouched.
+ *
+ * Default shallow comparison is enough because both props are stable:
+ *   • `open`     — React state in app/admin/layout.tsx
+ *   • `onToggle` — wrapped in useCallback in app/admin/layout.tsx
+ */
+export const AdminSidebar = memo(AdminSidebarImpl)

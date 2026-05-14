@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, useCallback, Suspense } from "react"
 import { usePathname } from "next/navigation"
 import { AdminSidebar } from "@/components/admin/Sidebar"
 import { AdminTopBar } from "@/components/admin/AdminTopBar"
@@ -26,11 +26,25 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // Phase 11.31 — preload globally on admin shell mount.
   usePreloadAppData()
 
+  // Phase 14.09 B — stable toggle handler so AdminSidebar's React.memo
+  // can short-circuit on every layout re-render that doesn't actually
+  // change `open`. Without useCallback, the lambda is recreated on
+  // every render and the memo'd Sidebar still receives a new prop,
+  // re-renders, and the perceived flicker stays.
+  const toggleSidebar = useCallback(() => setOpen((v) => !v), [])
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white" dir="rtl">
-      <Suspense fallback={null}>
-        <AdminSidebar open={open} onToggle={() => setOpen((v) => !v)} />
-      </Suspense>
+      {/* Phase 14.09 B — Sidebar is mounted WITHOUT a Suspense wrapper.
+          Suspense around a client component that has no async children
+          / no React.lazy still re-mounts its subtree when the parent
+          layout re-renders during streaming navigations on React 19 +
+          Next 16. That re-mount restarts the sidebar's realtime
+          subscription, which is what caused the visual flicker on
+          every admin-page navigation. The component itself is
+          React.memo'd in its own file so prop-stable navigations
+          short-circuit before they touch its tree. */}
+      <AdminSidebar open={open} onToggle={toggleSidebar} />
       <main
         className="min-h-screen transition-all duration-200 relative"
         style={{ marginRight: sidebarWidth }}
@@ -47,6 +61,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <AdminDiagnosticBanner />
           </Suspense>
         )}
+        {/* Children stay inside a Suspense boundary because admin
+            pages can be heavier and may suspend on server data. */}
         <Suspense fallback={null}>{children}</Suspense>
       </main>
 
