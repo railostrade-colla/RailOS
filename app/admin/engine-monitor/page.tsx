@@ -306,7 +306,7 @@ export default function EngineMonitorPage() {
             </div>
           ) : (
             <table className="w-full text-xs">
-              <thead className="bg-white/[0.03] border-b border-white/[0.06]">
+              <thead className="bg-white/[0.04] border-b border-white/[0.08]">
                 <tr className="text-neutral-500">
                   <th className="text-right px-3 py-2 font-bold">المشروع</th>
                   <th className="text-right px-3 py-2 font-bold">القطاع</th>
@@ -458,7 +458,7 @@ export default function EngineMonitorPage() {
             </div>
           ) : (
             <table className="w-full text-xs">
-              <thead className="bg-white/[0.03] border-b border-white/[0.06]">
+              <thead className="bg-white/[0.04] border-b border-white/[0.08]">
                 <tr className="text-neutral-500">
                   <th className="text-right px-3 py-2 font-bold">الوقت</th>
                   <th className="text-right px-3 py-2 font-bold">المشروع</th>
