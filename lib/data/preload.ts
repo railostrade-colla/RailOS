@@ -97,6 +97,12 @@ async function preloadAll(): Promise<void> {
 /**
  * Mount-once-per-shell hook. Wire into AppLayout (user-side) and the
  * admin shell so every authenticated page benefits.
+ *
+ * Refresh triggers:
+ *   • On mount                     — initial warm-up
+ *   • Every PRELOAD_INTERVAL_MS    — keep the cache warm (skipped when hidden)
+ *   • On visibility change         — user came back from another tab
+ *   • On network online (14.09 D)  — reconnect after offline / mobile-data switch
  */
 export function usePreloadAppData(): void {
   useEffect(() => {
@@ -120,9 +126,21 @@ export function usePreloadAppData(): void {
     }
     document.addEventListener("visibilitychange", onVisibility)
 
+    // Phase 14.09 D — refresh when network comes back online.
+    // Realtime channels typically reconnect on their own, but the
+    // preload cache won't catch up to "data that changed while we
+    // were offline" until the next interval tick (up to 60s).
+    // Listening for `online` events shrinks that to "the moment
+    // connectivity returns" without the need to wait or refresh.
+    const onOnline = () => {
+      if (!document.hidden) void preloadAll()
+    }
+    window.addEventListener("online", onOnline)
+
     return () => {
       window.clearInterval(id)
       document.removeEventListener("visibilitychange", onVisibility)
+      window.removeEventListener("online", onOnline)
     }
   }, [])
 }
