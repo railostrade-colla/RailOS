@@ -19,12 +19,14 @@ type LogoVariant = "icon" | "horizontal" | "vertical"
 
 // Per founder spec: every logo frame is a PURE SQUARE (no rounding,
 // no background) in both themes, app-wide.
+// Logo mark enlarged ~30% per founder request (box + icon scaled;
+// text sizes unchanged). Pure square, no frame/background.
 const SIZES: Record<LogoSize, { box: number; icon: number; gap: number; title: number; subtitle: number }> = {
-  sm:   { box: 32, icon: 20, gap: 8,  title: 13, subtitle: 9 },
-  md:   { box: 40, icon: 24, gap: 12, title: 15, subtitle: 11 },
-  lg:   { box: 56, icon: 32, gap: 14, title: 18, subtitle: 12 },
-  xl:   { box: 72, icon: 42, gap: 16, title: 20, subtitle: 13 },
-  "2xl":{ box: 96, icon: 56, gap: 20, title: 24, subtitle: 14 },
+  sm:   { box: 42,  icon: 26, gap: 8,  title: 13, subtitle: 9 },
+  md:   { box: 52,  icon: 31, gap: 12, title: 15, subtitle: 11 },
+  lg:   { box: 73,  icon: 42, gap: 14, title: 18, subtitle: 12 },
+  xl:   { box: 94,  icon: 55, gap: 16, title: 20, subtitle: 13 },
+  "2xl":{ box: 125, icon: 73, gap: 20, title: 24, subtitle: 14 },
 }
 
 export function Logo({
