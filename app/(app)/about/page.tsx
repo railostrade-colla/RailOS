@@ -1,10 +1,10 @@
 "use client"
 
-import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { Target, Sparkles, Lock, Globe, Handshake, Rocket, Mail, Phone, Headphones, ChevronRight } from "lucide-react"
+import { Target, Sparkles, Lock, Globe, Handshake, Rocket, Mail, Phone, Headphones, ArrowRight } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
+import { Logo } from "@/components/brand/Logo"
 import { APP_NAME, APP_NAME_EN } from "@/lib/utils/version"
 
 const VALUES = [
@@ -35,21 +35,20 @@ export default function AboutPage() {
       <div className="relative">
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-4xl mx-auto">
 
-          {/* Back button */}
+          {/* Back button — unified app pattern (circular icon button,
+              same as SettingsSectionHeader) */}
           <button
             onClick={() => router.back()}
-            className="flex items-center gap-1.5 text-sm text-neutral-400 hover:text-white mb-6 transition-colors"
+            aria-label="رجوع"
+            className="w-9 h-9 rounded-full bg-white/[0.05] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.08] transition-colors flex-shrink-0 mb-6"
           >
-            <ChevronRight className="w-4 h-4" strokeWidth={2} />
-            <span>رجوع</span>
+            <ArrowRight className="w-4 h-4 text-neutral-300" strokeWidth={2} />
           </button>
 
           {/* Hero - logo + name (footer style) */}
           <div className="mb-10">
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 overflow-hidden flex items-center justify-center flex-shrink-0">
-                <Image src="/logo.png" alt={APP_NAME} width={40} height={40} className="w-full h-full object-contain" />
-              </div>
+              <Logo size="md" variant="icon" />
               <div className="text-right">
                 <div className="text-base font-bold text-white">{APP_NAME}</div>
                 <div className="text-[10px] text-neutral-500 font-mono uppercase tracking-wider">{APP_NAME_EN}</div>
