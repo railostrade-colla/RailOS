@@ -765,16 +765,17 @@ export default function DashboardPage() {
                 <button
                   key={item.label}
                   onClick={() => router.push(item.path)}
-                  className="shadow-card group flex flex-col items-center gap-2 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-2xl py-4 px-2 relative transition-colors"
+                  className="shadow-card group flex flex-col items-center gap-1.5 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-2xl py-2.5 px-2 relative transition-colors"
                 >
                   <div
+                    style={{ borderRadius: 12 }}
                     className={cn(
-                      "w-12 h-12 rounded-xl border flex items-center justify-center group-hover:scale-105 transition-transform",
+                      "w-10 h-10 border flex items-center justify-center group-hover:scale-105 transition-transform",
                       item.iconBg,
                       item.iconBorder,
                     )}
                   >
-                    <Icon className={cn("w-6 h-6", item.iconColor)} strokeWidth={1.8} />
+                    <Icon className={cn("w-5 h-5", item.iconColor)} strokeWidth={1.8} />
                   </div>
                   <span className="text-xs text-foreground font-medium">{item.label}</span>
                   {item.badge > 0 && (
