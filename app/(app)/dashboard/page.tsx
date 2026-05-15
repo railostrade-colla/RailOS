@@ -587,7 +587,7 @@ export default function DashboardPage() {
       <div className="relative">
 {/* Sticky Project Selector — hidden when no projects exist */}
         {selectedProject && (
-        <div className="sticky top-[60px] lg:top-[68px] z-30 bg-black/85 backdrop-blur-xl border-b border-white/[0.1] px-4 lg:px-8 py-3">
+        <div className="sticky top-[60px] lg:top-[68px] z-30 bg-card backdrop-blur-xl border-b border-border px-4 lg:px-8 py-3">
           <div className="relative max-w-2xl">
             <button
               onClick={() => setShowDropdown(!showDropdown)}
@@ -623,16 +623,16 @@ export default function DashboardPage() {
             </button>
 
             {showDropdown && (
-              <div className="absolute top-full left-0 right-0 z-50 bg-[rgba(15,15,15,0.98)] backdrop-blur-2xl border border-white/[0.08] border-t-0 rounded-b-xl shadow-2xl overflow-hidden">
-                <div className="p-2.5 border-b border-white/[0.05]">
+              <div className="absolute top-full left-0 right-0 z-50 bg-card backdrop-blur-2xl border border-border border-t-0 rounded-b-xl shadow-floating overflow-hidden">
+                <div className="p-2.5 border-b border-border">
                   <div className="relative">
-                    <Search className="w-3.5 h-3.5 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2" />
+                    <Search className="w-3.5 h-3.5 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       placeholder="ابحث عن مشروع..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-white/[0.05] border border-white/[0.1] rounded-lg pr-9 pl-3 py-1.5 text-xs text-white outline-none"
+                      className="w-full bg-secondary border border-border rounded-lg pr-9 pl-3 py-1.5 text-xs text-foreground outline-none"
                     />
                   </div>
                 </div>
@@ -765,18 +765,18 @@ export default function DashboardPage() {
                 <button
                   key={item.label}
                   onClick={() => router.push(item.path)}
-                  className="group flex flex-col items-center gap-1.5 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-xl py-3 px-2 relative transition-colors"
+                  className="shadow-card group flex flex-col items-center gap-2 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-2xl py-4 px-2 relative transition-colors"
                 >
                   <div
                     className={cn(
-                      "w-9 h-9 rounded-xl border flex items-center justify-center group-hover:scale-105 transition-transform",
+                      "w-12 h-12 rounded-xl border flex items-center justify-center group-hover:scale-105 transition-transform",
                       item.iconBg,
                       item.iconBorder,
                     )}
                   >
-                    <Icon className={cn("w-4 h-4", item.iconColor)} strokeWidth={1.8} />
+                    <Icon className={cn("w-6 h-6", item.iconColor)} strokeWidth={1.8} />
                   </div>
-                  <span className="text-[10px] text-neutral-300 font-medium">{item.label}</span>
+                  <span className="text-xs text-foreground font-medium">{item.label}</span>
                   {item.badge > 0 && (
                     <div className="absolute top-1.5 left-1.5 w-3.5 h-3.5 rounded-full bg-red-400 text-[8px] font-bold text-white flex items-center justify-center">
                       {item.badge}
