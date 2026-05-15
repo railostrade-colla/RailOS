@@ -666,6 +666,7 @@ p { line-height: 1.6; }
 .app-chrome {
   background-color: var(--chrome-bg) !important;
   box-shadow: var(--shadow-top-nav) !important;
+  border-bottom: 1px solid var(--border);
 }
 
 /* ═══════════════════════════════════════════════════════════════
