@@ -229,42 +229,37 @@ const VOLUME_HISTORY: Array<{ month: string; volume: number }> = [
 ]
 
 // ─── Quick action items (4 only — no send/receive) ──────────────
+// `tile` mirrors the Portfolio action-button design exactly: the
+// whole tile is tinted by its colour (bg/border/text + hover) — no
+// separate icon container.
 const QUICK_ACTIONS = [
   {
     label: "محفظة",
     path: "/portfolio",
     icon: Wallet,
     badge: 0,
-    iconColor: "text-green-400",
-    iconBg: "bg-green-400/10",
-    iconBorder: "border-green-400/30",
+    tile: "bg-green-400/[0.08] border-green-400/25 text-green-400 hover:bg-green-400/[0.14]",
   },
   {
     label: "تبادل",
     path: "/exchange",
     icon: ArrowLeftRight,
     badge: 0,
-    iconColor: "text-blue-400",
-    iconBg: "bg-blue-400/10",
-    iconBorder: "border-blue-400/30",
+    tile: "bg-blue-400/[0.08] border-blue-400/25 text-blue-400 hover:bg-blue-400/[0.14]",
   },
   {
     label: "مزاد",
     path: "/auctions",
     icon: Gavel,
     badge: 0,
-    iconColor: "text-orange-400",
-    iconBg: "bg-orange-400/10",
-    iconBorder: "border-orange-400/30",
+    tile: "bg-orange-400/[0.08] border-orange-400/25 text-orange-400 hover:bg-orange-400/[0.14]",
   },
   {
     label: "عقود",
     path: "/contracts",
     icon: FileText,
     badge: 0,
-    iconColor: "text-purple-400",
-    iconBg: "bg-purple-400/10",
-    iconBorder: "border-purple-400/30",
+    tile: "bg-purple-400/[0.08] border-purple-400/25 text-purple-400 hover:bg-purple-400/[0.14]",
   },
 ] as const
 
@@ -765,19 +760,13 @@ export default function DashboardPage() {
                 <button
                   key={item.label}
                   onClick={() => router.push(item.path)}
-                  className="shadow-card group flex flex-col items-center gap-1.5 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] rounded-2xl py-2.5 px-2 relative transition-colors"
+                  className={cn(
+                    "shadow-card flex flex-col items-center gap-1.5 py-3 rounded-xl border relative transition-colors",
+                    item.tile,
+                  )}
                 >
-                  <div
-                    style={{ borderRadius: 12 }}
-                    className={cn(
-                      "w-10 h-10 border flex items-center justify-center group-hover:scale-105 transition-transform",
-                      item.iconBg,
-                      item.iconBorder,
-                    )}
-                  >
-                    <Icon className={cn("w-5 h-5", item.iconColor)} strokeWidth={1.8} />
-                  </div>
-                  <span className="text-xs text-foreground font-medium">{item.label}</span>
+                  <Icon className="w-4 h-4" strokeWidth={1.8} />
+                  <span className="text-[10px] font-medium">{item.label}</span>
                   {item.badge > 0 && (
                     <div className="absolute top-1.5 left-1.5 w-3.5 h-3.5 rounded-full bg-red-400 text-[8px] font-bold text-white flex items-center justify-center">
                       {item.badge}
