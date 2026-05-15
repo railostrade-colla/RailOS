@@ -36,9 +36,22 @@
     0 4px 8px rgba(0,0,0,0.5),
     0 12px 24px rgba(0,0,0,0.4),
     inset 0 1px 0 rgba(255,255,255,0.04);
+  --shadow-xl:
+    0 2px 4px rgba(0,0,0,0.7),
+    0 8px 16px rgba(0,0,0,0.6),
+    0 16px 32px rgba(0,0,0,0.5),
+    inset 0 1px 0 rgba(255,255,255,0.05);
   --shadow-button:
     0 1px 2px rgba(0,0,0,0.4),
     0 4px 8px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.05);
+  --shadow-button-success:
+    0 1px 2px rgba(74,222,128,0.3),
+    0 4px 8px rgba(74,222,128,0.2),
+    0 8px 20px rgba(74,222,128,0.15);
+  --shadow-card-hover:
+    0 4px 8px rgba(0,0,0,0.4),
+    0 12px 24px rgba(0,0,0,0.4),
     inset 0 1px 0 rgba(255,255,255,0.05);
 }
 
@@ -78,10 +91,20 @@
     0 1px 3px rgba(0,0,0,0.02),
     0 4px 8px rgba(0,0,0,0.04),
     0 12px 24px rgba(0,0,0,0.08);
+  --shadow-xl:
+    0 4px 12px rgba(0,0,0,0.06),
+    0 16px 32px rgba(0,0,0,0.12);
   --shadow-button:
     0 1px 2px rgba(15,23,42,0.3),
     0 4px 8px rgba(15,23,42,0.2),
     0 8px 16px rgba(15,23,42,0.1);
+  --shadow-button-success:
+    0 1px 2px rgba(74,222,128,0.4),
+    0 4px 8px rgba(74,222,128,0.3),
+    0 8px 20px rgba(74,222,128,0.2);
+  --shadow-card-hover:
+    0 6px 12px rgba(0,0,0,0.08),
+    0 16px 32px rgba(0,0,0,0.12);
 }
 
 * {
@@ -456,7 +479,7 @@ body {
   transition: box-shadow 200ms ease, transform 200ms ease;
 }
 [class*="bg-white/[0"]:not(.no-shadow):not(.always-dark):not(.animate-pulse):hover {
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-card-hover);
   transform: translateY(-1px);
 }
 
@@ -480,18 +503,18 @@ button:not(.no-shadow):not([disabled]):not(.always-dark):active {
 /* 3) Green / emerald CTAs (invest / buy) — branded glow. */
 [class*="bg-green"]:not(.no-shadow):not(.always-dark),
 [class*="bg-emerald"]:not(.no-shadow):not(.always-dark) {
-  box-shadow:
-    0 1px 2px rgba(74,222,128,0.3),
-    0 4px 8px rgba(74,222,128,0.2),
-    0 8px 20px rgba(74,222,128,0.15);
+  box-shadow: var(--shadow-button-success);
 }
 
-/* 4) Floating surfaces — modals & dropdowns read as elevated. */
+/* 4) Floating surfaces — modals (xl) read more elevated than
+ *    dropdowns / listboxes (lg). */
 [role="dialog"] > div:not(.no-shadow),
+.modal-content:not(.no-shadow) {
+  box-shadow: var(--shadow-xl);
+}
 [role="menu"]:not(.no-shadow),
 [role="listbox"]:not(.no-shadow),
-.dropdown-menu:not(.no-shadow),
-.modal-content:not(.no-shadow) {
+.dropdown-menu:not(.no-shadow) {
   box-shadow: var(--shadow-lg);
 }
 
@@ -499,4 +522,28 @@ button:not(.no-shadow):not([disabled]):not(.always-dark):active {
 @media (prefers-reduced-motion: reduce) {
   [class*="bg-white/[0"]:hover,
   button:active { transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ * Part 1 — opt-in shadow utility classes
+ * Use these on bespoke components (e.g. SettingsCategoryCard) that
+ * don't carry a bg-white/[0.0x] utility, or to force a specific
+ * depth level. Tokens flip with the theme automatically.
+ * ═══════════════════════════════════════════════════════════════ */
+.shadow-card    { box-shadow: var(--shadow-md); }
+.shadow-card-hover {
+  transition: box-shadow 200ms ease, transform 200ms ease;
+}
+.shadow-card-hover:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-1px);
+}
+.shadow-floating { box-shadow: var(--shadow-lg); }
+.shadow-modal    { box-shadow: var(--shadow-xl); }
+.shadow-button   { box-shadow: var(--shadow-button); }
+.shadow-success  { box-shadow: var(--shadow-button-success); }
+.no-shadow       { box-shadow: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .shadow-card-hover:hover { transform: none; }
 }
