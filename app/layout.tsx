@@ -5,6 +5,7 @@ import { DealRequestModal } from "@/components/deals/DealRequestModal"
 import { ContractInviteModal } from "@/components/contracts/ContractInviteModal"
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt"
 import { ThemeProvider } from "@/lib/theme/ThemeProvider"
+import { PreferencesProvider } from "@/lib/preferences/usePreferences"
 import "./globals.css"
 
 // Phase 14.13 M2 — no-FOUC theme bootstrap. Runs BEFORE first paint
@@ -12,10 +13,16 @@ import "./globals.css"
 // ThemeProvider's resolve() logic in vanilla JS. Kept tiny + inline.
 const THEME_BOOTSTRAP = `
 (function(){try{
+  var d=document.documentElement;
   var c=localStorage.getItem('railos:theme');
   var sysLight=window.matchMedia('(prefers-color-scheme: light)').matches;
   var light=(c==='light')||(c==='system'&&sysLight);
-  if(light)document.documentElement.setAttribute('data-theme','light');
+  if(light)d.setAttribute('data-theme','light');
+  /* Phase 14.13 PART A — appearance prefs, pre-paint (no FOUC) */
+  var p={};try{p=JSON.parse(localStorage.getItem('railos:prefs')||'{}')||{}}catch(e){}
+  d.setAttribute('data-font-size',(p.fontSize==='small'||p.fontSize==='large')?p.fontSize:'medium');
+  d.setAttribute('data-density',p.density==='compact'?'compact':'comfortable');
+  d.setAttribute('data-animations',p.animations===false?'off':'on');
 }catch(e){}})();`
 
 export const metadata: Metadata = {
@@ -69,6 +76,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           the shell dark even in light mode. */}
       <body className="antialiased">
         <ThemeProvider>
+        <PreferencesProvider>
         {/* Phase 14.12 P3 — Next 16 / React 19 hoist these <link>s into
             <head>. preconnect opens the connection eagerly; the
             crossOrigin variant covers the authenticated fetch + the
@@ -99,6 +107,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             },
           }}
         />
+        </PreferencesProvider>
         </ThemeProvider>
       </body>
     </html>

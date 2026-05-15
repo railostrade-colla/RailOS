@@ -799,3 +799,68 @@ select option {
 .logo-img-dark  { display: block; }
 [data-theme="light"] .logo-img-dark  { display: none; }
 [data-theme="light"] .logo-img-light { display: block; }
+
+/* ═══════════════════════════════════════════════════════════════
+ * Phase 14.13 PART A — Appearance preferences (font / density /
+ * animations). Driven by data attributes on <html> set by
+ * PreferencesProvider (+ a no-FOUC inline bootstrap in layout).
+ * ═══════════════════════════════════════════════════════════════ */
+
+/* ── Font size ── remap the standard text utilities so the whole
+ * app scales. medium = current sizes (zero regression default). */
+:root,
+html[data-font-size="medium"] {
+  --fs-xs: 11px; --fs-sm: 12px; --fs-base: 14px;
+  --fs-lg: 16px; --fs-xl: 18px; --fs-2xl: 20px; --fs-3xl: 24px;
+}
+html[data-font-size="small"] {
+  --fs-xs: 10px; --fs-sm: 11px; --fs-base: 13px;
+  --fs-lg: 14px; --fs-xl: 16px; --fs-2xl: 18px; --fs-3xl: 22px;
+}
+html[data-font-size="large"] {
+  --fs-xs: 12px; --fs-sm: 14px; --fs-base: 16px;
+  --fs-lg: 18px; --fs-xl: 20px; --fs-2xl: 22px; --fs-3xl: 28px;
+}
+/* Only re-scale when a non-default size is chosen, so the medium
+ * default leaves every existing layout pixel-identical. */
+html[data-font-size="small"]  .text-xs,
+html[data-font-size="large"]  .text-xs  { font-size: var(--fs-xs) !important; }
+html[data-font-size="small"]  .text-sm,
+html[data-font-size="large"]  .text-sm  { font-size: var(--fs-sm) !important; }
+html[data-font-size="small"]  .text-base,
+html[data-font-size="large"]  .text-base{ font-size: var(--fs-base) !important; }
+html[data-font-size="small"]  .text-lg,
+html[data-font-size="large"]  .text-lg  { font-size: var(--fs-lg) !important; }
+html[data-font-size="small"]  .text-xl,
+html[data-font-size="large"]  .text-xl  { font-size: var(--fs-xl) !important; }
+html[data-font-size="small"]  .text-2xl,
+html[data-font-size="large"]  .text-2xl { font-size: var(--fs-2xl) !important; }
+html[data-font-size="small"]  .text-3xl,
+html[data-font-size="large"]  .text-3xl { font-size: var(--fs-3xl) !important; }
+
+/* ── Display density ── scales the design-token spacing + the
+ * opt-in layout helpers (.cards-stack / .card-content / .section /
+ * .action-tile). Deliberately NOT a blanket !important padding on
+ * every card — that would fight Tailwind p-* across ~7k usages and
+ * break working layouts. comfortable = current (zero regression). */
+html[data-density="compact"] {
+  --space-sm: 6px;  --space-md: 8px;   --space-lg: 12px;
+  --space-xl: 14px; --space-2xl: 16px; --space-3xl: 22px;
+  --card-padding: 12px; --card-padding-sm: 10px;
+}
+html[data-density="comfortable"] {
+  --space-sm: 8px;  --space-md: 12px;  --space-lg: 16px;
+  --space-xl: 20px; --space-2xl: 24px; --space-3xl: 32px;
+  --card-padding: 20px; --card-padding-sm: 16px;
+}
+
+/* ── Animations toggle ── kill all motion when off. */
+html[data-animations="off"] *,
+html[data-animations="off"] *::before,
+html[data-animations="off"] *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}

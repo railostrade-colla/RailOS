@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { Moon, Sun, Laptop } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import {
@@ -10,6 +9,11 @@ import {
   SettingsToggle,
 } from "@/components/settings"
 import { useTheme } from "@/lib/theme/ThemeProvider"
+import {
+  usePreferences,
+  type FontSize,
+  type Density,
+} from "@/lib/preferences/usePreferences"
 
 /**
  * Phase 14.13 Unified UI Part 2 — Appearance sub-page. The theme
@@ -20,9 +24,11 @@ import { useTheme } from "@/lib/theme/ThemeProvider"
  */
 export default function AppearanceSettingsPage() {
   const { theme: themeChoice, setTheme: setThemeChoice } = useTheme()
-  const [fontSize, setFontSize] = useState("medium")
-  const [density, setDensity] = useState("comfortable")
-  const [animations, setAnimations] = useState(true)
+  const {
+    fontSize, setFontSize,
+    density, setDensity,
+    animations, setAnimations,
+  } = usePreferences()
 
   return (
     <AppLayout>
@@ -55,7 +61,7 @@ export default function AppearanceSettingsPage() {
             >
               <SettingsButtonGroup
                 value={fontSize}
-                onChange={setFontSize}
+                onChange={(id) => setFontSize(id as FontSize)}
                 options={[
                   { id: "small", label: "صغير" },
                   { id: "medium", label: "متوسط" },
@@ -70,7 +76,7 @@ export default function AppearanceSettingsPage() {
             >
               <SettingsButtonGroup
                 value={density}
-                onChange={setDensity}
+                onChange={(id) => setDensity(id as Density)}
                 options={[
                   { id: "compact", label: "مدمج" },
                   { id: "comfortable", label: "مريح" },
