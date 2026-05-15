@@ -28,6 +28,7 @@ import { KpiStrip } from "@/components/admin/dashboard-v2/KpiStrip"
 import { PendingQueueCard } from "@/components/admin/dashboard-v2/PendingQueueCard"
 import { LiveActivityFeed } from "@/components/admin/dashboard-v2/LiveActivityFeed"
 import { QuickActions } from "@/components/admin/dashboard-v2/QuickActions"
+import { AdminSectionsGrid } from "@/components/admin/AdminSectionsGrid"
 
 export function DashboardPanel() {
   const [adminName, setAdminName] = useState<string>("")
@@ -116,6 +117,9 @@ export function DashboardPanel() {
           <QuickActions />
         </div>
       </div>
+
+      {/* ─── 5. Unified section navigation (Phase 14.13 Part 4) ─── */}
+      <AdminSectionsGrid />
     </div>
   )
 }
