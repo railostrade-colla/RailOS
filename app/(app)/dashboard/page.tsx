@@ -688,7 +688,7 @@ export default function DashboardPage() {
               daily / weekly — all real from getPortfolioChangeMetrics)
               as the only motion indicator and let the hero use full
               width on desktop. */}
-          <div className="bg-gradient-to-br from-white/[0.06] to-white/[0.04] border border-white/[0.08] rounded-2xl p-5 lg:p-6 mb-6 backdrop-blur">
+          <div className="shadow-card bg-gradient-to-br from-white/[0.06] to-white/[0.04] border border-white/[0.08] rounded-2xl p-5 lg:p-6 mb-6 backdrop-blur">
             <div className="min-w-0">
                 <div className="text-xs text-neutral-400 mb-1">{getGreeting()} 👋</div>
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
