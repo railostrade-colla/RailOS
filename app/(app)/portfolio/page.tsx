@@ -819,10 +819,19 @@ function PortfolioContent() {
             {/* 4 أزرار */}
             <div className="grid grid-cols-4 gap-2">
               {[
-                { label: "إرسال", icon: Send, onClick: () => router.push("/wallet/send") },
-                { label: "استلام", icon: Download, onClick: () => router.push("/wallet/receive") },
-                { label: "بيع سريع", icon: Zap, onClick: () => router.push("/quick-sale"), disabled: totalShares === 0 },
-                { label: "طلب وحدات", icon: CreditCard, onClick: () => setShowFeeModal(true) },
+                // Each action is tinted by its meaning:
+                //   إرسال    → orange (shares going OUT)
+                //   استلام   → blue   (shares coming IN)
+                //   بيع سريع → green  (sell / cash out)
+                //   طلب وحدات→ purple (fee-units request)
+                { label: "إرسال", icon: Send, onClick: () => router.push("/wallet/send"),
+                  cls: "bg-orange-400/[0.08] border-orange-400/25 text-orange-400 hover:bg-orange-400/[0.14]" },
+                { label: "استلام", icon: Download, onClick: () => router.push("/wallet/receive"),
+                  cls: "bg-blue-400/[0.08] border-blue-400/25 text-blue-400 hover:bg-blue-400/[0.14]" },
+                { label: "بيع سريع", icon: Zap, onClick: () => router.push("/quick-sale"), disabled: totalShares === 0,
+                  cls: "bg-green-400/[0.08] border-green-400/25 text-green-400 hover:bg-green-400/[0.14]" },
+                { label: "طلب وحدات", icon: CreditCard, onClick: () => setShowFeeModal(true),
+                  cls: "bg-purple-400/[0.08] border-purple-400/25 text-purple-400 hover:bg-purple-400/[0.14]" },
               ].map((btn) => {
                 const Icon = btn.icon
                 return (
@@ -834,11 +843,11 @@ function PortfolioContent() {
                       "shadow-card flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-colors",
                       btn.disabled
                         ? "bg-white/[0.02] border-white/[0.04] text-neutral-600 cursor-not-allowed"
-                        : "bg-white/[0.04] border-white/[0.06] text-white hover:bg-white/[0.08]"
+                        : btn.cls
                     )}
                   >
                     <Icon className="w-4 h-4" strokeWidth={1.5} />
-                    <span className="text-[10px]">{btn.label}</span>
+                    <span className="text-[10px] font-medium">{btn.label}</span>
                   </button>
                 )
               })}
