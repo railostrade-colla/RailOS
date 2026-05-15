@@ -11,11 +11,18 @@ export const runtime = "nodejs"
  * — Sends to every active row in `push_subscriptions` for the user
  * — Auto-deactivates rows that return HTTP 410 (Gone)
  *
- * Auth model: this endpoint is called by your own backend / cron / RPC
- * trigger. It does NOT validate `auth.uid()` against `userId` because
- * it's expected to be invoked with a service-role context (or a Vercel
- * cron). For a tighter setup, gate this behind an internal `secret`
- * header before deployment.
+ * Auth model (Phase 13.50, re-confirmed Phase 14.11 A4):
+ *   This endpoint is HARD-GATED behind a shared secret. Every caller
+ *   MUST send `Authorization: Bearer ${INTERNAL_PUSH_SECRET}`. The
+ *   check runs FIRST in POST() — before VAPID setup, body parsing,
+ *   or any DB query — and returns 401 on mismatch / 500 if the
+ *   server forgot to configure the secret. The secret lives only in
+ *   server env (Railway), never in a NEXT_PUBLIC_* var, so the
+ *   browser can't read it. `userId` in the body is therefore trusted
+ *   only because the caller already proved it holds the internal
+ *   secret (a server action / cron / webhook), not an arbitrary
+ *   client. (The earlier version of this comment incorrectly said
+ *   the endpoint was ungated — it has been gated since Phase 13.50.)
  *
  * POST body:
  *   {
