@@ -688,7 +688,7 @@ function PortfolioContent() {
           <>
           {/* بطاقة الحدود الشهرية — Phase 10.96: shrunk further per founder.
               All on a single compact row: label + value + level + tiny progress bar. */}
-          <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-2.5 mb-3 backdrop-blur">
+          <div className="shadow-card bg-white/[0.05] border border-white/[0.08] rounded-xl p-2.5 mb-3 backdrop-blur">
 
             {/* Single-row compact layout */}
             <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -763,7 +763,7 @@ function PortfolioContent() {
           </div>
 
           {/* Unified Wallet Card */}
-          <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-3">
+          <div className="shadow-card bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-3">
             {/* القيمة الإجمالية */}
             <div className="mb-4">
               <div className="text-[11px] text-neutral-500 mb-1">القيمة الإجمالية للمحفظة</div>
@@ -831,7 +831,7 @@ function PortfolioContent() {
                     onClick={btn.onClick}
                     disabled={btn.disabled}
                     className={cn(
-                      "flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-colors",
+                      "shadow-card flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-colors",
                       btn.disabled
                         ? "bg-white/[0.02] border-white/[0.04] text-neutral-600 cursor-not-allowed"
                         : "bg-white/[0.04] border-white/[0.06] text-white hover:bg-white/[0.08]"
@@ -848,7 +848,7 @@ function PortfolioContent() {
           {/* Tabs — Phase 10.82: removed "الرسوم" tab; the unified
               السجل tab now shows deals + fee transactions + transfers
               all in one timeline (per founder spec). */}
-          <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-4">
+          <div className="shadow-card flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-4">
             {[
               { key: "holdings" as const, label: "الحصص", icon: Briefcase },
               { key: "stats" as const, label: "الإحصائيات", icon: BarChart3 },

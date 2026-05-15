@@ -584,7 +584,10 @@ footer .shadow-card { box-shadow: var(--shadow-sm) !important; }
  * don't carry a bg-white/[0.0x] utility, or to force a specific
  * depth level. Tokens flip with the theme automatically.
  * ═══════════════════════════════════════════════════════════════ */
-.shadow-card    { box-shadow: var(--shadow-md); }
+/* !important so the explicit opt-in always wins — even for cards /
+ * buttons nested inside another rounded container (the strict
+ * hierarchy reset is !important too). */
+.shadow-card    { box-shadow: var(--shadow-md) !important; }
 .shadow-card-hover {
   transition: box-shadow 200ms ease, transform 200ms ease;
 }
