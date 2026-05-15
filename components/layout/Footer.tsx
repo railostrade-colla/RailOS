@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { Shield, FileText, Lock, Headphones, BookOpen, Users, TrendingUp, Briefcase, Mail, MessageCircle, Phone } from "lucide-react"
+import { Shield, ShieldCheck, FileText, Lock, Headphones, BookOpen, Users, TrendingUp, Briefcase, Mail, MessageCircle, Phone } from "lucide-react"
 import { APP_VERSION, APP_NAME, APP_NAME_EN, APP_DESCRIPTION, COPYRIGHT_YEAR } from "@/lib/utils/version"
 import { cn } from "@/lib/utils/cn"
 
@@ -33,6 +33,9 @@ export function Footer({ compact = false }: { compact?: boolean }) {
         { label: "من نحن", path: "/about", icon: Shield },
         { label: "الشروط والأحكام", path: "/terms", icon: FileText },
         { label: "سياسة الخصوصية", path: "/privacy", icon: Lock },
+        // Phase 14.11 A7 — clarifies RailOS = organisation platform,
+        // not a financial institution; payment is off-platform.
+        { label: "إخلاء المسؤولية", path: "/disclaimer", icon: ShieldCheck },
       ],
     },
   ]
@@ -59,6 +62,7 @@ export function Footer({ compact = false }: { compact?: boolean }) {
             { label: "من نحن", path: "/about" },
             { label: "الشروط", path: "/terms" },
             { label: "الخصوصية", path: "/privacy" },
+            { label: "إخلاء المسؤولية", path: "/disclaimer" },
             { label: "الدعم", path: "/support" },
           ].map((link) => (
             <button

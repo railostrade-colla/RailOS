@@ -25,6 +25,7 @@ import {
   type ExchangePaymentMethod,
 } from "@/lib/data/payment-proof-submit"
 import { showSuccess, showError } from "@/lib/utils/toast"
+import { OffPlatformPaymentNotice } from "@/components/common/OffPlatformPaymentNotice"
 // Phase 12.8 — proof-submitted sound for buyer (seller hears its own
 // version via the deal-page status-transition watcher).
 import { playPaymentSubmitted } from "@/lib/sounds"
@@ -191,6 +192,8 @@ export function PaymentProofModal({
       }
     >
       <div className="space-y-3">
+        {/* Phase 14.11 A7 — off-platform payment reminder */}
+        <OffPlatformPaymentNotice />
         {/* Payment method picker */}
         <div>
           <label className="block text-[11px] text-neutral-400 mb-1.5">

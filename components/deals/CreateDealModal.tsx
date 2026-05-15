@@ -6,6 +6,7 @@ import { X, ShoppingCart, AlertTriangle, Loader2 } from "lucide-react"
 import { useRealtime } from "@/lib/realtime/RealtimeProvider"
 import { submitDirectBuyRequest, submitPaymentProof, type PaymentMethod } from "@/lib/data/direct-buy"
 import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
+import { OffPlatformPaymentNotice } from "@/components/common/OffPlatformPaymentNotice"
 import { cn } from "@/lib/utils/cn"
 import { PaymentInstructionsBlock } from "@/components/payment/PaymentInstructionsBlock"
 // Phase 11.27 — IntegerInput prevents wheel/arrow-key/spinner from
@@ -221,6 +222,9 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Phase 14.11 A7 — off-platform payment reminder */}
+        <OffPlatformPaymentNotice className="mb-4" />
 
         {/* Shares input */}
         <div className="mb-4">
