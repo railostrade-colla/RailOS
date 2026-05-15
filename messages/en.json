@@ -184,7 +184,15 @@
       "veryStrong": "Very strong",
       "tipsTitle": "💡 Tips to secure your account",
       "submit": "Change password",
-      "verified": "Verified ✓"
+      "verified": "Verified ✓",
+      "verifyBtn": "Verify",
+      "pwdsMatch": "Match ✓",
+      "updating": "Updating...",
+      "updateBtn": "Update password",
+      "tip1": "Never share your password with anyone, whatever the circumstances",
+      "tip2": "Use a different password from your other accounts",
+      "tip3": "Change your password every 3 months",
+      "tip4": "Enable two-factor authentication (2FA) if available"
     }
   },
   "dashboard": {},

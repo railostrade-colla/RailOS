@@ -16,15 +16,16 @@ import {
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
+import { useTranslations } from "next-intl"
 import { cn } from "@/lib/utils/cn"
 
 type Strength = "weak" | "medium" | "strong" | "very_strong"
 
-const STRENGTH_LABEL: Record<Strength, string> = {
-  weak: "ضعيف",
-  medium: "متوسط",
-  strong: "قوي",
-  very_strong: "قوي جداً",
+const STRENGTH_KEY: Record<Strength, string> = {
+  weak: "weak",
+  medium: "medium",
+  strong: "strong",
+  very_strong: "veryStrong",
 }
 
 const STRENGTH_COLOR: Record<Strength, { bar: string; text: string; emoji: string }> = {
@@ -55,6 +56,10 @@ function computeStrength(pw: string): Strength {
 
 export default function ResetPasswordPage() {
   const router = useRouter()
+  const t = useTranslations("auth.reset")
+  const tc = useTranslations("common")
+  const te = useTranslations("errors")
+  const tn = useTranslations("notifications")
 
   const [currentPw, setCurrentPw] = useState("")
   const [currentVerified, setCurrentVerified] = useState(false)
@@ -81,7 +86,7 @@ export default function ResetPasswordPage() {
   // ─── Handlers ──────────────────────────────────────────────────────
   const handleVerify = async () => {
     if (!currentPw) {
-      showError("أدخل كلمة المرور الحالية")
+      showError(t("currentPlaceholder"))
       return
     }
     setVerifying(true)
@@ -89,27 +94,27 @@ export default function ResetPasswordPage() {
 
     // Mock check — accept any password ≥ 6 chars (server check happens later)
     if (currentPw.length < 6) {
-      showError("كلمة المرور غير صحيحة")
+      showError(te("currentPwdWrong"))
       setCurrentVerified(false)
     } else {
       setCurrentVerified(true)
-      showSuccess("تم التحقق ✓")
+      showSuccess(t("verified"))
     }
     setVerifying(false)
   }
 
   const handleSubmit = async () => {
     if (!canSubmit) {
-      if (!currentVerified) showError("تحقّق من كلمة المرور الحالية أولاً")
-      else if (!allRulesMet) showError("كلمة المرور لا تستوفي الشروط")
-      else if (!passwordsMatch) showError("الكلمتان غير متطابقتين")
-      else if (!isDifferentFromCurrent) showError("الكلمة الجديدة يجب أن تختلف عن الحالية")
+      if (!currentVerified) showError(te("currentPwdFirst"))
+      else if (!allRulesMet) showError(te("pwdNotMeetRules"))
+      else if (!passwordsMatch) showError(te("twoPwdNoMatch"))
+      else if (!isDifferentFromCurrent) showError(te("newMustDiffer"))
       return
     }
 
     setSubmitting(true)
     await new Promise((r) => setTimeout(r, 800))
-    showSuccess("تم تحديث كلمة المرور بنجاح! 🔒")
+    showSuccess(tn("pwdUpdated"))
     setTimeout(() => router.push("/profile"), 600)
   }
 
@@ -126,8 +131,8 @@ export default function ResetPasswordPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-md mx-auto pb-20">
 
           <PageHeader
-            title="تغيير كلمة المرور"
-            subtitle="حدّث كلمة المرور للحفاظ على أمان حسابك"
+            title={t("title")}
+            subtitle={t("subtitle")}
             backHref="/profile"
           />
 
@@ -138,11 +143,11 @@ export default function ResetPasswordPage() {
           )}>
             <div className="flex items-center gap-2 mb-3">
               <Lock className="w-4 h-4 text-blue-400" strokeWidth={2} />
-              <h3 className="text-sm font-bold text-white">كلمة المرور الحالية</h3>
+              <h3 className="text-sm font-bold text-white">{t("currentLabel")}</h3>
               {currentVerified && (
-                <span className="ml-auto text-[10px] text-green-400 font-bold bg-green-400/[0.1] border border-green-400/30 px-2 py-0.5 rounded flex items-center gap-1">
+                <span className="ms-auto text-[10px] text-green-400 font-bold bg-green-400/[0.1] border border-green-400/30 px-2 py-0.5 rounded flex items-center gap-1">
                   <Check className="w-2.5 h-2.5" strokeWidth={3} />
-                  موثق
+                  {tc("status.verified")}
                 </span>
               )}
             </div>
@@ -156,7 +161,7 @@ export default function ResetPasswordPage() {
                     setCurrentPw(e.target.value)
                     if (currentVerified) setCurrentVerified(false)
                   }}
-                  placeholder="أدخل كلمة المرور الحالية"
+                  placeholder={t("currentPlaceholder")}
                   disabled={currentVerified}
                   className="w-full bg-white/[0.04] border border-white/[0.08] focus:border-white/20 rounded-xl pr-10 pl-4 py-3 text-sm text-white outline-none disabled:opacity-60 transition-colors"
                   dir="ltr"
@@ -180,7 +185,7 @@ export default function ResetPasswordPage() {
                   ) : (
                     <Check className="w-3.5 h-3.5" strokeWidth={2} />
                   )}
-                  تحقّق
+                  {t("verifyBtn")}
                 </button>
               )}
             </div>
@@ -193,18 +198,18 @@ export default function ResetPasswordPage() {
           )}>
             <div className="flex items-center gap-2 mb-4">
               <Sparkles className="w-4 h-4 text-yellow-400" strokeWidth={2} />
-              <h3 className="text-sm font-bold text-white">كلمة المرور الجديدة</h3>
+              <h3 className="text-sm font-bold text-white">{t("newLabel")}</h3>
             </div>
 
             {/* New password */}
             <div className="mb-3">
-              <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">كلمة المرور الجديدة</div>
+              <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">{t("newLabel")}</div>
               <div className="relative">
                 <input
                   type={showNew ? "text" : "password"}
                   value={newPw}
                   onChange={(e) => setNewPw(e.target.value)}
-                  placeholder="على الأقل 8 أحرف"
+                  placeholder={t("newPlaceholder")}
                   className="w-full bg-white/[0.04] border border-white/[0.08] focus:border-white/20 rounded-xl pr-10 pl-4 py-3 text-sm text-white outline-none transition-colors"
                   dir="ltr"
                 />
@@ -221,10 +226,10 @@ export default function ResetPasswordPage() {
               {newPw && (
                 <div className="mt-2">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-neutral-500">قوة كلمة المرور</span>
+                    <span className="text-[10px] text-neutral-500">{t("strengthTitle")}</span>
                     <span className={cn("text-[10px] font-bold flex items-center gap-1", sc.text)}>
                       <span>{sc.emoji}</span>
-                      {STRENGTH_LABEL[strength]}
+                      {t(STRENGTH_KEY[strength])}
                     </span>
                   </div>
                   <div className="h-1 bg-white/[0.05] rounded-full overflow-hidden">
@@ -236,13 +241,13 @@ export default function ResetPasswordPage() {
 
             {/* Confirm */}
             <div className="mb-4">
-              <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">تأكيد كلمة المرور</div>
+              <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">{t("confirmLabel")}</div>
               <div className="relative">
                 <input
                   type={showConfirm ? "text" : "password"}
                   value={confirmPw}
                   onChange={(e) => setConfirmPw(e.target.value)}
-                  placeholder="كرّر كلمة المرور الجديدة"
+                  placeholder={t("repeatPlaceholder")}
                   className={cn(
                     "w-full bg-white/[0.04] border focus:border-white/20 rounded-xl pr-10 pl-4 py-3 text-sm text-white outline-none transition-colors",
                     confirmPw && !passwordsMatch ? "border-red-500/40" : "border-white/[0.08]",
@@ -260,13 +265,13 @@ export default function ResetPasswordPage() {
               {confirmPw && !passwordsMatch && (
                 <div className="text-[10px] text-red-400 mt-1.5 flex items-center gap-1">
                   <X className="w-3 h-3" strokeWidth={3} />
-                  الكلمتان غير متطابقتين
+                  {te("twoPwdNoMatch")}
                 </div>
               )}
               {passwordsMatch && (
                 <div className="text-[10px] text-green-400 mt-1.5 flex items-center gap-1">
                   <Check className="w-3 h-3" strokeWidth={3} />
-                  متطابقتان ✓
+                  {t("pwdsMatch")}
                 </div>
               )}
             </div>
@@ -276,20 +281,20 @@ export default function ResetPasswordPage() {
               <div className="bg-yellow-400/[0.06] border border-yellow-400/25 rounded-lg p-2.5 mb-4 flex gap-2 items-start">
                 <AlertCircle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0 mt-0.5" strokeWidth={2} />
                 <div className="text-[11px] text-yellow-300 leading-relaxed">
-                  الكلمة الجديدة يجب أن تختلف عن الحالية
+                  {te("newMustDiffer")}
                 </div>
               </div>
             )}
 
             {/* Rules checklist */}
             <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
-              <div className="text-[10px] text-neutral-500 mb-2 font-bold">قواعد كلمة المرور:</div>
+              <div className="text-[10px] text-neutral-500 mb-2 font-bold">{t("rulesTitle")}</div>
               <div className="space-y-1.5">
-                <Rule met={rules.minLen} text="8 أحرف على الأقل" />
-                <Rule met={rules.upper} text="حرف كبير واحد (A-Z)" />
-                <Rule met={rules.lower} text="حرف صغير واحد (a-z)" />
-                <Rule met={rules.digit} text="رقم واحد (0-9)" />
-                <Rule met={rules.symbol} text="رمز خاص (!@#$%^&*)" />
+                <Rule met={rules.minLen} text={t("ruleLen")} />
+                <Rule met={rules.upper} text={t("ruleUpper")} />
+                <Rule met={rules.lower} text={t("ruleLower")} />
+                <Rule met={rules.digit} text={t("ruleDigit")} />
+                <Rule met={rules.symbol} text={t("ruleSpecial")} />
               </div>
             </div>
           </div>
@@ -298,24 +303,24 @@ export default function ResetPasswordPage() {
           <div className="bg-purple-400/[0.06] border border-purple-400/25 rounded-2xl p-4 mb-5 backdrop-blur">
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="w-4 h-4 text-purple-400" strokeWidth={2} />
-              <h3 className="text-sm font-bold text-white">💡 نصائح لأمان حسابك</h3>
+              <h3 className="text-sm font-bold text-white">{t("tipsTitle")}</h3>
             </div>
             <ul className="space-y-1.5 text-[11px] text-neutral-300 leading-relaxed">
               <li className="flex gap-2">
                 <span className="text-purple-400">•</span>
-                لا تشارك كلمة المرور مع أحد مهما كانت الظروف
+                {t("tip1")}
               </li>
               <li className="flex gap-2">
                 <span className="text-purple-400">•</span>
-                استخدم كلمة مرور مختلفة عن باقي حساباتك
+                {t("tip2")}
               </li>
               <li className="flex gap-2">
                 <span className="text-purple-400">•</span>
-                غيّر كلمة المرور كل 3 أشهر
+                {t("tip3")}
               </li>
               <li className="flex gap-2">
                 <span className="text-purple-400">•</span>
-                فعّل المصادقة الثنائية (2FA) إذا متاحة
+                {t("tip4")}
               </li>
             </ul>
           </div>
@@ -326,7 +331,7 @@ export default function ResetPasswordPage() {
               onClick={() => router.back()}
               className="flex-1 bg-white/[0.05] border border-white/[0.1] text-white py-3.5 rounded-xl text-sm hover:bg-white/[0.08] transition-colors"
             >
-              إلغاء
+              {tc("buttons.cancel")}
             </button>
             <button
               onClick={handleSubmit}
@@ -341,12 +346,12 @@ export default function ResetPasswordPage() {
               {submitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-neutral-400 border-t-transparent rounded-full animate-spin" />
-                  جاري التحديث...
+                  {t("updating")}
                 </>
               ) : (
                 <>
                   <CheckCircle className="w-4 h-4" strokeWidth={2} />
-                  تحديث كلمة المرور
+                  {t("updateBtn")}
                 </>
               )}
             </button>
