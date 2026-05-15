@@ -28,6 +28,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { checkRateLimit, clientKey } from "@/lib/utils/rate-limit"
 
 interface CreateAdminBody {
   full_name?: string
@@ -38,6 +39,27 @@ interface CreateAdminBody {
 }
 
 export async function POST(req: Request) {
+  // ─── 0. Rate limit (Phase 14.12 S2) ────────────────────────────
+  // Defense in depth even though step 1 already gates to super_admin:
+  // caps brute-force / scripted abuse before any DB or service-role
+  // work. 5 admin-creations per IP per 10 min is generous for a real
+  // operator, hostile for a script.
+  {
+    const rl = checkRateLimit(`create-admin:${clientKey(req)}`, {
+      limit: 5,
+      windowMs: 10 * 60_000,
+    })
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "too_many_requests" },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rl.retryAfterSec) },
+        },
+      )
+    }
+  }
+
   // ─── 1. Caller authentication + super_admin gate ───────────────
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

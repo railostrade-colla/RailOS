@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { checkRateLimit, clientKey } from "@/lib/utils/rate-limit"
 
 export const runtime = "nodejs"
 
@@ -16,6 +17,23 @@ export const runtime = "nodejs"
  */
 export async function POST(req: NextRequest) {
   try {
+    // Phase 14.12 S2 — rate limit subscription upserts so a client
+    // can't hammer the table. 20 per IP per 5 min covers legit
+    // multi-device re-subscribes; blocks a loop.
+    const rl = checkRateLimit(`push-sub:${clientKey(req)}`, {
+      limit: 20,
+      windowMs: 5 * 60_000,
+    })
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "too_many_requests" },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rl.retryAfterSec) },
+        },
+      )
+    }
+
     const supabase = await createClient()
     const {
       data: { user },

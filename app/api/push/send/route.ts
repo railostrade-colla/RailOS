@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import webpush from "web-push"
 import { createClient } from "@/lib/supabase/server"
+import { checkRateLimit, clientKey } from "@/lib/utils/rate-limit"
 
 export const runtime = "nodejs"
 
@@ -102,6 +103,23 @@ function configureWebPush(): boolean {
 
 export async function POST(req: NextRequest) {
   try {
+    // Phase 14.12 S2 — rate limit BEFORE the secret check so a leaked
+    // or brute-forced secret still can't be used to blast push spam.
+    // 60 sends per IP per minute is plenty for legit fan-out bursts.
+    const rl = checkRateLimit(`push-send:${clientKey(req)}`, {
+      limit: 60,
+      windowMs: 60_000,
+    })
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "too_many_requests" },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rl.retryAfterSec) },
+        },
+      )
+    }
+
     // Phase 13.50 — gate the endpoint with a shared secret. Previously
     // anyone could POST to /api/push/send and impersonate the platform
     // (phishing via push). Internal callers (server actions, scheduled
