@@ -43,3 +43,5 @@ export type { BadgeProps, BadgeColor, BadgeVariant, BadgeSize } from "./Badge"
 
 export { Tabs } from "./Tabs"
 export type { TabsProps, TabItem, TabsVariant, TabsSize } from "./Tabs"
+export { CapsuleTabs } from "./CapsuleTabs"
+export type { CapsuleTabsProps } from "./CapsuleTabs"
