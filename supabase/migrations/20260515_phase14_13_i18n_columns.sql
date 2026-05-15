@@ -18,16 +18,19 @@
 BEGIN;
 
 -- 1. Bilingual content ──────────────────────────────────────────────
+-- Real schema: projects(name, description), news(title, content),
+-- discount_brands(brand_name, description). There is NO `discounts`
+-- table — the discount content lives in `discount_brands`.
 ALTER TABLE public.projects
   ADD COLUMN IF NOT EXISTS name_en        TEXT,
   ADD COLUMN IF NOT EXISTS description_en TEXT;
 
 ALTER TABLE public.news
-  ADD COLUMN IF NOT EXISTS title_en TEXT,
-  ADD COLUMN IF NOT EXISTS body_en  TEXT;
+  ADD COLUMN IF NOT EXISTS title_en   TEXT,
+  ADD COLUMN IF NOT EXISTS content_en TEXT;
 
-ALTER TABLE public.discounts
-  ADD COLUMN IF NOT EXISTS title_en       TEXT,
+ALTER TABLE public.discount_brands
+  ADD COLUMN IF NOT EXISTS brand_name_en  TEXT,
   ADD COLUMN IF NOT EXISTS description_en TEXT;
 
 -- 2. Appearance prefs on user_preferences (table added in the
