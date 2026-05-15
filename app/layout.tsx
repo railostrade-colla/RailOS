@@ -4,6 +4,8 @@ import { RealtimeProvider } from "@/lib/realtime/RealtimeProvider"
 import { DealRequestModal } from "@/components/deals/DealRequestModal"
 import { ContractInviteModal } from "@/components/contracts/ContractInviteModal"
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt"
+import { NextIntlClientProvider } from "next-intl"
+import { getLocale, getMessages } from "next-intl/server"
 import { ThemeProvider } from "@/lib/theme/ThemeProvider"
 import { PreferencesProvider } from "@/lib/preferences/usePreferences"
 import "./globals.css"
@@ -62,10 +64,15 @@ function supabaseOrigin(): string | null {
   }
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const sbOrigin = supabaseOrigin()
+  // Phase 14.13 Batch 0 — locale from NEXT_LOCALE cookie (next-intl
+  // request config). Drives <html lang/dir> dynamically; default ar.
+  const locale = await getLocale()
+  const messages = await getMessages()
+  const dir = locale === "ar" ? "rtl" : "ltr"
   return (
-    <html lang="ar" dir="rtl" suppressHydrationWarning>
+    <html lang={locale} dir={dir} suppressHydrationWarning>
       <head>
         {/* Phase 14.13 M2 — no-FOUC theme bootstrap (runs pre-paint) */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
@@ -75,6 +82,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           The old hardcoded `bg-black text-white` would have pinned
           the shell dark even in light mode. */}
       <body className="antialiased">
+        <NextIntlClientProvider locale={locale} messages={messages}>
         <ThemeProvider>
         <PreferencesProvider>
         {/* Phase 14.12 P3 — Next 16 / React 19 hoist these <link>s into
@@ -109,6 +117,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         </PreferencesProvider>
         </ThemeProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   )

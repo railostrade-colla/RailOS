@@ -1,5 +1,11 @@
 import type { NextConfig } from "next"
 import { withSentryConfig } from "@sentry/nextjs"
+import createNextIntlPlugin from "next-intl/plugin"
+
+// Phase 14.13 Batch 0 — next-intl (cookie-based locale, NO URL
+// routing / no [locale] segment / no middleware). Locale resolves
+// from the NEXT_LOCALE cookie inside i18n/request.ts.
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts")
 
 const nextConfig: NextConfig = {
   // ─── Performance ─────────────────────────────────────────
@@ -87,7 +93,7 @@ const nextConfig: NextConfig = {
  * Without them, Sentry still captures errors but stack traces stay
  * minified — that's fine for a first push.
  */
-export default withSentryConfig(nextConfig, {
+export default withNextIntl(withSentryConfig(nextConfig, {
   // Org / project — read from env so we don't hard-code values.
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
@@ -107,4 +113,4 @@ export default withSentryConfig(nextConfig, {
   // Optional: tunnel route to bypass ad-blockers. Set to a path you
   // don't already use — keep disabled for now to avoid surprises.
   // tunnelRoute: "/monitoring",
-})
+}))
