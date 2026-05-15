@@ -3,26 +3,15 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
-  Edit2,
-  Lock,
-  Bell,
-  BarChart3,
-  CreditCard,
-  Globe,
-  HelpCircle,
-  LogOut,
-  Crown,
-  Calendar,
-  Briefcase,
-  TrendingUp,
-  Trophy,
-  Mail,
+  Edit2, LogOut, Crown, Calendar, Briefcase, TrendingUp, Trophy,
+  Mail, User, Wallet, Lock, BarChart3, Gift, Settings,
 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, StatCard, Badge, Modal } from "@/components/ui"
+import { SettingsCategoryCard } from "@/components/settings"
 import { signOut } from "@/lib/supabase/auth-helpers"
-import { showSuccess, showInfo } from "@/lib/utils/toast"
+import { showSuccess } from "@/lib/utils/toast"
 // Profile + portfolio numbers both come from Supabase (Phases 4.1 + I).
 import { fmtLimit } from "@/lib/utils/contractLimits"
 import {
@@ -35,32 +24,24 @@ import { getPortfolioData, type PortfolioSummary } from "@/lib/data/portfolio"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils/cn"
 
-// ─── Settings menu category ───────────────────────────────────
-interface MenuItem {
-  label: string
-  description?: string
-  onClick: () => void
-  variant?: "default" | "danger"
-}
-
-interface MenuCategory {
-  icon: string
-  title: string
-  items: MenuItem[]
-}
-
 // Skeleton bar — same dark tone as inactive surfaces, with a subtle pulse.
 function Skel({ className }: { className: string }) {
   return <span className={cn("inline-block bg-white/[0.08] rounded animate-pulse", className)} />
 }
 
+/**
+ * Phase 14.13 Unified UI Part 3 — Profile redesigned to match the new
+ * Settings language: centered hero (avatar + level + KYC) → quick
+ * stats → vertical category cards → logout. ALL data hooks (profile /
+ * portfolio / extras / follows) and the logout flow are preserved
+ * verbatim. The old settings menu's stale `/settings?tab=` links are
+ * replaced with the real Part-2 sub-page routes.
+ */
 export default function ProfilePage() {
   const router = useRouter()
   const [showLogoutModal, setShowLogoutModal] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
 
-  // Real profile + portfolio from Supabase. Mock summary used as a
-  // first-paint placeholder so the StatCards never render with NaN.
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null)
   const [dbPortfolio, setDbPortfolio] = useState<PortfolioSummary | null>(null)
   const [extras, setExtras] = useState<UserProfileExtras | null>(null)
@@ -129,124 +110,115 @@ export default function ProfilePage() {
     showSuccess("تم تسجيل الخروج بنجاح")
     // Phase 11.03 — HARD navigation. window.location.replace clears all
     // React state, dedup caches, realtime channels, and prevents the
-    // back button from returning into a logged-out session. Replaces
-    // the older router.push("/login") + 600ms setTimeout.
+    // back button from returning into a logged-out session.
     if (typeof window !== "undefined") {
       window.location.replace("/login")
     }
   }
 
-  // ─── Settings menu config ────────────────────────────────────
-  const menuCategories: MenuCategory[] = [
+  // ─── Category cards (real routes only — no stale ?tab= links) ──
+  const categories = [
     {
-      icon: "🔐",
+      icon: User,
+      title: "البيانات الشخصية",
+      subtitle: "الاسم، البريد، الهاتف",
+      color: "#F472B6",
+      href: "/profile-setup",
+    },
+    {
+      icon: Wallet,
+      title: "المحفظة",
+      subtitle: "الرصيد، الحصص، العمليات",
+      color: "#60A5FA",
+      href: "/portfolio",
+    },
+    {
+      icon: Lock,
       title: "الأمان والخصوصية",
-      items: [
-        { label: "تغيير كلمة المرور", description: "حدّث كلمة المرور الحالية", onClick: () => router.push("/reset-password") },
-        { label: "المصادقة الثنائية", description: "حماية إضافية لحسابك", onClick: () => showInfo("ميزة المصادقة الثنائية قادمة قريباً") },
-      ],
+      subtitle: "كلمة السر، البصمة، الجلسات",
+      color: "#4ADE80",
+      href: "/settings/security",
     },
     {
-      icon: "🔔",
-      title: "الإشعارات",
-      items: [
-        { label: "إعدادات الإشعارات", description: "تفضيلات الإشعارات الفورية", onClick: () => router.push("/settings?tab=notifications") },
-        { label: "البريد الإلكتروني", description: "ملخصات أسبوعية وعروض", onClick: () => router.push("/settings?tab=notifications") },
-      ],
+      icon: BarChart3,
+      title: "النشاط والصفقات",
+      subtitle: "صفقاتك وعملياتك وسجلّك",
+      color: "#FBBF24",
+      href: "/orders",
     },
     {
-      icon: "📊",
-      title: "الحساب",
-      items: [
-        { label: "حدودي الشهرية", description: `حسب مستواك (${fmtLimit(portfolio.totalCost)} د.ع)`, onClick: () => router.push("/portfolio") },
-        { label: "تاريخ النشاط", description: "كل صفقاتك وعملياتك", onClick: () => router.push("/orders") },
-        { label: "التوثيق KYC", description: "حالة التوثيق الحالية", onClick: () => router.push("/kyc") },
-      ],
+      icon: Gift,
+      title: "برنامج السفراء",
+      subtitle: "رمز الإحالة، المحالون، المكافآت",
+      color: "#C084FC",
+      href: "/ambassador",
     },
     {
-      icon: "💳",
-      title: "المالية",
-      items: [
-        { label: "وحدات الرسوم", description: "رصيد + شراء وحدات", onClick: () => router.push("/settings?tab=finance") },
-        { label: "كشف الحسابات", description: "تنزيل سجل المعاملات", onClick: () => showInfo("جاري تجهيز كشف الحسابات...") },
-      ],
+      icon: Settings,
+      title: "الإعدادات",
+      subtitle: "كل تفضيلات التطبيق",
+      color: "#22D3EE",
+      href: "/settings",
     },
-    {
-      icon: "🌐",
-      title: "التطبيق",
-      items: [
-        { label: "اللغة والمنطقة", description: "العربية + بغداد", onClick: () => router.push("/settings?tab=general") },
-        { label: "المظهر", description: "الوضع الليلي + حجم الخط", onClick: () => router.push("/settings?tab=appearance") },
-        { label: "حول التطبيق", description: "الإصدار والشروط", onClick: () => router.push("/about") },
-      ],
-    },
-    {
-      icon: "❓",
-      title: "الدعم والمساعدة",
-      items: [
-        { label: "مركز المساعدة", description: "أسئلة شائعة وإجابات", onClick: () => router.push("/support") },
-        { label: "تواصل معنا", description: "اتصال + WhatsApp + بريد", onClick: () => router.push("/support") },
-        { label: "اقتراحات وملاحظات", description: "ساعدنا نتحسّن", onClick: () => router.push("/support") },
-      ],
-    },
-  ]
+  ] as const
 
   const avatarChar = profile?.full_name?.charAt(0) ?? "?"
 
   return (
     <AppLayout>
       <div className="relative">
-<div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
+        <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader title="ملفي الشخصي" subtitle="إدارة حسابك" showBack={false} />
 
-          {/* ═══ § 1 Profile Card (Hero) ═══ */}
+          {/* ═══ § 1 Hero — centered avatar + level + KYC ═══ */}
           <Card variant="gradient" color="purple" className="mb-6">
-            <div className="flex items-start gap-4 mb-5 flex-wrap">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-400/[0.3] to-blue-400/[0.2] border border-purple-400/30 flex items-center justify-center text-3xl font-bold text-white flex-shrink-0">
-                {loading ? <Skel className="w-8 h-8 rounded-md" /> : avatarChar}
+            <div className="flex flex-col items-center text-center">
+              <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-purple-400/[0.3] to-blue-400/[0.2] border border-purple-400/30 flex items-center justify-center text-4xl font-bold text-white">
+                {loading ? <Skel className="w-10 h-10 rounded-md" /> : avatarChar}
               </div>
-              <div className="flex-1 min-w-[200px]">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  {loading ? (
-                    <>
-                      <Skel className="h-5 w-32" />
-                      <Skel className="h-4 w-16 rounded-full" />
-                    </>
-                  ) : (
-                    <>
-                      <h2 className="text-lg font-bold text-white">
-                        {profile?.full_name ?? "—"}
-                      </h2>
-                      <Badge color="purple" variant="soft" icon={profile?.level_icon ?? "⭐"}>
-                        {profile?.level_label ?? "—"}
-                      </Badge>
-                      {profile?.is_verified && (
-                        <Badge color="green" variant="soft" size="xs">✓ موثق</Badge>
-                      )}
-                    </>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5 text-[11px] text-neutral-400 mb-3">
-                  <Mail className="w-3 h-3" />
-                  {loading ? (
-                    <Skel className="h-3 w-40" />
-                  ) : (
-                    <span dir="ltr">{profile?.email ?? "—"}</span>
-                  )}
-                </div>
-                <button
-                  onClick={() => router.push("/profile-setup")}
-                  className="bg-white/[0.06] border border-white/[0.1] hover:bg-white/[0.1] text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
-                >
-                  <Edit2 className="w-3 h-3" strokeWidth={2} />
-                  تعديل الملف
-                </button>
+
+              <div className="flex items-center gap-2 mt-4 mb-1 flex-wrap justify-center">
+                {loading ? (
+                  <>
+                    <Skel className="h-5 w-32" />
+                    <Skel className="h-4 w-16 rounded-full" />
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-lg font-bold text-white">
+                      {profile?.full_name ?? "—"}
+                    </h2>
+                    <Badge color="purple" variant="soft" icon={profile?.level_icon ?? "⭐"}>
+                      {profile?.level_label ?? "—"}
+                    </Badge>
+                    {profile?.is_verified && (
+                      <Badge color="green" variant="soft" size="xs">✓ موثق</Badge>
+                    )}
+                  </>
+                )}
               </div>
+
+              <div className="flex items-center gap-1.5 text-[11px] text-neutral-400 mb-4">
+                <Mail className="w-3 h-3" />
+                {loading ? (
+                  <Skel className="h-3 w-40" />
+                ) : (
+                  <span dir="ltr">{profile?.email ?? "—"}</span>
+                )}
+              </div>
+
+              <button
+                onClick={() => router.push("/profile-setup")}
+                className="bg-white/[0.06] border border-white/[0.1] hover:bg-white/[0.1] text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
+              >
+                <Edit2 className="w-3 h-3" strokeWidth={2} />
+                تعديل الملف
+              </button>
             </div>
 
             {/* Quick stats inside hero */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2 mt-5">
               <StatCard
                 size="sm"
                 label="تاريخ الانضمام"
@@ -289,7 +261,6 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* Features */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
                 {[
                   { icon: "⚡", text: "بيع فوري بدون انتظار" },
@@ -371,38 +342,18 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* ═══ § 4 Settings Menu ═══ */}
+          {/* ═══ § 4 Category cards ═══ */}
           <SectionHeader title="⚙️ الإعدادات" subtitle="إدارة كاملة لحسابك" />
-          <div className="space-y-4 mb-6">
-            {menuCategories.map((cat) => (
-              <Card key={cat.title}>
-                <div className="text-xs font-bold text-white mb-2 flex items-center gap-2">
-                  <span className="text-base">{cat.icon}</span>
-                  {cat.title}
-                </div>
-                <div className="divide-y divide-white/[0.04]">
-                  {cat.items.map((item) => (
-                    <button
-                      key={item.label}
-                      onClick={item.onClick}
-                      className="w-full flex items-center justify-between gap-3 py-2.5 hover:bg-white/[0.04] rounded-lg px-2 -mx-2 transition-colors text-right"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className={cn(
-                          "text-sm font-medium",
-                          item.variant === "danger" ? "text-red-400" : "text-white",
-                        )}>
-                          {item.label}
-                        </div>
-                        {item.description && (
-                          <div className="text-[11px] text-neutral-500 mt-0.5">{item.description}</div>
-                        )}
-                      </div>
-                      <span className="text-neutral-500 flex-shrink-0">←</span>
-                    </button>
-                  ))}
-                </div>
-              </Card>
+          <div className="flex flex-col gap-3 mb-6">
+            {categories.map((c) => (
+              <SettingsCategoryCard
+                key={c.href}
+                icon={c.icon}
+                title={c.title}
+                subtitle={c.subtitle}
+                color={c.color}
+                href={c.href}
+              />
             ))}
           </div>
 
