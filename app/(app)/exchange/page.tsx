@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, useState, useEffect, useMemo } from "react"
+import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChevronDown, Search, Plus, X, AlertTriangle, ShoppingCart, Clock, Wallet, ChevronLeft, Lock, History, Trash2, Loader2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -138,8 +139,13 @@ function ProjectSelector({
         <div className="flex items-center gap-3 min-w-0">
           {selectedProject?.logo_url ? (
             <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/[0.1] bg-white/[0.04] flex-shrink-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={selectedProject.logo_url} alt={selectedProject.name} className="w-full h-full object-cover" />
+              <Image
+                src={selectedProject.logo_url}
+                alt={selectedProject.name}
+                width={40}
+                height={40}
+                className="w-full h-full object-cover"
+              />
             </div>
           ) : (
             <span className="text-2xl flex-shrink-0">
@@ -210,8 +216,13 @@ function ProjectSelector({
               >
                 {p.logo_url ? (
                   <div className="w-9 h-9 rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.04] flex-shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.logo_url} alt={p.name} className="w-full h-full object-cover" />
+                    <Image
+                      src={p.logo_url}
+                      alt={p.name}
+                      width={36}
+                      height={36}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                 ) : (
                   <span className="text-xl">{sectorIcon(p.sector)}</span>

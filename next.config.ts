@@ -12,6 +12,20 @@ const nextConfig: NextConfig = {
       "@supabase/supabase-js",
     ],
   },
+  // Phase 14.12 P2 — allow next/Image to optimize Supabase Storage
+  // assets (project logos, gallery images). Wildcard on the supabase.co
+  // host so it works across environments without hard-coding the
+  // project ref. data:/blob: previews in admin upload forms stay on
+  // plain <img> (next/Image can't optimize those anyway).
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**.supabase.co",
+        pathname: "/storage/v1/object/**",
+      },
+    ],
+  },
   trailingSlash: false,
   // Static asset caching — browser keeps fonts/images around for 30
   // days, which is the biggest win for repeat-visitor performance.

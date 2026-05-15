@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import dynamic from "next/dynamic"
+import Image from "next/image"
 import { useRouter, useParams } from "next/navigation"
 import { ShoppingCart, Heart, X, Image as ImageIcon, Clock, TrendingUp, TrendingDown, AlertCircle, Building2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -1075,10 +1076,15 @@ export default function ProjectDetailPage() {
                     href={src}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="aspect-[4/3] bg-white/[0.05] border border-white/[0.08] rounded-2xl overflow-hidden block hover:border-white/[0.2] transition-colors"
+                    className="relative aspect-[4/3] bg-white/[0.05] border border-white/[0.08] rounded-2xl overflow-hidden block hover:border-white/[0.2] transition-colors"
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt={`صورة ${i + 1}`} className="w-full h-full object-cover" />
+                    <Image
+                      src={src}
+                      alt={`صورة ${i + 1}`}
+                      fill
+                      sizes="(max-width: 768px) 50vw, 33vw"
+                      className="object-cover"
+                    />
                   </a>
                 ))}
               </div>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { ChevronDown, Search, X, AlertTriangle, Check, Wallet, ShoppingCart, Tag, Clock, FileText, Info, Lock, Coins } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -92,8 +93,13 @@ function ProjectDropdown({
           {/* Phase 11.23 — show real logo when available, else sector icon. */}
           {selected?.logo_url ? (
             <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/[0.1] bg-white/[0.04] flex-shrink-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={selected.logo_url} alt={selected.name} className="w-full h-full object-cover" />
+              <Image
+                src={selected.logo_url}
+                alt={selected.name}
+                width={40}
+                height={40}
+                className="w-full h-full object-cover"
+              />
             </div>
           ) : (
             <span className="text-2xl flex-shrink-0">
@@ -159,8 +165,13 @@ function ProjectDropdown({
                   >
                     {p.logo_url ? (
                       <div className="w-9 h-9 rounded-lg overflow-hidden border border-white/[0.08] bg-white/[0.04] flex-shrink-0">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={p.logo_url} alt={p.name} className="w-full h-full object-cover" />
+                        <Image
+                          src={p.logo_url}
+                          alt={p.name}
+                          width={36}
+                          height={36}
+                          className="w-full h-full object-cover"
+                        />
                       </div>
                     ) : (
                       <span className="text-xl flex-shrink-0">{sectorIcon(p.sector)}</span>

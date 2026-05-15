@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, useEffect, useMemo, useState } from "react"
+import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Send, Download, Zap, CreditCard, TrendingUp, X, Coins, ArrowDownToLine, ArrowUpFromLine, Briefcase, BarChart3, History, Trophy, Sparkles, Users } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -933,7 +934,13 @@ function PortfolioContent() {
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-xl flex-shrink-0 overflow-hidden">
                               {h.project?.logo_url ? (
-                                <img src={h.project.logo_url} alt="" className="w-full h-full object-cover" />
+                                <Image
+                                  src={h.project.logo_url}
+                                  alt=""
+                                  width={44}
+                                  height={44}
+                                  className="w-full h-full object-cover"
+                                />
                               ) : (
                                 <span>{sectorIcon(h.project?.sector || "")}</span>
                               )}
