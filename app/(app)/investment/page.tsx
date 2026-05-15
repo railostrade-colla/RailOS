@@ -30,9 +30,10 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
-import { ShoppingCart, TrendingDown, ArrowLeft, Info } from "lucide-react"
+import { ShoppingCart, TrendingDown, Info } from "lucide-react"
 import dynamic from "next/dynamic"
 import { AppLayout } from "@/components/layout/AppLayout"
+import { PageHeader } from "@/components/layout/PageHeader"
 // Phase 14.11 A6 — ProjectChart pulls in recharts (~65 KB). Loading
 // it via next/dynamic({ ssr:false }) keeps recharts out of the
 // investment page's initial JS; it streams in alongside the
@@ -290,22 +291,13 @@ function InvestmentPageContent() {
            padding) so it reads like a dedicated trading surface
            on desktop. Mobile keeps tighter padding for legibility. */}
       <div className="px-2 sm:px-4 lg:px-6 py-4 w-full">
-        {/* Header — back + title */}
-        <div className="flex items-center justify-between mb-4">
-          <button
-            onClick={() => router.back()}
-            className="w-9 h-9 rounded-full bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] flex items-center justify-center"
-            aria-label="رجوع"
-          >
-            <ArrowLeft className="w-4 h-4 text-neutral-300 rotate-180" />
-          </button>
-          <div className="text-right">
-            <div className="text-base sm:text-lg font-bold text-white">📈 الاستثمار</div>
-            <div className="text-[10px] text-neutral-500">
-              تابع أداء المشروع لحظياً قبل اتخاذ القرار
-            </div>
-          </div>
-        </div>
+        {/* Header — standard PageHeader (no back, left-aligned title,
+            no emoji) to match the rest of the app. */}
+        <PageHeader
+          title="الاستثمار"
+          subtitle="تابع أداء المشروع لحظياً قبل اتخاذ القرار"
+          showBack={false}
+        />
 
         {/* 1. Project selector */}
         <div className="mb-4">

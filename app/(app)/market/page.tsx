@@ -6,7 +6,7 @@ import { Search, X, Calendar, ChevronLeft, Clock } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { CompanyCard, ProjectCard } from "@/components/cards"
-import { Card, SectionHeader, Tabs, Badge, EmptyState, Modal, SkeletonCard } from "@/components/ui"
+import { Card, SectionHeader, Badge, EmptyState, Modal, SkeletonCard } from "@/components/ui"
 // Phase 14.07f — types + constant lists only. Both ALL_COMPANIES and
 // ALL_PROJECTS were imported solely for `typeof` inference; we use the
 // proper Project / Company types now and drop the runtime arrays so
@@ -159,19 +159,28 @@ function MarketContent() {
             </div>
           )}
 
-          {/* Tabs (uses Tabs primitive) — 4 tabs (clean labels only): News (default) | Projects | Companies | Offers */}
-          <div className="mb-4">
-            <Tabs
-              tabs={[
-                { id: "news", label: "الأخبار" },
-                { id: "projects", label: "المشاريع" },
-                { id: "companies", label: "الشركات" },
-                { id: "offers", label: "العروض" },
-              ]}
-              activeTab={tab}
-              onChange={(id) => handleTabChange(id as MarketTab)}
-              size="sm"
-            />
+          {/* Tabs — same design as the Community page (bespoke strip,
+              founder spec): News (default) | Projects | Companies | Offers */}
+          <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-4">
+            {([
+              { key: "news", label: "الأخبار" },
+              { key: "projects", label: "المشاريع" },
+              { key: "companies", label: "الشركات" },
+              { key: "offers", label: "العروض" },
+            ] as const).map((t) => (
+              <button
+                key={t.key}
+                onClick={() => handleTabChange(t.key as MarketTab)}
+                className={cn(
+                  "flex-1 py-2 rounded-lg text-[11px] transition-colors flex items-center justify-center gap-1",
+                  tab === t.key
+                    ? "bg-white/[0.08] text-white font-bold border border-white/[0.1]"
+                    : "text-neutral-500 hover:text-white",
+                )}
+              >
+                <span>{t.label}</span>
+              </button>
+            ))}
           </div>
 
           {/* Search — only for projects/companies tabs */}

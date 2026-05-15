@@ -30,16 +30,11 @@ import { useHeartbeat } from "@/lib/hooks/useHeartbeat"
 import { useGlobalPresenceTracker } from "@/lib/hooks/useGlobalPresenceTracker"
 import { usePreloadAppData } from "@/lib/data/preload"
 
+// Footer is intentionally limited to the home + support surfaces
+// only (founder spec) — every other page renders without it.
 const FOOTER_VISIBLE_PATHS = [
   "/",
   "/dashboard",
-  "/market",
-  "/investment",
-  "/community",
-  "/about",
-  "/council",
-  "/profile",
-  "/account",
   "/support",
 ]
 
