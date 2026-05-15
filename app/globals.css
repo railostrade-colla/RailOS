@@ -811,3 +811,10 @@ select option {
 .capsule-tabs-container::-webkit-scrollbar { display: none; }
 .capsule-tab            { box-shadow: none !important; }
 .capsule-tab.active     { box-shadow: var(--shadow-button-sm) !important; }
+
+/* ── Dual brand mark: icon.png (Dark) ↔ logo1.png (Light) ──
+ * Default = Dark → show .logo-img-dark. data-theme="light" flips. */
+.logo-img-light { display: none; }
+.logo-img-dark  { display: block; }
+[data-theme="light"] .logo-img-dark  { display: none; }
+[data-theme="light"] .logo-img-light { display: block; }

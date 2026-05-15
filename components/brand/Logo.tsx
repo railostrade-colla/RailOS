@@ -50,12 +50,22 @@ export function Logo({
         className="logo-box always-dark flex items-center justify-center shrink-0 overflow-hidden border border-white/[0.1]"
         style={{ width: d.box, height: d.box, borderRadius: d.radius, backgroundColor: "#000", boxShadow: "var(--shadow-md)" }}
       >
+        {/* Dual mark: icon.png in Dark, logo1.png in Light. Toggled
+            by CSS (no-FOUC, no client hook) — see globals.css. */}
         <Image
           src="/icon.png"
           alt="RailOS"
           width={d.icon}
           height={d.icon}
-          className="object-contain"
+          className="logo-img-dark object-contain"
+          priority
+        />
+        <Image
+          src="/logo1.png"
+          alt="RailOS"
+          width={d.icon}
+          height={d.icon}
+          className="logo-img-light object-contain"
           priority
         />
       </div>
