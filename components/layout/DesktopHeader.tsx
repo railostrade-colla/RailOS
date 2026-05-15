@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import {
   ChevronDown, User, Settings, LogOut, HelpCircle, Grid3x3, FileText
 } from "lucide-react"
@@ -13,21 +14,23 @@ import { showSuccess } from "@/lib/utils/toast"
 import { Logo } from "@/components/brand/Logo"
 
 const navItems = [
-  { id: "home", label: "الرئيسية", href: "/dashboard" },
-  { id: "market", label: "السوق", href: "/market" },
-  { id: "investment", label: "الاستثمار", href: "/investment" },
-  { id: "community", label: "المجتمع", href: "/community" },
-]
+  { id: "home", href: "/dashboard" },
+  { id: "market", href: "/market" },
+  { id: "investment", href: "/investment" },
+  { id: "community", href: "/community" },
+] as const
 
 const profileMenuItems = [
-  { label: "الملف الشخصي", href: "/profile", icon: User },
-  { label: "الإعدادات", href: "/settings", icon: Settings },
-  { label: "الشروط والأحكام", href: "/terms", icon: FileText },
-]
+  { id: "profile", href: "/profile", icon: User },
+  { id: "settings", href: "/settings", icon: Settings },
+  { id: "terms", href: "/terms", icon: FileText },
+] as const
 
 export function DesktopHeader() {
   const pathname = usePathname()
   const [profileOpen, setProfileOpen] = useState(false)
+  const t = useTranslations("common")
+  const tn = useTranslations("notifications")
 
   // Phase 11.03 — wire the dropdown logout button (was a no-op).
   // Hard navigation via window.location.replace clears all React
@@ -39,7 +42,7 @@ export function DesktopHeader() {
     } catch {
       // best-effort — navigate either way
     }
-    showSuccess("تم تسجيل الخروج")
+    showSuccess(tn("loggedOut"))
     if (typeof window !== "undefined") {
       window.location.replace("/login")
     }
@@ -57,14 +60,14 @@ export function DesktopHeader() {
           <button
             onClick={() => { if (typeof window !== "undefined") window.location.reload() }}
             className="no-shadow flex items-center hover:opacity-80 transition-opacity"
-            aria-label="تحديث التطبيق"
+            aria-label={t("aria.refreshApp")}
           >
             <Logo size="md" />
           </button>
 
           <div className="w-px h-5 bg-white/10" aria-hidden="true" />
 
-          <nav className="flex items-center gap-1" aria-label="التنقل الرئيسي">
+          <nav className="flex items-center gap-1" aria-label={t("aria.mainNav")}>
             {navItems.map((item) => {
               const isActive = pathname.startsWith(item.href)
               return (
@@ -80,7 +83,7 @@ export function DesktopHeader() {
                   )}
                   aria-current={isActive ? "page" : undefined}
                 >
-                  {item.label}
+                  {t(`nav.${item.id}`)}
                 </Link>
               )
             })}
@@ -94,8 +97,8 @@ export function DesktopHeader() {
           <Link
             href="/support"
             className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] transition-colors"
-            aria-label="الدعم"
-            title="الدعم والمساعدة"
+            aria-label={t("aria.support")}
+            title={t("nav.support")}
           >
             <HelpCircle className="w-4 h-4 text-neutral-300" strokeWidth={1.5} />
           </Link>
@@ -112,8 +115,8 @@ export function DesktopHeader() {
                 ? "bg-white/[0.08] border-white/[0.15]"
                 : "bg-white/[0.05] border-white/[0.08] hover:bg-white/[0.08]"
             )}
-            aria-label="القائمة الرئيسية"
-            title="القائمة"
+            aria-label={t("aria.menu")}
+            title={t("nav.menu")}
           >
             <Grid3x3 className="w-4 h-4 text-neutral-300" strokeWidth={1.5} />
           </Link>
@@ -128,7 +131,7 @@ export function DesktopHeader() {
                   ? "bg-white/[0.08] border-white/[0.15]"
                   : "bg-white/[0.05] border-white/[0.08] hover:bg-white/[0.08]"
               )}
-              aria-label="قائمة الحساب"
+              aria-label={t("aria.accountMenu")}
               aria-expanded={profileOpen}
             >
               <ChevronDown
@@ -148,7 +151,7 @@ export function DesktopHeader() {
                 <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
                 <div className="absolute top-full mt-2 left-0 w-56 bg-[rgba(15,15,15,0.95)] backdrop-blur-2xl border border-white/[0.08] rounded-xl shadow-2xl z-50 overflow-hidden">
                   <div className="px-4 py-3 border-b border-white/[0.05]">
-                    <div className="text-sm text-white">المستخدم</div>
+                    <div className="text-sm text-white">{t("nav.user")}</div>
                     <div className="text-[10px] text-neutral-500 mt-0.5">railostrade@gmail.com</div>
                   </div>
 
@@ -163,7 +166,7 @@ export function DesktopHeader() {
                           onClick={() => setProfileOpen(false)}
                         >
                           <Icon className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          <span>{item.label}</span>
+                          <span>{t(`nav.${item.id}`)}</span>
                         </Link>
                       )
                     })}
@@ -171,11 +174,11 @@ export function DesktopHeader() {
 
                   <div className="border-t border-white/[0.05] py-1">
                     <button
-                      className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-400 hover:bg-red-500/[0.06] transition-colors text-right"
+                      className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-red-400 hover:bg-red-500/[0.06] transition-colors text-start"
                       onClick={handleLogout}
                     >
                       <LogOut className="w-3.5 h-3.5" strokeWidth={1.5} />
-                      <span>تسجيل الخروج</span>
+                      <span>{t("nav.logout")}</span>
                     </button>
                   </div>
                 </div>

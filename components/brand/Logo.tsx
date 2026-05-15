@@ -1,4 +1,7 @@
+"use client"
+
 import Image from "next/image"
+import { useTranslations } from "next-intl"
 
 /**
  * Phase 14.13 Mega-overhaul Stage 1 — the single unified brand mark.
@@ -38,6 +41,7 @@ export function Logo({
   showText?: boolean
 }) {
   const d = SIZES[size]
+  const t = useTranslations("common")
 
   return (
     <div
@@ -73,15 +77,15 @@ export function Logo({
 
       {/* Brand text — never shadowed. */}
       {showText && variant !== "icon" && (
-        <div className={`logo-text leading-none ${variant === "vertical" ? "text-center mt-1" : "text-right"}`}>
+        <div className={`logo-text leading-none ${variant === "vertical" ? "text-center mt-1" : "text-start"}`}>
           <p className="font-bold text-white no-shadow" style={{ fontSize: d.title }}>
-            رايلوس
+            {t("brand.name")}
           </p>
           <p
             className="text-neutral-500 font-mono uppercase tracking-wider no-shadow mt-0.5"
             style={{ fontSize: d.subtitle }}
           >
-            RAILOS
+            {t("brand.code")}
           </p>
         </div>
       )}

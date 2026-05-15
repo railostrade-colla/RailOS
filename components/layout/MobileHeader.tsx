@@ -6,6 +6,7 @@ import { HelpCircle, Grid3x3 } from "lucide-react"
 import { cn } from "@/lib/utils/cn"
 import { NotificationBell } from "@/components/notifications/NotificationBell"
 import { Logo } from "@/components/brand/Logo"
+import { useTranslations } from "next-intl"
 
 /**
  * MobileHeader - الهيدر العلوي للموبايل والتابلت
@@ -18,6 +19,7 @@ import { Logo } from "@/components/brand/Logo"
  */
 export function MobileHeader() {
   const pathname = usePathname()
+  const t = useTranslations("common")
 
   // Phase 14.13 M2 Hotfix (Part A) — header follows the theme; only the
   // logo box keeps `always-dark` (white SVG logo). See DesktopHeader.
@@ -29,7 +31,7 @@ export function MobileHeader() {
         <button
           onClick={() => { if (typeof window !== "undefined") window.location.reload() }}
           className="no-shadow flex items-center hover:opacity-80 transition-opacity"
-          aria-label="تحديث التطبيق"
+          aria-label={t("aria.refreshApp")}
         >
           <Logo size="sm" />
         </button>
@@ -40,7 +42,7 @@ export function MobileHeader() {
           <Link
             href="/support"
             className="w-9 h-9 flex items-center justify-center rounded-full bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] active:bg-white/[0.1] transition-colors"
-            aria-label="الدعم"
+            aria-label={t("aria.support")}
           >
             <HelpCircle className="w-4 h-4 text-neutral-300" strokeWidth={1.5} />
           </Link>
@@ -58,7 +60,7 @@ export function MobileHeader() {
                 ? "bg-white/[0.08] border-white/[0.15]"
                 : "bg-white/[0.05] border-white/[0.08] hover:bg-white/[0.08] active:bg-white/[0.1]"
             )}
-            aria-label="القائمة الرئيسية"
+            aria-label={t("aria.menu")}
             aria-current={pathname.startsWith("/menu") ? "page" : undefined}
           >
             <Grid3x3 className="w-4 h-4 text-neutral-300" strokeWidth={1.5} />

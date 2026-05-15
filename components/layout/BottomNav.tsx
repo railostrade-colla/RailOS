@@ -4,21 +4,23 @@ import { memo, useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Home, TrendingUp, BarChart3, Users, User } from "lucide-react"
+import { useTranslations } from "next-intl"
 import { cn } from "@/lib/utils/cn"
 
 interface NavTab {
   id: string
-  label: string
+  /** key into common.nav */
+  labelKey: string
   href: string
   icon: typeof Home
 }
 
 const tabs: NavTab[] = [
-  { id: "home", label: "الرئيسية", href: "/dashboard", icon: Home },
-  { id: "market", label: "السوق", href: "/market", icon: TrendingUp },
-  { id: "investment", label: "الاستثمار", href: "/investment", icon: BarChart3 },
-  { id: "community", label: "المجتمع", href: "/community", icon: Users },
-  { id: "profile", label: "حسابي", href: "/profile", icon: User },
+  { id: "home", labelKey: "home", href: "/dashboard", icon: Home },
+  { id: "market", labelKey: "market", href: "/market", icon: TrendingUp },
+  { id: "investment", labelKey: "investment", href: "/investment", icon: BarChart3 },
+  { id: "community", labelKey: "community", href: "/community", icon: Users },
+  { id: "profile", labelKey: "account", href: "/profile", icon: User },
 ]
 
 /**
@@ -44,6 +46,7 @@ const tabs: NavTab[] = [
  */
 function BottomNavImpl() {
   const pathname = usePathname()
+  const t = useTranslations("common")
   const [isVisible, setIsVisible] = useState(true)
   const lastScrollY = useRef(0)
   const navRef = useRef<HTMLDivElement>(null)
@@ -105,7 +108,7 @@ function BottomNavImpl() {
         "fixed bottom-3.5 left-3 right-3 z-50 transition-transform duration-300 ease-out lg:hidden",
         !isVisible && "translate-y-[120%]"
       )}
-      aria-label="التنقل الرئيسي"
+      aria-label={t("aria.mainNav")}
     >
       {/* FIX 4 — the floating pill follows the theme via --nav-bg
           (dark glass in Dark, white glass in Light). No always-dark.
@@ -149,7 +152,7 @@ function BottomNavImpl() {
                   "min-h-[52px] justify-center",
                   isActive ? "text-white" : "text-neutral-500 hover:text-neutral-300"
                 )}
-                aria-label={tab.label}
+                aria-label={t(`nav.${tab.labelKey}`)}
                 aria-current={isActive ? "page" : undefined}
               >
                 <Icon
@@ -163,7 +166,7 @@ function BottomNavImpl() {
                     isActive ? "font-medium" : "font-normal"
                   )}
                 >
-                  {tab.label}
+                  {t(`nav.${tab.labelKey}`)}
                 </span>
               </Link>
             )

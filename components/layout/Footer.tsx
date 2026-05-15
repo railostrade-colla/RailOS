@@ -1,44 +1,43 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Logo } from "@/components/brand/Logo"
-import { Shield, ShieldCheck, FileText, Lock, Headphones, BookOpen, Users, TrendingUp, Briefcase, Mail, MessageCircle, Phone } from "lucide-react"
-import { APP_VERSION, APP_NAME, APP_DESCRIPTION, COPYRIGHT_YEAR } from "@/lib/utils/version"
-import { cn } from "@/lib/utils/cn"
+import { Shield, ShieldCheck, FileText, Lock, Headphones, BookOpen, Users, TrendingUp, Briefcase, Mail, Phone } from "lucide-react"
+import { APP_VERSION, COPYRIGHT_YEAR } from "@/lib/utils/version"
 
 export function Footer({ compact = false }: { compact?: boolean }) {
   const router = useRouter()
+  const t = useTranslations("common")
 
   const sections = [
     {
-      title: "المنصة",
+      titleKey: "platform",
       links: [
-        { label: "السوق", path: "/market", icon: TrendingUp },
-        { label: "الاستثمار", path: "/investment", icon: Briefcase },
-        { label: "المجتمع", path: "/community", icon: Users },
-        { label: "السفير", path: "/ambassador", icon: Shield },
+        { key: "market", path: "/market", icon: TrendingUp },
+        { key: "investment", path: "/investment", icon: Briefcase },
+        { key: "community", path: "/community", icon: Users },
+        { key: "ambassador", path: "/ambassador", icon: Shield },
       ],
     },
     {
-      title: "الدعم",
+      titleKey: "support",
       links: [
-        { label: "الدعم الفني", path: "/support", icon: Headphones },
-        { label: "دليل التطبيق", path: "/app-guide", icon: BookOpen },
-        { label: "دليل الاستثمار", path: "/investment-guide", icon: BookOpen },
+        { key: "techSupport", path: "/support", icon: Headphones },
+        { key: "appGuide", path: "/app-guide", icon: BookOpen },
+        { key: "investmentGuide", path: "/investment-guide", icon: BookOpen },
       ],
     },
     {
-      title: "قانوني",
+      titleKey: "legal",
       links: [
-        { label: "من نحن", path: "/about", icon: Shield },
-        { label: "الشروط والأحكام", path: "/terms", icon: FileText },
-        { label: "سياسة الخصوصية", path: "/privacy", icon: Lock },
-        // Phase 14.11 A7 — clarifies RailOS = organisation platform,
-        // not a financial institution; payment is off-platform.
-        { label: "إخلاء المسؤولية", path: "/disclaimer", icon: ShieldCheck },
+        { key: "about", path: "/about", icon: Shield },
+        { key: "terms", path: "/terms", icon: FileText },
+        { key: "privacy", path: "/privacy", icon: Lock },
+        { key: "disclaimer", path: "/disclaimer", icon: ShieldCheck },
       ],
     },
-  ]
+  ] as const
 
   // Compact version للموبايل أو الصفحات الصغيرة
   if (compact) {
@@ -53,18 +52,18 @@ export function Footer({ compact = false }: { compact?: boolean }) {
 
         <div className="flex gap-4 mb-4 flex-wrap">
           {[
-            { label: "من نحن", path: "/about" },
-            { label: "الشروط", path: "/terms" },
-            { label: "الخصوصية", path: "/privacy" },
-            { label: "إخلاء المسؤولية", path: "/disclaimer" },
-            { label: "الدعم", path: "/support" },
+            { key: "about", path: "/about" },
+            { key: "terms", path: "/terms" },
+            { key: "privacy", path: "/privacy" },
+            { key: "disclaimer", path: "/disclaimer" },
+            { key: "techSupport", path: "/support" },
           ].map((link) => (
             <button
               key={link.path}
               onClick={() => router.push(link.path)}
               className="text-xs text-neutral-400 hover:text-white transition-colors"
             >
-              {link.label}
+              {t(`footer.${link.key}`)}
             </button>
           ))}
         </div>
@@ -73,12 +72,12 @@ export function Footer({ compact = false }: { compact?: boolean }) {
           <div className="text-[10px] text-neutral-500 font-mono">v{APP_VERSION}</div>
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-[10px] text-neutral-500">النظام يعمل</span>
+            <span className="text-[10px] text-neutral-500">{t("footer.systemOk")}</span>
           </div>
         </div>
 
         <div className="text-[10px] text-neutral-500 text-center pt-2 border-t border-white/[0.04]">
-          © {COPYRIGHT_YEAR} {APP_NAME} — جميع الحقوق محفوظة
+          © {COPYRIGHT_YEAR} {t("brand.name")} — {t("footer.rights")}
         </div>
       </div>
     )
@@ -99,27 +98,27 @@ export function Footer({ compact = false }: { compact?: boolean }) {
             <Logo size="md" />
           </button>
           <div className="text-xs text-neutral-400 leading-relaxed mb-4">
-            {APP_DESCRIPTION}. تواصل آمن بين المستثمرين، صفقات موثقة، عوائد عادلة.
+            {t("footer.description")}
           </div>
 
           {/* Trust badges */}
           <div className="flex flex-wrap gap-1.5">
             <div className="bg-green-400/[0.06] border border-green-400/20 text-green-400 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1">
               <Shield className="w-2.5 h-2.5" />
-              KYC موثق
+              {t("footer.kycVerified")}
             </div>
             <div className="bg-blue-400/[0.06] border border-blue-400/20 text-blue-400 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1">
               <Lock className="w-2.5 h-2.5" />
-              مشفّر
+              {t("footer.encrypted")}
             </div>
           </div>
         </div>
 
         {/* Link Sections */}
         {sections.map((section) => (
-          <div key={section.title}>
+          <div key={section.titleKey}>
             <div className="text-[11px] font-bold text-white mb-3 tracking-wider uppercase">
-              {section.title}
+              {t(`footer.${section.titleKey}`)}
             </div>
             <div className="space-y-2">
               {section.links.map((link) => {
@@ -131,7 +130,7 @@ export function Footer({ compact = false }: { compact?: boolean }) {
                     className="flex items-center gap-2 text-xs text-neutral-400 hover:text-white transition-colors group"
                   >
                     <Icon className="w-3 h-3 text-neutral-500 group-hover:text-white transition-colors" strokeWidth={1.5} />
-                    {link.label}
+                    {t(`footer.${link.key}`)}
                   </button>
                 )
               })}
@@ -149,7 +148,7 @@ export function Footer({ compact = false }: { compact?: boolean }) {
           <div className="w-9 h-9 rounded-lg bg-blue-400/10 border border-blue-400/20 flex items-center justify-center mb-2">
             <Mail className="w-4 h-4 text-blue-400" strokeWidth={1.5} />
           </div>
-          <div className="text-[10px] text-neutral-500 mb-0.5">البريد</div>
+          <div className="text-[10px] text-neutral-500 mb-0.5">{t("footer.email")}</div>
           <div className="text-[10px] lg:text-[11px] font-bold text-white truncate w-full leading-tight" dir="ltr">
             railostrade@gmail.com
           </div>
@@ -162,7 +161,7 @@ export function Footer({ compact = false }: { compact?: boolean }) {
           <div className="w-9 h-9 rounded-lg bg-green-400/10 border border-green-400/20 flex items-center justify-center mb-2">
             <Phone className="w-4 h-4 text-green-400" strokeWidth={1.5} />
           </div>
-          <div className="text-[10px] text-neutral-500 mb-0.5">الهاتف</div>
+          <div className="text-[10px] text-neutral-500 mb-0.5">{t("footer.phone")}</div>
           <div className="text-[10px] lg:text-[11px] font-bold text-white leading-tight" dir="ltr">
             07721726518
           </div>
@@ -172,7 +171,7 @@ export function Footer({ compact = false }: { compact?: boolean }) {
           <div className="w-9 h-9 rounded-lg bg-purple-400/10 border border-purple-400/20 flex items-center justify-center mb-2">
             <Headphones className="w-4 h-4 text-purple-400" strokeWidth={1.5} />
           </div>
-          <div className="text-[10px] text-neutral-500 mb-0.5">ساعات العمل</div>
+          <div className="text-[10px] text-neutral-500 mb-0.5">{t("footer.workHours")}</div>
           <div className="text-[10px] lg:text-[11px] font-bold text-white leading-tight">
             8 ص - 10 م
           </div>
@@ -183,17 +182,17 @@ export function Footer({ compact = false }: { compact?: boolean }) {
       <div className="border-t border-white/[0.06] pt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-3 flex-wrap justify-center">
           <div className="flex items-center gap-1.5 bg-white/[0.05] border border-white/[0.08] rounded-md px-2.5 py-1">
-            <span className="text-[10px] text-neutral-500">إصدار</span>
+            <span className="text-[10px] text-neutral-500">{t("footer.version")}</span>
             <span className="text-[10px] font-bold text-white font-mono" dir="ltr">v{APP_VERSION}</span>
           </div>
           <div className="flex items-center gap-1.5 bg-green-400/[0.06] border border-green-400/20 rounded-md px-2.5 py-1">
             <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-[10px] text-green-400 font-bold">النظام يعمل</span>
+            <span className="text-[10px] text-green-400 font-bold">{t("footer.systemOk")}</span>
           </div>
         </div>
 
         <div className="text-[10px] text-neutral-500 text-center">
-          © {COPYRIGHT_YEAR} {APP_NAME} — جميع الحقوق محفوظة
+          © {COPYRIGHT_YEAR} {t("brand.name")} — {t("footer.rights")}
         </div>
       </div>
     </footer>
