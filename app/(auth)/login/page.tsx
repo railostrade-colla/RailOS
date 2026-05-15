@@ -7,6 +7,7 @@ import { Mail, Lock, Eye, EyeOff, Loader2, Fingerprint, X } from "lucide-react"
 import { AuthLayout } from "@/components/layout/AuthLayout"
 import { signInWithEmail, signInWithGoogle } from "@/lib/supabase/auth-helpers"
 import { showSuccess, showError } from "@/lib/utils/toast"
+import { useTranslations } from "next-intl"
 import {
   isBiometricSupported,
   hasAnyBiometricEnabled,
@@ -30,6 +31,10 @@ export default function LoginPage() {
 function LoginPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const t = useTranslations("auth.login")
+  const tc = useTranslations("common")
+  const te = useTranslations("errors")
+  const tn = useTranslations("notifications")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -49,7 +54,7 @@ function LoginPageInner() {
     setGoogleLoading(true)
     const { error } = await signInWithGoogle("/dashboard")
     if (error) {
-      showError(error.message || "تعذّر فتح صفحة Google")
+      showError(error.message || te("googleFailed"))
       setGoogleLoading(false)
     }
     // On success the browser navigates to Google — no need to reset state.
@@ -65,9 +70,9 @@ function LoginPageInner() {
   useEffect(() => {
     const err = searchParams?.get("error")
     if (err === "oauth_failed") {
-      showError("فشل تسجيل الدخول بـ Google — حاول مرة أخرى")
+      showError(te("googleSignInFailed"))
     } else if (err === "oauth_exchange_failed") {
-      showError("تعذّر إكمال تسجيل الدخول، حاول مجدداً")
+      showError(te("loginFailed"))
     }
   }, [searchParams])
 
@@ -75,7 +80,7 @@ function LoginPageInner() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email || !password) {
-      showError("أدخل البريد الإلكتروني وكلمة المرور")
+      showError(t("needEmailPwd"))
       return
     }
     setLoading(true)
@@ -84,15 +89,15 @@ function LoginPageInner() {
 
     if (error) {
       if (error.message.includes("Invalid login")) {
-        showError("البريد أو كلمة المرور غير صحيحة")
+        showError(te("invalidCredentials"))
       } else {
-        showError(error.message || "حدث خطأ، حاول مرة أخرى")
+        showError(error.message || te("generic"))
       }
       return
     }
 
     if (data.user) {
-      showSuccess("تم تسجيل الدخول ✓")
+      showSuccess(tn("loginOk"))
 
       // Offer biometric registration on first login (if not dismissed)
       const userId = data.user.id
@@ -119,10 +124,10 @@ function LoginPageInner() {
     setBioLoading(false)
 
     if (!result.success) {
-      showError(result.error ?? "فشل تسجيل الدخول بالبصمة")
+      showError(result.error ?? te("bioFailed"))
       return
     }
-    showSuccess("تم تسجيل الدخول بالبصمة ✓")
+    showSuccess(tn("bioLoginOk"))
     router.push("/dashboard")
     router.refresh()
   }
@@ -135,9 +140,9 @@ function LoginPageInner() {
     setBioLoading(false)
 
     if (result.success) {
-      showSuccess("تم تفعيل البصمة 👆")
+      showSuccess(tn("bioEnabled"))
     } else {
-      showError(result.error ?? "تعذّر التفعيل")
+      showError(result.error ?? te("bioActivateFailed"))
     }
 
     setShowBioPrompt(false)
@@ -156,9 +161,9 @@ function LoginPageInner() {
 
   return (
     <AuthLayout
-      title="مرحباً بعودتك"
-      subtitle="سجّل دخولك للمتابعة في Railos"
-      badge="تسجيل الدخول"
+      title={t("title")}
+      subtitle={t("subtitle")}
+      badge={t("badge")}
     >
       {/* Biometric login button */}
       {bioAvailable && (
@@ -173,13 +178,13 @@ function LoginPageInner() {
             ) : (
               <>
                 <Fingerprint className="w-4 h-4" strokeWidth={2} />
-                تسجيل دخول بالبصمة
+                {t("bioButton")}
               </>
             )}
           </button>
           <div className="flex items-center gap-3 mb-4">
             <div className="flex-1 h-px bg-white/[0.08]" />
-            <span className="text-[10px] text-neutral-500">أو</span>
+            <span className="text-[10px] text-neutral-500">{t("or")}</span>
             <div className="flex-1 h-px bg-white/[0.08]" />
           </div>
         </>
@@ -202,20 +207,20 @@ function LoginPageInner() {
               <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.3-7.3 2.3-5.2 0-9.7-3.3-11.3-8l-6.5 5C9.4 39.4 16.1 44 24 44z" />
               <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.8-5 6.8-14.8 0-1.3-.1-2.4-.4-3.5z" />
             </svg>
-            متابعة بـ Google
+            {t("googleButton")}
           </>
         )}
       </button>
       <div className="flex items-center gap-3 mb-4">
         <div className="flex-1 h-px bg-white/[0.08]" />
-        <span className="text-[10px] text-neutral-500">أو بالبريد الإلكتروني</span>
+        <span className="text-[10px] text-neutral-500">{t("orEmail")}</span>
         <div className="flex-1 h-px bg-white/[0.08]" />
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="text-xs text-neutral-400 mb-1.5 block">
-            البريد الإلكتروني
+            {tc("labels.email")}
           </label>
           <div className="relative">
             <Mail className="w-4 h-4 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2" />
@@ -232,12 +237,12 @@ function LoginPageInner() {
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs text-neutral-400">كلمة المرور</label>
+            <label className="text-xs text-neutral-400">{t("passwordLabel")}</label>
             <Link
               href="/forgot-password"
               className="text-[10px] text-blue-400 hover:text-blue-300"
             >
-              نسيت كلمة المرور؟
+              {t("forgotLink")}
             </Link>
           </div>
           <div className="relative">
@@ -246,14 +251,14 @@ function LoginPageInner() {
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder={t("pwdPlaceholder")}
               className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl pr-10 pl-10 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 transition-colors"
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
-              aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+              aria-label={showPassword ? t("hidePwd") : t("showPwd")}
             >
               {showPassword ? (
                 <EyeOff className="w-4 h-4" />
@@ -272,18 +277,18 @@ function LoginPageInner() {
           {loading ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            "تسجيل الدخول"
+            t("submit")
           )}
         </button>
       </form>
 
       <div className="mt-6 text-center text-sm">
-        <span className="text-neutral-500">ليس لديك حساب؟ </span>
+        <span className="text-neutral-500">{t("noAccount")}</span>
         <Link
           href="/register"
           className="text-white hover:text-neutral-300 font-medium"
         >
-          إنشاء حساب
+          {t("signUpLink")}
         </Link>
       </div>
 
@@ -300,7 +305,7 @@ function LoginPageInner() {
             <button
               onClick={handleSkipBiometric}
               className="absolute left-4 top-4 text-neutral-500 hover:text-white"
-              aria-label="إغلاق"
+              aria-label={t("close")}
             >
               <X className="w-5 h-5" />
             </button>
@@ -310,10 +315,10 @@ function LoginPageInner() {
                 <Fingerprint className="w-10 h-10 text-blue-400" strokeWidth={1.5} />
               </div>
               <div className="text-lg font-bold text-white mb-1.5">
-                تفعيل تسجيل الدخول بالبصمة
+                {t("bioPromptTitle")}
               </div>
               <div className="text-xs text-neutral-400 leading-relaxed">
-                ادخل التطبيق بسرعة دون الحاجة لكتابة كلمة المرور — استخدم بصمتك أو Face ID.
+                {t("bioPromptDesc")}
               </div>
             </div>
 
@@ -325,7 +330,7 @@ function LoginPageInner() {
                 className="w-4 h-4"
               />
               <span className="text-[11px] text-neutral-400">
-                لا تسأل مرة أخرى
+                {t("bioPromptDontAsk")}
               </span>
             </label>
 
@@ -335,7 +340,7 @@ function LoginPageInner() {
                 disabled={bioLoading}
                 className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
               >
-                لاحقاً
+                {t("bioPromptLater")}
               </button>
               <button
                 onClick={handleEnableBiometric}
@@ -352,7 +357,7 @@ function LoginPageInner() {
                 ) : (
                   <>
                     <Fingerprint className="w-4 h-4" strokeWidth={2} />
-                    ✓ تفعيل
+                    {t("bioPromptEnable")}
                   </>
                 )}
               </button>

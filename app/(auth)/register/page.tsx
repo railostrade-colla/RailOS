@@ -17,6 +17,7 @@ import { AuthLayout } from "@/components/layout/AuthLayout"
 import { signUpWithEmail, signInWithGoogle } from "@/lib/supabase/auth-helpers"
 import { getAmbassadorByCode, linkReferralByCode, type AmbassadorPreview } from "@/lib/data/referrals"
 import { showSuccess, showError } from "@/lib/utils/toast"
+import { useTranslations } from "next-intl"
 
 export default function RegisterPage() {
   // useSearchParams() requires a Suspense boundary for static generation.
@@ -30,6 +31,9 @@ export default function RegisterPage() {
 function RegisterPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const t = useTranslations("auth.register")
+  const te = useTranslations("errors")
+  const tn = useTranslations("notifications")
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -58,7 +62,7 @@ function RegisterPageInner() {
     setGoogleLoading(true)
     const { error } = await signInWithGoogle("/dashboard", refCode || undefined)
     if (error) {
-      showError(error.message || "تعذّر فتح صفحة Google")
+      showError(error.message || te("googleFailed"))
       setGoogleLoading(false)
     }
     // On success the browser navigates away.
@@ -73,23 +77,23 @@ function RegisterPageInner() {
     e.preventDefault()
 
     if (!name.trim() || name.trim().length < 3) {
-      showError("أدخل اسمك الكامل (3 أحرف على الأقل)")
+      showError(t("nameHint"))
       return
     }
     if (!email) {
-      showError("أدخل البريد الإلكتروني")
+      showError(t("emailHint"))
       return
     }
     if (!isPasswordValid) {
-      showError("كلمة المرور يجب أن تحتوي على 8 أحرف أو أكثر (حروف وأرقام)")
+      showError(te("pwdWeak"))
       return
     }
     if (!isPasswordMatch) {
-      showError("كلمتا المرور غير متطابقتين")
+      showError(te("pwdMismatch"))
       return
     }
     if (!agreed) {
-      showError("يجب الموافقة على الشروط والأحكام")
+      showError(te("mustAgreeTerms"))
       return
     }
 
@@ -101,7 +105,7 @@ function RegisterPageInner() {
 
     if (error) {
       if (error.message.includes("already registered")) {
-        showError("هذا البريد مسجل مسبقاً، جرّب تسجيل الدخول")
+        showError(te("emailExists"))
       } else {
         showError(error.message)
       }
@@ -117,7 +121,7 @@ function RegisterPageInner() {
           /* swallow — non-critical */
         }
       }
-      showSuccess("تم إنشاء حسابك بنجاح، مرحباً في Railos! 🎉")
+      showSuccess(tn("accountCreated"))
       // Phase 10.72 — fresh signups MUST complete profile before
       // entering the app. The /profile-setup page itself routes to
       // /dashboard once the form is submitted.
@@ -128,18 +132,18 @@ function RegisterPageInner() {
 
   return (
     <AuthLayout
-      title="إنشاء حساب جديد"
-      subtitle="ابدأ رحلتك الاستثمارية مع Railos"
-      badge="تسجيل جديد"
+      title={t("title")}
+      subtitle={t("subtitle")}
+      badge={t("badge")}
     >
       {/* Ambassador referral banner */}
       {ambassador?.found && ambassador.ambassador_name && (
         <div className="mb-4 bg-green-500/[0.08] border border-green-500/30 rounded-xl p-3 flex items-start gap-2.5">
           <Gift className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" strokeWidth={2} />
           <div className="text-xs text-green-300 leading-relaxed">
-            دعوة من السفير{" "}
+            {t("referralFrom")}
             <span className="font-bold text-green-200">{ambassador.ambassador_name}</span>
-            {" "}— سيُربط حسابك تلقائياً بعد التسجيل.
+            {t("referralAuto")}
           </div>
         </div>
       )}
@@ -160,20 +164,20 @@ function RegisterPageInner() {
               <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.4-4.5 2.3-7.3 2.3-5.2 0-9.7-3.3-11.3-8l-6.5 5C9.4 39.4 16.1 44 24 44z" />
               <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.6l6.2 5.2c-.4.4 6.8-5 6.8-14.8 0-1.3-.1-2.4-.4-3.5z" />
             </svg>
-            متابعة بـ Google
+            {t("googleButton")}
           </>
         )}
       </button>
       <div className="flex items-center gap-3 mb-4">
         <div className="flex-1 h-px bg-white/[0.08]" />
-        <span className="text-[10px] text-neutral-500">أو بالبريد الإلكتروني</span>
+        <span className="text-[10px] text-neutral-500">{t("orEmail")}</span>
         <div className="flex-1 h-px bg-white/[0.08]" />
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="text-xs text-neutral-400 mb-1.5 block">
-            الاسم الكامل
+            {t("nameLabel")}
           </label>
           <div className="relative">
             <User className="w-4 h-4 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2" />
@@ -181,7 +185,7 @@ function RegisterPageInner() {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="أحمد محمد"
+              placeholder={t("namePlaceholder")}
               className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl pr-10 pl-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
             />
           </div>
@@ -189,7 +193,7 @@ function RegisterPageInner() {
 
         <div>
           <label className="text-xs text-neutral-400 mb-1.5 block">
-            البريد الإلكتروني
+            {t("emailLabel")}
           </label>
           <div className="relative">
             <Mail className="w-4 h-4 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2" />
@@ -206,7 +210,7 @@ function RegisterPageInner() {
 
         <div>
           <label className="text-xs text-neutral-400 mb-1.5 block">
-            كلمة المرور
+            {t("pwdLabel")}
           </label>
           <div className="relative">
             <Lock className="w-4 h-4 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2" />
@@ -214,14 +218,14 @@ function RegisterPageInner() {
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="8 أحرف على الأقل (حروف وأرقام)"
+              placeholder={t("pwdHint")}
               className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl pr-10 pl-10 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
-              aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+              aria-label={showPassword ? t("hidePwd") : t("showPwd")}
             >
               {showPassword ? (
                 <EyeOff className="w-4 h-4" />
@@ -240,7 +244,7 @@ function RegisterPageInner() {
                   isPasswordValid ? "text-green-400" : "text-neutral-500"
                 }
               >
-                8 أحرف + حروف وأرقام
+                {t("pwdValidHint")}
               </span>
             </div>
           )}
@@ -248,7 +252,7 @@ function RegisterPageInner() {
 
         <div>
           <label className="text-xs text-neutral-400 mb-1.5 block">
-            تأكيد كلمة المرور
+            {t("confirmLabel")}
           </label>
           <div className="relative">
             <Lock className="w-4 h-4 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2" />
@@ -256,7 +260,7 @@ function RegisterPageInner() {
               type={showPassword ? "text" : "password"}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="أعد كلمة المرور"
+              placeholder={t("pwdRepeat")}
               className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl pr-10 pl-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
             />
           </div>
@@ -270,7 +274,7 @@ function RegisterPageInner() {
                   isPasswordMatch ? "text-green-400" : "text-neutral-500"
                 }
               >
-                {isPasswordMatch ? "كلمتا المرور متطابقتين" : "غير متطابقتين"}
+                {isPasswordMatch ? t("pwdMatch") : t("pwdNoMatch")}
               </span>
             </div>
           )}
@@ -284,13 +288,13 @@ function RegisterPageInner() {
             className="mt-1 w-4 h-4 rounded bg-white/[0.05] border border-white/[0.2]"
           />
           <span className="text-xs text-neutral-400 leading-relaxed">
-            أوافق على{" "}
+            {t("agreePre")}
             <Link href="/terms" className="text-white hover:underline">
-              شروط الاستخدام
-            </Link>{" "}
-            و{" "}
+              {t("termsLink")}
+            </Link>
+            {t("agreeAnd")}
             <Link href="/privacy" className="text-white hover:underline">
-              سياسة الخصوصية
+              {t("privacyLink")}
             </Link>
           </span>
         </label>
@@ -303,18 +307,18 @@ function RegisterPageInner() {
           {loading ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            "إنشاء الحساب"
+            t("submit")
           )}
         </button>
       </form>
 
       <div className="mt-6 text-center text-sm">
-        <span className="text-neutral-500">لديك حساب بالفعل؟ </span>
+        <span className="text-neutral-500">{t("haveAccount")}</span>
         <Link
           href="/login"
           className="text-white hover:text-neutral-300 font-medium"
         >
-          تسجيل الدخول
+          {t("signInLink")}
         </Link>
       </div>
     </AuthLayout>

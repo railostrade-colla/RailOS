@@ -6,8 +6,12 @@ import { Mail, Loader2, CheckCircle2 } from "lucide-react"
 import { AuthLayout } from "@/components/layout/AuthLayout"
 import { resetPasswordForEmail } from "@/lib/supabase/auth-helpers"
 import { showSuccess, showError } from "@/lib/utils/toast"
+import { useTranslations } from "next-intl"
 
 export default function ForgotPasswordPage() {
+  const t = useTranslations("auth.forgot")
+  const te = useTranslations("errors")
+  const tn = useTranslations("notifications")
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
@@ -15,7 +19,7 @@ export default function ForgotPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) {
-      showError("أدخل البريد الإلكتروني")
+      showError(t("emailPlaceholder"))
       return
     }
     setLoading(true)
@@ -25,21 +29,21 @@ export default function ForgotPasswordPage() {
       showError(error.message)
       return
     }
-    showSuccess("تم إرسال رابط استعادة كلمة المرور")
+    showSuccess(tn("resetLinkSent"))
     setSent(true)
   }
 
   return (
     <AuthLayout
-      title="استعادة كلمة المرور"
-      subtitle="سنرسل لك رابط لإعادة تعيين كلمة المرور"
-      badge="استعادة"
+      title={t("title")}
+      subtitle={t("subtitle")}
+      badge={t("badge")}
     >
       {!sent ? (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-xs text-neutral-400 mb-1.5 block">
-              البريد الإلكتروني
+              {t("emailLabel")}
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2" />
@@ -61,7 +65,7 @@ export default function ForgotPasswordPage() {
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              "إرسال رابط الاستعادة"
+              t("submit")
             )}
           </button>
         </form>
@@ -69,10 +73,10 @@ export default function ForgotPasswordPage() {
         <div className="bg-green-400/[0.06] border border-green-400/20 rounded-xl p-6 text-center">
           <CheckCircle2 className="w-10 h-10 text-green-400 mx-auto mb-3" />
           <div className="text-sm text-white font-medium mb-2">
-            تم إرسال البريد!
+            {t("sentTitle")}
           </div>
           <div className="text-xs text-neutral-400 leading-relaxed">
-            تحقق من بريدك ({email}) واتبع التعليمات لإعادة تعيين كلمة المرور
+            {t("sentDesc", { email })}
           </div>
         </div>
       )}
@@ -82,7 +86,7 @@ export default function ForgotPasswordPage() {
           href="/login"
           className="text-white hover:text-neutral-300 font-medium"
         >
-          ← العودة لتسجيل الدخول
+          {t("backToLogin")}
         </Link>
       </div>
     </AuthLayout>
