@@ -25,37 +25,24 @@
    * frosts content. Flips with the theme (FIX 3/4). */
   --chrome-bg: rgba(0,0,0,0.60);
 
-  /* Phase 14.13 M2 Hotfix Part C — 3D shadow system (Dark default).
-   * Deep ambient + inset top highlight (light-from-above feel). */
-  --shadow-sm:
-    0 1px 3px rgba(0,0,0,0.4),
-    inset 0 1px 0 rgba(255,255,255,0.02);
-  --shadow-md:
-    0 1px 3px rgba(0,0,0,0.5),
-    0 4px 12px rgba(0,0,0,0.4),
-    inset 0 1px 0 rgba(255,255,255,0.03);
-  --shadow-lg:
-    0 1px 3px rgba(0,0,0,0.6),
-    0 4px 8px rgba(0,0,0,0.5),
-    0 12px 24px rgba(0,0,0,0.4),
-    inset 0 1px 0 rgba(255,255,255,0.04);
-  --shadow-xl:
-    0 2px 4px rgba(0,0,0,0.7),
-    0 8px 16px rgba(0,0,0,0.6),
-    0 16px 32px rgba(0,0,0,0.5),
-    inset 0 1px 0 rgba(255,255,255,0.05);
-  --shadow-button:
-    0 1px 2px rgba(0,0,0,0.4),
-    0 4px 8px rgba(0,0,0,0.3),
-    inset 0 1px 0 rgba(255,255,255,0.05);
+  /* UNIFIED shadow — one consistent depth ratio across the WHOLE
+   * app (founder spec). Every elevation token aliases the same
+   * value so cards, buttons, tabs, tiles… all read identically.
+   * (Directional nav shadows + the green CTA glow stay separate —
+   * different purpose, not depth.) */
+  --shadow-unify:
+    0 2px 6px rgba(0,0,0,0.38),
+    0 6px 16px rgba(0,0,0,0.30);
+  --shadow-sm: var(--shadow-unify);
+  --shadow-md: var(--shadow-unify);
+  --shadow-lg: var(--shadow-unify);
+  --shadow-xl: var(--shadow-unify);
+  --shadow-button: var(--shadow-unify);
+  --shadow-card-hover: var(--shadow-unify);
   --shadow-button-success:
     0 1px 2px rgba(74,222,128,0.3),
     0 4px 8px rgba(74,222,128,0.2),
     0 8px 20px rgba(74,222,128,0.15);
-  --shadow-card-hover:
-    0 4px 8px rgba(0,0,0,0.4),
-    0 12px 24px rgba(0,0,0,0.4),
-    inset 0 1px 0 rgba(255,255,255,0.05);
   /* Stage 3 — navigation elevation (dark) */
   --shadow-bottom-nav:
     0 -4px 12px rgba(0,0,0,0.45),
@@ -111,30 +98,20 @@
     0 4px 12px rgba(0,0,0,0.08),
     0 1px 3px rgba(0,0,0,0.05);
 
-  /* Phase 14.13 M2 Hotfix Part C — 3D shadows (Light Mode).
-   * Soft, low-opacity ambient — no inset highlight on white. */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
-  --shadow-md:
-    0 1px 3px rgba(0,0,0,0.04),
-    0 4px 12px rgba(0,0,0,0.08);
-  --shadow-lg:
-    0 1px 3px rgba(0,0,0,0.02),
-    0 4px 8px rgba(0,0,0,0.04),
-    0 12px 24px rgba(0,0,0,0.08);
-  --shadow-xl:
-    0 4px 12px rgba(0,0,0,0.06),
-    0 16px 32px rgba(0,0,0,0.12);
-  --shadow-button:
-    0 1px 2px rgba(15,23,42,0.3),
-    0 4px 8px rgba(15,23,42,0.2),
-    0 8px 16px rgba(15,23,42,0.1);
+  /* UNIFIED shadow (Light Mode) — same single ratio everywhere. */
+  --shadow-unify:
+    0 2px 6px rgba(0,0,0,0.06),
+    0 6px 16px rgba(0,0,0,0.08);
+  --shadow-sm: var(--shadow-unify);
+  --shadow-md: var(--shadow-unify);
+  --shadow-lg: var(--shadow-unify);
+  --shadow-xl: var(--shadow-unify);
+  --shadow-button: var(--shadow-unify);
+  --shadow-card-hover: var(--shadow-unify);
   --shadow-button-success:
     0 1px 2px rgba(74,222,128,0.4),
     0 4px 8px rgba(74,222,128,0.3),
     0 8px 20px rgba(74,222,128,0.2);
-  --shadow-card-hover:
-    0 6px 12px rgba(0,0,0,0.08),
-    0 16px 32px rgba(0,0,0,0.12);
 }
 
 * {
