@@ -21,6 +21,25 @@
   --info: #60A5FA;
   --nav-bg: rgba(15,15,15,0.92);
   --nav-pill: rgba(35,35,35,0.9);
+
+  /* Phase 14.13 M2 Hotfix Part C — 3D shadow system (Dark default).
+   * Deep ambient + inset top highlight (light-from-above feel). */
+  --shadow-sm:
+    0 1px 3px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.02);
+  --shadow-md:
+    0 1px 3px rgba(0,0,0,0.5),
+    0 4px 12px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.03);
+  --shadow-lg:
+    0 1px 3px rgba(0,0,0,0.6),
+    0 4px 8px rgba(0,0,0,0.5),
+    0 12px 24px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+  --shadow-button:
+    0 1px 2px rgba(0,0,0,0.4),
+    0 4px 8px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.05);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -48,6 +67,21 @@
   --info: #2563EB;
   --nav-bg: rgba(255,255,255,0.92);
   --nav-pill: rgba(235,238,242,0.9);
+
+  /* Phase 14.13 M2 Hotfix Part C — 3D shadows (Light Mode).
+   * Soft, low-opacity ambient — no inset highlight on white. */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md:
+    0 1px 3px rgba(0,0,0,0.04),
+    0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg:
+    0 1px 3px rgba(0,0,0,0.02),
+    0 4px 8px rgba(0,0,0,0.04),
+    0 12px 24px rgba(0,0,0,0.08);
+  --shadow-button:
+    0 1px 2px rgba(15,23,42,0.3),
+    0 4px 8px rgba(15,23,42,0.2),
+    0 8px 16px rgba(15,23,42,0.1);
 }
 
 * {
@@ -400,3 +434,69 @@ body {
 /* Accent stays green in the island's active state (BottomNav) */
 [data-theme="light"] .always-dark .text-green-400,
 [data-theme="light"] .always-dark .text-green-300 { color: #4ADE80 !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+ * Phase 14.13 M2 Hotfix Part C — 3D shadow application
+ *
+ * Tokens (--shadow-*) flip with the theme automatically (defined in
+ * :root + [data-theme="light"]). These rules attach them to cards,
+ * buttons, green CTAs, and floating surfaces.
+ *
+ * Exclusions (founder spec):
+ *   .no-shadow            — opt-out hook
+ *   .always-dark + its kids (logo box stays flat dark)
+ *   .animate-pulse        — loading skeletons
+ *   header / nav backgrounds — use bg-black / bg-[rgba] so the
+ *     [class*="bg-white/[0"] selector never matches them anyway.
+ * ═══════════════════════════════════════════════════════════════ */
+
+/* 1) Cards — any glass surface (bg-white/[0.0x]). */
+[class*="bg-white/[0"]:not(.no-shadow):not(.always-dark):not(.animate-pulse) {
+  box-shadow: var(--shadow-md);
+  transition: box-shadow 200ms ease, transform 200ms ease;
+}
+[class*="bg-white/[0"]:not(.no-shadow):not(.always-dark):not(.animate-pulse):hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-1px);
+}
+
+/* Logo box and any always-dark island stay flat — kill inherited shadow. */
+.always-dark,
+.always-dark [class*="bg-white/[0"] {
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* 2) Buttons — press effect on :active. */
+button:not(.no-shadow):not([disabled]):not(.always-dark) {
+  box-shadow: var(--shadow-button);
+  transition: box-shadow 200ms ease, transform 200ms ease;
+}
+button:not(.no-shadow):not([disabled]):not(.always-dark):active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 3) Green / emerald CTAs (invest / buy) — branded glow. */
+[class*="bg-green"]:not(.no-shadow):not(.always-dark),
+[class*="bg-emerald"]:not(.no-shadow):not(.always-dark) {
+  box-shadow:
+    0 1px 2px rgba(74,222,128,0.3),
+    0 4px 8px rgba(74,222,128,0.2),
+    0 8px 20px rgba(74,222,128,0.15);
+}
+
+/* 4) Floating surfaces — modals & dropdowns read as elevated. */
+[role="dialog"] > div:not(.no-shadow),
+[role="menu"]:not(.no-shadow),
+[role="listbox"]:not(.no-shadow),
+.dropdown-menu:not(.no-shadow),
+.modal-content:not(.no-shadow) {
+  box-shadow: var(--shadow-lg);
+}
+
+/* Respect reduced-motion: keep depth, drop the lift/press motion. */
+@media (prefers-reduced-motion: reduce) {
+  [class*="bg-white/[0"]:hover,
+  button:active { transform: none; }
+}
