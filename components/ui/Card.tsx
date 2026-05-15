@@ -85,7 +85,12 @@ export function Card({
     <div
       onClick={onClick}
       className={cn(
-        "rounded-2xl transition-colors backdrop-blur",
+        // `shadow-card` (Phase 14.13 overhaul) gives every Card the
+        // theme-aware 3D depth in ONE place — clean opt-in instead of
+        // the old fragile global `[class*=bg-white/[0]` selector that
+        // also shadowed links/nav/footer. Hover lift is added by the
+        // global `.shadow-card:hover` rule in globals.css.
+        "rounded-2xl transition-colors backdrop-blur shadow-card",
         VARIANT_BG[variant][color],
         PADDING[padding],
         onClick && "cursor-pointer hover:bg-white/[0.06]",

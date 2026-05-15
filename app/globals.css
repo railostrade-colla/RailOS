@@ -53,6 +53,18 @@
     0 4px 8px rgba(0,0,0,0.4),
     0 12px 24px rgba(0,0,0,0.4),
     inset 0 1px 0 rgba(255,255,255,0.05);
+
+  /* STEP 3 (URGENT overhaul) — spacing + radius design tokens.
+   * Exposed for opt-in use; NOT force-applied to every card (a
+   * global padding override would fight Tailwind's p-* on ~7k
+   * existing usages and break working layouts). */
+  --space-xs: 4px;   --space-sm: 8px;   --space-md: 12px;
+  --space-lg: 16px;  --space-xl: 20px;  --space-2xl: 24px;
+  --space-3xl: 32px;
+  --radius-sm: 8px;  --radius-md: 12px; --radius-lg: 16px;
+  --radius-xl: 20px; --radius-2xl: 24px; --radius-full: 9999px;
+  --card-padding: 20px;  --card-padding-sm: 16px;
+  --page-padding: 16px;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -416,47 +428,19 @@ body {
  * [data-theme="light"] only).
  * ═══════════════════════════════════════════════════════════════ */
 
-/* The island surface itself */
+/* STEP 1 (URGENT overhaul) — Header + BottomNav now FOLLOW the theme
+ * (no always-dark on them). The ONLY surviving island is the small
+ * logo box, kept dark because the logo PNG reads as white. The big
+ * descendant-remap block was deleted: nothing else uses always-dark,
+ * and the logo box only contains an <img>, no glass children. */
 [data-theme="light"] .always-dark,
 [data-theme="light"] [data-always-dark="true"] {
   background-color: #000 !important;
+  border-color: rgba(255,255,255,0.10) !important;
+}
+[data-theme="light"] .always-dark .text-white {
   color: #FFFFFF !important;
-  border-color: rgba(255,255,255,0.08) !important;
 }
-
-/* Re-assert dark surfaces for any glass utilities INSIDE the island */
-[data-theme="light"] .always-dark .bg-black,
-[data-theme="light"] [data-always-dark="true"] .bg-black { background-color: #000 !important; }
-[data-theme="light"] .always-dark .bg-white\/\[0\.02\] { background-color: #080808 !important; }
-[data-theme="light"] .always-dark .bg-white\/\[0\.03\] { background-color: #0a0a0a !important; }
-[data-theme="light"] .always-dark .bg-white\/\[0\.04\] { background-color: #0d0d0d !important; }
-[data-theme="light"] .always-dark .bg-white\/\[0\.05\] { background-color: #0f0f0f !important; }
-[data-theme="light"] .always-dark .bg-white\/\[0\.06\] { background-color: #111111 !important; }
-[data-theme="light"] .always-dark .bg-white\/\[0\.08\] { background-color: #141414 !important; }
-[data-theme="light"] .always-dark .bg-white\/\[0\.1\]  { background-color: #161616 !important; }
-
-/* Re-assert the dark text ramp inside the island */
-[data-theme="light"] .always-dark .text-white,
-[data-theme="light"] [data-always-dark="true"] .text-white { color: #FFFFFF !important; }
-[data-theme="light"] .always-dark .text-neutral-200 { color: #E5E5E5 !important; }
-[data-theme="light"] .always-dark .text-neutral-300 { color: #D4D4D4 !important; }
-[data-theme="light"] .always-dark .text-neutral-400 { color: #A3A3A3 !important; }
-[data-theme="light"] .always-dark .text-neutral-500 { color: #737373 !important; }
-[data-theme="light"] .always-dark .text-neutral-600 { color: #525252 !important; }
-
-/* Borders back to dark hairlines inside the island */
-[data-theme="light"] .always-dark .border-white\/\[0\.04\],
-[data-theme="light"] .always-dark .border-white\/\[0\.05\],
-[data-theme="light"] .always-dark .border-white\/\[0\.06\],
-[data-theme="light"] .always-dark .border-white\/\[0\.08\],
-[data-theme="light"] .always-dark .border-white\/\[0\.1\],
-[data-theme="light"] .always-dark .border-white\/\[0\.12\] {
-  border-color: rgba(255,255,255,0.08) !important;
-}
-
-/* Accent stays green in the island's active state (BottomNav) */
-[data-theme="light"] .always-dark .text-green-400,
-[data-theme="light"] .always-dark .text-green-300 { color: #4ADE80 !important; }
 
 /* ═══════════════════════════════════════════════════════════════
  * Phase 14.13 M2 Hotfix Part C — 3D shadow application
@@ -473,41 +457,47 @@ body {
  *     [class*="bg-white/[0"] selector never matches them anyway.
  * ═══════════════════════════════════════════════════════════════ */
 
-/* 1) Cards — any glass surface (bg-white/[0.0x]). */
-[class*="bg-white/[0"]:not(.no-shadow):not(.always-dark):not(.animate-pulse) {
+/* ┌─ THE BUG WE JUST KILLED ──────────────────────────────────────┐
+ * The old rule `[class*="bg-white/[0"]` ALSO matched Tailwind's
+ * `hover:bg-white/[0.05]` class string — so every nav link, footer
+ * link and text row with a hover background got a drop-shadow.
+ * That is why "رايلوس / RAILOS", "السوق", "الشروط"… looked shadowed.
+ *
+ * New model: shadows are OPT-IN. Real cards get depth through the
+ * shared <Card> primitive (which now carries `.shadow-card`) and the
+ * bespoke *CategoryCard components. Free text/links never do.
+ * └───────────────────────────────────────────────────────────────┘ */
+
+/* 1) Real card containers only: must be a rounded-2xl/3xl glass box.
+ *    Links/nav/text don't carry rounded-2xl, so they're safe. */
+[class~="rounded-2xl"][class*="bg-white/[0"]:not(.no-shadow):not(.always-dark):not(.animate-pulse):not(a):not(nav *),
+[class~="rounded-3xl"][class*="bg-white/[0"]:not(.no-shadow):not(.always-dark):not(.animate-pulse):not(a):not(nav *),
+.shadow-card:not(.no-shadow) {
   box-shadow: var(--shadow-md);
   transition: box-shadow 200ms ease, transform 200ms ease;
 }
-[class*="bg-white/[0"]:not(.no-shadow):not(.always-dark):not(.animate-pulse):hover {
+[class~="rounded-2xl"][class*="bg-white/[0"]:not(.no-shadow):not(.always-dark):not(a):hover,
+[class~="rounded-3xl"][class*="bg-white/[0"]:not(.no-shadow):not(.always-dark):not(a):hover,
+.shadow-card:not(.no-shadow):hover {
   box-shadow: var(--shadow-card-hover);
   transform: translateY(-1px);
 }
 
-/* Logo box and any always-dark island stay flat — kill inherited shadow. */
-.always-dark,
-.always-dark [class*="bg-white/[0"] {
-  box-shadow: none !important;
-  transform: none !important;
-}
+/* Logo box / always-dark island stays flat dark — no shadow, no lift. */
+.always-dark { box-shadow: none !important; transform: none !important; }
 
-/* 2) Buttons — press effect on :active. */
-button:not(.no-shadow):not([disabled]):not(.always-dark) {
+/* 2) Buttons — real buttons only. Exclude nav/footer/ghost/link/icon
+ *    style buttons so toolbar + tab + link buttons stay flat. */
+button:not(.no-shadow):not([disabled]):not(.always-dark):not(.btn-ghost):not(.btn-link):not(.btn-text):not(nav button):not(footer button) {
   box-shadow: var(--shadow-button);
   transition: box-shadow 200ms ease, transform 200ms ease;
 }
-button:not(.no-shadow):not([disabled]):not(.always-dark):active {
+button:not(.no-shadow):not([disabled]):not(.always-dark):not(nav button):not(footer button):active {
   transform: translateY(1px);
   box-shadow: var(--shadow-sm);
 }
 
-/* 3) Green / emerald CTAs (invest / buy) — branded glow. */
-[class*="bg-green"]:not(.no-shadow):not(.always-dark),
-[class*="bg-emerald"]:not(.no-shadow):not(.always-dark) {
-  box-shadow: var(--shadow-button-success);
-}
-
-/* 4) Floating surfaces — modals (xl) read more elevated than
- *    dropdowns / listboxes (lg). */
+/* 3) Floating surfaces — modals (xl) > dropdowns / listboxes (lg). */
 [role="dialog"] > div:not(.no-shadow),
 .modal-content:not(.no-shadow) {
   box-shadow: var(--shadow-xl);
@@ -518,9 +508,27 @@ button:not(.no-shadow):not([disabled]):not(.always-dark):active {
   box-shadow: var(--shadow-lg);
 }
 
+/* 4) HARD RESET — free text, links, headings, nav & footer never
+ *    carry a shadow, even if they happen to match something above. */
+a:not(.btn):not(.shadow-card):not(.action-tile),
+h1, h2, h3, h4, h5, h6, p, label,
+span:not(.badge):not(.chip),
+nav a, nav span, nav button,
+footer a:not(.shadow-card), footer span, footer p, footer h1,
+footer h2, footer h3, footer h4, footer li, footer ul,
+footer button:not(.shadow-card),
+.footer-link, .nav-link, .text-only {
+  box-shadow: none !important;
+}
+
+/* Footer contact cards keep a deliberate subtle lift (founder spec). */
+footer .shadow-card { box-shadow: var(--shadow-sm) !important; }
+
 /* Respect reduced-motion: keep depth, drop the lift/press motion. */
 @media (prefers-reduced-motion: reduce) {
-  [class*="bg-white/[0"]:hover,
+  [class~="rounded-2xl"]:hover,
+  [class~="rounded-3xl"]:hover,
+  .shadow-card:hover,
   button:active { transform: none; }
 }
 
@@ -546,4 +554,58 @@ button:not(.no-shadow):not([disabled]):not(.always-dark):active {
 
 @media (prefers-reduced-motion: reduce) {
   .shadow-card-hover:hover { transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ * STEP 3 — safe global typographic rhythm + opt-in layout helpers
+ *
+ * Only low-risk, near-universal defaults are applied globally
+ * (heading/paragraph line-height). Everything that could fight
+ * existing Tailwind utilities is an OPT-IN class instead, so the
+ * 226-file app keeps working while new/edited surfaces get the
+ * consistent professional spacing.
+ * ═══════════════════════════════════════════════════════════════ */
+h1, h2, h3, h4 { line-height: 1.3; }
+p { line-height: 1.6; }
+
+/* Vertical stack of cards (replaces ad-hoc space-y-N on lists) */
+.cards-stack > * + * { margin-top: var(--space-md); }
+/* Inner content rhythm inside a card */
+.card-content > * + * { margin-top: var(--space-md); }
+/* Section separation */
+.section + .section { margin-top: var(--space-2xl); }
+
+/* Quick-actions: 4 even tiles, tightens on very small screens */
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+@media (max-width: 380px) {
+  .quick-actions-grid { gap: var(--space-sm); }
+}
+
+/* Action tile — square-ish tappable card, gets the card shadow via
+ * the rule above only if it also carries rounded-2xl + glass bg. */
+.action-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--card-padding-sm);
+  border-radius: var(--radius-lg);
+  transition: transform 200ms ease, box-shadow 200ms ease;
+}
+.action-tile:hover { transform: translateY(-2px); }
+
+/* Pill badge with breathing room (fixes "أساسي" hugging the text) */
+.badge-active {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
 }

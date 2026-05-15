@@ -48,7 +48,7 @@ export function Footer({ compact = false }: { compact?: boolean }) {
           onClick={() => router.push("/about")}
           className="flex items-center gap-2.5 mb-4 hover:opacity-80 transition-opacity"
         >
-          <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black">
+          <div className="always-dark w-8 h-8 rounded-lg overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black">
             <Image src="/logo.png" alt={APP_NAME} width={32} height={32} className="w-full h-full object-contain" />
           </div>
           <div className="text-right">
@@ -102,7 +102,7 @@ export function Footer({ compact = false }: { compact?: boolean }) {
             onClick={() => router.push("/about")}
             className="flex items-center gap-3 mb-3 hover:opacity-80 transition-opacity"
           >
-            <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black">
+            <div className="always-dark w-10 h-10 rounded-xl overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black">
               <Image src="/logo.png" alt={APP_NAME} width={40} height={40} className="w-full h-full object-contain" />
             </div>
             <div className="text-right">
@@ -156,7 +156,7 @@ export function Footer({ compact = false }: { compact?: boolean }) {
       <div className="grid grid-cols-3 gap-2 mb-6">
         <a
           href="mailto:railostrade@gmail.com"
-          className="bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.06] transition-colors rounded-xl p-3 flex flex-col items-center text-center"
+          className="shadow-card bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.06] transition-colors rounded-xl p-3 flex flex-col items-center text-center"
         >
           <div className="w-9 h-9 rounded-lg bg-blue-400/10 border border-blue-400/20 flex items-center justify-center mb-2">
             <Mail className="w-4 h-4 text-blue-400" strokeWidth={1.5} />
@@ -169,7 +169,7 @@ export function Footer({ compact = false }: { compact?: boolean }) {
 
         <a
           href="tel:+9647721726518"
-          className="bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.06] transition-colors rounded-xl p-3 flex flex-col items-center text-center"
+          className="shadow-card bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.06] transition-colors rounded-xl p-3 flex flex-col items-center text-center"
         >
           <div className="w-9 h-9 rounded-lg bg-green-400/10 border border-green-400/20 flex items-center justify-center mb-2">
             <Phone className="w-4 h-4 text-green-400" strokeWidth={1.5} />
@@ -180,7 +180,7 @@ export function Footer({ compact = false }: { compact?: boolean }) {
           </div>
         </a>
 
-        <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 flex flex-col items-center text-center">
+        <div className="shadow-card bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 flex flex-col items-center text-center">
           <div className="w-9 h-9 rounded-lg bg-purple-400/10 border border-purple-400/20 flex items-center justify-center mb-2">
             <Headphones className="w-4 h-4 text-purple-400" strokeWidth={1.5} />
           </div>
