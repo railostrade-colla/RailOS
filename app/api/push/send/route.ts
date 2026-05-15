@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import webpush from "web-push"
 import { createClient } from "@/lib/supabase/server"
 import { checkRateLimit, clientKey } from "@/lib/utils/rate-limit"
+import { isUuid, isNonEmptyString } from "@/lib/utils/validate"
 
 export const runtime = "nodejs"
 
@@ -151,9 +152,12 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as SendBody
     const { userId, title, message, type, action_url, action_label, priority } = body
 
-    if (!userId || !title || !message) {
+    // Phase 14.12 S3 — validate the shape. userId must be a real
+    // UUID (it's used directly in .eq("user_id", userId) lookups);
+    // title/message must be non-empty strings.
+    if (!isUuid(userId) || !isNonEmptyString(title) || !isNonEmptyString(message)) {
       return NextResponse.json(
-        { error: "userId, title and message are required" },
+        { error: "userId (uuid), title and message are required" },
         { status: 400 },
       )
     }

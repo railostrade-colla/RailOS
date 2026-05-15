@@ -29,6 +29,12 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { checkRateLimit, clientKey } from "@/lib/utils/rate-limit"
+import {
+  isNonEmptyString,
+  isEmail,
+  isStringArray,
+  isStrongAdminPassword,
+} from "@/lib/utils/validate"
 
 interface CreateAdminBody {
   full_name?: string
@@ -96,19 +102,34 @@ export async function POST(req: Request) {
   const fullName = (body.full_name ?? "").trim()
   const phone    = (body.phone ?? "").trim()
   const email    = (body.email ?? "").trim().toLowerCase()
-  const password = (body.password ?? "")
-  const permissions = Array.isArray(body.permissions)
-    ? body.permissions.filter((p) => typeof p === "string")
+  const password = body.password ?? ""
+  // Phase 14.12 S3 — shared validators; permissions must be a clean
+  // string[] (reject if the caller sent a non-array or mixed types
+  // rather than silently coercing).
+  const permissions = isStringArray(body.permissions)
+    ? body.permissions
     : []
 
-  if (!fullName || fullName.length < 2) {
+  if (!isNonEmptyString(fullName, 2)) {
     return NextResponse.json({ ok: false, error: "name_required" }, { status: 400 })
   }
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!isEmail(email)) {
     return NextResponse.json({ ok: false, error: "email_invalid" }, { status: 400 })
   }
-  if (!password || password.length < 6) {
-    return NextResponse.json({ ok: false, error: "password_too_short" }, { status: 400 })
+  // Phase 14.12 S3 — admin accounts can create other admins; the old
+  // `length >= 6` policy was far too weak. Now: 8-128 chars with at
+  // least one letter and one digit.
+  if (!isStrongAdminPassword(password)) {
+    return NextResponse.json(
+      { ok: false, error: "password_too_weak" },
+      { status: 400 },
+    )
+  }
+  if (body.permissions !== undefined && !isStringArray(body.permissions)) {
+    return NextResponse.json(
+      { ok: false, error: "permissions_invalid" },
+      { status: 400 },
+    )
   }
 
   // ─── 3. Service-role client ────────────────────────────────────
