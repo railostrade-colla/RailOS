@@ -6,6 +6,7 @@ import { Camera, Upload, Check, X, Lock, ChevronLeft, Wifi, FileText, Smartphone
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
+import { useTranslations } from "next-intl"
 // Phase 5.5: full KYC submission — Storage upload + DB INSERT.
 import { getCurrentUserProfile } from "@/lib/data/profile"
 import { uploadKycSelfie, uploadKycDocument } from "@/lib/storage/upload"
@@ -40,11 +41,12 @@ const statusColors: Record<KycView, string> = {
   rejected:      "#F87171",
 }
 
-const statusLabels: Record<KycView, string> = {
-  not_submitted: "غير موثق",
-  pending:       "قيد المراجعة",
-  verified:      "موثق",
-  rejected:      "مرفوض",
+// i18n key suffix per status (resolved via t() in the component).
+const statusLabelKey: Record<KycView, string> = {
+  not_submitted: "statusNotSubmitted",
+  pending:       "statusPending",
+  verified:      "statusVerified",
+  rejected:      "statusRejected",
 }
 
 function dbToView(s: string | undefined | null): KycView {
@@ -56,6 +58,8 @@ function dbToView(s: string | undefined | null): KycView {
 
 export default function KYCPage() {
   const router = useRouter()
+  const t = useTranslations("auth.kyc")
+  const tc = useTranslations("common")
   const [step, setStep] = useState<Step>("status")
   // For each upload we now keep the storage path (not the local filename).
   const [selfiePath, setSelfiePath] = useState("")
@@ -115,9 +119,9 @@ export default function KYCPage() {
     setUploading(null)
     if (result.success && result.path) {
       setSelfiePath(result.path)
-      showSuccess("تم رفع صورة السيلفي")
+      showSuccess(t("tSelfieUploaded"))
     } else {
-      showError(result.error ?? "تعذّر رفع الصورة")
+      showError(result.error ?? t("tSelfieFail"))
     }
   }
 
@@ -127,16 +131,16 @@ export default function KYCPage() {
     setUploading(null)
     if (result.success && result.path) {
       setDocPath(result.path)
-      showSuccess("تم رفع الوثيقة")
+      showSuccess(t("tDocUploaded"))
     } else {
-      showError(result.error ?? "تعذّر رفع الوثيقة")
+      showError(result.error ?? t("tDocFail"))
     }
   }
 
   const submitKYC = async () => {
-    if (!personalReady) return showError("أكمل البيانات الشخصية أوّلاً")
-    if (!selfiePath) return showError("الرجاء التقاط صورة السيلفي")
-    if (!docPath) return showError("الرجاء رفع وثيقة الهوية")
+    if (!personalReady) return showError(t("tPersonalFirst"))
+    if (!selfiePath) return showError(t("tNeedSelfie"))
+    if (!docPath) return showError(t("tNeedDoc"))
     setSubmitting(true)
 
     const result = await submitKycRequest({
@@ -154,11 +158,11 @@ export default function KYCPage() {
     setSubmitting(false)
 
     if (result.success) {
-      showSuccess("تم إرسال طلب التوثيق! 🎉 سنُعلمك بالنتيجة")
+      showSuccess(t("tSubmitted"))
       setKycStatus("pending")
       setStep("submitted")
     } else {
-      showError(result.error ?? "تعذّر إرسال الطلب")
+      showError(result.error ?? t("tSubmitFail"))
     }
   }
 
@@ -168,9 +172,9 @@ export default function KYCPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
 
           <PageHeader
-            badge="KYC · توثيق الهوية"
-            title="التوثيق"
-            description="وثّق هويتك للحصول على مزايا الحساب الموثق"
+            badge={t("badge")}
+            title={t("title")}
+            description={t("desc")}
           />
 
           {/* Progress bar */}
@@ -183,12 +187,12 @@ export default function KYCPage() {
                 />
               </div>
               <div className="flex justify-between mt-2 text-[10px] text-neutral-500">
-                <span>الحالة</span>
-                <span>التعليمات</span>
-                <span>البيانات</span>
-                <span>السيلفي</span>
-                <span>الوثيقة</span>
-                <span>المراجعة</span>
+                <span>{t("stepStatus")}</span>
+                <span>{t("stepInstructions")}</span>
+                <span>{t("stepData")}</span>
+                <span>{t("stepSelfie")}</span>
+                <span>{t("stepDocument")}</span>
+                <span>{t("stepReview")}</span>
               </div>
             </div>
           )}
@@ -217,18 +221,18 @@ export default function KYCPage() {
                   </span>
                 </div>
                 <div className="text-2xl font-bold text-white mb-2">
-                  {loadingStatus ? "..." : statusLabels[kycStatus]}
+                  {loadingStatus ? "..." : t(statusLabelKey[kycStatus])}
                 </div>
                 <div className="text-sm text-neutral-400 leading-relaxed">
                   {loadingStatus
-                    ? "جاري التحقّق من حالتك..."
+                    ? t("checking")
                     : kycStatus === "verified"
-                      ? "حسابك موثق بالكامل"
+                      ? t("msgVerified")
                       : kycStatus === "pending"
-                        ? "طلبك قيد المراجعة من قبل الإدارة"
+                        ? t("msgPending")
                         : kycStatus === "rejected"
-                          ? "تم رفض طلبك، يرجى إعادة المحاولة"
-                          : "يمكنك الآن البدء بتوثيق حسابك"}
+                          ? t("msgRejected")
+                          : t("msgNotSubmitted")}
                 </div>
               </div>
 
@@ -237,7 +241,7 @@ export default function KYCPage() {
                   onClick={() => setStep("instructions")}
                   className="w-full py-3.5 rounded-xl bg-neutral-100 text-black text-sm font-bold hover:bg-neutral-200 transition-colors"
                 >
-                  {kycStatus === "rejected" ? "إعادة التوثيق" : "بدء التوثيق"}
+                  {kycStatus === "rejected" ? t("reverifyBtn") : t("startBtn")}
                 </button>
               )}
             </>
@@ -246,16 +250,16 @@ export default function KYCPage() {
           {/* التعليمات */}
           {step === "instructions" && (
             <>
-              <div className="text-2xl font-bold text-white mb-2">قبل البدء</div>
+              <div className="text-2xl font-bold text-white mb-2">{t("instrTitle")}</div>
               <div className="text-sm text-neutral-400 mb-6 leading-relaxed">
-                تأكد من توفر المتطلبات التالية للحصول على موافقة أسرع
+                {t("instrSubtitle")}
               </div>
 
               <div className="space-y-2.5 mb-6">
                 {[
-                  { Icon: Camera, title: "صورة سيلفي واضحة", desc: "وجهك ظاهر بالكامل، بدون فلتر، إضاءة جيدة", color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/20" },
-                  { Icon: FileText, title: "وثيقة هوية سارية", desc: "هوية وطنية أو جواز سفر — جميع الزوايا واضحة والنص مقروء", color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/20" },
-                  { Icon: Wifi, title: "اتصال جيد بالإنترنت", desc: "لضمان رفع الصور بنجاح", color: "text-green-400", bg: "bg-green-400/10", border: "border-green-400/20" },
+                  { Icon: Camera, title: t("req1Title"), desc: t("req1Desc"), color: "text-blue-400", bg: "bg-blue-400/10", border: "border-blue-400/20" },
+                  { Icon: FileText, title: t("req2Title"), desc: t("req2Desc"), color: "text-purple-400", bg: "bg-purple-400/10", border: "border-purple-400/20" },
+                  { Icon: Wifi, title: t("req3Title"), desc: t("req3Desc"), color: "text-green-400", bg: "bg-green-400/10", border: "border-green-400/20" },
                 ].map((item, i) => (
                   <div key={i} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4 flex gap-3 items-start">
                     <div className={cn("w-10 h-10 rounded-lg border flex items-center justify-center flex-shrink-0", item.bg, item.border)}>
@@ -273,7 +277,7 @@ export default function KYCPage() {
                 onClick={() => setStep("personal")}
                 className="w-full py-3.5 rounded-xl bg-neutral-100 text-black text-sm font-bold hover:bg-neutral-200 transition-colors"
               >
-                فهمت، ابدأ التوثيق
+                {t("understoodBtn")}
               </button>
             </>
           )}
@@ -281,25 +285,25 @@ export default function KYCPage() {
           {/* البيانات الشخصية (Phase 5.5) */}
           {step === "personal" && (
             <>
-              <div className="text-2xl font-bold text-white mb-2">البيانات الشخصية</div>
-              <div className="text-sm text-neutral-400 mb-5">يجب أن تطابق هذه البيانات وثيقة هويتك تماماً</div>
+              <div className="text-2xl font-bold text-white mb-2">{t("personalTitle")}</div>
+              <div className="text-sm text-neutral-400 mb-5">{t("personalSubtitle")}</div>
 
               <div className="space-y-3 mb-5">
                 {/* Full name */}
                 <div>
-                  <label className="block text-xs text-neutral-400 mb-1.5">الاسم الكامل (كما في الوثيقة)</label>
+                  <label className="block text-xs text-neutral-400 mb-1.5">{t("nameLabel")}</label>
                   <input
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="مثال: محمد علي حسين"
+                    placeholder={t("namePh")}
                     className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-white/[0.25] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none transition-colors"
                   />
                 </div>
 
                 {/* DOB */}
                 <div>
-                  <label className="block text-xs text-neutral-400 mb-1.5">تاريخ الميلاد</label>
+                  <label className="block text-xs text-neutral-400 mb-1.5">{t("dobLabel")}</label>
                   <input
                     type="date"
                     value={dob}
@@ -313,17 +317,17 @@ export default function KYCPage() {
                 {/* City + Phone (grid) */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-neutral-400 mb-1.5">المدينة</label>
+                    <label className="block text-xs text-neutral-400 mb-1.5">{t("cityLabel")}</label>
                     <input
                       type="text"
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
-                      placeholder="بغداد"
+                      placeholder={t("cityPh")}
                       className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-white/[0.25] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none transition-colors"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-neutral-400 mb-1.5">رقم الهاتف</label>
+                    <label className="block text-xs text-neutral-400 mb-1.5">{t("phoneLabel")}</label>
                     <input
                       type="tel"
                       value={phone}
@@ -337,24 +341,24 @@ export default function KYCPage() {
 
                 {/* Address */}
                 <div>
-                  <label className="block text-xs text-neutral-400 mb-1.5">العنوان التفصيلي</label>
+                  <label className="block text-xs text-neutral-400 mb-1.5">{t("addressLabel")}</label>
                   <input
                     type="text"
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
-                    placeholder="المحلّة، الزقاق، رقم الدار"
+                    placeholder={t("addressPh")}
                     className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-white/[0.25] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none transition-colors"
                   />
                 </div>
 
                 {/* Document number */}
                 <div>
-                  <label className="block text-xs text-neutral-400 mb-1.5">رقم الوثيقة</label>
+                  <label className="block text-xs text-neutral-400 mb-1.5">{t("docNumLabel")}</label>
                   <input
                     type="text"
                     value={docNumber}
                     onChange={(e) => setDocNumber(e.target.value)}
-                    placeholder="مثال: 12345678"
+                    placeholder={t("docNumPh")}
                     className="w-full bg-white/[0.05] border border-white/[0.1] focus:border-white/[0.25] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none transition-colors"
                     dir="ltr"
                   />
@@ -366,12 +370,12 @@ export default function KYCPage() {
                   onClick={() => setStep("instructions")}
                   className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
                 >
-                  رجوع
+                  {tc("buttons.back")}
                 </button>
                 <button
                   onClick={() => {
                     if (!personalReady) {
-                      return showError("أكمل جميع الحقول بشكل صحيح")
+                      return showError(t("tAllFields"))
                     }
                     setStep("selfie")
                   }}
@@ -383,7 +387,7 @@ export default function KYCPage() {
                       : "bg-white/[0.05] text-neutral-600 cursor-not-allowed",
                   )}
                 >
-                  التالي
+                  {t("nextBtn")}
                 </button>
               </div>
             </>
@@ -392,8 +396,8 @@ export default function KYCPage() {
           {/* السيلفي */}
           {step === "selfie" && (
             <>
-              <div className="text-2xl font-bold text-white mb-2">صورة السيلفي</div>
-              <div className="text-sm text-neutral-400 mb-5">التقط صورة واضحة لوجهك مع الهوية</div>
+              <div className="text-2xl font-bold text-white mb-2">{t("selfieTitle")}</div>
+              <div className="text-sm text-neutral-400 mb-5">{t("selfieSubtitle")}</div>
 
               <button
                 onClick={() => uploading !== "selfie" && document.getElementById("selfie-input")?.click()}
@@ -403,19 +407,19 @@ export default function KYCPage() {
                 {uploading === "selfie" ? (
                   <div>
                     <Loader2 className="w-12 h-12 text-blue-400 mx-auto mb-3 animate-spin" strokeWidth={1.5} />
-                    <div className="text-sm font-bold text-blue-400 mb-1">جاري الرفع...</div>
+                    <div className="text-sm font-bold text-blue-400 mb-1">{t("uploading")}</div>
                   </div>
                 ) : selfiePath ? (
                   <div>
                     <div className="text-5xl mb-3">✅</div>
-                    <div className="text-sm font-bold text-green-400 mb-1">تم التقاط الصورة</div>
+                    <div className="text-sm font-bold text-green-400 mb-1">{t("captured")}</div>
                     <div className="text-[11px] text-neutral-500 break-all">{selfiePath.split("/").slice(-1)[0]}</div>
                   </div>
                 ) : (
                   <div>
                     <Camera className="w-12 h-12 text-neutral-400 mx-auto mb-3" strokeWidth={1.5} />
-                    <div className="text-sm font-bold text-white mb-1">اضغط للتقاط صورة</div>
-                    <div className="text-xs text-neutral-500">أو رفع من المعرض</div>
+                    <div className="text-sm font-bold text-white mb-1">{t("tapCapture")}</div>
+                    <div className="text-xs text-neutral-500">{t("orGallery")}</div>
                   </div>
                 )}
               </button>
@@ -439,11 +443,11 @@ export default function KYCPage() {
                   disabled={uploading === "selfie"}
                   className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
                 >
-                  رجوع
+                  {tc("buttons.back")}
                 </button>
                 <button
                   onClick={() => {
-                    if (!selfiePath) return showError("الرجاء التقاط صورة أولاً")
+                    if (!selfiePath) return showError(t("tNeedSelfieFirst"))
                     setStep("document")
                   }}
                   disabled={!selfiePath || uploading === "selfie"}
@@ -454,7 +458,7 @@ export default function KYCPage() {
                       : "bg-white/[0.05] text-neutral-600 cursor-not-allowed",
                   )}
                 >
-                  التالي
+                  {t("nextBtn")}
                 </button>
               </div>
             </>
@@ -463,14 +467,14 @@ export default function KYCPage() {
           {/* الوثيقة */}
           {step === "document" && (
             <>
-              <div className="text-2xl font-bold text-white mb-2">وثيقة الهوية</div>
-              <div className="text-sm text-neutral-400 mb-4">ارفع صورة واضحة لوثيقة هويتك</div>
+              <div className="text-2xl font-bold text-white mb-2">{t("documentTitle")}</div>
+              <div className="text-sm text-neutral-400 mb-4">{t("documentSubtitle")}</div>
 
               {/* نوع الوثيقة */}
               <div className="flex gap-2.5 mb-4">
                 {([
-                  { key: "id" as const, label: "هوية وطنية" },
-                  { key: "passport" as const, label: "جواز سفر" },
+                  { key: "id" as const, label: t("typeId") },
+                  { key: "passport" as const, label: t("typePassport") },
                 ]).map((d) => (
                   <button
                     key={d.key}
@@ -496,19 +500,19 @@ export default function KYCPage() {
                 {uploading === "doc" ? (
                   <div>
                     <Loader2 className="w-12 h-12 text-blue-400 mx-auto mb-3 animate-spin" strokeWidth={1.5} />
-                    <div className="text-sm font-bold text-blue-400 mb-1">جاري الرفع...</div>
+                    <div className="text-sm font-bold text-blue-400 mb-1">{t("uploading")}</div>
                   </div>
                 ) : docPath ? (
                   <div>
                     <div className="text-5xl mb-3">✅</div>
-                    <div className="text-sm font-bold text-green-400 mb-1">تم رفع الوثيقة</div>
+                    <div className="text-sm font-bold text-green-400 mb-1">{t("docUploaded")}</div>
                     <div className="text-[11px] text-neutral-500 break-all">{docPath.split("/").slice(-1)[0]}</div>
                   </div>
                 ) : (
                   <div>
                     <Upload className="w-12 h-12 text-neutral-400 mx-auto mb-3" strokeWidth={1.5} />
-                    <div className="text-sm font-bold text-white mb-1">اضغط لرفع الوثيقة</div>
-                    <div className="text-xs text-neutral-500">JPG أو PNG أو WEBP — حجم أقصى 10MB</div>
+                    <div className="text-sm font-bold text-white mb-1">{t("tapUpload")}</div>
+                    <div className="text-xs text-neutral-500">{t("fileHint")}</div>
                   </div>
                 )}
               </button>
@@ -530,11 +534,11 @@ export default function KYCPage() {
                   disabled={uploading === "doc"}
                   className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
                 >
-                  رجوع
+                  {tc("buttons.back")}
                 </button>
                 <button
                   onClick={() => {
-                    if (!docPath) return showError("الرجاء رفع الوثيقة أولاً")
+                    if (!docPath) return showError(t("tNeedDocFirst"))
                     setStep("review")
                   }}
                   disabled={!docPath || uploading === "doc"}
@@ -545,7 +549,7 @@ export default function KYCPage() {
                       : "bg-white/[0.05] text-neutral-600 cursor-not-allowed",
                   )}
                 >
-                  التالي
+                  {t("nextBtn")}
                 </button>
               </div>
             </>
@@ -554,33 +558,33 @@ export default function KYCPage() {
           {/* المراجعة */}
           {step === "review" && (
             <>
-              <div className="text-2xl font-bold text-white mb-2">مراجعة قبل الإرسال</div>
-              <div className="text-sm text-neutral-400 mb-5">تأكد من صحة البيانات</div>
+              <div className="text-2xl font-bold text-white mb-2">{t("reviewTitle")}</div>
+              <div className="text-sm text-neutral-400 mb-5">{t("reviewSubtitle")}</div>
 
               {/* Personal info summary */}
               <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3.5 mb-3 space-y-1.5 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-neutral-500">الاسم</span>
+                  <span className="text-neutral-500">{t("rName")}</span>
                   <span className="text-white font-bold">{fullName}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-neutral-500">تاريخ الميلاد</span>
+                  <span className="text-neutral-500">{t("rDob")}</span>
                   <span className="text-white font-mono" dir="ltr">{dob}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-neutral-500">المدينة</span>
+                  <span className="text-neutral-500">{t("rCity")}</span>
                   <span className="text-white">{city}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-neutral-500">الهاتف</span>
+                  <span className="text-neutral-500">{t("rPhone")}</span>
                   <span className="text-white font-mono" dir="ltr">{phone}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-neutral-500">العنوان</span>
+                  <span className="text-neutral-500">{t("rAddress")}</span>
                   <span className="text-white truncate max-w-[60%]">{address}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-neutral-500">رقم الوثيقة</span>
+                  <span className="text-neutral-500">{t("rDocNum")}</span>
                   <span className="text-white font-mono" dir="ltr">{docNumber}</span>
                 </div>
               </div>
@@ -588,12 +592,12 @@ export default function KYCPage() {
               <div className="space-y-2.5 mb-4">
                 {[
                   {
-                    label: "صورة السيلفي",
+                    label: t("rSelfie"),
                     value: selfiePath ? selfiePath.split("/").slice(-1)[0] : "—",
                     ok: !!selfiePath,
                   },
                   {
-                    label: `وثيقة ${docType === "id" ? "الهوية الوطنية" : "جواز السفر"}`,
+                    label: docType === "id" ? t("rDocId") : t("rDocPassport"),
                     value: docPath ? docPath.split("/").slice(-1)[0] : "—",
                     ok: !!docPath,
                   },
@@ -620,7 +624,7 @@ export default function KYCPage() {
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 mb-5 flex gap-2 items-start">
                 <Lock className="w-4 h-4 text-neutral-400 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
                 <div className="text-[11px] text-neutral-400 leading-relaxed">
-                  بياناتك محمية بالكامل ولن تُشارك مع أي طرف خارجي. تُستخدم فقط للتحقق من هويتك.
+                  {t("privacyNote")}
                 </div>
               </div>
 
@@ -630,14 +634,14 @@ export default function KYCPage() {
                   disabled={submitting}
                   className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
                 >
-                  تعديل
+                  {t("editBtn")}
                 </button>
                 <button
                   onClick={submitKYC}
                   disabled={submitting}
                   className="flex-[2] py-3 rounded-xl bg-neutral-100 text-black text-sm font-bold hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {submitting ? "جاري الإرسال..." : "إرسال للمراجعة"}
+                  {submitting ? t("sending") : t("submitBtn")}
                 </button>
               </div>
             </>
@@ -649,15 +653,15 @@ export default function KYCPage() {
               <div className="w-24 h-24 rounded-full bg-green-400/10 border-2 border-green-400/30 flex items-center justify-center mx-auto mb-5">
                 <Check className="w-12 h-12 text-green-400" strokeWidth={2} />
               </div>
-              <div className="text-2xl font-bold text-white mb-2">تم إرسال طلبك! 🎉</div>
+              <div className="text-2xl font-bold text-white mb-2">{t("submittedTitle")}</div>
               <div className="text-sm text-neutral-400 leading-relaxed mb-6 max-w-md mx-auto">
-                سيتم مراجعة طلب التوثيق خلال 24-48 ساعة. سنُعلمك بالنتيجة عبر الإشعارات.
+                {t("submittedDesc")}
               </div>
               <button
                 onClick={() => router.push("/profile")}
                 className="bg-neutral-100 text-black px-8 py-3 rounded-xl text-sm font-bold hover:bg-neutral-200"
               >
-                العودة للملف الشخصي
+                {t("backToProfile")}
               </button>
             </div>
           )}
