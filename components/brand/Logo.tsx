@@ -17,16 +17,15 @@ import Image from "next/image"
 type LogoSize = "sm" | "md" | "lg" | "xl" | "2xl"
 type LogoVariant = "icon" | "horizontal" | "vertical"
 
-// Per founder spec: every logo frame is a PURE SQUARE (no rounding,
-// no background) in both themes, app-wide.
-// Logo mark enlarged ~30% per founder request (box + icon scaled;
-// text sizes unchanged). Pure square, no frame/background.
+// Pure square, no frame/background, both themes. Net scale: +30%
+// then −20% per founder requests (box drives the rendered size;
+// text sizes unchanged).
 const SIZES: Record<LogoSize, { box: number; icon: number; gap: number; title: number; subtitle: number }> = {
-  sm:   { box: 42,  icon: 26, gap: 8,  title: 13, subtitle: 9 },
-  md:   { box: 52,  icon: 31, gap: 12, title: 15, subtitle: 11 },
-  lg:   { box: 73,  icon: 42, gap: 14, title: 18, subtitle: 12 },
-  xl:   { box: 94,  icon: 55, gap: 16, title: 20, subtitle: 13 },
-  "2xl":{ box: 125, icon: 73, gap: 20, title: 24, subtitle: 14 },
+  sm:   { box: 34,  icon: 21, gap: 8,  title: 13, subtitle: 9 },
+  md:   { box: 42,  icon: 25, gap: 12, title: 15, subtitle: 11 },
+  lg:   { box: 58,  icon: 34, gap: 14, title: 18, subtitle: 12 },
+  xl:   { box: 75,  icon: 44, gap: 16, title: 20, subtitle: 13 },
+  "2xl":{ box: 100, icon: 58, gap: 20, title: 24, subtitle: 14 },
 }
 
 export function Logo({
