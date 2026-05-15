@@ -802,11 +802,12 @@ select option {
 [data-theme="light"] { --shadow-button-sm: 0 1px 2px rgba(15,23,42,0.15), 0 2px 4px rgba(15,23,42,0.10); }
 
 .capsule-tabs-container {
-  background-color: var(--bg-card);
+  background-color: var(--nav-bg);
   border: 1px solid var(--border);
   border-radius: 9999px;
   box-shadow: var(--shadow-md);
 }
+.capsule-tab.active { background-color: var(--nav-pill) !important; }
 .capsule-tabs-container::-webkit-scrollbar { display: none; }
 .capsule-tab            { box-shadow: none !important; }
 .capsule-tab.active     { box-shadow: var(--shadow-button-sm) !important; }

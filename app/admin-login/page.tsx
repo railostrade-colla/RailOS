@@ -72,7 +72,7 @@ export default function AdminLoginPage() {
             placeholder with the real /logo.png brand mark used
             everywhere else in the app + admin sidebar. */}
         <div className="text-center mb-8">
-          <div className="w-20 h-20 rounded-2xl overflow-hidden border border-white/[0.1] bg-white/[0.04] flex items-center justify-center mx-auto mb-4">
+          <div className="w-20 h-20 rounded-xl overflow-hidden border border-white/[0.1] bg-black always-dark flex items-center justify-center mx-auto mb-4">
             <Image
               src="/logo.png"
               alt="RailOS"

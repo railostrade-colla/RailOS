@@ -208,7 +208,7 @@ function AdminSidebarImpl({
             onClick={() => router.push("/admin?tab=dashboard")}
             role="button"
           >
-            <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/[0.1] bg-white/[0.04] flex-shrink-0">
+            <div className="w-8 h-8 rounded-xl overflow-hidden border border-white/[0.1] bg-black always-dark flex-shrink-0">
               <Image
                 src="/logo.png"
                 alt="RailOS"
@@ -225,7 +225,7 @@ function AdminSidebarImpl({
         ) : (
           <button
             onClick={() => router.push("/admin?tab=dashboard")}
-            className="w-8 h-8 rounded-lg overflow-hidden border border-white/[0.1] bg-white/[0.04] hover:opacity-80 transition-opacity mx-auto"
+            className="w-8 h-8 rounded-xl overflow-hidden border border-white/[0.1] bg-black always-dark hover:opacity-80 transition-opacity mx-auto"
             aria-label="RailOS Home"
           >
             <Image
