@@ -48,7 +48,7 @@ export function DesktopHeader() {
   // Phase 14.13 M2 Hotfix (Part A) — header follows the theme (light in
   // Light Mode). Only the logo box keeps `always-dark` (white SVG logo).
   return (
-    <header className="hidden lg:block sticky top-0 z-40 bg-black/60 backdrop-blur-xl">
+    <header className="app-chrome hidden lg:block sticky top-0 z-40 backdrop-blur-xl">
       <div className="max-w-screen-2xl mx-auto px-6 py-3 flex items-center justify-between">
 
         {/* RIGHT: Logo + Tabs */}

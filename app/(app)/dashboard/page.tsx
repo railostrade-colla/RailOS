@@ -769,7 +769,7 @@ export default function DashboardPage() {
                 >
                   <div
                     className={cn(
-                      "w-9 h-9 rounded-lg border flex items-center justify-center group-hover:scale-105 transition-transform",
+                      "w-9 h-9 rounded-xl border flex items-center justify-center group-hover:scale-105 transition-transform",
                       item.iconBg,
                       item.iconBorder,
                     )}

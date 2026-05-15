@@ -48,7 +48,7 @@ export function Footer({ compact = false }: { compact?: boolean }) {
           onClick={() => router.push("/about")}
           className="flex items-center gap-2.5 mb-4 hover:opacity-80 transition-opacity"
         >
-          <div className="always-dark w-8 h-8 rounded-lg overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black">
+          <div className="always-dark w-8 h-8 rounded-xl overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black">
             <Image src="/logo.png" alt={APP_NAME} width={32} height={32} className="w-full h-full object-contain" />
           </div>
           <div className="text-right">

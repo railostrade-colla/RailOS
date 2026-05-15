@@ -107,20 +107,22 @@ function BottomNavImpl() {
       )}
       aria-label="التنقل الرئيسي"
     >
-      {/* Phase 14.13 M2 Hotfix (Part A) — the floating pill follows the
-          theme (light glass in Light Mode). No always-dark here. */}
+      {/* FIX 4 — the floating pill follows the theme via --nav-bg
+          (dark glass in Dark, white glass in Light). No always-dark.
+          Indicator uses --nav-pill so it stays visible in both. */}
       <div
         ref={navRef}
-        className="relative max-w-md mx-auto bg-[rgba(15,15,15,0.92)] backdrop-blur-2xl border border-white/[0.08] rounded-[40px] p-2 shadow-2xl"
-        style={{ direction: "rtl" }}
+        className="relative max-w-md mx-auto backdrop-blur-2xl border border-white/[0.08] rounded-[40px] p-2 shadow-2xl"
+        style={{ direction: "rtl", backgroundColor: "var(--nav-bg)" }}
       >
         {/* Sliding indicator */}
         {activeIndex !== -1 && (
           <div
-            className="absolute top-2 bottom-2 bg-[rgba(40,40,40,0.95)] rounded-[28px] transition-all duration-300 ease-out shadow-inner"
+            className="absolute top-2 bottom-2 rounded-[28px] transition-all duration-300 ease-out shadow-inner"
             style={{
               width: indicatorStyle.width,
               right: indicatorStyle.right,
+              backgroundColor: "var(--nav-pill)",
             }}
             aria-hidden="true"
           />

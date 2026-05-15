@@ -21,6 +21,9 @@
   --info: #60A5FA;
   --nav-bg: rgba(15,15,15,0.92);
   --nav-pill: rgba(35,35,35,0.9);
+  /* Header / chrome surface — translucent so backdrop-blur still
+   * frosts content. Flips with the theme (FIX 3/4). */
+  --chrome-bg: rgba(0,0,0,0.60);
 
   /* Phase 14.13 M2 Hotfix Part C — 3D shadow system (Dark default).
    * Deep ambient + inset top highlight (light-from-above feel). */
@@ -92,6 +95,7 @@
   --info: #2563EB;
   --nav-bg: rgba(255,255,255,0.92);
   --nav-pill: rgba(235,238,242,0.9);
+  --chrome-bg: rgba(255,255,255,0.85);
 
   /* Phase 14.13 M2 Hotfix Part C — 3D shadows (Light Mode).
    * Soft, low-opacity ambient — no inset highlight on white. */
@@ -608,4 +612,38 @@ p { line-height: 1.6; }
   font-size: 12px;
   line-height: 1;
   white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ * FIX 3/4 — theme-aware chrome (Header / MobileHeader). The bg
+ * flips with --chrome-bg (dark→black 60%, light→white 85%) so the
+ * header is "the same colour as the page" in both themes while
+ * backdrop-blur still frosts scrolled content. Text/icons inside
+ * already flip via the existing [data-theme="light"] .text-*
+ * overrides, so nothing else is needed here.
+ * ═══════════════════════════════════════════════════════════════ */
+.app-chrome { background-color: var(--chrome-bg) !important; }
+
+/* ═══════════════════════════════════════════════════════════════
+ * FIX 5 — ⭐ Strict shadow hierarchy.
+ * Depth belongs to the OUTER container only. Anything that is a
+ * rounded glass box NESTED inside another rounded box loses its
+ * shadow + lift, as do inner buttons/links/mini-stats. Top-level
+ * <Card>/.shadow-card and quick-action tiles keep their depth.
+ * `!important` so it overrides the non-important .shadow-card.
+ * ═══════════════════════════════════════════════════════════════ */
+[class*="rounded-2xl"] [class*="rounded-2xl"][class*="bg-white/[0"],
+[class*="rounded-2xl"] [class*="rounded-xl"][class*="bg-white/[0"],
+[class*="rounded-2xl"] [class*="rounded-lg"][class*="bg-white/[0"],
+[class*="rounded-3xl"] [class*="rounded-xl"][class*="bg-white/[0"],
+[class*="rounded-3xl"] [class*="rounded-lg"][class*="bg-white/[0"],
+.shadow-card .shadow-card,
+.shadow-card [class*="rounded-xl"][class*="bg-white/[0"],
+.shadow-card [class*="rounded-lg"][class*="bg-white/[0"],
+.card-content [class*="rounded-xl"],
+.card-content [class*="rounded-lg"],
+[class*="rounded"] button:not(.btn-primary),
+[class*="rounded"] a:not(.shadow-card) {
+  box-shadow: none !important;
+  transform: none !important;
 }

@@ -28,7 +28,7 @@ export function AdminCategoryCard({
   return (
     <Link
       href={href}
-      className="group flex items-center gap-3.5 bg-white/[0.05] border border-white/[0.06] rounded-2xl p-3.5 transition-colors hover:bg-white/[0.07]"
+      className="shadow-card group flex items-center gap-3.5 bg-white/[0.05] border border-white/[0.06] rounded-2xl p-3.5 transition-colors hover:bg-white/[0.07]"
     >
       <div
         className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
