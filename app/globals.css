@@ -345,3 +345,58 @@ body {
   background: linear-gradient(180deg,#0F172A 0%,#64748B 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+ * Phase 14.13 M2 Hotfix — ALWAYS-DARK islands
+ *
+ * Some chrome (Header, BottomNav, logo chip) must stay dark even in
+ * light mode — a deliberate "dark navigation over light content"
+ * look. Any element tagged `.always-dark` (or [data-always-dark])
+ * RE-ASSERTS the dark palette for itself + descendants, defeating
+ * the light overrides above via higher specificity
+ * ([data-theme="light"] .always-dark <sel> = 0,3,0 > the 0,2,0
+ * light rules). Dark mode is untouched (these rules are scoped to
+ * [data-theme="light"] only).
+ * ═══════════════════════════════════════════════════════════════ */
+
+/* The island surface itself */
+[data-theme="light"] .always-dark,
+[data-theme="light"] [data-always-dark="true"] {
+  background-color: #000 !important;
+  color: #FFFFFF !important;
+  border-color: rgba(255,255,255,0.08) !important;
+}
+
+/* Re-assert dark surfaces for any glass utilities INSIDE the island */
+[data-theme="light"] .always-dark .bg-black,
+[data-theme="light"] [data-always-dark="true"] .bg-black { background-color: #000 !important; }
+[data-theme="light"] .always-dark .bg-white\/\[0\.02\] { background-color: #080808 !important; }
+[data-theme="light"] .always-dark .bg-white\/\[0\.03\] { background-color: #0a0a0a !important; }
+[data-theme="light"] .always-dark .bg-white\/\[0\.04\] { background-color: #0d0d0d !important; }
+[data-theme="light"] .always-dark .bg-white\/\[0\.05\] { background-color: #0f0f0f !important; }
+[data-theme="light"] .always-dark .bg-white\/\[0\.06\] { background-color: #111111 !important; }
+[data-theme="light"] .always-dark .bg-white\/\[0\.08\] { background-color: #141414 !important; }
+[data-theme="light"] .always-dark .bg-white\/\[0\.1\]  { background-color: #161616 !important; }
+
+/* Re-assert the dark text ramp inside the island */
+[data-theme="light"] .always-dark .text-white,
+[data-theme="light"] [data-always-dark="true"] .text-white { color: #FFFFFF !important; }
+[data-theme="light"] .always-dark .text-neutral-200 { color: #E5E5E5 !important; }
+[data-theme="light"] .always-dark .text-neutral-300 { color: #D4D4D4 !important; }
+[data-theme="light"] .always-dark .text-neutral-400 { color: #A3A3A3 !important; }
+[data-theme="light"] .always-dark .text-neutral-500 { color: #737373 !important; }
+[data-theme="light"] .always-dark .text-neutral-600 { color: #525252 !important; }
+
+/* Borders back to dark hairlines inside the island */
+[data-theme="light"] .always-dark .border-white\/\[0\.04\],
+[data-theme="light"] .always-dark .border-white\/\[0\.05\],
+[data-theme="light"] .always-dark .border-white\/\[0\.06\],
+[data-theme="light"] .always-dark .border-white\/\[0\.08\],
+[data-theme="light"] .always-dark .border-white\/\[0\.1\],
+[data-theme="light"] .always-dark .border-white\/\[0\.12\] {
+  border-color: rgba(255,255,255,0.08) !important;
+}
+
+/* Accent stays green in the island's active state (BottomNav) */
+[data-theme="light"] .always-dark .text-green-400,
+[data-theme="light"] .always-dark .text-green-300 { color: #4ADE80 !important; }

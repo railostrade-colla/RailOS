@@ -45,8 +45,10 @@ export function DesktopHeader() {
     }
   }
 
+  // Phase 14.13 M2 Hotfix — `always-dark`: header stays dark even in
+  // light mode (dark-nav-over-light-content look). See globals.css.
   return (
-    <header className="hidden lg:block sticky top-0 z-40 bg-black/60 backdrop-blur-xl">
+    <header className="always-dark hidden lg:block sticky top-0 z-40 bg-black/60 backdrop-blur-xl">
       <div className="max-w-screen-2xl mx-auto px-6 py-3 flex items-center justify-between">
 
         {/* RIGHT: Logo + Tabs */}

@@ -19,8 +19,9 @@ import { NotificationBell } from "@/components/notifications/NotificationBell"
 export function MobileHeader() {
   const pathname = usePathname()
 
+  // Phase 14.13 M2 Hotfix — always-dark (see DesktopHeader / globals.css).
   return (
-    <header className="lg:hidden sticky top-0 z-40 bg-[rgba(0,0,0,0.85)] backdrop-blur-xl">
+    <header className="always-dark lg:hidden sticky top-0 z-40 bg-[rgba(0,0,0,0.85)] backdrop-blur-xl">
       <div className="px-4 py-3 flex items-center justify-between">
         {/* Logo — Phase 10.96: click reloads the app instead of navigating
             (per founder spec: "ايقونة التطبيق الاجراء النقر يتم تحديث التطبيق") */}
