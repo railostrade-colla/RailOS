@@ -772,3 +772,18 @@ select option {
   border: 1px solid var(--border) !important;
   box-shadow: var(--shadow-lg);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+ * Theme-aware utility aliases (Phase 14.13 — project-selector pass)
+ *
+ * The newer component specs use shadcn-style class names. They don't
+ * exist in this Tailwind-v4 setup, so map them to the project's
+ * EXISTING theme vars (already dark+light). This gives a stable
+ * theme-aware vocabulary without touching ~7k legacy utilities.
+ * ═══════════════════════════════════════════════════════════════ */
+.bg-card              { background-color: var(--bg-card) !important; }
+.bg-secondary         { background-color: var(--bg-hover) !important; }
+.text-foreground      { color: var(--text-primary) !important; }
+.text-muted-foreground{ color: var(--text-muted) !important; }
+.border-border        { border-color: var(--border) !important; }
+.border-border-strong { border-color: var(--border-strong) !important; }
