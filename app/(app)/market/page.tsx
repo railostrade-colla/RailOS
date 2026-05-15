@@ -21,19 +21,21 @@ import type { Project, Company } from "@/lib/mock-data/types"
 import { getAllProjects, getAllCompanies, getLatestNews } from "@/lib/data"
 import { readPersistedSync } from "@/lib/data/cache"
 import { cn } from "@/lib/utils/cn"
+import { useTranslations } from "next-intl"
 
 // ─── News type → label/color ───────────────────────────────
-const NEWS_TYPE_META: Record<NewsType, { label: string; color: "blue" | "purple" | "green" | "yellow" }> = {
-  announcement: { label: "إعلان",      color: "blue" },
-  feature:      { label: "ميزة جديدة", color: "purple" },
-  tip:          { label: "نصيحة",      color: "green" },
-  update:       { label: "تحديث",      color: "yellow" },
+const NEWS_TYPE_META: Record<NewsType, { labelKey: string; color: "blue" | "purple" | "green" | "yellow" }> = {
+  announcement: { labelKey: "listing",      color: "blue" },
+  feature:      { labelKey: "badgeFeature", color: "purple" },
+  tip:          { labelKey: "badgeTip",      color: "green" },
+  update:       { labelKey: "badgeUpdate",   color: "yellow" },
 }
 
 type MarketTab = "news" | "projects" | "companies" | "offers"
 
 function MarketContent() {
   const router = useRouter()
+  const tr = useTranslations("market")
   const searchParams = useSearchParams()
 
   // Tab from URL
@@ -137,8 +139,8 @@ function MarketContent() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-6xl mx-auto pb-20">
 
           <PageHeader
-            title="السوق"
-            subtitle="استكشف الفرص الاستثمارية المتاحة"
+            title={tr("title")}
+            subtitle={tr("subtitle")}
             showBack={false}
           />
 
@@ -146,7 +148,7 @@ function MarketContent() {
           {filteredCompany && (
             <div className="bg-blue-400/[0.06] border border-blue-400/25 rounded-xl p-3 mb-4 flex items-center justify-between">
               <div className="text-xs">
-                <span className="text-neutral-400">عرض مشاريع: </span>
+                <span className="text-neutral-400">{tr("showProjects")}</span>
                 <span className="text-white font-bold">{filteredCompany.name}</span>
               </div>
               <button
@@ -163,22 +165,22 @@ function MarketContent() {
               founder spec): News (default) | Projects | Companies | Offers */}
           <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-4">
             {([
-              { key: "news", label: "الأخبار" },
-              { key: "projects", label: "المشاريع" },
-              { key: "companies", label: "الشركات" },
-              { key: "offers", label: "العروض" },
-            ] as const).map((t) => (
+              { key: "news", lk: "tabNews" },
+              { key: "projects", lk: "tabProjects" },
+              { key: "companies", lk: "tabCompanies" },
+              { key: "offers", lk: "tabOffers" },
+            ] as const).map((tb) => (
               <button
-                key={t.key}
-                onClick={() => handleTabChange(t.key as MarketTab)}
+                key={tb.key}
+                onClick={() => handleTabChange(tb.key as MarketTab)}
                 className={cn(
                   "flex-1 py-2 rounded-lg text-[11px] transition-colors flex items-center justify-center gap-1",
-                  tab === t.key
+                  tab === tb.key
                     ? "bg-white/[0.08] text-white font-bold border border-white/[0.1]"
                     : "text-neutral-500 hover:text-white",
                 )}
               >
-                <span>{t.label}</span>
+                <span>{tr(tb.lk)}</span>
               </button>
             ))}
           </div>
@@ -191,7 +193,7 @@ function MarketContent() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={tab === "projects" ? "ابحث عن مشروع..." : "ابحث عن شركة..."}
+                placeholder={tab === "projects" ? tr("searchProject") : tr("searchCompany")}
                 className="w-full bg-white/[0.05] border border-white/[0.08] focus:border-white/20 rounded-xl pr-10 pl-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none transition-colors"
               />
             </div>
@@ -231,7 +233,7 @@ function MarketContent() {
                         : "bg-white/[0.04] border-white/[0.08] text-neutral-400 hover:text-white"
                     )}
                   >
-                    {r === "الكل" ? "كل المخاطر" : r}
+                    {r === "الكل" ? tr("allRisk") : r}
                   </button>
                 ))}
               </div>
@@ -239,10 +241,10 @@ function MarketContent() {
               {/* Sort */}
               <div className="flex gap-2 mb-5 overflow-x-auto pb-1 -mx-1 px-1">
                 {[
-                  { key: "newest" as const, label: "الأحدث" },
-                  { key: "trending" as const, label: "🔥 الأكثر رواجاً" },
-                  { key: "price_asc" as const, label: "السعر: من الأقل" },
-                  { key: "price_desc" as const, label: "السعر: من الأعلى" },
+                  { key: "newest" as const, label: tr("sortLatest") },
+                  { key: "trending" as const, label: tr("trending") },
+                  { key: "price_asc" as const, label: tr("sortPriceLow") },
+                  { key: "price_desc" as const, label: tr("sortPriceHigh") },
                 ].map((s) => (
                   <button
                     key={s.key}
@@ -274,8 +276,8 @@ function MarketContent() {
             ) : news.length === 0 ? (
               <EmptyState
                 icon="📰"
-                title="لا توجد أخبار بعد"
-                description="ستظهر هنا آخر إعلانات وتحديثات المنصة فور نشرها."
+                title={tr("noNewsTitle")}
+                description={tr("noNewsDesc")}
                 size="lg"
               />
             ) : (
@@ -293,7 +295,7 @@ function MarketContent() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                          <Badge color={meta.color} variant="soft" size="xs">{meta.label}</Badge>
+                          <Badge color={meta.color} variant="soft" size="xs">{tr(meta.labelKey)}</Badge>
                           {n.is_new && <Badge color="green" variant="soft" size="xs">جديد</Badge>}
                           <span className="text-[9px] text-neutral-600 mr-auto flex items-center gap-1">
                             <Calendar className="w-2.5 h-2.5" />
@@ -320,8 +322,8 @@ function MarketContent() {
                   are wired to the real `ads` table on this tab. */}
               <Card variant="gradient" color="purple">
                 <SectionHeader
-                  title="✨ عروض النظام"
-                  subtitle="عروض ترويجية رسمية من رايلوس"
+                  title={tr("systemOffersTitle")}
+                  subtitle={tr("systemOffersSubtitle")}
                 />
                 <div className="space-y-2">
                   {([] as Array<{
@@ -365,7 +367,7 @@ function MarketContent() {
 
               {/* Redirect note — user listings now live in dedicated routes */}
               <Card>
-                <div className="text-xs font-bold text-white mb-3">عروض المستخدمين متاحة في:</div>
+                <div className="text-xs font-bold text-white mb-3">{tr("userOffersIn")}</div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
                   <button
                     onClick={() => router.push("/exchange")}
@@ -375,8 +377,8 @@ function MarketContent() {
                       🔄
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs font-bold text-white">سوق التبادل</div>
-                      <div className="text-[10px] text-neutral-400">تداول مباشر بين المستخدمين</div>
+                      <div className="text-xs font-bold text-white">{tr("exchangeMarket")}</div>
+                      <div className="text-[10px] text-neutral-400">{tr("quickSaleSub")}</div>
                     </div>
                     <ChevronLeft className="w-4 h-4 text-neutral-500 flex-shrink-0" strokeWidth={2} />
                   </button>
@@ -389,10 +391,10 @@ function MarketContent() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-white">البيع السريع</span>
+                        <span className="text-xs font-bold text-white">{tr("quickSale")}</span>
                         <Badge color="yellow" variant="soft" size="xs">اشتراك</Badge>
                       </div>
-                      <div className="text-[10px] text-neutral-400">أسعار حصرية للمشتركين</div>
+                      <div className="text-[10px] text-neutral-400">{tr("exclusivePrices")}</div>
                     </div>
                     <ChevronLeft className="w-4 h-4 text-neutral-500 flex-shrink-0" strokeWidth={2} />
                   </button>
@@ -410,8 +412,8 @@ function MarketContent() {
             ) : filteredProjects.length === 0 ? (
               <EmptyState
                 icon="🔍"
-                title="لا توجد مشاريع تطابق البحث"
-                description="جرّب تغيير الفلاتر"
+                title={tr("noProjectsTitle")}
+                description={tr("tryFilters")}
                 size="lg"
               />
             ) : (
@@ -437,8 +439,8 @@ function MarketContent() {
             ) : filteredCompanies.length === 0 ? (
               <EmptyState
                 icon="🔍"
-                title="لا توجد شركات تطابق البحث"
-                description="جرّب تغيير الفلاتر"
+                title={tr("noCompaniesTitle")}
+                description={tr("tryFilters")}
                 size="lg"
               />
             ) : (
@@ -469,7 +471,7 @@ function MarketContent() {
               {openNews.icon}
             </div>
             <Badge color={NEWS_TYPE_META[openNews.type].color} variant="soft">
-              {NEWS_TYPE_META[openNews.type].label}
+              {tr(NEWS_TYPE_META[openNews.type].labelKey)}
             </Badge>
             {openNews.is_new && <Badge color="green" variant="soft" size="xs">جديد</Badge>}
           </div>
