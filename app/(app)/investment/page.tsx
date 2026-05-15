@@ -31,8 +31,26 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { ShoppingCart, TrendingDown, ArrowLeft, Info } from "lucide-react"
+import dynamic from "next/dynamic"
 import { AppLayout } from "@/components/layout/AppLayout"
-import { ProjectChart } from "@/components/investment/ProjectChart"
+// Phase 14.11 A6 — ProjectChart pulls in recharts (~65 KB). Loading
+// it via next/dynamic({ ssr:false }) keeps recharts out of the
+// investment page's initial JS; it streams in alongside the
+// price_history fetch. Matches the Phase 14.10 C pattern.
+const ProjectChart = dynamic(
+  () =>
+    import("@/components/investment/ProjectChart").then(
+      (m) => m.ProjectChart,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[260px] flex items-center justify-center text-xs text-neutral-600">
+        جاري تحميل الرسم البيانيّ...
+      </div>
+    ),
+  },
+)
 import { ProjectSelector } from "@/components/investment/ProjectSelector"
 import {
   ProjectStatusGrid,
