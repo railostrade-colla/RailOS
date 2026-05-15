@@ -45,10 +45,11 @@ export function Logo({
       className={`logo-wrapper flex items-center ${variant === "vertical" ? "flex-col" : ""}`}
       style={{ gap: d.gap }}
     >
-      {/* Logo box — always dark, the only element with a shadow. */}
+      {/* Logo box — fully transparent (no bg / border / shadow) in
+          both themes, per founder spec. Just a sized, centered frame. */}
       <div
-        className="logo-box always-dark flex items-center justify-center shrink-0 overflow-hidden border border-white/[0.1]"
-        style={{ width: d.box, height: d.box, borderRadius: d.radius, backgroundColor: "#000", boxShadow: "var(--shadow-md)" }}
+        className="logo-box flex items-center justify-center shrink-0 overflow-hidden"
+        style={{ width: d.box, height: d.box }}
       >
         {/* Dual mark: icon.png in Dark, logo1.png in Light. Toggled
             by CSS (no-FOUC, no client hook) — see globals.css. */}

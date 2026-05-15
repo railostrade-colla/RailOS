@@ -37,7 +37,7 @@ export default function HomePage() {
 <div className="relative z-10 w-full max-w-sm flex flex-col items-center text-center animate-[fadeIn_0.8s_ease-out]">
 
         {/* Logo */}
-        <div className="w-32 h-32 lg:w-40 lg:h-40 rounded-3xl overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black shadow-2xl mb-6 animate-[bounceIn_1s_ease-out]">
+        <div className="w-32 h-32 lg:w-40 lg:h-40 overflow-hidden flex items-center justify-center mb-6 animate-[bounceIn_1s_ease-out]">
           <Image
             src="/logo.png"
             alt={APP_NAME}

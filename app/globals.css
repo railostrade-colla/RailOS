@@ -533,7 +533,7 @@ button:not(.no-shadow):not([disabled]):not(.always-dark):not(nav button):not(foo
 
 /* Logo: depth on the box only, text always flat (kills the
  * "shadow ring around رايلوس/RAILOS" bug for good). */
-.logo-box { box-shadow: var(--shadow-md) !important; }
+.logo-box { box-shadow: none !important; background: transparent !important; border: 0 !important; }
 .logo-text, .logo-text *, .logo-wrapper > .logo-text {
   box-shadow: none !important;
   text-shadow: none !important;

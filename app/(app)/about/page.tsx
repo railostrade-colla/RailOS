@@ -47,7 +47,7 @@ export default function AboutPage() {
           {/* Hero - logo + name (footer style) */}
           <div className="mb-10">
             <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black flex-shrink-0">
+              <div className="w-10 h-10 overflow-hidden flex items-center justify-center flex-shrink-0">
                 <Image src="/logo.png" alt={APP_NAME} width={40} height={40} className="w-full h-full object-contain" />
               </div>
               <div className="text-right">

@@ -196,7 +196,7 @@ function InvoiceContent({ params }: { params: Promise<{ id: string }> }) {
             <div className="flex justify-between items-start mb-6 pb-5 border-b-2 border-white/[0.1]">
               <div>
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-12 h-12 rounded-xl bg-black border border-white/[0.15] overflow-hidden flex items-center justify-center">
+                  <div className="w-12 h-12 overflow-hidden flex items-center justify-center">
                     <Image
                       src="/logo.png"
                       alt="RailOS"
