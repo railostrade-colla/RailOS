@@ -17,12 +17,16 @@ import Image from "next/image"
 type LogoSize = "sm" | "md" | "lg" | "xl" | "2xl"
 type LogoVariant = "icon" | "horizontal" | "vertical"
 
-const SIZES: Record<LogoSize, { box: number; icon: number; gap: number; title: number; subtitle: number }> = {
-  sm:   { box: 32, icon: 20, gap: 8,  title: 13, subtitle: 9 },
-  md:   { box: 40, icon: 24, gap: 12, title: 15, subtitle: 11 },
-  lg:   { box: 56, icon: 32, gap: 14, title: 18, subtitle: 12 },
-  xl:   { box: 72, icon: 42, gap: 16, title: 20, subtitle: 13 },
-  "2xl":{ box: 96, icon: 56, gap: 20, title: 24, subtitle: 14 },
+// `radius` is an explicit, modest corner (~20% of the box) so the
+// frame always reads as a SOFT SQUARE — never a circle. A fixed
+// rounded-xl (12px) on the 32px size looked almost circular; this
+// scales the corner with the box instead.
+const SIZES: Record<LogoSize, { box: number; icon: number; gap: number; title: number; subtitle: number; radius: number }> = {
+  sm:   { box: 32, icon: 20, gap: 8,  title: 13, subtitle: 9,  radius: 7 },
+  md:   { box: 40, icon: 24, gap: 12, title: 15, subtitle: 11, radius: 9 },
+  lg:   { box: 56, icon: 32, gap: 14, title: 18, subtitle: 12, radius: 12 },
+  xl:   { box: 72, icon: 42, gap: 16, title: 20, subtitle: 13, radius: 16 },
+  "2xl":{ box: 96, icon: 56, gap: 20, title: 24, subtitle: 14, radius: 20 },
 }
 
 export function Logo({
@@ -43,8 +47,8 @@ export function Logo({
     >
       {/* Logo box — always dark, the only element with a shadow. */}
       <div
-        className="logo-box always-dark rounded-xl flex items-center justify-center shrink-0 overflow-hidden border border-white/[0.1]"
-        style={{ width: d.box, height: d.box, backgroundColor: "#000", boxShadow: "var(--shadow-md)" }}
+        className="logo-box always-dark flex items-center justify-center shrink-0 overflow-hidden border border-white/[0.1]"
+        style={{ width: d.box, height: d.box, borderRadius: d.radius, backgroundColor: "#000", boxShadow: "var(--shadow-md)" }}
       >
         <Image
           src="/icon.png"
