@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { Search, Calendar } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
+import { useTranslations } from "next-intl"
 import { Card, Badge, Tabs, EmptyState, Modal, SkeletonCard } from "@/components/ui"
 import {
   type PlatformNews,
@@ -40,27 +41,27 @@ function dbToNews(row: DBNews): PlatformNews {
 }
 
 // ─── Type → label/color/badge mapping ───────────────────────────
-const TYPE_META: Record<NewsType, { label: string; color: "blue" | "purple" | "green" | "yellow" }> = {
-  announcement: { label: "إعلان",      color: "blue" },
-  feature:      { label: "ميزة جديدة", color: "purple" },
-  tip:          { label: "نصيحة",      color: "green" },
-  update:       { label: "تحديث",      color: "yellow" },
+const TYPE_META: Record<NewsType, { labelKey: string; color: "blue" | "purple" | "green" | "yellow" }> = {
+  announcement: { labelKey: "typeAnnouncement", color: "blue" },
+  feature:      { labelKey: "typeFeature",      color: "purple" },
+  tip:          { labelKey: "typeTip",          color: "green" },
+  update:       { labelKey: "typeUpdate",       color: "yellow" },
 }
 
 type FilterTab = "all" | NewsType
 
-// Clean label-only tabs (no emoji icons / counts) — same design as
-// the rest of the app (Market, Deals…). Phase 14.13 unification.
-const TABS: Array<{ id: FilterTab; label: string }> = [
-  { id: "all",          label: "الكل" },
-  { id: "feature",      label: "ميزات" },
-  { id: "announcement", label: "إعلانات" },
-  { id: "tip",          label: "نصائح" },
-  { id: "update",       label: "تحديثات" },
+// Clean label-only tabs; labels resolved via t() in the component.
+const TABS: Array<{ id: FilterTab; labelKey: string }> = [
+  { id: "all",          labelKey: "tabAll" },
+  { id: "feature",      labelKey: "tabFeature" },
+  { id: "announcement", labelKey: "tabAnnouncement" },
+  { id: "tip",          labelKey: "tabTip" },
+  { id: "update",       labelKey: "tabUpdate" },
 ]
 
 // ════════════════════════════════════════════════════════════════
 export default function NewsPage() {
+  const t = useTranslations("news")
   const [tab, setTab] = useState<FilterTab>("all")
   const [search, setSearch] = useState("")
   const [openItem, setOpenItem] = useState<PlatformNews | null>(null)
@@ -121,8 +122,8 @@ export default function NewsPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-5xl mx-auto pb-20">
 
           <PageHeader
-            title="📰 آخر الأخبار"
-            subtitle="تابع كل جديد على المنصة"
+            title={t("title")}
+            subtitle={t("subtitle")}
             backHref="/dashboard"
           />
 
@@ -136,10 +137,10 @@ export default function NewsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <Badge color={TYPE_META[featured.type].color} variant="soft">
-                      {TYPE_META[featured.type].label}
+                      {t(TYPE_META[featured.type].labelKey)}
                     </Badge>
                     {featured.is_new && (
-                      <Badge color="green" variant="soft" size="xs">جديد</Badge>
+                      <Badge color="green" variant="soft" size="xs">{t("new")}</Badge>
                     )}
                     <span className="text-[10px] text-neutral-500 flex items-center gap-1 mr-auto">
                       <Calendar className="w-2.5 h-2.5" />
@@ -163,7 +164,7 @@ export default function NewsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث في الأخبار..."
+              placeholder={t("search")}
               className="w-full bg-white/[0.05] border border-white/[0.08] focus:border-white/20 rounded-xl pr-10 pl-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none transition-colors"
             />
           </div>
@@ -171,7 +172,7 @@ export default function NewsPage() {
           {/* ═══ Filter Tabs ═══ */}
           <div className="mb-5">
             <Tabs
-              tabs={TABS}
+              tabs={TABS.map((tb) => ({ id: tb.id, label: t(tb.labelKey) }))}
               activeTab={tab}
               onChange={(id) => setTab(id as FilterTab)}
             />
@@ -185,8 +186,8 @@ export default function NewsPage() {
           ) : filtered.length === 0 ? (
             <EmptyState
               icon="🔍"
-              title="لا توجد أخبار تطابق البحث"
-              description="جرّب تغيير الفلتر أو كلمة البحث"
+              title={t("noResultsTitle")}
+              description={t("noResultsDesc")}
               size="md"
             />
           ) : (
@@ -201,10 +202,10 @@ export default function NewsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
                         <Badge color={meta.color} variant="soft" size="xs">
-                          {meta.label}
+                          {t(meta.labelKey)}
                         </Badge>
                         {n.is_new && (
-                          <Badge color="green" variant="soft" size="xs">جديد</Badge>
+                          <Badge color="green" variant="soft" size="xs">{t("new")}</Badge>
                         )}
                         <span className="text-[9px] text-neutral-600 mr-auto">{n.date}</span>
                       </div>
@@ -237,10 +238,10 @@ export default function NewsPage() {
               {openItem.icon}
             </div>
             <Badge color={TYPE_META[openItem.type].color} variant="soft">
-              {TYPE_META[openItem.type].label}
+              {t(TYPE_META[openItem.type].labelKey)}
             </Badge>
             {openItem.is_new && (
-              <Badge color="green" variant="soft" size="xs">جديد</Badge>
+              <Badge color="green" variant="soft" size="xs">{t("new")}</Badge>
             )}
           </div>
           <p className="text-sm text-neutral-300 leading-relaxed">{openItem.excerpt}</p>
@@ -258,15 +259,16 @@ export default function NewsPage() {
 }
 
 // ─── News reactions strip ────────────────────────────────────
-const REACTIONS: ReadonlyArray<{ id: ReactionType; emoji: string; label: string }> = [
-  { id: "like",      emoji: "👍", label: "إعجاب" },
-  { id: "love",      emoji: "❤️", label: "حب" },
-  { id: "celebrate", emoji: "🎉", label: "احتفال" },
-  { id: "applause",  emoji: "👏", label: "تصفيق" },
-  { id: "fire",      emoji: "🔥", label: "نار" },
+const REACTIONS: ReadonlyArray<{ id: ReactionType; emoji: string; labelKey: string }> = [
+  { id: "like",      emoji: "👍", labelKey: "reactLike" },
+  { id: "love",      emoji: "❤️", labelKey: "reactLove" },
+  { id: "celebrate", emoji: "🎉", labelKey: "reactCelebrate" },
+  { id: "applause",  emoji: "👏", labelKey: "reactClap" },
+  { id: "fire",      emoji: "🔥", labelKey: "reactFire" },
 ]
 
 function NewsReactions({ newsId }: { newsId: string }) {
+  const t = useTranslations("news")
   const [active, setActive] = useState<ReactionType | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -295,7 +297,7 @@ function NewsReactions({ newsId }: { newsId: string }) {
     if (!result.success) {
       // Roll back on failure and surface a toast.
       setActive(previous)
-      showError(result.error || "تعذّر حفظ التفاعل")
+      showError(result.error || t("reactFail"))
     } else {
       // Trust the server's view (handles edge-cases where DB state
       // diverged from client state — e.g. another tab reacted).
@@ -306,7 +308,7 @@ function NewsReactions({ newsId }: { newsId: string }) {
 
   return (
     <div className="mt-5 pt-4 border-t border-white/[0.06]">
-      <div className="text-[11px] text-neutral-400 mb-2">كيف وجدت هذا الإعلان؟</div>
+      <div className="text-[11px] text-neutral-400 mb-2">{t("reactPrompt")}</div>
       <div className="flex gap-1.5 flex-wrap">
         {REACTIONS.map((r) => {
           const selected = active === r.id
@@ -315,7 +317,7 @@ function NewsReactions({ newsId }: { newsId: string }) {
               key={r.id}
               onClick={() => handleClick(r.id)}
               disabled={busy}
-              aria-label={r.label}
+              aria-label={t(r.labelKey)}
               aria-pressed={selected}
               className={cn(
                 "flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs transition-colors",
@@ -326,7 +328,7 @@ function NewsReactions({ newsId }: { newsId: string }) {
               )}
             >
               <span className="text-base leading-none">{r.emoji}</span>
-              <span className="text-[10px]">{r.label}</span>
+              <span className="text-[10px]">{t(r.labelKey)}</span>
             </button>
           )
         })}
