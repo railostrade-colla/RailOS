@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { memo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Heart, ChevronLeft, TrendingUp, Clock, Users, Calendar } from "lucide-react"
 import { showSuccess } from "@/lib/utils/toast"
@@ -76,7 +76,14 @@ interface ProjectCardProps {
   variant?: "compact" | "full"
 }
 
-export function ProjectCard({ project, variant = "full" }: ProjectCardProps) {
+// Phase 14.12 P4 — memo'd. ProjectCard is rendered in .map() grids on
+// /market and the /dashboard discover section. Those parents re-render
+// on unrelated state (tab switch, search input, realtime tick). The
+// `project` object reference is stable across those re-renders (it
+// comes from the dedupCache'd array), so default shallow comparison
+// lets every card skip re-render unless its own data actually
+// changed — big win on large grids.
+function ProjectCardImpl({ project, variant = "full" }: ProjectCardProps) {
   const router = useRouter()
   const [following, setFollowing] = useState(false)
 
@@ -360,3 +367,6 @@ export function ProjectCard({ project, variant = "full" }: ProjectCardProps) {
     </div>
   )
 }
+
+// Phase 14.12 P4 — memo'd export (see note on ProjectCardImpl).
+export const ProjectCard = memo(ProjectCardImpl)

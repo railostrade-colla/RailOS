@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { memo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Heart, Check, ChevronLeft, Star, TrendingUp } from "lucide-react"
 import { showSuccess } from "@/lib/utils/toast"
@@ -50,7 +50,9 @@ interface CompanyCardProps {
   variant?: "compact" | "full"
 }
 
-export function CompanyCard({ company, variant = "full" }: CompanyCardProps) {
+// Phase 14.12 P4 — memo'd (see ProjectCard rationale; same .map()
+// grid usage, stable `company` reference from cached arrays).
+function CompanyCardImpl({ company, variant = "full" }: CompanyCardProps) {
   const router = useRouter()
   const [following, setFollowing] = useState(false)
 
@@ -184,3 +186,6 @@ export function CompanyCard({ company, variant = "full" }: CompanyCardProps) {
     </div>
   )
 }
+
+// Phase 14.12 P4 — memo'd export.
+export const CompanyCard = memo(CompanyCardImpl)

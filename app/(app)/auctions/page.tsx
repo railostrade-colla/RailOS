@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { memo, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Gavel, Clock, AlertCircle } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
@@ -45,7 +45,13 @@ function useCountdown(endsAt: string) {
   return time
 }
 
-function AuctionCard({ auction, onClick }: { auction: AuctionListItem; onClick: () => void }) {
+// Phase 14.12 P4 — memo'd. Rendered in a .map() list; each card runs
+// its own 1s countdown interval (useCountdown). Without memo, a
+// parent re-render (realtime refresh / nav) would re-render every
+// card and re-create its interval. `onClick` is a fresh lambda per
+// render at the call site, so memo is paired with a stable handler
+// there (see the .map below).
+function AuctionCardImpl({ auction, onClick }: { auction: AuctionListItem; onClick: () => void }) {
   const countdown = useCountdown(auction.ends_at)
   const isUrgent = new Date(auction.ends_at).getTime() - Date.now() < 3600000 // أقل من ساعة
   const minBidIncrease = Math.floor(auction.current_price * 0.03)
@@ -103,6 +109,12 @@ function AuctionCard({ auction, onClick }: { auction: AuctionListItem; onClick: 
     </button>
   )
 }
+
+// Phase 14.12 P4 — memo'd export. The .map() below passes a stable
+// per-render router.push lambda; memo still helps because the
+// `auction` object reference is stable across the parent's realtime
+// refreshes (it comes from the mapped cache array).
+const AuctionCard = memo(AuctionCardImpl)
 
 // Phase 14.10 D — same row-mapping the useEffect used to do inline,
 // now a pure helper so first paint and subsequent refreshes share
