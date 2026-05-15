@@ -18,6 +18,7 @@ import {
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { showSuccess, showError } from "@/lib/utils/toast"
+import { useTranslations } from "next-intl"
 import { cn } from "@/lib/utils/cn"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -30,48 +31,59 @@ import {
 } from "@/lib/data/profile"
 
 // ─── Static option data ───────────────────────────────────────────────
+// `v` = the value stored in the DB (kept Arabic-canonical so saved
+// profiles stay consistent across locales); `k` = i18n key suffix
+// for display only. Labels resolved via t() in the component.
 const CITIES = [
-  "بغداد", "البصرة", "الموصل", "كركوك", "أربيل", "النجف",
-  "كربلاء", "الكوت", "الناصرية", "الديوانية", "السماوة", "الرمادي",
+  { v: "بغداد", k: "baghdad" }, { v: "البصرة", k: "basra" },
+  { v: "الموصل", k: "mosul" }, { v: "كركوك", k: "kirkuk" },
+  { v: "أربيل", k: "erbil" }, { v: "النجف", k: "najaf" },
+  { v: "كربلاء", k: "karbala" }, { v: "الكوت", k: "kut" },
+  { v: "الناصرية", k: "nasiriyah" }, { v: "الديوانية", k: "diwaniyah" },
+  { v: "السماوة", k: "samawah" }, { v: "الرمادي", k: "ramadi" },
 ] as const
 
 const PROFESSIONS = [
-  "موظف", "تاجر", "مهندس", "طبيب", "معلم", "مهني حر", "طالب", "أخرى",
+  { v: "موظف", k: "employee" }, { v: "تاجر", k: "trader" },
+  { v: "مهندس", k: "engineer" }, { v: "طبيب", k: "doctor" },
+  { v: "معلم", k: "teacher" }, { v: "مهني حر", k: "freelance" },
+  { v: "طالب", k: "student" }, { v: "أخرى", k: "other" },
 ] as const
 
 const INCOME_TIERS = [
-  { id: "lt_1m", label: "أقل من 1M د.ع", color: "text-neutral-400", border: "border-white/[0.1]" },
-  { id: "1_5m", label: "1M - 5M د.ع", color: "text-blue-400", border: "border-blue-400/30" },
-  { id: "5_15m", label: "5M - 15M د.ع", color: "text-yellow-400", border: "border-yellow-400/30" },
-  { id: "gt_15m", label: "أكثر من 15M د.ع", color: "text-green-400", border: "border-green-400/30" },
+  { id: "lt_1m", color: "text-neutral-400", border: "border-white/[0.1]" },
+  { id: "1_5m", color: "text-blue-400", border: "border-blue-400/30" },
+  { id: "5_15m", color: "text-yellow-400", border: "border-yellow-400/30" },
+  { id: "gt_15m", color: "text-green-400", border: "border-green-400/30" },
 ] as const
 
 const GOALS = [
-  { id: "growth", label: "نمو رأس المال", icon: "📈" },
-  { id: "income", label: "دخل شهري ثابت", icon: "💰" },
-  { id: "preserve", label: "الحفاظ على القيمة", icon: "🛡️" },
-  { id: "diversify", label: "التنويع في المحفظة", icon: "🎯" },
+  { id: "growth", icon: "📈" },
+  { id: "income", icon: "💰" },
+  { id: "preserve", icon: "🛡️" },
+  { id: "diversify", icon: "🎯" },
 ] as const
 
 const EXPERIENCE_LEVELS = [
-  { id: "beginner", label: "مبتدئ", desc: "أول تجربة استثمارية", icon: "🌱" },
-  { id: "intermediate", label: "متوسط", desc: "لدي تجارب سابقة", icon: "📈" },
-  { id: "expert", label: "متقدم", desc: "مستثمر محترف", icon: "🎯" },
+  { id: "beginner", icon: "🌱" },
+  { id: "intermediate", icon: "📈" },
+  { id: "expert", icon: "🎯" },
 ] as const
 
 const SECTORS = [
-  { id: "agri", label: "زراعة", icon: "🌾" },
-  { id: "real_estate", label: "عقارات", icon: "🏗️" },
-  { id: "industry", label: "صناعة", icon: "🏭" },
-  { id: "trade", label: "تجارة", icon: "🏪" },
-  { id: "tech", label: "تقنية", icon: "💻" },
-  { id: "med", label: "طب", icon: "🏥" },
+  { id: "agri", icon: "🌾" },
+  { id: "real_estate", icon: "🏗️" },
+  { id: "industry", icon: "🏭" },
+  { id: "trade", icon: "🏪" },
+  { id: "tech", icon: "💻" },
+  { id: "med", icon: "🏥" },
 ] as const
 
 type Section = 1 | 2 | 3 | 4
 
 export default function ProfileSetupPage() {
   const router = useRouter()
+  const t = useTranslations("auth.profileSetup")
   const [activeSection, setActiveSection] = useState<Section>(1)
   const [submitting, setSubmitting] = useState(false)
 
@@ -195,22 +207,22 @@ export default function ProfileSetupPage() {
 
   const handleSubmit = async () => {
     if (!sectionComplete[1]) {
-      showError("أكمل المعلومات الشخصية أولاً")
+      showError(t("errP1"))
       setActiveSection(1)
       return
     }
     if (!sectionComplete[2]) {
-      showError("أكمل المعلومات المهنية")
+      showError(t("errP2"))
       setActiveSection(2)
       return
     }
     if (!sectionComplete[3]) {
-      showError("اختر أهدافك الاستثمارية")
+      showError(t("errP3"))
       setActiveSection(3)
       return
     }
     if (!sectionComplete[4]) {
-      showError("أكّد جميع الموافقات للمتابعة")
+      showError(t("errP4"))
       setActiveSection(4)
       return
     }
@@ -222,7 +234,7 @@ export default function ProfileSetupPage() {
         data: { user },
       } = await supabase.auth.getUser()
       if (!user) {
-        showError("غير مسجَّل دخول — يرجى إعادة تسجيل الدخول")
+        showError(t("errNotLoggedIn"))
         setSubmitting(false)
         return
       }
@@ -238,7 +250,7 @@ export default function ProfileSetupPage() {
           // eslint-disable-next-line no-console
           console.error("[profile-setup] password update:", pwErr.message)
           if (needsPassword) {
-            showError("تعذّر تعيين كلمة المرور — " + pwErr.message)
+            showError(t("errPwdSet") + pwErr.message)
             setSubmitting(false)
             return
           }
@@ -259,7 +271,7 @@ export default function ProfileSetupPage() {
       if (profileErr) {
         // eslint-disable-next-line no-console
         console.error("[profile-setup] profile update:", profileErr.message)
-        showError("تعذّر حفظ الملف — حاول مرّة أخرى")
+        showError(t("errSave"))
         setSubmitting(false)
         return
       }
@@ -289,12 +301,12 @@ export default function ProfileSetupPage() {
         // Still let them proceed — profile core was saved.
       }
 
-      showSuccess("تم حفظ ملفك! ننتقل لـ KYC... 🎉")
+      showSuccess(t("saved"))
       setTimeout(() => router.push("/kyc"), 600)
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("[profile-setup] submit threw:", err)
-      showError("خطأ غير متوقّع")
+      showError(t("errUnexpected"))
       setSubmitting(false)
     }
   }
@@ -306,8 +318,8 @@ export default function ProfileSetupPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-2xl mx-auto pb-24">
 
           <PageHeader
-            title="إكمال الملف الشخصي"
-            subtitle="خطوة أخيرة قبل البدء — معلوماتك تساعدنا نقدم لك أفضل تجربة"
+            title={t("title")}
+            subtitle={t("subtitle")}
             showBack
           />
 
@@ -343,22 +355,22 @@ export default function ProfileSetupPage() {
           {/* ═══════════════ Section 1: Personal info ═══════════════ */}
           <Section
             n={1}
-            title="المعلومات الشخصية"
+            title={t("sec1")}
             icon={<User className="w-4 h-4 text-blue-400" strokeWidth={2} />}
             done={sectionComplete[1]}
             active={activeSection === 1}
             onActivate={() => setActiveSection(1)}
           >
-            <Field label="الاسم الكامل *">
+            <Field label={t("fullNameLabel")}>
               <input
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="مثال: أحمد محمد علي"
+                placeholder={t("fullNamePh")}
                 className="form-input"
               />
             </Field>
 
-            <Field label="تاريخ الميلاد *" icon={<Calendar className="w-3.5 h-3.5 text-neutral-500" />}>
+            <Field label={t("dobLabel")} icon={<Calendar className="w-3.5 h-3.5 text-neutral-500" />}>
               <input
                 type="date"
                 value={birthDate}
@@ -368,11 +380,11 @@ export default function ProfileSetupPage() {
               />
             </Field>
 
-            <Field label="الجنس *">
+            <Field label={t("genderLabel")}>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { id: "male" as const, label: "ذكر", icon: "👨" },
-                  { id: "female" as const, label: "أنثى", icon: "👩" },
+                  { id: "male" as const, label: t("male"), icon: "👨" },
+                  { id: "female" as const, label: t("female"), icon: "👩" },
                 ].map((g) => (
                   <button
                     key={g.id}
@@ -391,20 +403,20 @@ export default function ProfileSetupPage() {
               </div>
             </Field>
 
-            <Field label="المدينة *" icon={<MapPin className="w-3.5 h-3.5 text-neutral-500" />}>
+            <Field label={t("cityLabel")} icon={<MapPin className="w-3.5 h-3.5 text-neutral-500" />}>
               <select
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 className="form-input"
               >
-                <option value="">— اختر المدينة —</option>
+                <option value="">{t("cityPlaceholder")}</option>
                 {CITIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
+                  <option key={c.k} value={c.v}>{t(`city_${c.k}`)}</option>
                 ))}
               </select>
             </Field>
 
-            <Field label="رقم الهاتف *" icon={<Phone className="w-3.5 h-3.5 text-neutral-500" />}>
+            <Field label={t("phoneLabel")} icon={<Phone className="w-3.5 h-3.5 text-neutral-500" />}>
               <div className="flex gap-2">
                 <span className="px-3 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-sm font-mono text-neutral-400 flex-shrink-0" dir="ltr">
                   +964
@@ -425,19 +437,19 @@ export default function ProfileSetupPage() {
                 already have one. */}
             <div className="mt-3 pt-3 border-t border-white/[0.06]">
               <div className="text-[11px] text-neutral-400 mb-2 font-bold flex items-center gap-1.5">
-                🔐 كلمة المرور
+                {t("pwdSectionLabel")}
                 {needsPassword ? (
                   <span className="text-red-400">*</span>
                 ) : (
-                  <span className="text-neutral-600 text-[10px]">(اختياري — مُعيّنة سابقاً)</span>
+                  <span className="text-neutral-600 text-[10px]">{t("pwdOptionalPrev")}</span>
                 )}
               </div>
               {needsPassword && (
                 <div className="text-[10px] text-yellow-400 mb-2 leading-relaxed">
-                  دخلت عبر Google — عيِّن كلمة مرور لتتمكن من الدخول بالبريد لاحقاً.
+                  {t("pwdGoogleHint")}
                 </div>
               )}
-              <Field label={"كلمة المرور " + (needsPassword ? "*" : "(8 أحرف على الأقل)")}>
+              <Field label={t("pwdBase") + (needsPassword ? "*" : t("pwdHint8"))}>
                 <input
                   type="password"
                   value={password}
@@ -450,7 +462,7 @@ export default function ProfileSetupPage() {
                 />
               </Field>
               {password.length > 0 && (
-                <Field label="تأكيد كلمة المرور *">
+                <Field label={t("confirmPwdLabel")}>
                   <input
                     type="password"
                     value={passwordConfirm}
@@ -464,7 +476,7 @@ export default function ProfileSetupPage() {
                     autoComplete="new-password"
                   />
                   {passwordConfirm.length > 0 && password !== passwordConfirm && (
-                    <div className="text-[10px] text-red-400 mt-1">كلمتا المرور غير متطابقتين</div>
+                    <div className="text-[10px] text-red-400 mt-1">{t("pwdNoMatch")}</div>
                   )}
                 </Field>
               )}
@@ -474,50 +486,50 @@ export default function ProfileSetupPage() {
           {/* ═══════════════ Section 2: Professional info ═══════════════ */}
           <Section
             n={2}
-            title="المعلومات المهنية"
+            title={t("sec2")}
             icon={<Briefcase className="w-4 h-4 text-yellow-400" strokeWidth={2} />}
             done={sectionComplete[2]}
             active={activeSection === 2}
             onActivate={() => setActiveSection(2)}
           >
-            <Field label="المهنة *">
+            <Field label={t("professionLabel")}>
               <select
                 value={profession}
                 onChange={(e) => setProfession(e.target.value)}
                 className="form-input"
               >
-                <option value="">— اختر المهنة —</option>
+                <option value="">{t("professionPlaceholder")}</option>
                 {PROFESSIONS.map((p) => (
-                  <option key={p} value={p}>{p}</option>
+                  <option key={p.k} value={p.v}>{t(`prof_${p.k}`)}</option>
                 ))}
               </select>
             </Field>
 
-            <Field label="مستوى الدخل الشهري *" icon={<Coins className="w-3.5 h-3.5 text-neutral-500" />}>
+            <Field label={t("incomeLabel")} icon={<Coins className="w-3.5 h-3.5 text-neutral-500" />}>
               <div className="grid grid-cols-1 gap-2">
-                {INCOME_TIERS.map((t) => (
+                {INCOME_TIERS.map((ti) => (
                   <button
-                    key={t.id}
-                    onClick={() => setIncomeTier(t.id)}
+                    key={ti.id}
+                    onClick={() => setIncomeTier(ti.id)}
                     className={cn(
                       "py-2.5 px-3 rounded-xl border text-sm transition-colors flex items-center justify-between",
-                      incomeTier === t.id
+                      incomeTier === ti.id
                         ? "bg-white text-black border-transparent font-bold"
-                        : `bg-white/[0.04] ${t.border} ${t.color} hover:bg-white/[0.06]`,
+                        : `bg-white/[0.04] ${ti.border} ${ti.color} hover:bg-white/[0.06]`,
                     )}
                   >
-                    <span>{t.label}</span>
-                    {incomeTier === t.id && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
+                    <span>{t(`income_${ti.id}`)}</span>
+                    {incomeTier === ti.id && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
                   </button>
                 ))}
               </div>
             </Field>
 
-            <Field label="مصدر الدخل الرئيسي (اختياري)">
+            <Field label={t("incomeSourceLabel")}>
               <input
                 value={incomeSource}
                 onChange={(e) => setIncomeSource(e.target.value)}
-                placeholder="مثال: راتب شهري، نشاط تجاري..."
+                placeholder={t("incomeSourcePh")}
                 maxLength={80}
                 className="form-input"
               />
@@ -527,13 +539,13 @@ export default function ProfileSetupPage() {
           {/* ═══════════════ Section 3: Investment goals ═══════════════ */}
           <Section
             n={3}
-            title="الأهداف الاستثمارية"
+            title={t("sec3")}
             icon={<Target className="w-4 h-4 text-green-400" strokeWidth={2} />}
             done={sectionComplete[3]}
             active={activeSection === 3}
             onActivate={() => setActiveSection(3)}
           >
-            <Field label="الهدف من الاستثمار * (يمكن اختيار أكثر من واحد)">
+            <Field label={t("goalLabel")}>
               <div className="grid grid-cols-2 gap-2">
                 {GOALS.map((g) => {
                   const selected = goals.includes(g.id)
@@ -549,7 +561,7 @@ export default function ProfileSetupPage() {
                       )}
                     >
                       <span className="text-base">{g.icon}</span>
-                      <span className="flex-1 text-right">{g.label}</span>
+                      <span className="flex-1 text-start">{t(`goal_${g.id}`)}</span>
                       {selected && <Check className="w-3 h-3" strokeWidth={3} />}
                     </button>
                   )
@@ -557,7 +569,7 @@ export default function ProfileSetupPage() {
               </div>
             </Field>
 
-            <Field label="مستوى الخبرة *" icon={<TrendingUp className="w-3.5 h-3.5 text-neutral-500" />}>
+            <Field label={t("expLabel")} icon={<TrendingUp className="w-3.5 h-3.5 text-neutral-500" />}>
               <div className="space-y-2">
                 {EXPERIENCE_LEVELS.map((l) => (
                   <button
@@ -572,8 +584,8 @@ export default function ProfileSetupPage() {
                   >
                     <span className="text-2xl">{l.icon}</span>
                     <div className="flex-1 text-right">
-                      <div className={cn("text-sm font-bold", experience === l.id ? "text-black" : "text-white")}>{l.label}</div>
-                      <div className={cn("text-[11px] mt-0.5", experience === l.id ? "text-neutral-700" : "text-neutral-500")}>{l.desc}</div>
+                      <div className={cn("text-sm font-bold", experience === l.id ? "text-black" : "text-white")}>{t(`exp_${l.id}`)}</div>
+                      <div className={cn("text-[11px] mt-0.5", experience === l.id ? "text-neutral-700" : "text-neutral-500")}>{t(`exp_${l.id}_desc`)}</div>
                     </div>
                     {experience === l.id && <Check className="w-4 h-4" strokeWidth={3} />}
                   </button>
@@ -581,7 +593,7 @@ export default function ProfileSetupPage() {
               </div>
             </Field>
 
-            <Field label="القطاعات المفضّلة *">
+            <Field label={t("sectorsLabel")}>
               <div className="flex flex-wrap gap-1.5">
                 {SECTORS.map((s) => {
                   const selected = preferredSectors.includes(s.id)
@@ -597,7 +609,7 @@ export default function ProfileSetupPage() {
                       )}
                     >
                       <span className="text-sm">{s.icon}</span>
-                      {s.label}
+                      {t(`sec_${s.id}`)}
                     </button>
                   )
                 })}
@@ -608,7 +620,7 @@ export default function ProfileSetupPage() {
           {/* ═══════════════ Section 4: Confirmations ═══════════════ */}
           <Section
             n={4}
-            title="التأكيد والموافقات"
+            title={t("sec4")}
             icon={<Sparkles className="w-4 h-4 text-purple-400" strokeWidth={2} />}
             done={sectionComplete[4]}
             active={activeSection === 4}
@@ -619,13 +631,13 @@ export default function ProfileSetupPage() {
               onChange={setAgreeTerms}
               label={
                 <>
-                  أوافق على{" "}
+                  {t("agreePre")}
                   <button
                     type="button"
                     onClick={() => router.push("/terms")}
                     className="text-blue-400 hover:text-blue-300 underline"
                   >
-                    شروط الاستخدام
+                    {t("termsLink")}
                   </button>
                 </>
               }
@@ -635,13 +647,13 @@ export default function ProfileSetupPage() {
               onChange={setAgreePrivacy}
               label={
                 <>
-                  أوافق على{" "}
+                  {t("agreePre")}
                   <button
                     type="button"
                     onClick={() => router.push("/privacy")}
                     className="text-blue-400 hover:text-blue-300 underline"
                   >
-                    سياسة الخصوصية
+                    {t("privacyLink")}
                   </button>
                 </>
               }
@@ -649,7 +661,7 @@ export default function ProfileSetupPage() {
             <Checkbox
               checked={confirmAccuracy}
               onChange={setConfirmAccuracy}
-              label="أؤكد صحة المعلومات المُدخلة"
+              label={t("confirmAccuracy")}
             />
           </Section>
 
@@ -670,11 +682,11 @@ export default function ProfileSetupPage() {
               {submitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-neutral-400 border-t-transparent rounded-full animate-spin" />
-                  جاري الحفظ...
+                  {t("submitting")}
                 </>
               ) : (
                 <>
-                  إكمال + متابعة لـ KYC
+                  {t("submitBtn")}
                   <ChevronLeft className="w-4 h-4" strokeWidth={2.5} />
                 </>
               )}
@@ -729,6 +741,7 @@ function Section({
   onActivate: () => void
   children: React.ReactNode
 }) {
+  const t = useTranslations("auth.profileSetup")
   return (
     <div
       onClick={!active ? onActivate : undefined}
@@ -747,7 +760,7 @@ function Section({
         </div>
         {done && (
           <span className="text-[10px] text-green-400 font-bold bg-green-400/[0.1] border border-green-400/30 px-2 py-0.5 rounded">
-            ✓ مكتمل
+            {t("completeBadge")}
           </span>
         )}
       </div>
