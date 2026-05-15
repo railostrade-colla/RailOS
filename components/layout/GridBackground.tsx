@@ -135,7 +135,7 @@ export function GridBackground({
       {showCornerMarkers && (
         <>
           <svg
-            className="absolute top-8 left-8 w-6 h-6 opacity-50 pointer-events-none"
+            className="absolute top-8 left-8 w-6 h-6 opacity-[0.12] pointer-events-none"
             viewBox="0 0 24 24"
             fill="none"
             stroke="white"
@@ -145,7 +145,7 @@ export function GridBackground({
             <path d="M 0 8 L 0 0 L 8 0" />
           </svg>
           <svg
-            className="absolute top-8 right-8 w-6 h-6 opacity-50 pointer-events-none"
+            className="absolute top-8 right-8 w-6 h-6 opacity-[0.12] pointer-events-none"
             viewBox="0 0 24 24"
             fill="none"
             stroke="white"
@@ -155,7 +155,7 @@ export function GridBackground({
             <path d="M 16 0 L 24 0 L 24 8" />
           </svg>
           <svg
-            className="absolute bottom-8 left-8 w-6 h-6 opacity-50 pointer-events-none"
+            className="absolute bottom-8 left-8 w-6 h-6 opacity-[0.12] pointer-events-none"
             viewBox="0 0 24 24"
             fill="none"
             stroke="white"
@@ -165,7 +165,7 @@ export function GridBackground({
             <path d="M 0 16 L 0 24 L 8 24" />
           </svg>
           <svg
-            className="absolute bottom-8 right-8 w-6 h-6 opacity-50 pointer-events-none"
+            className="absolute bottom-8 right-8 w-6 h-6 opacity-[0.12] pointer-events-none"
             viewBox="0 0 24 24"
             fill="none"
             stroke="white"
