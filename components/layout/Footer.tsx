@@ -1,9 +1,9 @@
 "use client"
 
-import Image from "next/image"
 import { useRouter } from "next/navigation"
+import { Logo } from "@/components/brand/Logo"
 import { Shield, ShieldCheck, FileText, Lock, Headphones, BookOpen, Users, TrendingUp, Briefcase, Mail, MessageCircle, Phone } from "lucide-react"
-import { APP_VERSION, APP_NAME, APP_NAME_EN, APP_DESCRIPTION, COPYRIGHT_YEAR } from "@/lib/utils/version"
+import { APP_VERSION, APP_NAME, APP_DESCRIPTION, COPYRIGHT_YEAR } from "@/lib/utils/version"
 import { cn } from "@/lib/utils/cn"
 
 export function Footer({ compact = false }: { compact?: boolean }) {
@@ -46,15 +46,9 @@ export function Footer({ compact = false }: { compact?: boolean }) {
       <div className="border-t border-white/[0.08] pt-5 pb-3 mt-8">
         <button
           onClick={() => router.push("/about")}
-          className="flex items-center gap-2.5 mb-4 hover:opacity-80 transition-opacity"
+          className="no-shadow flex items-center mb-4 hover:opacity-80 transition-opacity"
         >
-          <div className="always-dark w-8 h-8 rounded-xl overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black">
-            <Image src="/logo.png" alt={APP_NAME} width={32} height={32} className="w-full h-full object-contain" />
-          </div>
-          <div className="text-right">
-            <div className="text-sm font-bold text-white">{APP_NAME}</div>
-            <div className="text-[10px] text-neutral-500">{APP_DESCRIPTION}</div>
-          </div>
+          <Logo size="sm" />
         </button>
 
         <div className="flex gap-4 mb-4 flex-wrap">
@@ -100,15 +94,9 @@ export function Footer({ compact = false }: { compact?: boolean }) {
         <div className="col-span-3 md:col-span-1">
           <button
             onClick={() => router.push("/about")}
-            className="flex items-center gap-3 mb-3 hover:opacity-80 transition-opacity"
+            className="no-shadow flex items-center mb-3 hover:opacity-80 transition-opacity"
           >
-            <div className="always-dark w-10 h-10 rounded-xl overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black">
-              <Image src="/logo.png" alt={APP_NAME} width={40} height={40} className="w-full h-full object-contain" />
-            </div>
-            <div className="text-right">
-              <div className="text-base font-bold text-white">{APP_NAME}</div>
-              <div className="text-[10px] text-neutral-500 font-mono uppercase tracking-wider">{APP_NAME_EN}</div>
-            </div>
+            <Logo size="md" />
           </button>
           <div className="text-xs text-neutral-400 leading-relaxed mb-4">
             {APP_DESCRIPTION}. تواصل آمن بين المستثمرين، صفقات موثقة، عوائد عادلة.

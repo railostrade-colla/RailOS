@@ -492,13 +492,21 @@ body {
 
 /* 2) Buttons — real buttons only. Exclude nav/footer/ghost/link/icon
  *    style buttons so toolbar + tab + link buttons stay flat. */
-button:not(.no-shadow):not([disabled]):not(.always-dark):not(.btn-ghost):not(.btn-link):not(.btn-text):not(nav button):not(footer button) {
+button:not(.no-shadow):not([disabled]):not(.always-dark):not(.btn-ghost):not(.btn-link):not(.btn-text):not(nav button):not(footer button):not(header button) {
   box-shadow: var(--shadow-button);
   transition: box-shadow 200ms ease, transform 200ms ease;
 }
-button:not(.no-shadow):not([disabled]):not(.always-dark):not(nav button):not(footer button):active {
+button:not(.no-shadow):not([disabled]):not(.always-dark):not(nav button):not(footer button):not(header button):active {
   transform: translateY(1px);
   box-shadow: var(--shadow-sm);
+}
+
+/* Logo: depth on the box only, text always flat (kills the
+ * "shadow ring around رايلوس/RAILOS" bug for good). */
+.logo-box { box-shadow: var(--shadow-md) !important; }
+.logo-text, .logo-text *, .logo-wrapper > .logo-text {
+  box-shadow: none !important;
+  text-shadow: none !important;
 }
 
 /* 3) Floating surfaces — modals (xl) > dropdowns / listboxes (lg). */

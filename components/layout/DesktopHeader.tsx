@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 import {
@@ -11,6 +10,7 @@ import { cn } from "@/lib/utils/cn"
 import { NotificationBell } from "@/components/notifications/NotificationBell"
 import { signOut } from "@/lib/supabase/auth-helpers"
 import { showSuccess } from "@/lib/utils/toast"
+import { Logo } from "@/components/brand/Logo"
 
 const navItems = [
   { id: "home", label: "الرئيسية", href: "/dashboard" },
@@ -56,16 +56,10 @@ export function DesktopHeader() {
           {/* Logo — Phase 10.96: click reloads the app instead of navigating */}
           <button
             onClick={() => { if (typeof window !== "undefined") window.location.reload() }}
-            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+            className="no-shadow flex items-center hover:opacity-80 transition-opacity"
             aria-label="تحديث التطبيق"
           >
-            <div className="always-dark w-10 h-10 rounded-xl overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black flex-shrink-0">
-              <Image src="/logo.png" alt="رايلوس" width={40} height={40} className="w-full h-full object-contain" />
-            </div>
-            <div className="text-right leading-none">
-              <div className="text-base font-bold text-white">رايلوس</div>
-              <div className="text-[10px] text-neutral-500 font-mono uppercase tracking-wider mt-1">RAILOS</div>
-            </div>
+            <Logo size="md" />
           </button>
 
           <div className="w-px h-5 bg-white/10" aria-hidden="true" />

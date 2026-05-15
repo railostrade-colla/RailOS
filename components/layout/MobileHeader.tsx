@@ -1,11 +1,11 @@
 "use client"
 
-import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { HelpCircle, Grid3x3 } from "lucide-react"
 import { cn } from "@/lib/utils/cn"
 import { NotificationBell } from "@/components/notifications/NotificationBell"
+import { Logo } from "@/components/brand/Logo"
 
 /**
  * MobileHeader - الهيدر العلوي للموبايل والتابلت
@@ -28,16 +28,10 @@ export function MobileHeader() {
             (per founder spec: "ايقونة التطبيق الاجراء النقر يتم تحديث التطبيق") */}
         <button
           onClick={() => { if (typeof window !== "undefined") window.location.reload() }}
-          className="flex items-center gap-2.5 hover:opacity-80 transition-opacity"
+          className="no-shadow flex items-center hover:opacity-80 transition-opacity"
           aria-label="تحديث التطبيق"
         >
-          <div className="always-dark w-9 h-9 rounded-xl overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black flex-shrink-0">
-            <Image src="/logo.png" alt="رايلوس" width={36} height={36} className="w-full h-full object-contain" />
-          </div>
-          <div className="text-right leading-none">
-            <div className="text-sm font-bold text-white">رايلوس</div>
-            <div className="text-[9px] text-neutral-500 font-mono uppercase tracking-wider mt-0.5">RAILOS</div>
-          </div>
+          <Logo size="sm" />
         </button>
 
         {/* Action Icons */}
