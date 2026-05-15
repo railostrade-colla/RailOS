@@ -50,7 +50,7 @@ const DashboardVolumeChart = dynamic(
 import { AppLayout } from "@/components/layout/AppLayout"
 import { AdsSlider } from "@/components/common/AdsSlider"
 import { ProjectCard } from "@/components/cards"
-import { SectionHeader, Tabs, SkeletonCard } from "@/components/ui"
+import { SectionHeader, SkeletonCard } from "@/components/ui"
 // Phase 14.07f — only type imports survive from mock-data. The 10 runtime
 // helpers that used to live here (mockProjects, mockAds, mockStats,
 // CURRENT_USER, HOLDINGS, getPortfolioSummary, getActiveAlerts,
@@ -1052,19 +1052,27 @@ export default function DashboardPage() {
                 action={{ label: "كل المشاريع", href: "/market" }}
               />
 
-              {/* Tabs — Phase 11.06: name-only, no icons / no counts.
-                  Matches the standardized tab styling used elsewhere in
-                  the app (founder spec: تبويبات موحدة في كل التطبيق). */}
-              <div className="mb-3">
-                <Tabs
-                  tabs={[
-                    { id: "trending", label: "رائج" },
-                    { id: "closing",  label: "قريباً" },
-                    { id: "new",      label: "جديد" },
-                  ]}
-                  activeTab={discoverTab}
-                  onChange={(id) => setDiscoverTab(id as typeof discoverTab)}
-                />
+              {/* Discover tabs — same bespoke design as the Community
+                  page (founder spec): glass strip, active = filled. */}
+              <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-3">
+                {([
+                  { key: "trending", label: "رائج" },
+                  { key: "closing",  label: "قريباً" },
+                  { key: "new",      label: "جديد" },
+                ] as const).map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setDiscoverTab(t.key as typeof discoverTab)}
+                    className={cn(
+                      "flex-1 py-2 rounded-lg text-[11px] transition-colors flex items-center justify-center gap-1",
+                      discoverTab === t.key
+                        ? "bg-white/[0.08] text-white font-bold border border-white/[0.1]"
+                        : "text-neutral-500 hover:text-white",
+                    )}
+                  >
+                    <span>{t.label}</span>
+                  </button>
+                ))}
               </div>
 
               {/* Cards — Phase 13.13:
