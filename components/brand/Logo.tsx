@@ -51,22 +51,24 @@ export function Logo({
         className="logo-box flex items-center justify-center shrink-0 overflow-hidden"
         style={{ width: d.box, height: d.box, borderRadius: 0 }}
       >
-        {/* Dual mark: icon.png in Dark, logo1.png in Light. Toggled
-            by CSS (no-FOUC, no client hook) — see globals.css. */}
+        {/* Dual mark: icon.png in Dark, logo1.png in Light. Both
+            render at the FULL box size so the visible mark is equal
+            in both themes regardless of each PNG's internal padding
+            (icon.png had more built-in margin → looked smaller). */}
         <Image
           src="/icon.png"
           alt="RailOS"
-          width={d.icon}
-          height={d.icon}
-          className="logo-img-dark object-contain"
+          width={d.box}
+          height={d.box}
+          className="logo-img-dark object-contain w-full h-full"
           priority
         />
         <Image
           src="/logo1.png"
           alt="RailOS"
-          width={d.icon}
-          height={d.icon}
-          className="logo-img-light object-contain"
+          width={d.box}
+          height={d.box}
+          className="logo-img-light object-contain w-full h-full"
           priority
         />
       </div>
