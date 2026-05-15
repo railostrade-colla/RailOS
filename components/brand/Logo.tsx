@@ -17,16 +17,14 @@ import Image from "next/image"
 type LogoSize = "sm" | "md" | "lg" | "xl" | "2xl"
 type LogoVariant = "icon" | "horizontal" | "vertical"
 
-// `radius` is an explicit, modest corner (~20% of the box) so the
-// frame always reads as a SOFT SQUARE — never a circle. A fixed
-// rounded-xl (12px) on the 32px size looked almost circular; this
-// scales the corner with the box instead.
-const SIZES: Record<LogoSize, { box: number; icon: number; gap: number; title: number; subtitle: number; radius: number }> = {
-  sm:   { box: 32, icon: 20, gap: 8,  title: 13, subtitle: 9,  radius: 7 },
-  md:   { box: 40, icon: 24, gap: 12, title: 15, subtitle: 11, radius: 9 },
-  lg:   { box: 56, icon: 32, gap: 14, title: 18, subtitle: 12, radius: 12 },
-  xl:   { box: 72, icon: 42, gap: 16, title: 20, subtitle: 13, radius: 16 },
-  "2xl":{ box: 96, icon: 56, gap: 20, title: 24, subtitle: 14, radius: 20 },
+// Per founder spec: every logo frame is a PURE SQUARE (no rounding,
+// no background) in both themes, app-wide.
+const SIZES: Record<LogoSize, { box: number; icon: number; gap: number; title: number; subtitle: number }> = {
+  sm:   { box: 32, icon: 20, gap: 8,  title: 13, subtitle: 9 },
+  md:   { box: 40, icon: 24, gap: 12, title: 15, subtitle: 11 },
+  lg:   { box: 56, icon: 32, gap: 14, title: 18, subtitle: 12 },
+  xl:   { box: 72, icon: 42, gap: 16, title: 20, subtitle: 13 },
+  "2xl":{ box: 96, icon: 56, gap: 20, title: 24, subtitle: 14 },
 }
 
 export function Logo({
@@ -49,7 +47,7 @@ export function Logo({
           both themes, per founder spec. Just a sized, centered frame. */}
       <div
         className="logo-box flex items-center justify-center shrink-0 overflow-hidden"
-        style={{ width: d.box, height: d.box }}
+        style={{ width: d.box, height: d.box, borderRadius: 0 }}
       >
         {/* Dual mark: icon.png in Dark, logo1.png in Light. Toggled
             by CSS (no-FOUC, no client hook) — see globals.css. */}
