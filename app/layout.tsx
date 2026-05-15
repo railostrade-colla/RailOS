@@ -28,10 +28,37 @@ export const viewport = {
   maximumScale: 1,
 }
 
+// Phase 14.12 P3 — resolve the Supabase origin once at module load so
+// we can emit preconnect / dns-prefetch resource hints. Every page
+// makes its first data call to Supabase; warming the TCP+TLS handshake
+// in parallel with HTML parse shaves ~50-150ms off that first request
+// (more on mobile / high-latency links — relevant for Iraq). Guarded
+// so a missing env at build time can't crash the layout.
+function supabaseOrigin(): string | null {
+  try {
+    const u = process.env.NEXT_PUBLIC_SUPABASE_URL
+    return u ? new URL(u).origin : null
+  } catch {
+    return null
+  }
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const sbOrigin = supabaseOrigin()
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
       <body className="bg-black text-white antialiased">
+        {/* Phase 14.12 P3 — Next 16 / React 19 hoist these <link>s into
+            <head>. preconnect opens the connection eagerly; the
+            crossOrigin variant covers the authenticated fetch + the
+            realtime websocket which both run cross-origin. */}
+        {sbOrigin && (
+          <>
+            <link rel="preconnect" href={sbOrigin} />
+            <link rel="preconnect" href={sbOrigin} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={sbOrigin} />
+          </>
+        )}
         <RealtimeProvider>
           {children}
           <DealRequestModal />
