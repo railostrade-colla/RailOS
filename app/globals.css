@@ -543,8 +543,11 @@ nav a, nav span, nav button,
 footer a:not(.shadow-card), footer span, footer p, footer h1,
 footer h2, footer h3, footer h4, footer li, footer ul,
 footer button:not(.shadow-card),
-.footer-link, .nav-link, .text-only {
+.footer-link, .nav-link, .text-only,
+.logo-text, .logo-text *,
+.badge, .chip, .pill {
   box-shadow: none !important;
+  text-shadow: none !important;
 }
 
 /* Footer contact cards keep a deliberate subtle lift (founder spec). */
