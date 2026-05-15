@@ -308,7 +308,7 @@ export default function ProfileSetupPage() {
           <PageHeader
             title="إكمال الملف الشخصي"
             subtitle="خطوة أخيرة قبل البدء — معلوماتك تساعدنا نقدم لك أفضل تجربة"
-            showBack={false}
+            showBack
           />
 
           {/* Progress indicator (4 steps) */}
