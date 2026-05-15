@@ -152,6 +152,46 @@ const FALLBACK_LEVEL_COLORS: Record<string, string> = {
   elite: "#FBBF24",
 }
 
+// Phase 14.11 A2 — explicit column whitelist instead of select("*").
+//
+// select("*") returned EVERY profiles column to the browser, including
+// `admin_permissions` (JSONB array of capability strings) and any
+// future internal column. That's a privilege-information disclosure:
+// a regular user could read which capabilities the admin role grants.
+//
+// We split the columns into two tiers so the defensive "works on a
+// DB where migration 10 hasn't run yet" property is preserved:
+//   • BASE  — guaranteed present since 01_users.sql
+//   • EXTRA — added by 10-levels-system.sql; may be absent on a
+//             fresh/un-migrated dev DB
+// We try BASE+EXTRA first; if Postgres complains a column doesn't
+// exist (code 42703) we retry with BASE only. `admin_permissions`
+// is in NEITHER list, so it never reaches the client.
+const PROFILE_BASE_COLUMNS = [
+  "full_name",
+  "username",
+  "phone",
+  "avatar_url",
+  "role",
+  "kyc_status",
+  "is_active",
+  "is_banned",
+  "rating_average",
+  "rating_count",
+  "trades_completed",
+  "is_ambassador",
+  "created_at",
+].join(", ")
+
+const PROFILE_EXTRA_COLUMNS = [
+  "total_trades",
+  "successful_trades",
+  "total_trade_volume",
+  "level",
+].join(", ")
+
+const PROFILE_FULL_COLUMNS = `${PROFILE_BASE_COLUMNS}, ${PROFILE_EXTRA_COLUMNS}`
+
 function formatYearMonth(iso: string): string {
   if (!iso) return ""
   const d = new Date(iso)
@@ -199,18 +239,34 @@ async function fetchCurrentUserProfileInner(): Promise<CurrentUserProfile | null
   }
 
   // ── Step 2: profiles row (REQUIRED) ───────────────────────
-  // Use `select("*")` so the query never fails on databases where
-  // migration 10 hasn't been applied yet (those DBs lack columns
-  // like total_trades / successful_trades / level). We treat every
-  // migration-10 column as optional in `ProfileRow` and fall back
-  // gracefully below.
+  // Phase 14.11 A2 — explicit whitelist (no more select("*")) so
+  // admin_permissions + any future internal column never reaches the
+  // browser. Two-attempt strategy keeps the un-migrated-DB safety:
+  // try BASE+EXTRA, and on a missing-column error (42703) fall back
+  // to BASE-only.
   let profile: ProfileRow
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("profiles")
-      .select("*")
+      .select(PROFILE_FULL_COLUMNS)
       .eq("id", userId)
       .maybeSingle()
+
+    // 42703 = undefined_column → migration 10 not applied on this DB.
+    // Retry with just the base columns that 01_users.sql guarantees.
+    if (
+      error &&
+      (error.code === "42703" ||
+        /column .* does not exist/i.test(error.message))
+    ) {
+      const retry = await supabase
+        .from("profiles")
+        .select(PROFILE_BASE_COLUMNS)
+        .eq("id", userId)
+        .maybeSingle()
+      data = retry.data
+      error = retry.error
+    }
 
     if (error) {
       // eslint-disable-next-line no-console
