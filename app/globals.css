@@ -56,6 +56,13 @@
     0 4px 8px rgba(0,0,0,0.4),
     0 12px 24px rgba(0,0,0,0.4),
     inset 0 1px 0 rgba(255,255,255,0.05);
+  /* Stage 3 — navigation elevation (dark) */
+  --shadow-bottom-nav:
+    0 -4px 12px rgba(0,0,0,0.45),
+    0 -1px 3px rgba(0,0,0,0.35);
+  --shadow-top-nav:
+    0 4px 12px rgba(0,0,0,0.40),
+    0 1px 3px rgba(0,0,0,0.30);
 
   /* STEP 3 (URGENT overhaul) — spacing + radius design tokens.
    * Exposed for opt-in use; NOT force-applied to every card (a
@@ -96,6 +103,13 @@
   --nav-bg: rgba(255,255,255,0.92);
   --nav-pill: rgba(235,238,242,0.9);
   --chrome-bg: rgba(255,255,255,0.85);
+  /* Stage 3 — navigation elevation (light) */
+  --shadow-bottom-nav:
+    0 -4px 12px rgba(0,0,0,0.08),
+    0 -1px 3px rgba(0,0,0,0.05);
+  --shadow-top-nav:
+    0 4px 12px rgba(0,0,0,0.08),
+    0 1px 3px rgba(0,0,0,0.05);
 
   /* Phase 14.13 M2 Hotfix Part C — 3D shadows (Light Mode).
    * Soft, low-opacity ambient — no inset highlight on white. */
@@ -630,7 +644,10 @@ p { line-height: 1.6; }
  * already flip via the existing [data-theme="light"] .text-*
  * overrides, so nothing else is needed here.
  * ═══════════════════════════════════════════════════════════════ */
-.app-chrome { background-color: var(--chrome-bg) !important; }
+.app-chrome {
+  background-color: var(--chrome-bg) !important;
+  box-shadow: var(--shadow-top-nav) !important;
+}
 
 /* ═══════════════════════════════════════════════════════════════
  * FIX 5 — ⭐ Strict shadow hierarchy.

@@ -112,8 +112,12 @@ function BottomNavImpl() {
           Indicator uses --nav-pill so it stays visible in both. */}
       <div
         ref={navRef}
-        className="relative max-w-md mx-auto backdrop-blur-2xl border border-white/[0.08] rounded-[40px] p-2 shadow-2xl"
-        style={{ direction: "rtl", backgroundColor: "var(--nav-bg)" }}
+        className="relative max-w-md mx-auto backdrop-blur-2xl border border-white/[0.08] rounded-[40px] p-2"
+        style={{
+          direction: "rtl",
+          backgroundColor: "var(--nav-bg)",
+          boxShadow: "var(--shadow-bottom-nav)",
+        }}
       >
         {/* Sliding indicator */}
         {activeIndex !== -1 && (
