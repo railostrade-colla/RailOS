@@ -936,28 +936,32 @@ function ExchangeContent() {
             onSelect={setSelectedProject}
           />
 
-          {/* Mode Toggle: شراء / بيع */}
-          <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-2.5">
+          {/* Mode Toggle: شراء / بيع — same colored design as the
+              Create-Listing "نوع الإعلان" selector (🟢 شراء = green,
+              🔴 بيع = red). */}
+          <div className="flex gap-1 bg-white/[0.04] border border-white/[0.08] rounded-xl p-1 mb-2.5">
             <button
               onClick={() => setMode("buy")}
               className={cn(
-                "flex-1 py-2.5 rounded-lg text-sm transition-colors",
+                "flex-1 py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5",
                 mode === "buy"
-                  ? "bg-white text-black font-bold"
+                  ? "bg-green-500/15 text-green-400 font-bold border border-green-500/30"
                   : "text-neutral-400 hover:text-white"
               )}
             >
+              <span className="text-xs">🟢</span>
               شراء
             </button>
             <button
               onClick={() => setMode("sell")}
               className={cn(
-                "flex-1 py-2.5 rounded-lg text-sm transition-colors",
+                "flex-1 py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5",
                 mode === "sell"
                   ? "bg-red-500/15 text-red-400 font-bold border border-red-500/30"
                   : "text-neutral-400 hover:text-white"
               )}
             >
+              <span className="text-xs">🔴</span>
               بيع
             </button>
           </div>
