@@ -19,9 +19,10 @@ import { NotificationBell } from "@/components/notifications/NotificationBell"
 export function MobileHeader() {
   const pathname = usePathname()
 
-  // Phase 14.13 M2 Hotfix — always-dark (see DesktopHeader / globals.css).
+  // Phase 14.13 M2 Hotfix (Part A) — header follows the theme; only the
+  // logo box keeps `always-dark` (white SVG logo). See DesktopHeader.
   return (
-    <header className="always-dark lg:hidden sticky top-0 z-40 bg-[rgba(0,0,0,0.85)] backdrop-blur-xl">
+    <header className="lg:hidden sticky top-0 z-40 bg-[rgba(0,0,0,0.85)] backdrop-blur-xl">
       <div className="px-4 py-3 flex items-center justify-between">
         {/* Logo — Phase 10.96: click reloads the app instead of navigating
             (per founder spec: "ايقونة التطبيق الاجراء النقر يتم تحديث التطبيق") */}
@@ -30,7 +31,7 @@ export function MobileHeader() {
           className="flex items-center gap-2.5 hover:opacity-80 transition-opacity"
           aria-label="تحديث التطبيق"
         >
-          <div className="w-9 h-9 rounded-lg overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black flex-shrink-0">
+          <div className="always-dark w-9 h-9 rounded-lg overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black flex-shrink-0">
             <Image src="/logo.png" alt="رايلوس" width={36} height={36} className="w-full h-full object-contain" />
           </div>
           <div className="text-right leading-none">

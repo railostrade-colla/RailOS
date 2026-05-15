@@ -45,10 +45,10 @@ export function DesktopHeader() {
     }
   }
 
-  // Phase 14.13 M2 Hotfix — `always-dark`: header stays dark even in
-  // light mode (dark-nav-over-light-content look). See globals.css.
+  // Phase 14.13 M2 Hotfix (Part A) — header follows the theme (light in
+  // Light Mode). Only the logo box keeps `always-dark` (white SVG logo).
   return (
-    <header className="always-dark hidden lg:block sticky top-0 z-40 bg-black/60 backdrop-blur-xl">
+    <header className="hidden lg:block sticky top-0 z-40 bg-black/60 backdrop-blur-xl">
       <div className="max-w-screen-2xl mx-auto px-6 py-3 flex items-center justify-between">
 
         {/* RIGHT: Logo + Tabs */}
@@ -59,7 +59,7 @@ export function DesktopHeader() {
             className="flex items-center gap-3 hover:opacity-80 transition-opacity"
             aria-label="تحديث التطبيق"
           >
-            <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black flex-shrink-0">
+            <div className="always-dark w-10 h-10 rounded-xl overflow-hidden border border-white/[0.1] flex items-center justify-center bg-black flex-shrink-0">
               <Image src="/logo.png" alt="رايلوس" width={40} height={40} className="w-full h-full object-contain" />
             </div>
             <div className="text-right leading-none">

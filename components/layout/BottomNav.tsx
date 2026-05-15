@@ -107,12 +107,11 @@ function BottomNavImpl() {
       )}
       aria-label="التنقل الرئيسي"
     >
-      {/* Phase 14.13 M2 Hotfix — always-dark: the floating pill stays
-          dark in light mode; re-asserts white icon/text + green
-          active so the nav reads against its dark glass. */}
+      {/* Phase 14.13 M2 Hotfix (Part A) — the floating pill follows the
+          theme (light glass in Light Mode). No always-dark here. */}
       <div
         ref={navRef}
-        className="always-dark relative max-w-md mx-auto bg-[rgba(15,15,15,0.92)] backdrop-blur-2xl border border-white/[0.08] rounded-[40px] p-2 shadow-2xl"
+        className="relative max-w-md mx-auto bg-[rgba(15,15,15,0.92)] backdrop-blur-2xl border border-white/[0.08] rounded-[40px] p-2 shadow-2xl"
         style={{ direction: "rtl" }}
       >
         {/* Sliding indicator */}
