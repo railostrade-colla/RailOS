@@ -1,3 +1,11 @@
+// Phase 14.11 A3 — hard server-only guard. Importing this module from
+// any "use client" component (or anything that ends up in a client
+// bundle) now throws a build-time error instead of silently shipping
+// a path that could expose the service-role key. This is defense in
+// depth on top of the existing runtime `if (!key) return null` —
+// `server-only` fails the BUILD, not just at runtime.
+import "server-only"
+
 import { createClient as createSbClient } from "@supabase/supabase-js"
 
 /**
@@ -12,6 +20,9 @@ import { createClient as createSbClient } from "@supabase/supabase-js"
  * Returns `null` when SUPABASE_SERVICE_ROLE_KEY is missing so callers
  * can degrade gracefully (e.g. skip the admin lookup) instead of
  * crashing during local dev.
+ *
+ * Phase 14.11 A3: the `import "server-only"` at the top guarantees a
+ * client component can never pull this in.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js"
