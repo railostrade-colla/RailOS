@@ -655,3 +655,83 @@ p { line-height: 1.6; }
   box-shadow: none !important;
   transform: none !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+ * Stage 2 — unified, THEME-AWARE form elements
+ *
+ * Fixes the "project selector / search box stays black in Light
+ * Mode" bug: text inputs, textareas and selects now derive bg +
+ * border + text from the theme (dark glass ↔ light glass) instead
+ * of whatever hardcoded class they happened to carry.
+ *
+ * Scoped to text-like controls — checkbox / radio / range / the
+ * custom toggle switches are excluded so their bespoke styling is
+ * untouched.
+ * ═══════════════════════════════════════════════════════════════ */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([role="switch"]),
+textarea,
+select {
+  background-color: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  color: var(--text-body) !important;
+  border-radius: var(--radius-md);
+  transition: border-color 200ms ease, background-color 200ms ease;
+  box-shadow: none !important;
+}
+[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([role="switch"]),
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  background-color: rgba(0,0,0,0.03) !important;
+  border: 1px solid rgba(0,0,0,0.10) !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([role="switch"]):focus,
+textarea:focus,
+select:focus {
+  outline: none !important;
+  border-color: rgba(255,255,255,0.22) !important;
+  background-color: rgba(255,255,255,0.06) !important;
+}
+[data-theme="light"] input:focus,
+[data-theme="light"] textarea:focus,
+[data-theme="light"] select:focus {
+  border-color: rgba(0,0,0,0.28) !important;
+  background-color: rgba(0,0,0,0.05) !important;
+}
+
+input::placeholder, textarea::placeholder {
+  color: rgba(255,255,255,0.32) !important;
+}
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: rgba(0,0,0,0.35) !important;
+}
+
+/* Native select dropdown list uses themed surface (was always dark) */
+select option {
+  background-color: var(--bg-card);
+  color: var(--text-body);
+}
+
+/* Search inputs + project selector / its dropdown — theme-aware
+ * surfaces (these were the specific black-in-light offenders). */
+.search-input,
+[role="searchbox"],
+.project-selector,
+[data-component="project-selector"] {
+  background-color: rgba(255,255,255,0.05) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+}
+[data-theme="light"] .search-input,
+[data-theme="light"] [role="searchbox"],
+[data-theme="light"] .project-selector,
+[data-theme="light"] [data-component="project-selector"] {
+  background-color: #FFFFFF !important;
+  border: 1px solid rgba(0,0,0,0.10) !important;
+}
+.project-selector-dropdown,
+[data-component="project-dropdown"] {
+  background-color: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow-lg);
+}
