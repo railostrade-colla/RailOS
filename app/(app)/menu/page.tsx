@@ -123,7 +123,7 @@ const menuItems: MenuItem[] = [
   {
     label: "الأخبار",
     description: "آخر تحديثات السوق",
-    href: "/news",
+    href: "/market?tab=news",
     icon: Newspaper,
     iconColor: "text-cyan-400",
     iconBg: "bg-cyan-400/10",

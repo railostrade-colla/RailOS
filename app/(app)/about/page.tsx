@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Target, Sparkles, Lock, Globe, Handshake, Rocket, Mail, Phone, Headphones, ArrowRight } from "lucide-react"
+import { Target, Sparkles, Lock, Globe, Handshake, Rocket, Mail, Phone, Headphones } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Logo } from "@/components/brand/Logo"
@@ -35,27 +35,20 @@ export default function AboutPage() {
       <div className="relative">
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-4xl mx-auto">
 
-          {/* Back button — unified app pattern (circular icon button,
-              same as SettingsSectionHeader) */}
-          <button
-            onClick={() => router.back()}
-            aria-label="رجوع"
-            className="w-9 h-9 rounded-full bg-white/[0.05] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.08] transition-colors flex-shrink-0 mb-6"
-          >
-            <ArrowRight className="w-4 h-4 text-neutral-300" strokeWidth={2} />
-          </button>
+          {/* Standard page header (same back button + title + subtitle
+              pattern as the rest of the app, both themes) */}
+          <PageHeader
+            title="عن رايلوس"
+            subtitle="نبني مستقبل الاستثمار في العراق"
+            showBack
+          />
 
-          {/* Hero - logo + name (footer style) */}
-          <div className="mb-10">
-            <div className="flex items-center gap-3 mb-5">
-              <Logo size="md" variant="icon" />
-              <div className="text-right">
-                <div className="text-base font-bold text-white">{APP_NAME}</div>
-                <div className="text-[10px] text-neutral-500 font-mono uppercase tracking-wider">{APP_NAME_EN}</div>
-              </div>
-            </div>
-            <div className="text-lg font-bold text-white max-w-md leading-relaxed">
-              نبني مستقبل الاستثمار في العراق
+          {/* Brand row */}
+          <div className="flex items-center gap-3 mb-8">
+            <Logo size="md" variant="icon" />
+            <div className="text-right">
+              <div className="text-base font-bold text-white">{APP_NAME}</div>
+              <div className="text-[10px] text-neutral-500 font-mono uppercase tracking-wider">{APP_NAME_EN}</div>
             </div>
           </div>
 

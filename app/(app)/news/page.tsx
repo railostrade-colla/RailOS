@@ -49,12 +49,14 @@ const TYPE_META: Record<NewsType, { label: string; color: "blue" | "purple" | "g
 
 type FilterTab = "all" | NewsType
 
-const TABS: Array<{ id: FilterTab; icon: string; label: string }> = [
-  { id: "all",          icon: "✨", label: "الكل" },
-  { id: "feature",      icon: "🎉", label: "ميزات" },
-  { id: "announcement", icon: "📢", label: "إعلانات" },
-  { id: "tip",          icon: "💡", label: "نصائح" },
-  { id: "update",       icon: "🔄", label: "تحديثات" },
+// Clean label-only tabs (no emoji icons / counts) — same design as
+// the rest of the app (Market, Deals…). Phase 14.13 unification.
+const TABS: Array<{ id: FilterTab; label: string }> = [
+  { id: "all",          label: "الكل" },
+  { id: "feature",      label: "ميزات" },
+  { id: "announcement", label: "إعلانات" },
+  { id: "tip",          label: "نصائح" },
+  { id: "update",       label: "تحديثات" },
 ]
 
 // ════════════════════════════════════════════════════════════════
@@ -112,17 +114,6 @@ export default function NewsPage() {
     return rows
   }, [tab, search, featured, allNews])
 
-  // Tab counts
-  const tabCounts = useMemo(() => {
-    const base = searchInList(search, allNews)
-    return {
-      all: base.length,
-      feature: base.filter((n) => n.type === "feature").length,
-      announcement: base.filter((n) => n.type === "announcement").length,
-      tip: base.filter((n) => n.type === "tip").length,
-      update: base.filter((n) => n.type === "update").length,
-    }
-  }, [search, allNews])
 
   return (
     <AppLayout>
@@ -180,7 +171,7 @@ export default function NewsPage() {
           {/* ═══ Filter Tabs ═══ */}
           <div className="mb-5">
             <Tabs
-              tabs={TABS.map((t) => ({ ...t, count: tabCounts[t.id] }))}
+              tabs={TABS}
               activeTab={tab}
               onChange={(id) => setTab(id as FilterTab)}
             />
