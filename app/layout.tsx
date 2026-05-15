@@ -4,7 +4,19 @@ import { RealtimeProvider } from "@/lib/realtime/RealtimeProvider"
 import { DealRequestModal } from "@/components/deals/DealRequestModal"
 import { ContractInviteModal } from "@/components/contracts/ContractInviteModal"
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt"
+import { ThemeProvider } from "@/lib/theme/ThemeProvider"
 import "./globals.css"
+
+// Phase 14.13 M2 — no-FOUC theme bootstrap. Runs BEFORE first paint
+// so a light-mode user never sees a dark flash. Mirrors
+// ThemeProvider's resolve() logic in vanilla JS. Kept tiny + inline.
+const THEME_BOOTSTRAP = `
+(function(){try{
+  var c=localStorage.getItem('railos:theme');
+  var sysLight=window.matchMedia('(prefers-color-scheme: light)').matches;
+  var light=(c==='light')||(c==='system'&&sysLight);
+  if(light)document.documentElement.setAttribute('data-theme','light');
+}catch(e){}})();`
 
 export const metadata: Metadata = {
   title: "Railos - منصة التداول الاستثماري",
@@ -47,7 +59,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const sbOrigin = supabaseOrigin()
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
-      <body className="bg-black text-white antialiased">
+      <head>
+        {/* Phase 14.13 M2 — no-FOUC theme bootstrap (runs pre-paint) */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+      </head>
+      {/* Phase 14.13 M2 — body bg/text now come from CSS vars
+          (globals.css html,body rule) so they flip with the theme.
+          The old hardcoded `bg-black text-white` would have pinned
+          the shell dark even in light mode. */}
+      <body className="antialiased">
+        <ThemeProvider>
         {/* Phase 14.12 P3 — Next 16 / React 19 hoist these <link>s into
             <head>. preconnect opens the connection eagerly; the
             crossOrigin variant covers the authenticated fetch + the
@@ -78,6 +99,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             },
           }}
         />
+        </ThemeProvider>
       </body>
     </html>
   )

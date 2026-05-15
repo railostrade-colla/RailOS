@@ -1,0 +1,20 @@
+{
+  "common": {},
+  "auth": {},
+  "dashboard": {},
+  "market": {},
+  "portfolio": {},
+  "exchange": {},
+  "deals": {},
+  "project": {},
+  "auctions": {},
+  "admin": {},
+  "settings": {},
+  "legal": {},
+  "errors": {},
+  "notifications": {},
+  "council": {},
+  "healthcare": {},
+  "orphans": {},
+  "discounts": {}
+}

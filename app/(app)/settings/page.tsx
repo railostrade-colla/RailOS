@@ -15,6 +15,7 @@ import {
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, Tabs, Modal } from "@/components/ui"
+import { useTheme } from "@/lib/theme/ThemeProvider"
 import { showSuccess, showError, showInfo } from "@/lib/utils/toast"
 // Phase 14.07d — removed `CURRENT_USER` mock import. The page now relies
 // exclusively on getCurrentUserProfile() (Supabase auth + profiles row);
@@ -168,8 +169,14 @@ function SettingsContent() {
   const [timeFormat, setTimeFormat] = useState("24h")
   const [autoLocation, setAutoLocation] = useState(true)
 
-  // Appearance
-  const [theme, setTheme] = useState("dark")
+  // Appearance — Phase 14.13 M2: theme is now REAL (was a dead
+  // useState stub). Bridged to the global ThemeProvider. The
+  // SelectRow speaks "dark|light|auto"; the provider speaks
+  // "dark|light|system" — `auto` ↔ `system` is mapped here.
+  const { theme: themeChoice, setTheme: setThemeChoice } = useTheme()
+  const theme = themeChoice === "system" ? "auto" : themeChoice
+  const setTheme = (v: string) =>
+    setThemeChoice(v === "auto" ? "system" : (v as "dark" | "light"))
   const [fontSize, setFontSize] = useState("medium")
   const [density, setDensity] = useState("comfortable")
   const [animations, setAnimations] = useState(true)
@@ -477,9 +484,9 @@ function SettingsContent() {
                   value={theme}
                   onChange={setTheme}
                   options={[
-                    { id: "dark", label: "داكن (افتراضي)" },
-                    { id: "light", label: "فاتح (قريباً)" },
-                    { id: "auto", label: "تلقائي" },
+                    { id: "dark", label: "داكن" },
+                    { id: "light", label: "فاتح" },
+                    { id: "auto", label: "تلقائي (حسب النظام)" },
                   ]}
                 />
                 <SelectRow
