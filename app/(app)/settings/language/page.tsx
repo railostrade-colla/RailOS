@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { AppLayout } from "@/components/layout/AppLayout"
 import {
   SettingsSectionHeader,
@@ -25,6 +26,7 @@ function currentLocale(): "ar" | "en" {
 
 export default function LanguageSettingsPage() {
   const router = useRouter()
+  const t = useTranslations("settings")
   const [language, setLanguage] = useState<"ar" | "en">(currentLocale())
   const [timezone, setTimezone] = useState("baghdad")
   const [currency, setCurrency] = useState("IQD")
@@ -44,13 +46,13 @@ export default function LanguageSettingsPage() {
       <div className="relative">
         <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
           <SettingsSectionHeader
-            title="اللغة والمنطقة"
-            subtitle="اللغة، التوقيت، العملة"
+            title={t("langTitle")}
+            subtitle={t("langSubtitle")}
             backHref="/settings"
           />
 
           <div className="flex flex-col gap-3">
-            <SettingsOptionCard title="اللغة" description="لغة واجهة التطبيق">
+            <SettingsOptionCard title={t("langCardTitle")} description={t("langCardDesc")}>
               <SettingsButtonGroup
                 value={language}
                 onChange={changeLanguage}
@@ -61,46 +63,46 @@ export default function LanguageSettingsPage() {
               />
             </SettingsOptionCard>
 
-            <SettingsOptionCard title="المنطقة الزمنية">
+            <SettingsOptionCard title={t("tzTitle")}>
               <SettingsButtonGroup
                 value={timezone}
                 onChange={setTimezone}
                 options={[
-                  { id: "baghdad", label: "بغداد +3" },
-                  { id: "dubai", label: "دبي +4" },
-                  { id: "riyadh", label: "الرياض +3" },
+                  { id: "baghdad", label: t("tzBaghdad") },
+                  { id: "dubai", label: t("tzDubai") },
+                  { id: "riyadh", label: t("tzRiyadh") },
                 ]}
               />
             </SettingsOptionCard>
 
-            <SettingsOptionCard title="العملة">
+            <SettingsOptionCard title={t("currencyTitle")}>
               <SettingsButtonGroup
                 value={currency}
                 onChange={setCurrency}
                 options={[
-                  { id: "IQD", label: "د.ع IQD" },
-                  { id: "USD", label: "$ USD" },
+                  { id: "IQD", label: t("currencyIqd") },
+                  { id: "USD", label: t("currencyUsd") },
                 ]}
               />
             </SettingsOptionCard>
 
-            <SettingsOptionCard title="تنسيق الوقت">
+            <SettingsOptionCard title={t("timeFmtTitle")}>
               <SettingsButtonGroup
                 value={timeFormat}
                 onChange={setTimeFormat}
                 options={[
-                  { id: "24h", label: "24 ساعة" },
-                  { id: "12h", label: "12 ساعة" },
+                  { id: "24h", label: t("timeFmt24") },
+                  { id: "12h", label: t("timeFmt12") },
                 ]}
               />
             </SettingsOptionCard>
 
             <SettingsOptionCard
-              title="الموقع التلقائي"
-              description="استخدم موقعك لتحسين التوصيات"
+              title={t("autoLocTitle")}
+              description={t("autoLocDesc")}
             >
               <SettingsToggle
-                label="تفعيل الموقع التلقائي"
+                label={t("autoLocToggle")}
                 checked={autoLocation}
                 onChange={setAutoLocation}
               />
