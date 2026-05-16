@@ -2,14 +2,14 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Search, Gift, Ticket, Sparkles } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, StatCard, Badge, EmptyState } from "@/components/ui"
 import {
-  CATEGORY_LABELS,
-  LEVEL_LABELS,
   type DiscountCategory,
+  type RequiredLevel,
   type Discount,
 } from "@/lib/mock-data/discounts"
 import {
@@ -23,8 +23,24 @@ const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 type SortKey = "newest" | "most_used" | "highest_value"
 
+// Icon stays lib-canonical; label resolved via t() at the call site.
+const CATEGORY_META: Record<DiscountCategory, { labelKey: string; icon: string }> = {
+  restaurants: { labelKey: "catRestaurants", icon: "🍽️" },
+  clothing:    { labelKey: "catClothing",    icon: "👔" },
+  electronics: { labelKey: "catElectronics", icon: "💻" },
+  services:    { labelKey: "catServices",    icon: "🛠️" },
+  travel:      { labelKey: "catTravel",      icon: "✈️" },
+  groceries:   { labelKey: "catGroceries",   icon: "🛒" },
+}
+const LEVEL_META: Record<RequiredLevel, { labelKey: string; icon: string }> = {
+  basic:    { labelKey: "lvlBasic",    icon: "🌱" },
+  advanced: { labelKey: "lvlAdvanced", icon: "⭐" },
+  pro:      { labelKey: "lvlPro",      icon: "👑" },
+}
+
 export default function DiscountsPage() {
   const router = useRouter()
+  const t = useTranslations("discounts")
   // Production mode — DB only.
   const [stats, setStats] = useState<DiscountsStats>({ total_brands: 0, active_discounts: 0 })
   const [allDiscounts, setAllDiscounts] = useState<Discount[]>([])
@@ -65,15 +81,15 @@ export default function DiscountsPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-5xl mx-auto pb-20">
 
           <PageHeader
-            title="🎁 خصومات حصرية"
-            subtitle="خصومات في أفضل الماركات لمشتركي رايلوس"
+            title={t("discountsTitle")}
+            subtitle={t("discountsSubtitle")}
             rightAction={
               <button
                 onClick={() => router.push("/discounts/my-coupons")}
                 className="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] text-white px-3 py-1.5 rounded-md text-xs font-bold flex items-center gap-1 transition-colors"
               >
                 <Ticket className="w-3.5 h-3.5" />
-                قسائمي
+                {t("myCoupons")}
               </button>
             }
           />
@@ -82,13 +98,13 @@ export default function DiscountsPage() {
             <div className="w-14 h-14 rounded-2xl bg-orange-400/[0.15] border border-orange-400/[0.3] flex items-center justify-center mx-auto mb-3">
               <Gift className="w-7 h-7 text-orange-400" strokeWidth={1.5} />
             </div>
-            <div className="text-base font-bold text-white mb-1">احصل على خصومات في أفضل الماركات</div>
+            <div className="text-base font-bold text-white mb-1">{t("heroTitle")}</div>
             <div className="text-xs text-neutral-300 max-w-md mx-auto leading-relaxed mb-3">
-              خصومات حصرية للمشتركين تصل لـ 50% على المطاعم والملابس والإلكترونيات والمزيد.
+              {t("heroDesc")}
             </div>
             <div className="grid grid-cols-2 gap-2 max-w-xs mx-auto">
-              <StatCard label="ماركات" value={stats.total_brands} color="orange" size="sm" />
-              <StatCard label="خصومات نشطة" value={stats.active_discounts} color="purple" size="sm" />
+              <StatCard label={t("stBrands")} value={stats.total_brands} color="orange" size="sm" />
+              <StatCard label={t("stActiveDiscounts")} value={stats.active_discounts} color="purple" size="sm" />
             </div>
           </Card>
 
@@ -100,7 +116,7 @@ export default function DiscountsPage() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="ابحث عن ماركة..."
+                placeholder={t("searchBrandPlaceholder")}
                 className="w-full bg-white/[0.05] border border-white/[0.08] rounded-xl pr-10 pl-4 py-2.5 text-sm text-white placeholder:text-neutral-500 outline-none focus:border-white/20"
               />
             </div>
@@ -109,9 +125,9 @@ export default function DiscountsPage() {
               onChange={(e) => setCategory(e.target.value as DiscountCategory | "all")}
               className="bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-white/20"
             >
-              <option value="all">كل الفئات</option>
-              {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v.icon} {v.label}</option>
+              <option value="all">{t("allCategories")}</option>
+              {Object.entries(CATEGORY_META).map(([k, v]) => (
+                <option key={k} value={k}>{v.icon} {t(v.labelKey)}</option>
               ))}
             </select>
             <select
@@ -119,15 +135,15 @@ export default function DiscountsPage() {
               onChange={(e) => setSort(e.target.value as SortKey)}
               className="bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-white/20"
             >
-              <option value="highest_value">الأعلى قيمة</option>
-              <option value="most_used">الأكثر استخداماً</option>
-              <option value="newest">الأحدث</option>
+              <option value="highest_value">{t("sortHighest")}</option>
+              <option value="most_used">{t("sortMostUsed")}</option>
+              <option value="newest">{t("sortNewest")}</option>
             </select>
           </div>
 
           <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
             {[
-              { val: 0,  label: "كل الخصومات" },
+              { val: 0,  label: t("minAll") },
               { val: 10, label: "10%+" },
               { val: 20, label: "20%+" },
               { val: 30, label: "30%+" },
@@ -149,12 +165,12 @@ export default function DiscountsPage() {
           </div>
 
           {discounts.length === 0 ? (
-            <EmptyState icon="🎁" title="لا توجد خصومات" description="جرّب تغيير الفلترة" size="md" />
+            <EmptyState icon="🎁" title={t("noDiscounts")} description={t("tryFilter")} size="md" />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {discounts.map((d) => {
-                const cat = CATEGORY_LABELS[d.category]
-                const lvl = LEVEL_LABELS[d.required_level]
+                const cat = CATEGORY_META[d.category]
+                const lvl = LEVEL_META[d.required_level]
                 return (
                   <Card
                     key={d.id}
@@ -191,7 +207,7 @@ export default function DiscountsPage() {
                             <div className="text-sm font-bold text-white">{d.brand_name}</div>
                             <div className="text-[10px] text-neutral-500 flex items-center gap-1">
                               <span>{cat.icon}</span>
-                              <span>{cat.label}</span>
+                              <span>{t(cat.labelKey)}</span>
                             </div>
                           </div>
                         </div>
@@ -213,14 +229,14 @@ export default function DiscountsPage() {
                       <div className="flex items-center justify-between text-[10px] text-neutral-500 mb-3">
                         <span className="flex items-center gap-1">
                           <span>{lvl.icon}</span>
-                          <span>{lvl.label}+</span>
+                          <span>{t(lvl.labelKey)}+</span>
                         </span>
-                        <span>{fmtNum(d.used_count)} استخدام</span>
+                        <span>{t("usageCount", { n: fmtNum(d.used_count) })}</span>
                       </div>
 
                       <button className="w-full bg-neutral-100 text-black py-2 rounded-lg text-xs font-bold hover:bg-neutral-200 transition-colors flex items-center justify-center gap-1">
                         <Sparkles className="w-3.5 h-3.5" strokeWidth={2} />
-                        احصل على القسيمة
+                        {t("getCoupon")}
                       </button>
                     </div>
                   </Card>
