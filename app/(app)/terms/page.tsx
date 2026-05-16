@@ -1,64 +1,24 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { ChevronDown, Scale, FileText } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { cn } from "@/lib/utils/cn"
 
-const SECTIONS = [
-  {
-    title: "طبيعة المنصة",
-    icon: "🏛️",
-    content: "رايلوس منصة تقنية لإدارة وتنظيم الفرص الاستثمارية، تربط المستثمرين بالشركات وأصحاب المشاريع. لا تقوم المنصة بأي تعاملات مالية مباشرة داخلها، وجميع العمليات المالية تتم خارج نطاق المنصة بين الأطراف.",
-    legal: "استناداً إلى أحكام القانون المدني العراقي رقم (40) لسنة 1951 الخاصة بحرية التعاقد وتنظيم العلاقات بين الأطراف.",
-  },
-  {
-    title: "التسجيل والأهلية",
-    icon: "👤",
-    content: "يُشترط أن يكون المستخدم بالغاً وفق القوانين المحلية المعمول بها. بتسجيلك فإنك تقر بصحة معلوماتك وموافقتك على شروط الاستخدام.",
-    legal: "استناداً إلى أحكام الأهلية القانونية في القانون المدني العراقي.",
-  },
-  {
-    title: "المسؤولية",
-    icon: "⚖️",
-    content: "المنصة تنظم العمليات وتيسر التواصل بين الأطراف فقط، وليست مسؤولة عن خسائر الاستثمار أو قرارات المستخدمين. كل مستخدم يتحمل مسؤولية قراراته الاستثمارية كاملاً.",
-    legal: "استناداً إلى أحكام المسؤولية المدنية في القانون المدني العراقي رقم (40) لسنة 1951.",
-  },
-  {
-    title: "العمولة والرسوم",
-    icon: "💱",
-    content: "تُفرض رسوم 2.5% على عمليات إرسال الحصص — تُخصم بوحدات الرسوم فقط (وليست بالحصص نفسها). يستلم المستلم الكمية كاملةً. كل رسوم المنصّة تُحسب بوحدات الرسوم بدون أي خصم من الحصص.",
-    legal: "استناداً إلى أحكام التعاقد في القانون المدني العراقي.",
-  },
-  {
-    title: "الدفع والتحويل",
-    icon: "🏦",
-    content: "جميع المعاملات المالية الفعلية تتم عبر التحويل البنكي أو الطرق المتفق عليها خارج التطبيق. الدفع يتم بعد الاتفاق عبر المحادثة داخل المنصة.",
-    legal: "استناداً إلى القوانين العراقية المنظمة للنشاطات المالية والتحويلات.",
-  },
-  {
-    title: "حقوق الملكية الفكرية",
-    icon: "©️",
-    content: "جميع محتويات المنصة وعلامتها التجارية محمية قانونياً. لا يجوز نسخ أو إعادة استخدام أي محتوى دون إذن كتابي مسبق.",
-    legal: "استناداً إلى قانون حماية حقوق الملكية الفكرية العراقي.",
-  },
-  {
-    title: "إلغاء الحساب والتعليق",
-    icon: "🚫",
-    content: "يحق للمستخدم حذف حسابه في أي وقت بعد إتمام أو إلغاء جميع الصفقات الجارية. يحق للمنصة تعليق الحساب أو إلغاءه في حال انتهاك الشروط.",
-    legal: "استناداً إلى حق المنصة في حماية نزاهة البيئة الاستثمارية.",
-  },
-  {
-    title: "تحديثات الشروط",
-    icon: "📋",
-    content: "قد يتم تحديث هذه الشروط من وقت لآخر. سيتم إشعار المستخدمين بأي تحديثات مهمة عبر التطبيق. الاستمرار في استخدام المنصة يعني موافقتك على الشروط الجديدة.",
-    legal: "استناداً إلى مبادئ العقود المتجددة في القانون المدني.",
-  },
-]
+// content/legal/title resolved via t(); icon stays here.
+const SECTION_ICONS = ["🏛️", "👤", "⚖️", "💱", "🏦", "©️", "🚫", "📋"] as const
 
 export default function TermsPage() {
+  const t = useTranslations("legal")
   const [openIdx, setOpenIdx] = useState<number | null>(0)
+  const SECTIONS = SECTION_ICONS.map((icon, i) => ({
+    icon,
+    title: t(`ts${i + 1}Title`),
+    content: t(`ts${i + 1}Content`),
+    legal: t(`ts${i + 1}Legal`),
+  }))
 
   return (
     <AppLayout>
@@ -66,18 +26,18 @@ export default function TermsPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
 
           <PageHeader
-            badge="TERMS · الشروط والأحكام"
-            title="الشروط والأحكام"
-            description="آخر تحديث: 25 أبريل 2026"
+            badge={t("termsBadge")}
+            title={t("termsTitle")}
+            description={t("termsUpdated")}
           />
 
           {/* Header banner */}
           <div className="bg-yellow-400/[0.06] border border-yellow-400/20 rounded-2xl p-4 mb-5 flex gap-3 items-start">
             <Scale className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
             <div>
-              <div className="text-sm font-bold text-yellow-400 mb-1">قبل البدء باستخدام المنصة</div>
+              <div className="text-sm font-bold text-yellow-400 mb-1">{t("beforeUsing")}</div>
               <div className="text-xs text-neutral-300 leading-relaxed">
-                يرجى قراءة هذه الشروط بعناية. باستخدامك للمنصة فإنك توافق على الالتزام بكافة البنود المذكورة أدناه.
+                {t("beforeUsingDesc")}
               </div>
             </div>
           </div>
@@ -107,7 +67,7 @@ export default function TermsPage() {
                     <div className="bg-blue-400/[0.04] border border-blue-400/15 rounded-lg p-3 flex gap-2 items-start">
                       <FileText className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
                       <div className="text-[11px] text-neutral-400 leading-relaxed">
-                        <span className="text-blue-400 font-bold">المرجعية القانونية: </span>
+                        <span className="text-blue-400 font-bold">{t("legalRef")}</span>
                         {s.legal}
                       </div>
                     </div>
@@ -120,7 +80,7 @@ export default function TermsPage() {
           {/* Footer note */}
           <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-4 text-center mt-6">
             <div className="text-[11px] text-neutral-400 leading-relaxed">
-              للاستفسار حول هذه الشروط، تواصل مع <a href="mailto:railostrade@gmail.com" className="text-blue-400 hover:underline" dir="ltr">railostrade@gmail.com</a> أو <a href="tel:+9647721726518" className="text-blue-400 hover:underline" dir="ltr">07721726518</a>
+              {t("termsFooterPre")}<a href="mailto:railostrade@gmail.com" className="text-blue-400 hover:underline" dir="ltr">railostrade@gmail.com</a>{t("termsFooterOr")}<a href="tel:+9647721726518" className="text-blue-400 hover:underline" dir="ltr">07721726518</a>
             </div>
           </div>
 
