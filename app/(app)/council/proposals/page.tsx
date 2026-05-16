@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Calendar, ChevronLeft, Clock } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -19,23 +20,24 @@ import { cn } from "@/lib/utils/cn"
 
 type TabId = "voting" | "approved" | "rejected" | "all"
 
-const TYPE_META: Record<ProposalType, { label: string; icon: string }> = {
-  new_project:    { label: "مشروع",    icon: "🏗️" },
-  shares_release: { label: "حصص",     icon: "📈" },
-  investigation:  { label: "تحقيق",    icon: "🔍" },
-  policy:         { label: "سياسة",    icon: "📜" },
+const TYPE_META: Record<ProposalType, { labelKey: string; icon: string }> = {
+  new_project:    { labelKey: "typeProject",    icon: "🏗️" },
+  shares_release: { labelKey: "typeShares",     icon: "📈" },
+  investigation:  { labelKey: "ptInvestigation", icon: "🔍" },
+  policy:         { labelKey: "ptPolicy",        icon: "📜" },
 }
 
-const STATUS_META: Record<ProposalStatus, { label: string; color: "yellow" | "blue" | "green" | "red" | "neutral" }> = {
-  pending:   { label: "قيد الانتظار", color: "yellow" },
-  voting:    { label: "تصويت نشط",   color: "blue" },
-  approved:  { label: "موافق عليه",   color: "green" },
-  rejected:  { label: "مرفوض",       color: "red" },
-  executed:  { label: "تم التنفيذ",  color: "neutral" },
+const STATUS_META: Record<ProposalStatus, { labelKey: string; color: "yellow" | "blue" | "green" | "red" | "neutral" }> = {
+  pending:   { labelKey: "psPending",  color: "yellow" },
+  voting:    { labelKey: "psVoting",   color: "blue" },
+  approved:  { labelKey: "psApproved", color: "green" },
+  rejected:  { labelKey: "psRejected", color: "red" },
+  executed:  { labelKey: "psExecuted", color: "neutral" },
 }
 
 export default function ProposalsPage() {
   const router = useRouter()
+  const t = useTranslations("council")
   const [tab, setTab] = useState<TabId>("voting")
   const [typeFilter, setTypeFilter] = useState<ProposalType | "all">("all")
 
@@ -97,27 +99,27 @@ export default function ProposalsPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-4xl mx-auto pb-20">
 
           <PageHeader
-            title="📋 القرارات"
-            subtitle="تابع القرارات والتصويت"
+            title={t("proposalsTitle")}
+            subtitle={t("proposalsSubtitle")}
             backHref="/council"
           />
 
           {/* ═══ Stats ═══ */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6">
-            <StatCard label="الإجمالي" value={stats.proposals} />
-            <StatCard label="نشط" value={stats.active} color="blue" />
-            <StatCard label="موافق" value={stats.approved} color="green" />
-            <StatCard label="مرفوض" value={stats.rejected} color="red" />
+            <StatCard label={t("stTotal")} value={stats.proposals} />
+            <StatCard label={t("stActive")} value={stats.active} color="blue" />
+            <StatCard label={t("stApproved")} value={stats.approved} color="green" />
+            <StatCard label={t("stRejected")} value={stats.rejected} color="red" />
           </div>
 
           {/* ═══ Tabs ═══ */}
           <div className="mb-4">
             <Tabs
               tabs={[
-                { id: "voting",   icon: "⏳", label: "نشط",      count: stats.active },
-                { id: "approved", icon: "✅", label: "موافق",     count: stats.approved },
-                { id: "rejected", icon: "❌", label: "مرفوض",     count: stats.rejected },
-                { id: "all",      icon: "📜", label: "الكل",      count: stats.proposals },
+                { id: "voting",   icon: "⏳", label: t("tabVoting"),   count: stats.active },
+                { id: "approved", icon: "✅", label: t("tabApproved"), count: stats.approved },
+                { id: "rejected", icon: "❌", label: t("tabRejected"), count: stats.rejected },
+                { id: "all",      icon: "📜", label: t("tabAll"),      count: stats.proposals },
               ]}
               activeTab={tab}
               onChange={(id) => setTab(id as TabId)}
@@ -128,11 +130,11 @@ export default function ProposalsPage() {
           {/* ═══ Type filter chips ═══ */}
           <div className="flex gap-2 overflow-x-auto pb-2 mb-5 -mx-1 px-1">
             {([
-              { id: "all", label: "كل الأنواع" },
-              { id: "new_project", label: "🏗️ مشاريع" },
-              { id: "shares_release", label: "📈 حصص" },
-              { id: "investigation", label: "🔍 تحقيقات" },
-              { id: "policy", label: "📜 سياسات" },
+              { id: "all", label: t("allTypes") },
+              { id: "new_project", label: t("filterProjects") },
+              { id: "shares_release", label: t("filterShares") },
+              { id: "investigation", label: t("filterInvestigations") },
+              { id: "policy", label: t("filterPolicies") },
             ] as Array<{ id: ProposalType | "all"; label: string }>).map((f) => (
               <button
                 key={f.id}
@@ -153,8 +155,8 @@ export default function ProposalsPage() {
           {filtered.length === 0 ? (
             <EmptyState
               icon="📭"
-              title="لا توجد قرارات في هذه الفئة"
-              description="جرّب تبويباً آخر أو غيّر النوع"
+              title={t("emptyTitle")}
+              description={t("emptyDesc")}
               size="md"
             />
           ) : (
@@ -168,15 +170,15 @@ export default function ProposalsPage() {
                   <Card key={p.id} onClick={() => router.push("/council/proposals/" + p.id)}>
                     {/* Badges */}
                     <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-                      <Badge color="neutral" variant="soft" size="xs" icon={type.icon}>{type.label}</Badge>
-                      <Badge color={status.color} variant="soft" size="xs">{status.label}</Badge>
+                      <Badge color="neutral" variant="soft" size="xs" icon={type.icon}>{t(type.labelKey)}</Badge>
+                      <Badge color={status.color} variant="soft" size="xs">{t(status.labelKey)}</Badge>
                       {p.council_recommendation && (
                         <Badge
                           color={p.council_recommendation === "approve" ? "green" : p.council_recommendation === "object" ? "red" : "neutral"}
                           variant="soft"
                           size="xs"
                         >
-                          توصية: {p.council_recommendation === "approve" ? "موافقة" : p.council_recommendation === "object" ? "اعتراض" : "محايد"}
+                          {t("recPrefix")} {p.council_recommendation === "approve" ? t("recApprove") : p.council_recommendation === "object" ? t("recObject") : t("recNeutral")}
                         </Badge>
                       )}
                     </div>
@@ -189,7 +191,7 @@ export default function ProposalsPage() {
 
                     {/* Submitter */}
                     <div className="flex items-center gap-2 text-[10px] text-neutral-500 mb-3">
-                      <span>قُدّم من: <span className="text-white font-bold">{p.submitted_by_name ?? "—"}</span></span>
+                      <span>{t("submittedBy")} <span className="text-white font-bold">{p.submitted_by_name ?? "—"}</span></span>
                       <span>·</span>
                       <span dir="ltr">{p.submitted_at}</span>
                     </div>
@@ -199,9 +201,9 @@ export default function ProposalsPage() {
                       <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3 mb-3">
                         <div className="space-y-1.5">
                           {[
-                            { label: "موافقة", count: p.votes_approve, color: "bg-green-400", text: "text-green-400" },
-                            { label: "اعتراض",  count: p.votes_object,  color: "bg-red-400",   text: "text-red-400" },
-                            { label: "امتناع",  count: p.votes_abstain, color: "bg-neutral-500", text: "text-neutral-400" },
+                            { label: t("voteApprove"), count: p.votes_approve, color: "bg-green-400", text: "text-green-400" },
+                            { label: t("voteObject"),  count: p.votes_object,  color: "bg-red-400",   text: "text-red-400" },
+                            { label: t("voteAbstain"), count: p.votes_abstain, color: "bg-neutral-500", text: "text-neutral-400" },
                           ].map((row) => (
                             <div key={row.label} className="flex items-center gap-2">
                               <span className="text-[10px] text-neutral-500 w-12 flex-shrink-0">{row.label}</span>
@@ -217,7 +219,7 @@ export default function ProposalsPage() {
                         </div>
                         <div className="text-[9px] text-neutral-600 mt-2 flex items-center gap-1">
                           <Clock className="w-2.5 h-2.5" />
-                          {total} من {eligible} عضو صوّتوا
+                          {t("votedCount", { total, eligible })}
                         </div>
                       </div>
                     )}
@@ -231,14 +233,14 @@ export default function ProposalsPage() {
                           : "bg-red-400/[0.06] border border-red-400/25 text-red-300",
                       )}>
                         <Calendar className="w-3 h-3" />
-                        القرار النهائي من <span className="font-bold">{p.final_decision_by}</span> · {p.final_decision_at}
+                        {t("finalDecisionBy")} <span className="font-bold">{p.final_decision_by}</span> · {p.final_decision_at}
                       </div>
                     )}
 
                     {/* CTA */}
                     <div className="flex items-center justify-end">
                       <span className="text-[11px] text-blue-400 font-bold flex items-center gap-1">
-                        التفاصيل والتصويت
+                        {t("detailsAndVote")}
                         <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
                       </span>
                     </div>
