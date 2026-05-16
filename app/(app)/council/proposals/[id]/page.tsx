@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Check, X, Minus, Clock, Calendar, Crown } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
@@ -25,25 +26,25 @@ import {
 import { showSuccess, showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
-const TYPE_META: Record<ProposalType, { label: string; icon: string }> = {
-  new_project:    { label: "مشروع جديد",    icon: "🏗️" },
-  shares_release: { label: "إطلاق حصص",     icon: "📈" },
-  investigation:  { label: "تحقيق",          icon: "🔍" },
-  policy:         { label: "سياسة",         icon: "📜" },
+const TYPE_META: Record<ProposalType, { labelKey: string; icon: string }> = {
+  new_project:    { labelKey: "ptNewProject",    icon: "🏗️" },
+  shares_release: { labelKey: "ptSharesRelease", icon: "📈" },
+  investigation:  { labelKey: "ptInvestigation", icon: "🔍" },
+  policy:         { labelKey: "ptPolicy",        icon: "📜" },
 }
 
-const STATUS_META: Record<ProposalStatus, { label: string; color: "yellow" | "blue" | "green" | "red" | "neutral" }> = {
-  pending:   { label: "قيد الانتظار", color: "yellow" },
-  voting:    { label: "تصويت نشط",   color: "blue" },
-  approved:  { label: "موافق عليه",   color: "green" },
-  rejected:  { label: "مرفوض",       color: "red" },
-  executed:  { label: "تم التنفيذ",  color: "neutral" },
+const STATUS_META: Record<ProposalStatus, { labelKey: string; color: "yellow" | "blue" | "green" | "red" | "neutral" }> = {
+  pending:   { labelKey: "psPending",  color: "yellow" },
+  voting:    { labelKey: "psVoting",   color: "blue" },
+  approved:  { labelKey: "psApproved", color: "green" },
+  rejected:  { labelKey: "psRejected", color: "red" },
+  executed:  { labelKey: "psExecuted", color: "neutral" },
 }
 
-const CHOICE_META: Record<VoteChoice, { label: string; color: "green" | "red" | "neutral"; icon: typeof Check }> = {
-  approve: { label: "موافقة", color: "green",   icon: Check },
-  object:  { label: "اعتراض", color: "red",     icon: X },
-  abstain: { label: "امتناع", color: "neutral", icon: Minus },
+const CHOICE_META: Record<VoteChoice, { labelKey: string; color: "green" | "red" | "neutral"; icon: typeof Check }> = {
+  approve: { labelKey: "voteApprove", color: "green",   icon: Check },
+  object:  { labelKey: "voteObject",  color: "red",     icon: X },
+  abstain: { labelKey: "voteAbstain", color: "neutral", icon: Minus },
 }
 
 function useCountdown(endsAt: string) {
@@ -63,14 +64,16 @@ function useCountdown(endsAt: string) {
       })
     }
     calc()
-    const t = setInterval(calc, 60_000)
-    return () => clearInterval(t)
+    const iv = setInterval(calc, 60_000)
+    return () => clearInterval(iv)
   }, [endsAt])
   return parts
 }
 
 export default function ProposalDetailsPage() {
   const router = useRouter()
+  const t = useTranslations("council")
+  const tc = useTranslations("common")
   const params = useParams()
   const proposalId = (params?.id as string) ?? ""
 
@@ -153,7 +156,7 @@ export default function ProposalDetailsPage() {
         <div className="relative">
           <GridBackground showCircles={false} />
           <div className="relative z-10 px-3 lg:px-8 py-12 max-w-3xl mx-auto text-center text-sm text-neutral-500">
-            جاري تحميل القرار...
+            {t("loadingProposal")}
           </div>
         </div>
       </AppLayout>
@@ -166,12 +169,12 @@ export default function ProposalDetailsPage() {
         <div className="relative">
           <GridBackground showCircles={false} />
           <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
-            <PageHeader title="تفاصيل القرار" backHref="/council/proposals" />
+            <PageHeader title={t("pdDetailsTitle")} backHref="/council/proposals" />
             <EmptyState
               icon="🔍"
-              title="القرار غير موجود"
-              description="ربما تم حذفه أو الرابط غير صحيح"
-              action={{ label: "كل القرارات", href: "/council/proposals" }}
+              title={t("notFoundTitle")}
+              description={t("notFoundDesc")}
+              action={{ label: t("allProposals"), href: "/council/proposals" }}
               size="lg"
             />
           </div>
@@ -199,7 +202,7 @@ export default function ProposalDetailsPage() {
 
   const handleSubmitVote = async () => {
     if (!choice) {
-      showError("اختر موقفك أولاً")
+      showError(t("chooseStanceFirst"))
       return
     }
     setSubmitting(true)
@@ -207,15 +210,15 @@ export default function ProposalDetailsPage() {
     const result = await castProposalVote(proposalId, choice, reason.trim() || undefined)
     if (!result.success) {
       const map: Record<string, string> = {
-        unauthenticated: "سجّل دخولك أولاً",
-        not_council_member: "التصويت محصور بأعضاء المجلس",
-        not_found: "القرار غير موجود",
-        voting_closed: "التصويت مُغلق",
-        voting_expired: "انتهى وقت التصويت",
-        missing_table: "الجداول غير منشورة بعد",
-        rls: "صلاحياتك لا تسمح بالتصويت",
+        unauthenticated: t("pdLoginFirst"),
+        not_council_member: t("votingMembersOnly"),
+        not_found: t("notFoundTitle"),
+        voting_closed: t("votingClosed"),
+        voting_expired: t("votingExpired"),
+        missing_table: t("tablesNotPub"),
+        rls: t("noVotePermission"),
       }
-      showError(map[result.reason ?? ""] ?? "فشل التصويت — حاول مجدداً")
+      showError(map[result.reason ?? ""] ?? t("voteFailed"))
       setSubmitting(false)
       return
     }
@@ -225,8 +228,8 @@ export default function ProposalDetailsPage() {
       id: "new-" + Date.now(),
       proposal_id: proposalId,
       member_id: "me",
-      member_name: "أنت",
-      member_avatar: "أ",
+      member_name: t("youLabel"),
+      member_avatar: t("youAvatar"),
       choice,
       reason: reason.trim() || undefined,
       voted_at: new Date().toISOString(),
@@ -234,7 +237,7 @@ export default function ProposalDetailsPage() {
     setVotes((prev) => [newVote, ...prev])
     setHasVoted(true)
     setShowConfirm(false)
-    showSuccess(`تم تسجيل صوتك: ${CHOICE_META[choice].label}`)
+    showSuccess(t("voteRecorded", { choice: t(CHOICE_META[choice].labelKey) }))
     setSubmitting(false)
 
     // Re-pull authoritative votes in the background
@@ -263,7 +266,7 @@ export default function ProposalDetailsPage() {
         <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader
-            title="تفاصيل القرار"
+            title={t("pdDetailsTitle")}
             subtitle={proposal.title}
             backHref="/council/proposals"
           />
@@ -271,21 +274,21 @@ export default function ProposalDetailsPage() {
           {/* ═══ § 1: Hero ═══ */}
           <Card variant="gradient" color={proposal.status === "voting" ? "blue" : proposal.final_decision === "approved" ? "green" : proposal.final_decision === "rejected" ? "red" : "neutral"} className="mb-6">
             <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-              <Badge color="neutral" variant="soft" icon={type.icon}>{type.label}</Badge>
-              <Badge color={status.color} variant="soft">{status.label}</Badge>
+              <Badge color="neutral" variant="soft" icon={type.icon}>{t(type.labelKey)}</Badge>
+              <Badge color={status.color} variant="soft">{t(status.labelKey)}</Badge>
               {proposal.council_recommendation && (
                 <Badge
                   color={proposal.council_recommendation === "approve" ? "green" : proposal.council_recommendation === "object" ? "red" : "neutral"}
                   variant="soft"
                   size="xs"
                 >
-                  توصية: {proposal.council_recommendation === "approve" ? "موافقة" : proposal.council_recommendation === "object" ? "اعتراض" : "محايد"}
+                  {t("recPrefix")} {proposal.council_recommendation === "approve" ? t("recApprove") : proposal.council_recommendation === "object" ? t("recObject") : t("recNeutral")}
                 </Badge>
               )}
             </div>
             <h2 className="text-base font-bold text-white mb-3">{proposal.title}</h2>
             <div className="flex items-center gap-2 text-[11px] text-neutral-400">
-              <span>قُدّم من: <span className="text-white font-bold">{proposal.submitted_by_name}</span></span>
+              <span>{t("submittedBy")} <span className="text-white font-bold">{proposal.submitted_by_name}</span></span>
               <span>·</span>
               <span dir="ltr">{proposal.submitted_at}</span>
             </div>
@@ -295,10 +298,10 @@ export default function ProposalDetailsPage() {
               <div className="mt-4 bg-white/[0.05] border border-white/[0.08] rounded-xl p-3">
                 <div className="text-[10px] text-neutral-400 mb-1.5 flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  ينتهي التصويت خلال
+                  {t("countdownEnds")}
                 </div>
                 <div className="text-base font-bold text-white font-mono">
-                  {countdown.d}ي {countdown.h}س {countdown.m}د
+                  {t("countdownDHM", { d: countdown.d, h: countdown.h, m: countdown.m })}
                 </div>
               </div>
             )}
@@ -306,14 +309,14 @@ export default function ProposalDetailsPage() {
 
           {/* ═══ § 2: Description ═══ */}
           <Card className="mb-6">
-            <SectionHeader title="📝 الوصف الكامل" />
+            <SectionHeader title={t("descTitle")} />
             <p className="text-sm text-neutral-300 leading-relaxed">{proposal.description}</p>
             {proposal.related_project_id && (
               <button
                 onClick={() => router.push("/project/" + proposal.related_project_id)}
                 className="text-xs text-blue-400 hover:text-blue-300 mt-3 flex items-center gap-1 transition-colors"
               >
-                مشروع مرتبط: {proposal.related_project_id} ←
+                {t("relatedProject")} {proposal.related_project_id} ←
               </button>
             )}
           </Card>
@@ -322,12 +325,12 @@ export default function ProposalDetailsPage() {
           {proposal.status === "voting" && (
             isMember ? (
               <Card variant="highlighted" color="blue" className="mb-6">
-                <SectionHeader title="🗳️ صوّت على هذا القرار" subtitle={hasVoted ? "تم تسجيل صوتك" : "اختر موقفك من القرار"} />
+                <SectionHeader title={t("voteSectionTitle")} subtitle={hasVoted ? t("voteRecordedSub") : t("chooseStanceSub")} />
 
                 {hasVoted ? (
                   <div className="bg-green-400/[0.06] border border-green-400/25 rounded-xl p-3 text-center">
                     <Check className="w-6 h-6 text-green-400 mx-auto mb-1" strokeWidth={2.5} />
-                    <div className="text-sm font-bold text-green-400">تم تسجيل صوتك بنجاح</div>
+                    <div className="text-sm font-bold text-green-400">{t("voteRecordedOk")}</div>
                   </div>
                 ) : (
                   <>
@@ -350,18 +353,18 @@ export default function ProposalDetailsPage() {
                             )}
                           >
                             <Icon className="w-4 h-4" strokeWidth={2.5} />
-                            {meta.label}
+                            {t(meta.labelKey)}
                           </button>
                         )
                       })}
                     </div>
 
                     <div className="mb-3">
-                      <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">سبب التصويت (اختياري)</div>
+                      <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">{t("voteReasonLabel")}</div>
                       <textarea
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
-                        placeholder="وضّح موقفك للتوثيق..."
+                        placeholder={t("voteReasonPlaceholder")}
                         rows={3}
                         maxLength={300}
                         className="w-full bg-white/[0.04] border border-white/[0.08] focus:border-white/20 rounded-xl px-4 py-3 text-sm text-white outline-none resize-none transition-colors"
@@ -378,7 +381,7 @@ export default function ProposalDetailsPage() {
                           : "bg-white/[0.05] text-neutral-500 cursor-not-allowed",
                       )}
                     >
-                      تأكيد التصويت
+                      {t("confirmVoteBtn")}
                     </button>
                   </>
                 )}
@@ -386,8 +389,8 @@ export default function ProposalDetailsPage() {
             ) : (
               <Card className="mb-6 text-center">
                 <div className="text-3xl mb-2 opacity-50">ℹ️</div>
-                <div className="text-sm font-bold text-white mb-1">التصويت محصور بأعضاء المجلس فقط</div>
-                <div className="text-[11px] text-neutral-500">يمكنك متابعة النتيجة هنا</div>
+                <div className="text-sm font-bold text-white mb-1">{t("membersOnlyTitle")}</div>
+                <div className="text-[11px] text-neutral-500">{t("membersOnlyDesc")}</div>
               </Card>
             )
           )}
@@ -395,14 +398,14 @@ export default function ProposalDetailsPage() {
           {/* ═══ § 4: Live tally ═══ */}
           <Card className="mb-6">
             <SectionHeader
-              title="📊 نتائج التصويت الحالية"
-              subtitle={`${liveCounts.total} من ${proposal.total_eligible_voters} عضو صوّتوا`}
+              title={t("tallyTitle")}
+              subtitle={t("votedCount", { total: liveCounts.total, eligible: proposal.total_eligible_voters })}
             />
             <div className="space-y-3">
               {[
-                { label: "موافقة", count: liveCounts.approve, color: "bg-green-400",   text: "text-green-400" },
-                { label: "اعتراض", count: liveCounts.object,   color: "bg-red-400",     text: "text-red-400" },
-                { label: "امتناع", count: liveCounts.abstain,  color: "bg-neutral-500", text: "text-neutral-400" },
+                { label: t("voteApprove"), count: liveCounts.approve, color: "bg-green-400",   text: "text-green-400" },
+                { label: t("voteObject"),  count: liveCounts.object,   color: "bg-red-400",     text: "text-red-400" },
+                { label: t("voteAbstain"), count: liveCounts.abstain,  color: "bg-neutral-500", text: "text-neutral-400" },
               ].map((row) => (
                 <div key={row.label}>
                   <div className="flex justify-between mb-1">
@@ -424,7 +427,7 @@ export default function ProposalDetailsPage() {
           {votes.length > 0 && (
             <Card className="mb-6" padding="sm">
               <div className="px-2 py-2">
-                <SectionHeader title="🗳️ المصوّتون" subtitle={`${votes.length} صوت`} />
+                <SectionHeader title={t("votersTitle")} subtitle={t("votersCount", { n: votes.length })} />
               </div>
               <div className="space-y-1">
                 {votes.map((v) => {
@@ -437,7 +440,7 @@ export default function ProposalDetailsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
                           <span className="text-xs font-bold text-white">{v.member_name}</span>
-                          <Badge color={meta.color} variant="soft" size="xs">{meta.label}</Badge>
+                          <Badge color={meta.color} variant="soft" size="xs">{t(meta.labelKey)}</Badge>
                         </div>
                         {v.reason && (
                           <p className="text-[11px] text-neutral-400 leading-relaxed">{v.reason}</p>
@@ -458,19 +461,19 @@ export default function ProposalDetailsPage() {
             <Card variant="highlighted" color={proposal.final_decision === "approved" ? "green" : "red"}>
               <div className="flex items-center gap-2 mb-3">
                 <Crown className={cn("w-5 h-5", proposal.final_decision === "approved" ? "text-green-400" : "text-red-400")} strokeWidth={2} />
-                <h3 className="text-sm font-bold text-white">القرار النهائي</h3>
+                <h3 className="text-sm font-bold text-white">{t("finalDecisionTitle")}</h3>
               </div>
               <Badge
                 color={proposal.final_decision === "approved" ? "green" : "red"}
                 variant="solid"
                 size="md"
               >
-                {proposal.final_decision === "approved" ? "✅ تم الاعتماد" : "❌ تم الرفض"}
+                {proposal.final_decision === "approved" ? t("finalApproved") : t("finalRejected")}
               </Badge>
               <div className="mt-3 space-y-1.5 text-[11px] text-neutral-300">
                 <div className="flex items-center gap-2">
                   <Crown className="w-3 h-3 text-yellow-400" />
-                  <span>صدر من: <span className="font-bold text-white">{proposal.final_decision_by}</span></span>
+                  <span>{t("issuedBy")} <span className="font-bold text-white">{proposal.final_decision_by}</span></span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Calendar className="w-3 h-3 text-neutral-500" />
@@ -478,8 +481,8 @@ export default function ProposalDetailsPage() {
                 </div>
                 {proposal.council_recommendation && (
                   <div className="text-[10px] text-neutral-500 mt-2">
-                    💡 توصية المجلس كانت: <span className="font-bold">
-                      {proposal.council_recommendation === "approve" ? "موافقة" : proposal.council_recommendation === "object" ? "اعتراض" : "محايد"}
+                    {t("councilRecWas")} <span className="font-bold">
+                      {proposal.council_recommendation === "approve" ? t("recApprove") : proposal.council_recommendation === "object" ? t("recObject") : t("recNeutral")}
                     </span>
                   </div>
                 )}
@@ -495,8 +498,8 @@ export default function ProposalDetailsPage() {
         <Modal
           isOpen={showConfirm}
           onClose={() => !submitting && setShowConfirm(false)}
-          title="🗳️ تأكيد التصويت"
-          subtitle={`موقفك: ${CHOICE_META[choice].label}`}
+          title={t("confirmModalTitle")}
+          subtitle={t("yourStance", { choice: t(CHOICE_META[choice].labelKey) })}
           variant="warning"
           size="sm"
           footer={
@@ -506,7 +509,7 @@ export default function ProposalDetailsPage() {
                 disabled={submitting}
                 className="flex-1 bg-white/[0.05] border border-white/[0.1] text-white py-2.5 rounded-xl text-sm hover:bg-white/[0.08] disabled:opacity-50 transition-colors"
               >
-                إلغاء
+                {tc("buttons.cancel")}
               </button>
               <button
                 onClick={handleSubmitVote}
@@ -516,21 +519,21 @@ export default function ProposalDetailsPage() {
                 {submitting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-neutral-400 border-t-transparent rounded-full animate-spin" />
-                    جاري...
+                    {t("workingShort")}
                   </>
                 ) : (
-                  "تأكيد"
+                  t("confirmBtn")
                 )}
               </button>
             </>
           }
         >
           <p className="text-sm text-neutral-300 leading-relaxed">
-            ⚠️ لا يمكن تغيير صوتك بعد التأكيد.
+            {t("cannotChangeVote")}
           </p>
           {reason.trim() && (
             <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3 mt-3">
-              <div className="text-[10px] text-neutral-500 mb-1">سبب تصويتك:</div>
+              <div className="text-[10px] text-neutral-500 mb-1">{t("yourReasonLabel")}</div>
               <p className="text-xs text-neutral-300 leading-relaxed">{reason}</p>
             </div>
           )}
