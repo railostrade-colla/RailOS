@@ -3,6 +3,7 @@
 import {
   Palette, Globe, Lock, Bell, Wallet, User, HelpCircle,
 } from "lucide-react"
+import { useTranslations } from "next-intl"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { SettingsCategoryCard } from "@/components/settings"
@@ -22,69 +23,70 @@ import { SettingsCategoryCard } from "@/components/settings"
 const CATEGORIES = [
   {
     icon: Palette,
-    title: "المظهر والعرض",
-    subtitle: "الوضع، الخط، الحركات",
+    titleKey: "catAppearanceTitle",
+    subKey: "catAppearanceSub",
     color: "#C084FC",
     href: "/settings/appearance",
   },
   {
     icon: Globe,
-    title: "اللغة والمنطقة",
-    subtitle: "العربية، التوقيت، العملة",
+    titleKey: "catLangTitle",
+    subKey: "catLangSub",
     color: "#60A5FA",
     href: "/settings/language",
   },
   {
     icon: Lock,
-    title: "الأمان والخصوصية",
-    subtitle: "كلمة السر، البصمة",
+    titleKey: "catSecurityTitle",
+    subKey: "catSecuritySub",
     color: "#4ADE80",
     href: "/settings/security",
   },
   {
     icon: Bell,
-    title: "الإشعارات",
-    subtitle: "التنبيهات، الأصوات",
+    titleKey: "catNotifTitle",
+    subKey: "catNotifSub",
     color: "#FBBF24",
     href: "/settings/notifications",
   },
   {
     icon: Wallet,
-    title: "المالية والدفع",
-    subtitle: "المحفظة، الفواتير",
+    titleKey: "catFinanceTitle",
+    subKey: "catFinanceSub",
     color: "#22C55E",
     href: "/settings/finance",
   },
   {
     icon: User,
-    title: "الحساب الشخصي",
-    subtitle: "البيانات الشخصية، KYC",
+    titleKey: "catAccountTitle",
+    subKey: "catAccountSub",
     color: "#F472B6",
     href: "/settings/account",
   },
   {
     icon: HelpCircle,
-    title: "الدعم والمساعدة",
-    subtitle: "الأسئلة، التواصل",
+    titleKey: "catSupportTitle",
+    subKey: "catSupportSub",
     color: "#22D3EE",
     href: "/settings/support",
   },
 ] as const
 
 export default function SettingsPage() {
+  const t = useTranslations("settings")
   return (
     <AppLayout>
       <div className="relative">
         <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
-          <PageHeader title="⚙️ الإعدادات" subtitle="إدارة تفضيلاتك" backHref="/profile" />
+          <PageHeader title={t("hubTitle")} subtitle={t("hubSubtitle")} backHref="/profile" />
 
           <div className="flex flex-col gap-3 mt-2">
             {CATEGORIES.map((c) => (
               <SettingsCategoryCard
                 key={c.href}
                 icon={c.icon}
-                title={c.title}
-                subtitle={c.subtitle}
+                title={t(c.titleKey)}
+                subtitle={t(c.subKey)}
                 color={c.color}
                 href={c.href}
               />
