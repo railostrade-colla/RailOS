@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Building2, Users, FileText, Vote, BookOpen, ChevronLeft } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -16,23 +17,25 @@ import {
 } from "@/lib/data"
 import { cn } from "@/lib/utils/cn"
 
-const STATUS_META: Record<ProposalStatus, { label: string; color: "yellow" | "blue" | "green" | "red" | "neutral" }> = {
-  pending:   { label: "قيد الانتظار",  color: "yellow" },
-  voting:    { label: "تصويت نشط",    color: "blue" },
-  approved:  { label: "موافق عليه",    color: "green" },
-  rejected:  { label: "مرفوض",        color: "red" },
-  executed:  { label: "تم التنفيذ",   color: "neutral" },
+const STATUS_META: Record<ProposalStatus, { labelKey: string; color: "yellow" | "blue" | "green" | "red" | "neutral" }> = {
+  pending:   { labelKey: "psPending",  color: "yellow" },
+  voting:    { labelKey: "psVoting",   color: "blue" },
+  approved:  { labelKey: "psApproved", color: "green" },
+  rejected:  { labelKey: "psRejected", color: "red" },
+  executed:  { labelKey: "psExecuted", color: "neutral" },
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  new_project:    "مشروع جديد",
-  shares_release: "إطلاق حصص",
-  investigation:  "تحقيق",
-  policy:         "سياسة",
+const TYPE_LABEL_KEYS: Record<string, string> = {
+  new_project:    "ptNewProject",
+  shares_release: "ptSharesRelease",
+  investigation:  "ptInvestigation",
+  policy:         "ptPolicy",
 }
 
 export default function CouncilPage() {
   const router = useRouter()
+  const t = useTranslations("council")
+  const tc = useTranslations("common")
   // No active election (DB-only — production mode); status defaults
   // make this section render as inactive until a real election starts.
   const election = useMemo(() => ({
@@ -97,7 +100,7 @@ export default function CouncilPage() {
   const participation = election.total_eligible_voters > 0
     ? Math.round((election.votes_cast / election.total_eligible_voters) * 100)
     : 0
-  const electionLabel = election.status === "voting" ? "نشطة" : election.status === "registration" ? "ترشّح" : "منتهية"
+  const electionLabel = election.status === "voting" ? t("elActive") : election.status === "registration" ? t("elRegistration") : t("elEnded")
 
   return (
     <AppLayout>
@@ -105,8 +108,8 @@ export default function CouncilPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-5xl mx-auto pb-20">
 
           <PageHeader
-            title="🏛️ مجلس السوق"
-            subtitle="الجهة الرقابية المنتخبة"
+            title={t("homeTitle")}
+            subtitle={t("homeSubtitle")}
             backHref="/dashboard"
           />
 
@@ -117,18 +120,18 @@ export default function CouncilPage() {
                 <Building2 className="w-7 h-7 text-purple-400" strokeWidth={2} />
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-bold text-white mb-1">مجلس السوق</h2>
+                <h2 className="text-lg font-bold text-white mb-1">{t("councilName")}</h2>
                 <p className="text-xs text-neutral-400 leading-relaxed">
-                  {stats.total_members} أعضاء يراقبون السوق ويرفعون التوصيات للإدارة
+                  {t("heroDesc", { n: stats.total_members })}
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-              <StatCard size="sm" label="الأعضاء" value={stats.total_members} color="purple" />
-              <StatCard size="sm" label="القرارات النشطة" value={stats.active} color="blue" />
-              <StatCard size="sm" label="نسبة المشاركة" value={participation + "%"} color="green" />
-              <StatCard size="sm" label="مدة الدورة" value="سنة" color="yellow" />
+              <StatCard size="sm" label={t("stMembers")} value={stats.total_members} color="purple" />
+              <StatCard size="sm" label={t("stActiveDecisions")} value={stats.active} color="blue" />
+              <StatCard size="sm" label={t("stParticipation")} value={participation + "%"} color="green" />
+              <StatCard size="sm" label={t("stTermDuration")} value={t("yearVal")} color="yellow" />
             </div>
           </Card>
 
@@ -142,8 +145,8 @@ export default function CouncilPage() {
                   <Users className="w-5 h-5 text-purple-400" strokeWidth={2} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-bold text-white mb-0.5">👥 الأعضاء</h3>
-                  <p className="text-[11px] text-neutral-400">تعرّف على أعضاء المجلس</p>
+                  <h3 className="text-sm font-bold text-white mb-0.5">{t("cardMembers")}</h3>
+                  <p className="text-[11px] text-neutral-400">{t("cardMembersDesc")}</p>
                 </div>
               </div>
               <div className="flex -space-x-2 -space-x-reverse mb-3">
@@ -154,7 +157,7 @@ export default function CouncilPage() {
                 ))}
               </div>
               <div className="text-[11px] text-purple-400 font-bold flex items-center gap-1">
-                عرض الأعضاء
+                {t("viewMembers")}
                 <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
               </div>
             </Card>
@@ -166,13 +169,13 @@ export default function CouncilPage() {
                   <FileText className="w-5 h-5 text-blue-400" strokeWidth={2} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-bold text-white mb-0.5">📋 القرارات والتصويت</h3>
-                  <p className="text-[11px] text-neutral-400">اطّلع على القرارات الجارية</p>
+                  <h3 className="text-sm font-bold text-white mb-0.5">{t("cardProposals")}</h3>
+                  <p className="text-[11px] text-neutral-400">{t("cardProposalsDesc")}</p>
                 </div>
               </div>
-              <Badge color="blue" variant="soft" size="xs">{stats.active} قرار نشط</Badge>
+              <Badge color="blue" variant="soft" size="xs">{t("activeDecisionsBadge", { n: stats.active })}</Badge>
               <div className="text-[11px] text-blue-400 font-bold flex items-center gap-1 mt-3">
-                عرض القرارات
+                {t("viewProposals")}
                 <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
               </div>
             </Card>
@@ -184,13 +187,13 @@ export default function CouncilPage() {
                   <Vote className="w-5 h-5 text-orange-400" strokeWidth={2} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-bold text-white mb-0.5">🗳️ الانتخابات</h3>
-                  <p className="text-[11px] text-neutral-400">شارك في انتخاب المجلس</p>
+                  <h3 className="text-sm font-bold text-white mb-0.5">{t("cardElections")}</h3>
+                  <p className="text-[11px] text-neutral-400">{t("cardElectionsDesc")}</p>
                 </div>
               </div>
-              <Badge color="orange" variant="soft" size="xs">انتخابات {electionLabel}</Badge>
+              <Badge color="orange" variant="soft" size="xs">{t("electionsBadge", { label: electionLabel })}</Badge>
               <div className="text-[11px] text-orange-400 font-bold flex items-center gap-1 mt-3">
-                المشاركة في الانتخابات
+                {t("participateElections")}
                 <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
               </div>
             </Card>
@@ -202,12 +205,12 @@ export default function CouncilPage() {
                   <BookOpen className="w-5 h-5 text-green-400" strokeWidth={2} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-bold text-white mb-0.5">📚 كيف يعمل المجلس؟</h3>
-                  <p className="text-[11px] text-neutral-400">تعرّف على المهام والصلاحيات</p>
+                  <h3 className="text-sm font-bold text-white mb-0.5">{t("cardAbout")}</h3>
+                  <p className="text-[11px] text-neutral-400">{t("cardAboutDesc")}</p>
                 </div>
               </div>
               <div className="text-[11px] text-green-400 font-bold flex items-center gap-1 mt-3">
-                اقرأ الدليل
+                {t("readGuide")}
                 <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
               </div>
             </Card>
@@ -215,9 +218,9 @@ export default function CouncilPage() {
 
           {/* ═══ § 3: Recent proposals ═══ */}
           <SectionHeader
-            title="📊 آخر القرارات"
-            subtitle={`${recentProposals.length} قرار حديث`}
-            action={{ label: "عرض الكل", href: "/council/proposals" }}
+            title={t("recentTitle")}
+            subtitle={t("recentSubtitle", { n: recentProposals.length })}
+            action={{ label: t("viewAll"), href: "/council/proposals" }}
           />
           <div className="space-y-3">
             {recentProposals.map((p) => {
@@ -226,8 +229,8 @@ export default function CouncilPage() {
               return (
                 <Card key={p.id} onClick={() => router.push("/council/proposals/" + p.id)}>
                   <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-                    <Badge color="neutral" variant="soft" size="xs">{TYPE_LABELS[p.type]}</Badge>
-                    <Badge color={status.color} variant="soft" size="xs">{status.label}</Badge>
+                    <Badge color="neutral" variant="soft" size="xs">{t(TYPE_LABEL_KEYS[p.type] ?? "ptPolicy")}</Badge>
+                    <Badge color={status.color} variant="soft" size="xs">{t(status.labelKey)}</Badge>
                   </div>
                   <h4 className="text-sm font-bold text-white mb-2 leading-snug">{p.title}</h4>
                   {(p.status === "voting" || p.status === "approved" || p.status === "rejected") && (
@@ -255,7 +258,7 @@ export default function CouncilPage() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-[10px] text-neutral-500" dir="ltr">{p.submitted_at}</span>
                     <span className="text-[11px] text-blue-400 font-bold flex items-center gap-1">
-                      التفاصيل
+                      {tc("buttons.details")}
                       <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
                     </span>
                   </div>
