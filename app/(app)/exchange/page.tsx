@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useMemo } from "react"
 import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { ChevronDown, Search, Plus, X, AlertTriangle, ShoppingCart, Clock, Wallet, ChevronLeft, Lock, History, Trash2, Loader2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -81,14 +82,17 @@ function isDbListingId(id: string): boolean {
 }
 
 const CURRENT_USER_ID = "me"
-const CURRENT_USER_NAME = "أنا"
 
-function formatTimeLeftShort(ms: number): string {
-  if (ms <= 0) return "انتهى"
+/** Loosely-typed translator param so module helpers can localize
+ *  without importing next-intl's complex generic signature. */
+type TFn = (key: string, values?: Record<string, string | number>) => string
+
+function formatTimeLeftShort(ms: number, t: TFn): string {
+  if (ms <= 0) return t("ended")
   const hrs = Math.floor(ms / 3_600_000)
   const mins = Math.floor((ms % 3_600_000) / 60_000)
-  if (hrs > 0) return `${hrs}س ${mins}د`
-  return `${mins}د`
+  if (hrs > 0) return t("timeHM", { h: hrs, m: mins })
+  return t("timeM", { m: mins })
 }
 
 const fmtIQD = (n: number) => n.toLocaleString("en-US")
@@ -101,13 +105,13 @@ const sectorIcon = (s: string) =>
   s?.includes("صناع") ? "🏭" :
   s?.includes("عقار") ? "🏢" : "🏢"
 
-const timeSince = (dateStr: string) => {
+const timeSince = (dateStr: string, t: TFn) => {
   const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000)
-  if (mins < 1) return "الآن"
-  if (mins < 60) return "منذ " + mins + " د"
+  if (mins < 1) return t("nowLabel")
+  if (mins < 60) return t("minsAgo", { n: mins })
   const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return "منذ " + hrs + " س"
-  return "منذ " + Math.floor(hrs / 24) + " ي"
+  if (hrs < 24) return t("hoursAgo", { n: hrs })
+  return t("daysAgo", { n: Math.floor(hrs / 24) })
 }
 
 // ─── Project Selector Dropdown ───
@@ -120,6 +124,7 @@ function ProjectSelector({
   selectedProject: Project | null
   onSelect: (p: Project | null) => void
 }) {
+  const t = useTranslations("exchange")
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
 
@@ -154,12 +159,12 @@ function ProjectSelector({
           )}
           <div className="min-w-0">
             <div className="text-sm font-bold text-white truncate">
-              {selectedProject ? selectedProject.name : "كل المشاريع"}
+              {selectedProject ? selectedProject.name : t("allProjects")}
             </div>
             <div className="text-[10px] text-neutral-500 mt-0.5">
               {selectedProject
-                ? (selectedProject.share_price ?? 0).toLocaleString("en-US") + " د.ع/حصة"
-                : "اختر مشروعاً للفلترة"}
+                ? (selectedProject.share_price ?? 0).toLocaleString("en-US") + " " + t("iqdPerShare")
+                : t("chooseProjectFilter")}
             </div>
           </div>
         </div>
@@ -179,7 +184,7 @@ function ProjectSelector({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="بحث..."
+                placeholder={t("searchPlaceholder")}
                 className="w-full bg-white/[0.04] border border-white/[0.06] rounded-lg pr-8 pl-3 py-1.5 text-xs text-white placeholder:text-neutral-600 outline-none"
               />
             </div>
@@ -197,8 +202,8 @@ function ProjectSelector({
             >
               <span className="text-xl">🏢</span>
               <div>
-                <div className="text-xs font-bold text-white">كل المشاريع</div>
-                <div className="text-[10px] text-neutral-500">عرض جميع الإعلانات</div>
+                <div className="text-xs font-bold text-white">{t("allProjects")}</div>
+                <div className="text-[10px] text-neutral-500">{t("showAllListings")}</div>
               </div>
               {!selectedProject && (
                 <div className="w-1.5 h-1.5 rounded-full bg-green-400 mr-auto" />
@@ -230,7 +235,7 @@ function ProjectSelector({
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-bold text-white truncate">{p.name}</div>
                   <div className="text-[10px] text-neutral-500">
-                    {p.sector} • {(p.share_price ?? 0).toLocaleString("en-US")} د.ع
+                    {p.sector} • {(p.share_price ?? 0).toLocaleString("en-US")} {t("iqd")}
                   </div>
                 </div>
                 {selectedProject?.id === p.id && (
@@ -239,7 +244,7 @@ function ProjectSelector({
               </button>
             ))}
             {filtered.length === 0 && (
-              <div className="text-center py-6 text-xs text-neutral-500">لا توجد نتائج</div>
+              <div className="text-center py-6 text-xs text-neutral-500">{t("noResults")}</div>
             )}
           </div>
         </div>
@@ -256,6 +261,7 @@ function PaymentMethodFilter({
   selected: string[]
   onChange: (v: string[]) => void
 }) {
+  const t = useTranslations("exchange")
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
 
@@ -269,10 +275,10 @@ function PaymentMethodFilter({
 
   const label =
     selected.length === 0
-      ? "كل طرق الدفع"
+      ? t("allPaymentMethods")
       : selected.length === 1
       ? selected[0]
-      : selected.length + " طرق دفع"
+      : t("nPaymentMethods", { n: selected.length })
 
   return (
     <div className="relative">
@@ -302,7 +308,7 @@ function PaymentMethodFilter({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث في طرق الدفع..."
+              placeholder={t("searchPaymentPlaceholder")}
               className="w-full bg-white/[0.04] border border-white/[0.06] rounded-md px-3 py-1.5 text-xs text-white placeholder:text-neutral-600 outline-none"
             />
           </div>
@@ -311,7 +317,7 @@ function PaymentMethodFilter({
               onClick={() => onChange([])}
               className="text-[11px] text-blue-400 py-1.5 border-b border-white/[0.04] hover:bg-white/[0.04]"
             >
-              مسح التحديد ({selected.length})
+              {t("clearSelection", { n: selected.length })}
             </button>
           )}
           <div className="overflow-y-auto flex-1">
@@ -362,21 +368,22 @@ function MyListingsPanel({
   onCreate: () => void
   onBackToMarket: () => void
 }) {
-  // Status → Arabic label + color class.
+  const t = useTranslations("exchange")
+  // Status → localized label + color class.
   const statusMeta = (status: string): { label: string; cls: string } => {
     switch (status) {
       case "active":
-        return { label: "نشط", cls: "bg-green-400/[0.12] border-green-400/25 text-green-400" }
+        return { label: t("statusActive"), cls: "bg-green-400/[0.12] border-green-400/25 text-green-400" }
       case "paused":
-        return { label: "مُعلَّق", cls: "bg-yellow-400/[0.12] border-yellow-400/25 text-yellow-400" }
+        return { label: t("statusPaused"), cls: "bg-yellow-400/[0.12] border-yellow-400/25 text-yellow-400" }
       case "cancelled":
-        return { label: "مُلغى", cls: "bg-red-400/[0.10] border-red-400/25 text-red-400" }
+        return { label: t("statusCancelled"), cls: "bg-red-400/[0.10] border-red-400/25 text-red-400" }
       case "sold":
-        return { label: "مكتمل (بيع)", cls: "bg-blue-400/[0.12] border-blue-400/25 text-blue-300" }
+        return { label: t("statusSold"), cls: "bg-blue-400/[0.12] border-blue-400/25 text-blue-300" }
       case "completed":
-        return { label: "مكتمل", cls: "bg-blue-400/[0.12] border-blue-400/25 text-blue-300" }
+        return { label: t("statusCompleted"), cls: "bg-blue-400/[0.12] border-blue-400/25 text-blue-300" }
       case "expired":
-        return { label: "منتهٍ", cls: "bg-neutral-500/[0.12] border-neutral-500/25 text-neutral-400" }
+        return { label: t("statusExpired"), cls: "bg-neutral-500/[0.12] border-neutral-500/25 text-neutral-400" }
       default:
         return { label: status, cls: "bg-white/[0.06] border-white/[0.1] text-neutral-300" }
     }
@@ -403,13 +410,13 @@ function MyListingsPanel({
     return (
       <div className="text-center py-16 bg-white/[0.03] border border-white/[0.06] rounded-2xl">
         <div className="text-5xl mb-3 opacity-50">📋</div>
-        <div className="text-sm text-neutral-400 mb-1">لم تنشر إعلاناً بعد</div>
-        <div className="text-[11px] text-neutral-600 mb-5">انشر أول إعلان لك في السوق</div>
+        <div className="text-sm text-neutral-400 mb-1">{t("noListingsYet")}</div>
+        <div className="text-[11px] text-neutral-600 mb-5">{t("postFirstListing")}</div>
         <button
           onClick={onCreate}
           className="bg-neutral-100 text-black px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-neutral-200 transition-colors"
         >
-          إنشاء إعلان
+          {t("createListing")}
         </button>
       </div>
     )
@@ -424,32 +431,32 @@ function MyListingsPanel({
         className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1 mb-1"
       >
         <ChevronLeft className="w-3 h-3 rotate-180" />
-        ← العودة إلى السوق
+        {t("backToMarket")}
       </button>
 
       {/* Summary chips */}
       <div className="flex flex-wrap gap-1.5 mb-2">
         <span className="bg-white/[0.06] border border-white/[0.1] text-neutral-300 text-[10px] px-2 py-1 rounded-full">
-          الإجمالي: <span className="font-mono font-bold text-white">{counts.all}</span>
+          {t("totalChip")} <span className="font-mono font-bold text-white">{counts.all}</span>
         </span>
         {counts.active > 0 && (
           <span className="bg-green-400/[0.08] border border-green-400/20 text-green-400 text-[10px] px-2 py-1 rounded-full">
-            نشط: <span className="font-mono font-bold">{counts.active}</span>
+            {t("activeChip")} <span className="font-mono font-bold">{counts.active}</span>
           </span>
         )}
         {counts.sold > 0 && (
           <span className="bg-blue-400/[0.08] border border-blue-400/20 text-blue-300 text-[10px] px-2 py-1 rounded-full">
-            مكتمل: <span className="font-mono font-bold">{counts.sold}</span>
+            {t("completedChip")} <span className="font-mono font-bold">{counts.sold}</span>
           </span>
         )}
         {counts.cancelled > 0 && (
           <span className="bg-red-400/[0.06] border border-red-400/20 text-red-400 text-[10px] px-2 py-1 rounded-full">
-            مُلغى: <span className="font-mono font-bold">{counts.cancelled}</span>
+            {t("cancelledChip")} <span className="font-mono font-bold">{counts.cancelled}</span>
           </span>
         )}
         {counts.expired > 0 && (
           <span className="bg-neutral-500/[0.06] border border-neutral-500/20 text-neutral-400 text-[10px] px-2 py-1 rounded-full">
-            منتهٍ: <span className="font-mono font-bold">{counts.expired}</span>
+            {t("expiredChip")} <span className="font-mono font-bold">{counts.expired}</span>
           </span>
         )}
       </div>
@@ -476,7 +483,7 @@ function MyListingsPanel({
                       : "bg-green-500/[0.12] border-green-500/25 text-green-400"
                   )}
                 >
-                  {l.type === "sell" ? "🔴 بيع" : "🟢 شراء"}
+                  {l.type === "sell" ? t("sellTag") : t("buyTag")}
                 </span>
                 <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded border", meta.cls)}>
                   {meta.label}
@@ -484,7 +491,7 @@ function MyListingsPanel({
               </div>
               <span className="text-[10px] text-neutral-500 flex items-center gap-1">
                 <Clock className="w-2.5 h-2.5" />
-                {timeSince(l.created_at)}
+                {timeSince(l.created_at, t)}
               </span>
             </div>
 
@@ -492,19 +499,19 @@ function MyListingsPanel({
             <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2.5 mb-3">
               <div className="text-xs font-bold text-white truncate mb-1">{l.project_name}</div>
               <div className="text-[10px] text-neutral-500">
-                <span className="font-mono">{Number(l.price_per_share).toLocaleString("en-US")}</span> د.ع/حصة
+                <span className="font-mono">{Number(l.price_per_share).toLocaleString("en-US")}</span> {t("iqdPerShare")}
               </div>
             </div>
 
             {/* Shares progress */}
             <div className="flex items-center justify-between text-[11px] mb-2">
               <span className="text-neutral-400">
-                مُباع: <span className="text-white font-mono font-bold">{Number(l.shares_sold ?? 0)}</span>
+                {t("soldLabel")} <span className="text-white font-mono font-bold">{Number(l.shares_sold ?? 0)}</span>
                 {" / "}
                 <span className="text-white font-mono">{Number(l.shares_offered)}</span>
               </span>
               <span className="text-neutral-400">
-                المتبقي: <span className="text-yellow-400 font-mono font-bold">{remaining}</span>
+                {t("remainingLabel")} <span className="text-yellow-400 font-mono font-bold">{remaining}</span>
               </span>
             </div>
             <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden mb-3">
@@ -519,7 +526,7 @@ function MyListingsPanel({
             {/* Total + cancel */}
             <div className="flex items-center justify-between gap-2">
               <span className="text-[11px] text-neutral-400">
-                الإجمالي: <span className="text-yellow-400 font-bold font-mono">{total.toLocaleString("en-US")}</span> د.ع
+                {t("totalLabel")} <span className="text-yellow-400 font-bold font-mono">{total.toLocaleString("en-US")}</span> {t("iqd")}
               </span>
               {isActive && (
                 <button
@@ -530,12 +537,12 @@ function MyListingsPanel({
                   {isCancelling ? (
                     <>
                       <Loader2 className="w-3 h-3 animate-spin" />
-                      جاري الإلغاء...
+                      {t("cancelling")}
                     </>
                   ) : (
                     <>
                       <Trash2 className="w-3 h-3" strokeWidth={2} />
-                      إلغاء الإعلان
+                      {t("cancelListing")}
                     </>
                   )}
                 </button>
@@ -551,6 +558,8 @@ function MyListingsPanel({
 // ─── Main Page ───
 function ExchangeContent() {
   const router = useRouter()
+  const t = useTranslations("exchange")
+  const tc = useTranslations("common")
   const searchParams = useSearchParams()
   const projectFilter = searchParams?.get("project")
 
@@ -639,14 +648,14 @@ function ExchangeContent() {
     try {
       const ok = await cancelMyListing(listingId)
       if (ok) {
-        showSuccess("تم إلغاء الإعلان")
+        showSuccess(t("toastListingCancelled"))
         // Optimistic local update so the badge flips immediately even
         // before realtime fires.
         setMyListings((cur) =>
           cur.map((l) => (l.id === listingId ? { ...l, status: "cancelled" } : l)),
         )
       } else {
-        showError("تعذّر إلغاء الإعلان")
+        showError(t("toastCancelListingFailed"))
       }
     } finally {
       setCancellingId(null)
@@ -721,7 +730,7 @@ function ExchangeContent() {
   const onClickListing = (listing: Listing) => {
     // 0. منع المستخدم من فتح صفقة على إعلانه
     if (listing.user_id === currentUserId || listing.user_id === CURRENT_USER_ID) {
-      return showError("لا يمكنك فتح صفقة على إعلانك")
+      return showError(t("toastCantDealOwn"))
     }
     // 1. Check for active deal على هذا الإعلان (mock-only — DB-side
     //    enforcement happens inside place_deal_from_listing RPC)
@@ -776,20 +785,20 @@ function ExchangeContent() {
 
       if (!res.success) {
         const reasonMap: Record<string, string> = {
-          unauthenticated: "يجب تسجيل الدخول أولاً",
-          invalid_quantity: "الكمية غير صحيحة",
-          listing_not_found: "الإعلان غير موجود",
-          listing_inactive: "الإعلان لم يعد نشطاً",
-          cannot_buy_own_listing: "لا يمكنك شراء إعلانك",
-          cannot_accept_own_listing: "لا يمكنك قبول طلبك الخاص",
-          not_a_buy_listing: "هذا الإعلان ليس طلب شراء",
-          insufficient_listing_capacity: `الكمية المتاحة: ${res.available ?? "؟"}`,
-          seller_holdings_missing: "البائع لا يملك حصصاً في هذا المشروع",
-          seller_insufficient_unfrozen: `البائع يملك ${res.unfrozen ?? "؟"} حصة فقط غير مجمدة`,
-          no_holdings: "لا تملك حصصاً في هذا المشروع",
-          insufficient_unfrozen: `لديك ${res.unfrozen ?? "؟"} حصة فقط غير مجمدة`,
-          missing_table: "الميزة غير مفعّلة بعد على الخادم",
-          rls: "ليس لديك صلاحية لإجراء هذه الصفقة",
+          unauthenticated: t("reasonUnauthenticated"),
+          invalid_quantity: t("reasonInvalidQuantity"),
+          listing_not_found: t("reasonListingNotFound"),
+          listing_inactive: t("reasonListingInactive"),
+          cannot_buy_own_listing: t("reasonCannotBuyOwn"),
+          cannot_accept_own_listing: t("reasonCannotAcceptOwn"),
+          not_a_buy_listing: t("reasonNotBuyListing"),
+          insufficient_listing_capacity: t("reasonInsufficientCapacity", { available: res.available ?? t("unknownQ") }),
+          seller_holdings_missing: t("reasonSellerHoldingsMissing"),
+          seller_insufficient_unfrozen: t("reasonSellerInsufficient", { unfrozen: res.unfrozen ?? t("unknownQ") }),
+          no_holdings: t("reasonNoHoldings"),
+          insufficient_unfrozen: t("reasonInsufficientUnfrozen", { unfrozen: res.unfrozen ?? t("unknownQ") }),
+          missing_table: t("reasonMissingTable"),
+          rls: t("reasonRls"),
         }
         // Log the full payload so we can diagnose unmapped reasons.
         // eslint-disable-next-line no-console
@@ -800,8 +809,8 @@ function ExchangeContent() {
           // Surface the real DB error / reason instead of a generic
           // "تعذّر فتح الصفقة". This is what unblocks debugging when
           // the RPC raises an unexpected SQLSTATE.
-          const detail = res.error || reasonKey || "خطأ غير معروف"
-          msg = `تعذّر فتح الصفقة: ${detail}`
+          const detail = res.error || reasonKey || t("unknownError")
+          msg = t("openDealFailed", { detail })
         }
         throw new Error(msg)
       }
@@ -811,8 +820,8 @@ function ExchangeContent() {
       playRequestSent()
       showSuccess(
         isBuyListing
-          ? `📤 تم إرسال طلب الشراء — بانتظار موافقة البائع`
-          : `📤 تم إرسال طلب البيع — بانتظار موافقة المشتري`,
+          ? t("buyReqSent")
+          : t("sellReqSent"),
       )
       setSelectedListing(null)
       // Refresh DB listings so capacity reflects immediately. Wrap in
@@ -846,9 +855,9 @@ function ExchangeContent() {
     // ─── Legacy mock path (until buy-listings migrate) ──────
     const isBuyingFromSellListing = selectedListing.type === "sell"
     const buyerId = isBuyingFromSellListing ? CURRENT_USER_ID : selectedListing.user_id
-    const buyerName = isBuyingFromSellListing ? CURRENT_USER_NAME : selectedListing.user_name
+    const buyerName = isBuyingFromSellListing ? t("me") : selectedListing.user_name
     const sellerId = isBuyingFromSellListing ? selectedListing.user_id : CURRENT_USER_ID
-    const sellerName = isBuyingFromSellListing ? selectedListing.user_name : CURRENT_USER_NAME
+    const sellerName = isBuyingFromSellListing ? selectedListing.user_name : t("me")
 
     const result = createDeal({
       buyerId,
@@ -864,9 +873,9 @@ function ExchangeContent() {
     })
 
     if (!result.success || !result.data) {
-      throw new Error(result.reason ?? "تعذّر فتح الصفقة")
+      throw new Error(result.reason ?? t("openDealFailedPlain"))
     }
-    showSuccess(`🔒 تم تعليق ${quantity} حصة وفتح الصفقة`)
+    showSuccess(t("sharesLockedDealOpened", { count: quantity }))
     setSelectedListing(null)
     router.push("/deals/" + result.data.id)
   }
@@ -877,8 +886,8 @@ function ExchangeContent() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
 
           <PageHeader
-            title="التبادل"
-            subtitle="سوق التبادل بين المستثمرين"
+            title={t("title")}
+            subtitle={t("subtitle")}
             rightAction={
               <div className="flex items-center gap-2">
                 {/* Phase 11.32 — log button mirrors the create button's
@@ -894,7 +903,7 @@ function ExchangeContent() {
                   )}
                 >
                   <History className="w-3.5 h-3.5" />
-                  سجلي
+                  {t("myLog")}
                   {myListings.length > 0 && (
                     <span className={cn(
                       "text-[10px] font-mono px-1.5 py-px rounded-full",
@@ -911,7 +920,7 @@ function ExchangeContent() {
                   className="bg-neutral-100 text-black px-3.5 py-2 rounded-lg text-xs font-bold hover:bg-neutral-200 flex items-center gap-1.5 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  إنشاء إعلان
+                  {t("createListing")}
                 </button>
               </div>
             }
@@ -950,7 +959,7 @@ function ExchangeContent() {
               )}
             >
               <span className="text-xs">🟢</span>
-              شراء
+              {t("buy")}
             </button>
             <button
               onClick={() => setMode("sell")}
@@ -962,16 +971,16 @@ function ExchangeContent() {
               )}
             >
               <span className="text-xs">🔴</span>
-              بيع
+              {t("sell")}
             </button>
           </div>
 
           {/* Sort filters */}
           <div className="flex gap-1.5 overflow-x-auto pb-1 mb-2.5 -mx-1 px-1">
             {([
-              { key: "price" as const, label: "الأفضل سعراً" },
-              { key: "trust" as const, label: "الأعلى موثوقية" },
-              { key: "speed" as const, label: "الأسرع تنفيذاً" },
+              { key: "price" as const, label: t("sortPrice") },
+              { key: "trust" as const, label: t("sortTrust") },
+              { key: "speed" as const, label: t("sortSpeed") },
             ]).map((s) => (
               <button
                 key={s.key}
@@ -1006,7 +1015,7 @@ function ExchangeContent() {
           >
             <div className="text-xs text-neutral-400">
               <span className="text-white font-bold">{filtered.length}</span>{" "}
-              {mode === "buy" ? "عرض بيع" : "طلب شراء"} متاح
+              {mode === "buy" ? t("sellOffer") : t("buyRequest")} {t("available")}
             </div>
             <div className="flex items-center gap-1.5">
               <div
@@ -1030,10 +1039,10 @@ function ExchangeContent() {
                 )}
               >
                 {filtered.length > 3
-                  ? "سيولة مرتفعة"
+                  ? t("liquidityHigh")
                   : filtered.length > 0
-                  ? "سيولة متوسطة"
-                  : "لا توجد عروض"}
+                  ? t("liquidityMid")
+                  : t("liquidityNone")}
               </span>
             </div>
           </div>
@@ -1061,13 +1070,13 @@ function ExchangeContent() {
           ) : filtered.length === 0 ? (
             <div className="text-center py-16 bg-white/[0.03] border border-white/[0.06] rounded-2xl">
               <div className="text-5xl mb-3 opacity-50">📋</div>
-              <div className="text-sm text-neutral-400 mb-1">لا توجد عروض حالياً</div>
-              <div className="text-[11px] text-neutral-600 mb-5">جرب تغيير الفلاتر أو أنشئ إعلانك الخاص</div>
+              <div className="text-sm text-neutral-400 mb-1">{t("noOffersNow")}</div>
+              <div className="text-[11px] text-neutral-600 mb-5">{t("tryChangeFilters")}</div>
               <button
                 onClick={() => router.push("/exchange/create")}
                 className="bg-neutral-100 text-black px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-neutral-200 transition-colors"
               >
-                إنشاء إعلان
+                {t("createListing")}
               </button>
             </div>
           ) : (
@@ -1112,23 +1121,23 @@ function ExchangeContent() {
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className="text-sm font-bold text-white truncate">
-                              {isOwn ? "أنا" : l.user_name}
+                              {isOwn ? t("me") : l.user_name}
                             </span>
                             {isOwn && (
                               <span className="bg-blue-400/[0.12] border border-blue-400/30 text-blue-300 px-1.5 py-px rounded text-[9px] font-bold">
-                                إعلانك
+                                {t("yourListing")}
                               </span>
                             )}
                             {!isOwn && verified && (
                               <span className="bg-green-400/[0.12] border border-green-400/25 text-green-400 px-1.5 py-px rounded text-[9px] font-bold flex items-center gap-0.5">
-                                ✓ موثق
+                                {t("verifiedBadge")}
                               </span>
                             )}
                           </div>
                           <div className="text-[10px] text-neutral-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
-                            <span>{l.total_trades} صفقة</span>
+                            <span>{t("dealsCountUnit", { n: l.total_trades })}</span>
                             <span className="text-neutral-700">•</span>
-                            <span>{l.success_rate}% نجاح</span>
+                            <span>{t("successRate", { n: l.success_rate })}</span>
                             {!isOwn && l.user_id && (
                               <>
                                 <span className="text-neutral-700">•</span>
@@ -1141,12 +1150,12 @@ function ExchangeContent() {
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         {isBest && !isOwn && (
                           <span className="bg-yellow-400/[0.12] border border-yellow-400/25 text-yellow-400 px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5">
-                            ⭐ الأفضل
+                            {t("bestBadge")}
                           </span>
                         )}
                         <span className="text-[10px] text-neutral-500 flex items-center gap-1">
                           <Clock className="w-2.5 h-2.5" />
-                          {timeSince(l.created_at)}
+                          {timeSince(l.created_at, t)}
                         </span>
                       </div>
                     </div>
@@ -1160,14 +1169,14 @@ function ExchangeContent() {
                     {/* Price + Quantity */}
                     <div className="flex items-end justify-between mb-3">
                       <div>
-                        <div className="text-[10px] text-neutral-500 mb-1">سعر الحصة</div>
+                        <div className="text-[10px] text-neutral-500 mb-1">{t("sharePrice")}</div>
                         <div className="text-2xl font-bold text-white tracking-tight font-mono">
                           {l.price.toLocaleString("en-US")}{" "}
-                          <span className="text-xs text-neutral-500 font-normal">د.ع</span>
+                          <span className="text-xs text-neutral-500 font-normal">{t("iqd")}</span>
                         </div>
                       </div>
                       <div className="text-left">
-                        <div className="text-[10px] text-neutral-500 mb-1">الكمية</div>
+                        <div className="text-[10px] text-neutral-500 mb-1">{t("quantity")}</div>
                         <div className="text-base font-bold text-white font-mono">
                           {l.shares}{" "}
                           <span className="text-[10px] text-neutral-500">SHR</span>
@@ -1201,10 +1210,10 @@ function ExchangeContent() {
                     {/* Total + Min amount */}
                     <div className="flex items-center justify-between mb-3 text-[10px]">
                       <span className="text-neutral-500">
-                        {l.min_amount > 0 ? "حد أدنى: " + l.min_amount.toLocaleString("en-US") + " د.ع" : "1-10 SHR"}
+                        {l.min_amount > 0 ? t("minAmount", { amount: l.min_amount.toLocaleString("en-US") }) : t("range1to10")}
                       </span>
                       <span className="text-neutral-400">
-                        الإجمالي: <span className="text-yellow-400 font-bold font-mono">{fmtIQD(l.price * l.shares)} د.ع</span>
+                        {t("totalColon")} <span className="text-yellow-400 font-bold font-mono">{fmtIQD(l.price * l.shares)} {t("iqd")}</span>
                       </span>
                     </div>
 
@@ -1215,7 +1224,7 @@ function ExchangeContent() {
                         className="w-full py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2 bg-blue-500/15 border border-blue-500/30 text-blue-300 hover:bg-blue-500/20"
                       >
                         <History className="w-4 h-4" strokeWidth={2} />
-                        إدارة الإعلان في السجل
+                        {t("manageInLog")}
                         <ChevronLeft className="w-3.5 h-3.5 opacity-70" strokeWidth={2.5} />
                       </button>
                     ) : (
@@ -1229,7 +1238,7 @@ function ExchangeContent() {
                         )}
                       >
                         <ShoppingCart className="w-4 h-4" strokeWidth={2} />
-                        {mode === "buy" ? "شراء — تحديد الكمية" : "بيع — تحديد الكمية"}
+                        {mode === "buy" ? t("buySetQty") : t("sellSetQty")}
                         <ChevronLeft className="w-3.5 h-3.5 opacity-70" strokeWidth={2.5} />
                       </button>
                     )}
@@ -1261,8 +1270,8 @@ function ExchangeContent() {
                   ⏳
                 </div>
                 <div>
-                  <div className="text-base font-bold text-white">صفقة نشطة موجودة</div>
-                  <div className="text-[11px] text-neutral-500 mt-0.5">على هذا الإعلان</div>
+                  <div className="text-base font-bold text-white">{t("conflictTitle")}</div>
+                  <div className="text-[11px] text-neutral-500 mt-0.5">{t("conflictOnThisListing")}</div>
                 </div>
               </div>
               <button onClick={() => setConflictDeal(null)} className="text-neutral-500 hover:text-white">
@@ -1271,11 +1280,11 @@ function ExchangeContent() {
             </div>
 
             <div className="bg-yellow-400/[0.05] border border-yellow-400/20 rounded-xl p-4 mb-4 text-center">
-              <div className="text-[10px] text-neutral-500 mb-1">الوقت المتبقّي</div>
+              <div className="text-[10px] text-neutral-500 mb-1">{t("timeRemaining")}</div>
               <div className="text-2xl font-bold text-yellow-400 font-mono mb-1" dir="ltr">
-                {formatTimeLeftShort(new Date(conflictDeal.expires_at).getTime() - Date.now())}
+                {formatTimeLeftShort(new Date(conflictDeal.expires_at).getTime() - Date.now(), t)}
               </div>
-              <div className="text-[10px] text-neutral-400">يجب إكمال أو إلغاء الصفقة الحالية أولاً</div>
+              <div className="text-[10px] text-neutral-400">{t("mustCompleteFirst")}</div>
             </div>
 
             <div className="flex gap-2">
@@ -1283,13 +1292,13 @@ function ExchangeContent() {
                 onClick={() => setConflictDeal(null)}
                 className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
               >
-                إلغاء
+                {tc("buttons.cancel")}
               </button>
               <button
                 onClick={() => router.push("/deals/" + conflictDeal.id)}
                 className="flex-[2] py-3 rounded-xl bg-neutral-100 text-black text-sm font-bold hover:bg-neutral-200 flex items-center justify-center gap-2"
               >
-                عرض الصفقة
+                {t("viewDeal")}
                 <ChevronLeft className="w-4 h-4" />
               </button>
             </div>
