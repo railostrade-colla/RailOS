@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { useParams, useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import {
   Gavel,
   Clock,
@@ -59,19 +60,23 @@ function useCountdown(endsAt: string) {
   return parts
 }
 
-function timeAgo(dateStr: string) {
+type TFn = (key: string, values?: Record<string, string | number>) => string
+
+function timeAgo(dateStr: string, t: TFn) {
   const diff = Date.now() - new Date(dateStr).getTime()
   const m = Math.floor(diff / 60_000)
-  if (m < 1) return "الآن"
-  if (m < 60) return "منذ " + m + " د"
+  if (m < 1) return t("nowLabel")
+  if (m < 60) return t("minsAgo", { n: m })
   const h = Math.floor(diff / 3_600_000)
-  if (h < 24) return "منذ " + h + " س"
-  return "منذ " + Math.floor(diff / 86_400_000) + " ي"
+  if (h < 24) return t("hoursAgo", { n: h })
+  return t("daysAgo", { n: Math.floor(diff / 86_400_000) })
 }
 
 // ════════════════════════════════════════════════════════════════
 export default function AuctionDetailsPage() {
   const router = useRouter()
+  const t = useTranslations("auctions")
+  const tc = useTranslations("common")
   const params = useParams()
   const auctionId = (params?.id as string) ?? ""
 
@@ -115,12 +120,12 @@ export default function AuctionDetailsPage() {
         <div className="relative">
           <GridBackground showCircles={false} />
           <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
-            <PageHeader title="تفاصيل المزاد" backHref="/auctions" />
+            <PageHeader title={t("detailsTitle")} backHref="/auctions" />
             <EmptyState
               icon="🔍"
-              title="المزاد غير موجود"
-              description="ربما انتهى أو تم حذفه"
-              action={{ label: "كل المزادات", href: "/auctions" }}
+              title={t("notFoundTitle")}
+              description={t("notFoundDesc")}
+              action={{ label: t("allAuctions"), href: "/auctions" }}
               size="lg"
             />
           </div>
@@ -137,7 +142,7 @@ export default function AuctionDetailsPage() {
   const urgent = !countdown.ended && totalSecondsLeft < 3600
   const warning = !countdown.ended && totalSecondsLeft < 21_600 && !urgent
 
-  const statusLabel = countdown.ended ? "منتهي" : auction.status === "upcoming" ? "قريب" : "نشط"
+  const statusLabel = countdown.ended ? t("stEnded") : auction.status === "upcoming" ? t("stUpcoming") : t("stActive")
   const statusColor: "red" | "yellow" | "green" | "neutral" =
     countdown.ended ? "neutral" :
     urgent ? "red" :
@@ -159,8 +164,8 @@ export default function AuctionDetailsPage() {
 
   const handleSubmitBid = async () => {
     if (!canSubmit) {
-      if (!priceValid) showError(`الحد الأدنى لعرضك: ${fmt(minBidPrice)} د.ع`)
-      else if (!sharesValid) showError("عدد الحصص غير صحيح")
+      if (!priceValid) showError(t("minBidToast", { amount: fmt(minBidPrice) }))
+      else if (!sharesValid) showError(t("invalidShares"))
       return
     }
     setSubmitting(true)
@@ -168,7 +173,7 @@ export default function AuctionDetailsPage() {
     setSubmitting(false)
 
     if (result.success) {
-      showSuccess(`تم تقديم عرضك بنجاح: ${fmt(total)} د.ع`)
+      showSuccess(t("bidSuccess", { amount: fmt(total) }))
       setShowBidModal(false)
       setBidShares("1")
       setBidPrice("")
@@ -178,21 +183,21 @@ export default function AuctionDetailsPage() {
 
     // Friendly error mapping.
     if (result.reason === "amount_below_min" && result.min_required) {
-      showError(`الحد الأدنى لعرضك: ${fmt(result.min_required)} د.ع`)
+      showError(t("minBidToast", { amount: fmt(result.min_required) }))
     } else if (result.reason === "shares_exceed_offered") {
-      showError(`الحد الأقصى للحصص: ${result.max_shares}`)
+      showError(t("maxShares", { n: result.max_shares ?? "" }))
     } else if (result.reason === "auction_not_active") {
-      showError("المزاد غير نشط حالياً")
+      showError(t("notActive"))
     } else if (result.reason === "expired") {
-      showError("انتهى المزاد")
+      showError(t("auctionEnded"))
     } else if (result.reason === "not_started") {
-      showError("لم يبدأ المزاد بعد")
+      showError(t("notStarted"))
     } else if (result.reason === "unauthenticated") {
-      showError("سجّل دخول للمزايدة")
+      showError(t("loginToBid"))
     } else if (result.reason === "missing_table") {
-      showError("الميزة غير متاحة على الخادم بعد")
+      showError(t("featureUnavailable"))
     } else {
-      showError(result.error || "تعذّر تقديم العرض")
+      showError(result.error || t("bidFailed"))
     }
   }
 
@@ -204,7 +209,7 @@ export default function AuctionDetailsPage() {
         <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader
-            title="تفاصيل المزاد"
+            title={t("detailsTitle")}
             subtitle={auction.project_name}
             backHref="/auctions"
           />
@@ -228,26 +233,26 @@ export default function AuctionDetailsPage() {
             <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4">
               <div className="text-[11px] text-neutral-400 mb-2 flex items-center gap-1.5">
                 <Clock className="w-3 h-3" strokeWidth={2} />
-                {countdown.ended ? "انتهى المزاد" : "ينتهي خلال"}
+                {countdown.ended ? t("auctionEndedLabel") : t("endsWithin")}
               </div>
               {countdown.ended ? (
                 <div className="text-2xl font-bold text-neutral-500">—</div>
               ) : (
                 <div className="grid grid-cols-4 gap-2">
                   {[
-                    { v: countdown.d, label: "أيام" },
-                    { v: countdown.h, label: "ساعات" },
-                    { v: countdown.m, label: "دقائق" },
-                    { v: countdown.s, label: "ثواني" },
-                  ].map((t, i) => (
+                    { v: countdown.d, label: t("days") },
+                    { v: countdown.h, label: t("hours") },
+                    { v: countdown.m, label: t("minutes") },
+                    { v: countdown.s, label: t("seconds") },
+                  ].map((cp, i) => (
                     <div key={i} className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2 text-center">
                       <div className={cn(
                         "text-2xl font-bold font-mono",
                         urgent ? "text-red-400" : warning ? "text-yellow-400" : "text-white",
                       )}>
-                        {String(t.v).padStart(2, "0")}
+                        {String(cp.v).padStart(2, "0")}
                       </div>
-                      <div className="text-[9px] text-neutral-500 mt-0.5">{t.label}</div>
+                      <div className="text-[9px] text-neutral-500 mt-0.5">{cp.label}</div>
                     </div>
                   ))}
                 </div>
@@ -257,21 +262,21 @@ export default function AuctionDetailsPage() {
 
           {/* ═══ § 2: 4 stats ═══ */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-6">
-            <StatCard label="السعر الافتتاحي" value={fmt(auction.starting_price)} />
+            <StatCard label={t("startingPrice")} value={fmt(auction.starting_price)} />
             <StatCard
-              label="أعلى عرض حالي"
+              label={t("highestBid")}
               value={fmt(currentHighest)}
               color="green"
               trend={{ value: Math.round((currentHighest / auction.starting_price - 1) * 100), direction: "up" }}
             />
             <StatCard
-              label="عدد العروض"
+              label={t("bidsCount")}
               value={bids.length || auction.bid_count}
               color="blue"
               icon={<Users className="w-3 h-3" />}
             />
             <StatCard
-              label="الحصص المعروضة"
+              label={t("sharesOffered")}
               value={auction.shares_offered}
               color="yellow"
             />
@@ -279,14 +284,14 @@ export default function AuctionDetailsPage() {
 
           {/* ═══ § 3: Auction details ═══ */}
           <Card className="mb-6">
-            <SectionHeader title="📜 تفاصيل المزاد" />
+            <SectionHeader title={t("detailsCardTitle")} />
             <div className="divide-y divide-white/[0.04]">
               {[
-                { label: "نوع المزاد", value: auction.type === "english" ? "صعودي إنجليزي" : "هولندي" },
-                { label: "الحد الأدنى للزيادة", value: fmt(auction.min_increment) + " د.ع" },
-                { label: "وقت البدء", value: new Date(auction.starts_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" }) },
-                { label: "وقت الانتهاء", value: new Date(auction.ends_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" }) },
-                { label: "الشركة المالكة", value: auction.company_name },
+                { label: t("auctionType"), value: auction.type === "english" ? t("englishType") : t("dutchType") },
+                { label: t("minIncrement"), value: fmt(auction.min_increment) + " " + t("iqd") },
+                { label: t("startTime"), value: new Date(auction.starts_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" }) },
+                { label: t("endTime"), value: new Date(auction.ends_at).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" }) },
+                { label: t("ownerCompany"), value: auction.company_name },
               ].map((row) => (
                 <div key={row.label} className="flex justify-between items-center py-2.5">
                   <span className="text-[11px] text-neutral-500">{row.label}</span>
@@ -300,15 +305,15 @@ export default function AuctionDetailsPage() {
           <Card className="mb-6" padding="sm">
             <div className="px-2 py-2">
               <SectionHeader
-                title="📊 تاريخ العروض"
-                subtitle={`${bids.length} عرض ${bids.length > 0 ? "(الأحدث أولاً)" : ""}`}
+                title={t("bidsHistoryTitle")}
+                subtitle={`${t("bidsCountLabel", { n: bids.length })} ${bids.length > 0 ? t("newestFirst") : ""}`}
               />
             </div>
             {bids.length === 0 ? (
               <EmptyState
                 icon="📭"
-                title="لا توجد عروض بعد"
-                description="كن أوّل من يقدّم عرضاً!"
+                title={t("noBids")}
+                description={t("beFirst")}
                 size="sm"
               />
             ) : (
@@ -330,12 +335,12 @@ export default function AuctionDetailsPage() {
                         <span className={cn("text-xs font-bold truncate", bid.is_current_user ? "text-blue-400" : "text-white")}>
                           {bid.bidder_name}
                         </span>
-                        {i === 0 && <Badge color="green" variant="soft" size="xs">أعلى عرض</Badge>}
+                        {i === 0 && <Badge color="green" variant="soft" size="xs">{t("topBid")}</Badge>}
                         {bid.is_current_user && !bid.is_current_user === false && i !== 0 && (
-                          <Badge color="blue" variant="soft" size="xs">أنت</Badge>
+                          <Badge color="blue" variant="soft" size="xs">{t("you")}</Badge>
                         )}
                       </div>
-                      <div className="text-[10px] text-neutral-500 mt-0.5">{timeAgo(bid.created_at)}</div>
+                      <div className="text-[10px] text-neutral-500 mt-0.5">{timeAgo(bid.created_at, t)}</div>
                     </div>
                     <div className={cn(
                       "text-sm font-bold font-mono flex-shrink-0",
@@ -364,35 +369,35 @@ export default function AuctionDetailsPage() {
             )}
           >
             <TrendingUp className="w-4 h-4" strokeWidth={2.5} />
-            {countdown.ended ? "المزاد منتهي" : "💰 تقديم عرضك"}
+            {countdown.ended ? t("auctionFinished") : t("submitYourBid")}
           </button>
 
           {/* ═══ § 6: Rules ═══ */}
           <Card variant="highlighted" color="yellow">
             <div className="text-xs font-bold text-yellow-400 mb-3 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4" strokeWidth={2} />
-              📋 شروط المشاركة
+              {t("rulesTitle")}
             </div>
             <ul className="space-y-2 text-[11px] text-yellow-300/90 leading-relaxed">
               <li className="flex gap-2">
                 <span className="text-yellow-400">•</span>
-                الحد الأدنى للزيادة: <span className="font-mono font-bold">{fmt(auction.min_increment)}</span> د.ع
+                {t("minIncrement")}: <span className="font-mono font-bold">{fmt(auction.min_increment)}</span> {t("iqd")}
               </li>
               <li className="flex gap-2">
                 <span className="text-yellow-400">•</span>
-                العمولة: <span className="font-bold">2%</span> من قيمة الفوز
+                {t("ruleCommissionPre")} <span className="font-bold">2%</span> {t("ruleCommissionPost")}
               </li>
               <li className="flex gap-2">
                 <span className="text-yellow-400">•</span>
-                الدفع خلال <span className="font-bold">24 ساعة</span> من الفوز
+                {t("rulePaymentPre")} <span className="font-bold">{t("ruleHours")}</span> {t("rulePaymentPost")}
               </li>
               <li className="flex gap-2">
                 <span className="text-yellow-400">•</span>
-                لا يمكن سحب العرض بعد التقديم
+                {t("ruleNoWithdraw")}
               </li>
               <li className="flex gap-2">
                 <span className="text-yellow-400">•</span>
-                أعلى عرض في النهاية يفوز بكل الحصص
+                {t("ruleWinnerTakesAll")}
               </li>
             </ul>
           </Card>
@@ -405,8 +410,8 @@ export default function AuctionDetailsPage() {
         <Modal
           isOpen={showBidModal}
           onClose={() => !submitting && setShowBidModal(false)}
-          title="💰 قدّم عرضك"
-          subtitle={`أعلى عرض حالي: ${fmt(currentHighest)} د.ع`}
+          title={t("modalTitle")}
+          subtitle={t("modalSubtitle", { amount: fmt(currentHighest) })}
           size="md"
           footer={
             <>
@@ -415,7 +420,7 @@ export default function AuctionDetailsPage() {
                 disabled={submitting}
                 className="flex-1 bg-white/[0.05] border border-white/[0.1] text-white py-2.5 rounded-xl text-sm hover:bg-white/[0.08] disabled:opacity-50 transition-colors"
               >
-                إلغاء
+                {tc("buttons.cancel")}
               </button>
               <button
                 onClick={handleSubmitBid}
@@ -430,11 +435,11 @@ export default function AuctionDetailsPage() {
                 {submitting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-neutral-400 border-t-transparent rounded-full animate-spin" />
-                    جاري...
+                    {t("submitting")}
                   </>
                 ) : (
                   <>
-                    تأكيد العرض
+                    {t("confirmBid")}
                     <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
                   </>
                 )}
@@ -445,7 +450,7 @@ export default function AuctionDetailsPage() {
           <div className="space-y-4">
             {/* Shares input */}
             <div>
-              <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">عدد الحصص</div>
+              <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">{t("sharesCount")}</div>
               <IntegerInput
                 value={bidShares}
                 onValueChange={setBidShares}
@@ -454,13 +459,13 @@ export default function AuctionDetailsPage() {
                 dir="ltr"
               />
               <div className="text-[10px] text-neutral-500 mt-1">
-                المعروض: <span className="font-mono">{auction.shares_offered}</span> حصة
+                {t("offeredLabel")} <span className="font-mono">{auction.shares_offered}</span> {t("shareUnit")}
               </div>
             </div>
 
             {/* Price input */}
             <div>
-              <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">السعر للحصة (د.ع)</div>
+              <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">{t("pricePerShareLabel")}</div>
               <IntegerInput
                 value={bidPrice}
                 onValueChange={setBidPrice}
@@ -475,7 +480,7 @@ export default function AuctionDetailsPage() {
                 "text-[10px] mt-1",
                 bidPrice && !priceValid ? "text-red-400" : "text-neutral-500",
               )}>
-                الحد الأدنى لعرضك: <span className="font-mono font-bold">{fmt(minBidPrice)}</span> د.ع
+                {t("minYourBidLabel")} <span className="font-mono font-bold">{fmt(minBidPrice)}</span> {t("iqd")}
               </div>
             </div>
 
@@ -496,9 +501,9 @@ export default function AuctionDetailsPage() {
             {sharesNum > 0 && priceNum > 0 && (
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs text-neutral-400">المجموع</span>
+                  <span className="text-xs text-neutral-400">{t("totalLabel")}</span>
                   <span className="text-base font-bold text-white font-mono">
-                    {fmt(total)} <span className="text-[10px] text-neutral-500 font-sans">د.ع</span>
+                    {fmt(total)} <span className="text-[10px] text-neutral-500 font-sans">{t("iqd")}</span>
                   </span>
                 </div>
               </div>
