@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
+import { useTranslations } from "next-intl"
 import { Calendar, Vote } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -11,13 +12,14 @@ import { cn } from "@/lib/utils/cn"
 
 type TabId = "all" | "admin" | "elected"
 
-const ROLE_META: Record<CouncilRole, { label: string; color: "purple" | "blue" | "green"; icon: string }> = {
-  founder:   { label: "مؤسس",       color: "purple", icon: "👑" },
-  appointed: { label: "معيّن",       color: "blue",   icon: "🛡️" },
-  elected:   { label: "منتخب",       color: "green",  icon: "🗳️" },
+const ROLE_META: Record<CouncilRole, { labelKey: string; color: "purple" | "blue" | "green"; icon: string }> = {
+  founder:   { labelKey: "roleFounder",   color: "purple", icon: "👑" },
+  appointed: { labelKey: "roleAppointed", color: "blue",   icon: "🛡️" },
+  elected:   { labelKey: "roleElected",   color: "green",  icon: "🗳️" },
 }
 
 export default function CouncilMembersPage() {
+  const t = useTranslations("council")
   const [tab, setTab] = useState<TabId>("all")
   // Production mode — DB only.
   const [members, setMembers] = useState<CouncilMember[]>([])
@@ -62,8 +64,8 @@ export default function CouncilMembersPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-4xl mx-auto pb-20">
 
           <PageHeader
-            title="👥 أعضاء المجلس"
-            subtitle={`${members.length} أعضاء — الدورة الحالية`}
+            title={t("membersTitle")}
+            subtitle={t("membersSubtitle", { n: members.length })}
             backHref="/council"
           />
 
@@ -71,9 +73,9 @@ export default function CouncilMembersPage() {
           <div className="mb-6">
             <Tabs
               tabs={[
-                { id: "all",     icon: "✨", label: "الكل",      count: counts.all },
-                { id: "admin",   icon: "👑", label: "الإدارة",    count: counts.admin },
-                { id: "elected", icon: "🗳️", label: "المنتخبون", count: counts.elected },
+                { id: "all",     icon: "✨", label: t("tabAll"),      count: counts.all },
+                { id: "admin",   icon: "👑", label: t("tabAdmin"),    count: counts.admin },
+                { id: "elected", icon: "🗳️", label: t("tabElected"), count: counts.elected },
               ]}
               activeTab={tab}
               onChange={(id) => setTab(id as TabId)}
@@ -99,7 +101,7 @@ export default function CouncilMembersPage() {
                       <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                         <h3 className="text-sm font-bold text-white truncate">{m.name}</h3>
                         <Badge color={meta.color} variant="soft" size="xs" icon={meta.icon}>
-                          {meta.label}
+                          {t(meta.labelKey)}
                         </Badge>
                       </div>
                       <p className="text-[11px] text-neutral-400">{m.position_title}</p>
@@ -112,14 +114,14 @@ export default function CouncilMembersPage() {
                       <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2 flex items-center gap-2">
                         <Vote className="w-3.5 h-3.5 text-green-400 flex-shrink-0" strokeWidth={2} />
                         <div className="min-w-0">
-                          <div className="text-[10px] text-neutral-500">أصوات</div>
+                          <div className="text-[10px] text-neutral-500">{t("votes")}</div>
                           <div className="text-xs font-bold text-white font-mono">{(m.votes_received ?? 0).toLocaleString("en-US")}</div>
                         </div>
                       </div>
                       <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2 flex items-center gap-2">
                         <Calendar className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" strokeWidth={2} />
                         <div className="min-w-0">
-                          <div className="text-[10px] text-neutral-500">نهاية الدورة</div>
+                          <div className="text-[10px] text-neutral-500">{t("termEnd")}</div>
                           <div className="text-xs font-bold text-white" dir="ltr">{m.term_ends_at?.slice(0, 7) ?? "—"}</div>
                         </div>
                       </div>
@@ -129,7 +131,7 @@ export default function CouncilMembersPage() {
                   {/* Joined date */}
                   <div className="text-[10px] text-neutral-500 mb-2 flex items-center gap-1">
                     <Calendar className="w-2.5 h-2.5" />
-                    انضم: <span dir="ltr" className="font-mono">{m.joined_at}</span>
+                    {t("joinedLabel")} <span dir="ltr" className="font-mono">{m.joined_at}</span>
                   </div>
 
                   {/* Bio */}

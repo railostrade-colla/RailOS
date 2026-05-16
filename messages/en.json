@@ -1396,7 +1396,19 @@
     "resetLinkSent": "Password reset link sent",
     "pwdUpdated": "Password updated successfully! 🔒"
   },
-  "council": {},
+  "council": {
+    "roleFounder": "Founder",
+    "roleAppointed": "Appointed",
+    "roleElected": "Elected",
+    "membersTitle": "👥 Council members",
+    "membersSubtitle": "{n} members — current term",
+    "tabAll": "All",
+    "tabAdmin": "Administration",
+    "tabElected": "Elected",
+    "votes": "Votes",
+    "termEnd": "Term end",
+    "joinedLabel": "Joined:"
+  },
   "healthcare": {},
   "orphans": {},
   "discounts": {},

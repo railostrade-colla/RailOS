@@ -1396,7 +1396,19 @@
     "resetLinkSent": "تم إرسال رابط استعادة كلمة المرور",
     "pwdUpdated": "تم تحديث كلمة المرور بنجاح! 🔒"
   },
-  "council": {},
+  "council": {
+    "roleFounder": "مؤسس",
+    "roleAppointed": "معيّن",
+    "roleElected": "منتخب",
+    "membersTitle": "👥 أعضاء المجلس",
+    "membersSubtitle": "{n} أعضاء — الدورة الحالية",
+    "tabAll": "الكل",
+    "tabAdmin": "الإدارة",
+    "tabElected": "المنتخبون",
+    "votes": "أصوات",
+    "termEnd": "نهاية الدورة",
+    "joinedLabel": "انضم:"
+  },
   "healthcare": {},
   "orphans": {},
   "discounts": {},
