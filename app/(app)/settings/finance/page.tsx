@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useTranslations } from "next-intl"
 import { ChevronLeft } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import {
@@ -18,6 +19,7 @@ import { PaymentMethodsEditor } from "@/components/settings/PaymentMethodsEditor
  * verbatim from the old "finance" tab.
  */
 export default function FinanceSettingsPage() {
+  const t = useTranslations("settings")
   const [profile, setProfile] = useState<CurrentUserProfile | null>(null)
 
   useEffect(() => {
@@ -41,40 +43,40 @@ export default function FinanceSettingsPage() {
       <div className="relative">
         <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
           <SettingsSectionHeader
-            title="المالية والدفع"
-            subtitle="الحدود، وحدات الرسوم، الفواتير"
+            title={t("financeTitle")}
+            subtitle={t("financeSubtitle")}
             backHref="/settings"
           />
 
           <div className="flex flex-col gap-3">
-            <SettingsOptionCard title="الإعدادات المالية">
+            <SettingsOptionCard title={t("financeSettings")}>
               <div className="divide-y divide-white/[0.04]">
                 <div className="py-2.5 flex justify-between items-center">
                   <div>
-                    <div className="text-sm text-white font-medium">حدّي الشهري الحالي</div>
-                    <div className="text-[11px] text-neutral-500 mt-0.5">حسب مستواك ({levelKey})</div>
+                    <div className="text-sm text-white font-medium">{t("currentMonthlyLimit")}</div>
+                    <div className="text-[11px] text-neutral-500 mt-0.5">{t("byLevel", { level: levelKey })}</div>
                   </div>
                   <span className="text-sm font-bold text-yellow-400 font-mono">
-                    {fmtLimit(LEVEL_LIMITS[levelKey])} د.ع
+                    {fmtLimit(LEVEL_LIMITS[levelKey])} {t("iqd")}
                   </span>
                 </div>
                 <button
-                  onClick={() => showInfo("ستتاح إدارة وحدات الرسوم قريباً")}
+                  onClick={() => showInfo(t("feeUnitsSoon"))}
                   className="no-shadow w-full flex items-center justify-between gap-3 py-2.5 hover:bg-white/[0.04] rounded-lg px-2 -mx-2 transition-colors text-right"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-white">وحدات الرسوم</div>
-                    <div className="text-[11px] text-neutral-500 mt-0.5">رصيد + شراء وحدات إضافية</div>
+                    <div className="text-sm font-medium text-white">{t("feeUnits")}</div>
+                    <div className="text-[11px] text-neutral-500 mt-0.5">{t("feeUnitsSub")}</div>
                   </div>
                   <ChevronLeft className="w-4 h-4 text-neutral-500 flex-shrink-0" strokeWidth={2} />
                 </button>
                 <button
-                  onClick={() => showInfo("جاري تجهيز كشف الحسابات...")}
+                  onClick={() => showInfo(t("statementPreparing"))}
                   className="no-shadow w-full flex items-center justify-between gap-3 py-2.5 hover:bg-white/[0.04] rounded-lg px-2 -mx-2 transition-colors text-right"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-white">كشف الحسابات</div>
-                    <div className="text-[11px] text-neutral-500 mt-0.5">تنزيل سجل المعاملات (PDF)</div>
+                    <div className="text-sm font-medium text-white">{t("statement")}</div>
+                    <div className="text-[11px] text-neutral-500 mt-0.5">{t("statementSub")}</div>
                   </div>
                   <ChevronLeft className="w-4 h-4 text-neutral-500 flex-shrink-0" strokeWidth={2} />
                 </button>

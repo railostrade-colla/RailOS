@@ -1309,7 +1309,19 @@
     "accKycTitle": "Identity verification (KYC)",
     "accKycSub": "Verification status and account level",
     "accAvatarTitle": "Profile photo",
-    "accAvatarSub": "Update your profile picture"
+    "accAvatarSub": "Update your profile picture",
+    "financeTitle": "Finance & payments",
+    "financeSubtitle": "Limits, fee units, invoices",
+    "financeSettings": "Financial settings",
+    "currentMonthlyLimit": "My current monthly limit",
+    "byLevel": "By your level ({level})",
+    "iqd": "IQD",
+    "feeUnits": "Fee units",
+    "feeUnitsSub": "Balance + buy extra units",
+    "feeUnitsSoon": "Fee-units management will be available soon",
+    "statement": "Account statement",
+    "statementSub": "Download the transaction log (PDF)",
+    "statementPreparing": "Preparing the account statement..."
   },
   "legal": {},
   "company": {

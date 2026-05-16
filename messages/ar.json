@@ -1309,7 +1309,19 @@
     "accKycTitle": "التحقّق من الهوية (KYC)",
     "accKycSub": "حالة التوثيق ومستوى الحساب",
     "accAvatarTitle": "الصورة الشخصية",
-    "accAvatarSub": "تحديث صورة الملف الشخصي"
+    "accAvatarSub": "تحديث صورة الملف الشخصي",
+    "financeTitle": "المالية والدفع",
+    "financeSubtitle": "الحدود، وحدات الرسوم، الفواتير",
+    "financeSettings": "الإعدادات المالية",
+    "currentMonthlyLimit": "حدّي الشهري الحالي",
+    "byLevel": "حسب مستواك ({level})",
+    "iqd": "د.ع",
+    "feeUnits": "وحدات الرسوم",
+    "feeUnitsSub": "رصيد + شراء وحدات إضافية",
+    "feeUnitsSoon": "ستتاح إدارة وحدات الرسوم قريباً",
+    "statement": "كشف الحسابات",
+    "statementSub": "تنزيل سجل المعاملات (PDF)",
+    "statementPreparing": "جاري تجهيز كشف الحسابات..."
   },
   "legal": {},
   "company": {
