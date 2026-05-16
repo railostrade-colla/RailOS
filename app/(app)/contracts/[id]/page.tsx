@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Users, Calendar, Coins, FileText, AlertTriangle, X, Check, UserCheck, UserX, Ban } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 // Phase 13.65 — GridBackground removed per founder spec; the
@@ -33,8 +34,8 @@ import { cn } from "@/lib/utils/cn"
 
 const fmtIQD = (n: number) => n.toLocaleString("en-US")
 
-const statusLabel = (s: string) =>
-  ({ pending: "قيد الانتظار", active: "نشط", ended: "منتهي" }[s] || s)
+const statusKey = (s: string) =>
+  ({ pending: "statusPending", active: "statusActive", ended: "statusEnded" }[s] || "")
 
 const statusBadge = (s: string) => {
   if (s === "pending") return "bg-yellow-400/15 border-yellow-400/30 text-yellow-400"
@@ -44,6 +45,8 @@ const statusBadge = (s: string) => {
 
 export default function ContractDetailPage() {
   const router = useRouter()
+  const t = useTranslations("contracts")
+  const tc = useTranslations("common")
   const params = useParams()
   const id = (params?.id as string) || "ct1"
 
@@ -127,16 +130,16 @@ export default function ContractDetailPage() {
     setSavingPermFor(null)
     if (!result.success) {
       const map: Record<string, string> = {
-        unauthenticated: "سجّل دخولك أولاً",
-        not_creator: "فقط منشئ العقد يقدر يغيّر الصلاحيات",
-        not_found: "العضو غير موجود",
-        missing_table: "الجداول غير منشورة بعد",
-        rls: "صلاحياتك لا تسمح",
+        unauthenticated: t("loginFirst"),
+        not_creator: t("onlyCreatorPerm"),
+        not_found: t("memberNotFound"),
+        missing_table: t("tablesNotPublished"),
+        rls: t("noPermission"),
       }
-      showError(map[result.reason ?? ""] ?? "فشل تحديث الصلاحية")
+      showError(map[result.reason ?? ""] ?? t("permUpdateFailed"))
       return
     }
-    showSuccess("✅ تم تحديث الصلاحية")
+    showSuccess(t("permUpdated"))
     refreshMembers()
   }
 
@@ -187,7 +190,7 @@ export default function ContractDetailPage() {
   const handleEndContract = async () => {
     if (!contract || !distribution) return
     if (!confirmCheck) {
-      showError("أكّد رغبتك في إنهاء العقد أولاً")
+      showError(t("confirmEndFirst"))
       return
     }
     setSubmitting(true)
@@ -198,9 +201,8 @@ export default function ContractDetailPage() {
       // same session reflects the change.
       endContractMock(contract.id)
       showSuccess(
-        `تم إنهاء العقد + توزيع الحصص! 🎉${
-          result.fee_deducted ? ` (خصم رسوم: ${fmtIQD(result.fee_deducted)})` : ""
-        }`,
+        t("endedDistributed") +
+          (result.fee_deducted ? t("endedFeeNote", { amount: fmtIQD(result.fee_deducted) }) : ""),
       )
       setShowEndModal(false)
       setTimeout(() => router.push("/contracts"), 600)
@@ -208,13 +210,13 @@ export default function ContractDetailPage() {
     }
     // Failure paths.
     if (result.reason === "not_owner") {
-      showError("فقط منشئ العقد يقدر ينهيه")
+      showError(t("onlyCreatorEnd"))
     } else if (result.reason === "not_active") {
-      showError("العقد غير نشط")
+      showError(t("notActive"))
     } else if (result.reason === "missing_table") {
-      showError("الميزة غير متاحة على الخادم بعد")
+      showError(t("featureUnavailable"))
     } else {
-      showError(result.error || "تعذّر إنهاء العقد")
+      showError(result.error || t("endFailed"))
     }
     setShowEndModal(false)
   }
@@ -227,14 +229,14 @@ export default function ContractDetailPage() {
     setRespondingInvite(null)
     if (!r.success) {
       const map: Record<string, string> = {
-        unauthenticated: "سجّل دخولك أولاً",
-        no_pending_invite: "الدعوة لم تعد متاحة",
-        invalid_input: "مدخلات غير صحيحة",
+        unauthenticated: t("loginFirst"),
+        no_pending_invite: t("inviteUnavailable"),
+        invalid_input: t("invalidInput"),
       }
-      showError(map[r.reason ?? ""] ?? r.reason ?? "فشلت الموافقة")
+      showError(map[r.reason ?? ""] ?? r.reason ?? t("acceptFailed"))
       return
     }
-    showSuccess("✅ تمت الموافقة على عقد الشراكة")
+    showSuccess(t("partnershipAccepted"))
     refreshMembers()
   }
 
@@ -249,13 +251,13 @@ export default function ContractDetailPage() {
     setRespondingInvite(null)
     if (!r.success) {
       const map: Record<string, string> = {
-        unauthenticated: "سجّل دخولك أولاً",
-        no_pending_invite: "الدعوة لم تعد متاحة",
+        unauthenticated: t("loginFirst"),
+        no_pending_invite: t("inviteUnavailable"),
       }
-      showError(map[r.reason ?? ""] ?? "فشل الرفض")
+      showError(map[r.reason ?? ""] ?? t("declineFailed"))
       return
     }
-    showSuccess("تم رفض الدعوة")
+    showSuccess(t("inviteDeclined"))
     setShowDeclineForm(false)
     setDeclineReason("")
     refreshMembers()
@@ -269,16 +271,16 @@ export default function ContractDetailPage() {
     setCancellingPending(false)
     if (!r.success) {
       const map: Record<string, string> = {
-        unauthenticated: "سجّل دخولك أولاً",
-        not_owner: "فقط منشئ العقد يقدر يلغيه",
-        not_pending: "العقد ليس في حالة قيد الانتظار",
-        not_found: "العقد غير موجود",
-        missing_table: "الميزة غير منشورة على الخادم بعد",
+        unauthenticated: t("loginFirst"),
+        not_owner: t("onlyCreatorCancel"),
+        not_pending: t("notPending"),
+        not_found: t("contractNotFound"),
+        missing_table: t("featureUnavailable"),
       }
-      showError(map[r.reason ?? ""] ?? r.error ?? "تعذّر إلغاء العقد")
+      showError(map[r.reason ?? ""] ?? r.error ?? t("cancelFailed"))
       return
     }
-    showSuccess("تم إلغاء العقد")
+    showSuccess(t("contractCancelled"))
     setShowCancelPending(false)
     setTimeout(() => router.push("/contracts"), 500)
   }
@@ -296,9 +298,9 @@ export default function ContractDetailPage() {
       <AppLayout>
         <div className="relative">
           <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
-            <PageHeader title="تفاصيل العقد" subtitle="…" backHref="/contracts" />
+            <PageHeader title={t("detailsTitle")} subtitle="…" backHref="/contracts" />
             <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-12 text-center">
-              <div className="text-xs text-neutral-500 animate-pulse">جاري تحميل العقد…</div>
+              <div className="text-xs text-neutral-500 animate-pulse">{t("loadingContract")}</div>
             </div>
           </div>
         </div>
@@ -311,18 +313,18 @@ export default function ContractDetailPage() {
       <AppLayout>
         <div className="relative">
           <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
-            <PageHeader title="تفاصيل العقد" subtitle="—" backHref="/contracts" />
+            <PageHeader title={t("detailsTitle")} subtitle="—" backHref="/contracts" />
             <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-12 text-center">
               <FileText className="w-12 h-12 text-neutral-600 mx-auto mb-3" strokeWidth={1.5} />
-              <div className="text-sm font-bold text-white mb-1">العقد غير موجود</div>
+              <div className="text-sm font-bold text-white mb-1">{t("notFoundTitle")}</div>
               <div className="text-xs text-neutral-500 mb-4">
-                ربّما حُذف، أو ليست لديك صلاحية لعرضه.
+                {t("notFoundDesc")}
               </div>
               <button
                 onClick={() => router.push("/contracts")}
                 className="text-xs text-blue-400 hover:text-blue-300"
               >
-                العودة إلى قائمة العقود
+                {t("backToList")}
               </button>
             </div>
           </div>
@@ -337,7 +339,7 @@ export default function ContractDetailPage() {
         <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
 
           <PageHeader
-            title="تفاصيل العقد"
+            title={t("detailsTitle")}
             subtitle={contract.title}
             backHref="/contracts"
           />
@@ -354,12 +356,12 @@ export default function ContractDetailPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-bold text-white mb-1">
-                    📩 دعوة شراكة بانتظار ردّك
+                    {t("inviteBannerTitle")}
                   </div>
                   <div className="text-[11px] text-neutral-300 leading-relaxed">
-                    أنت مدعوّ للانضمام إلى هذا العقد بحصّة{" "}
-                    <span className="font-bold text-[#4ADE80] font-mono">{myMember?.share_percent}%</span>.
-                    وافق للدخول أو ارفض الدعوة.
+                    {t("inviteBodyPre")}{" "}
+                    <span className="font-bold text-[#4ADE80] font-mono">{myMember?.share_percent}%</span>.{" "}
+                    {t("inviteBodyPost")}
                   </div>
                 </div>
               </div>
@@ -368,13 +370,13 @@ export default function ContractDetailPage() {
                 <div className="space-y-3">
                   <div>
                     <label className="text-[11px] text-neutral-400 mb-1.5 block">
-                      سبب الرفض (اختياري)
+                      {t("declineReasonLabel")}
                     </label>
                     <textarea
                       value={declineReason}
                       onChange={(e) => setDeclineReason(e.target.value)}
                       rows={3}
-                      placeholder="مثال: مشغول حالياً، حصّة غير مناسبة..."
+                      placeholder={t("declineReasonPlaceholder")}
                       className="w-full bg-white/[0.04] border border-white/[0.1] rounded-xl px-3 py-2 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 resize-none"
                     />
                   </div>
@@ -384,7 +386,7 @@ export default function ContractDetailPage() {
                       disabled={respondingInvite !== null}
                       className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-xs hover:bg-white/[0.08] disabled:opacity-50"
                     >
-                      تراجع
+                      {t("undo")}
                     </button>
                     <button
                       onClick={handleDeclineInvite}
@@ -392,7 +394,7 @@ export default function ContractDetailPage() {
                       className="flex-1 py-2.5 rounded-xl bg-red-500/[0.15] border border-red-500/[0.3] text-red-400 text-xs font-bold hover:bg-red-500/[0.2] disabled:opacity-50 flex items-center justify-center gap-1.5"
                     >
                       <UserX className="w-3.5 h-3.5" strokeWidth={2.5} />
-                      {respondingInvite === "decline" ? "جارٍ..." : "تأكيد الرفض"}
+                      {respondingInvite === "decline" ? t("workingShort") : t("confirmDecline")}
                     </button>
                   </div>
                 </div>
@@ -404,7 +406,7 @@ export default function ContractDetailPage() {
                     className="flex-1 py-2.5 rounded-xl bg-red-500/[0.1] border border-red-500/[0.25] text-red-400 text-xs font-bold hover:bg-red-500/[0.15] disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >
                     <UserX className="w-3.5 h-3.5" strokeWidth={2.5} />
-                    رفض
+                    {t("declineBtn")}
                   </button>
                   <button
                     onClick={handleAcceptInvite}
@@ -412,7 +414,7 @@ export default function ContractDetailPage() {
                     className="flex-1 py-2.5 rounded-xl bg-[#4ADE80] text-black text-xs font-bold hover:bg-[#22c55e] disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >
                     <UserCheck className="w-3.5 h-3.5" strokeWidth={2.5} />
-                    {respondingInvite === "accept" ? "جارٍ..." : "الموافقة على الانضمام"}
+                    {respondingInvite === "accept" ? t("workingShort") : t("acceptJoin")}
                   </button>
                 </div>
               )}
@@ -425,11 +427,11 @@ export default function ContractDetailPage() {
               <div className="flex-1 min-w-0">
                 <div className="text-base font-bold text-white mb-1.5">{contract.title}</div>
                 <div className="text-[11px] text-neutral-500">
-                  منشئ العقد: <span className="text-white font-bold">{contract.creator}</span>
+                  {t("creatorLabel")} <span className="text-white font-bold">{contract.creator}</span>
                 </div>
               </div>
               <span className={cn("px-2.5 py-1 rounded-md text-[11px] font-bold border", statusBadge(contract.status))}>
-                {statusLabel(contract.status)}
+                {t(statusKey(contract.status))}
               </span>
             </div>
 
@@ -443,21 +445,21 @@ export default function ContractDetailPage() {
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5 flex items-center gap-2">
                 <Coins className="w-4 h-4 text-yellow-400 flex-shrink-0" strokeWidth={1.5} />
                 <div className="min-w-0">
-                  <div className="text-[10px] text-neutral-500 mb-0.5">قيمة الاستثمار</div>
+                  <div className="text-[10px] text-neutral-500 mb-0.5">{t("investmentValue")}</div>
                   <div className="text-xs font-bold text-yellow-400 font-mono truncate">{fmtIQD(contract.total_investment)}</div>
                 </div>
               </div>
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5 flex items-center gap-2">
                 <Users className="w-4 h-4 text-blue-400 flex-shrink-0" strokeWidth={1.5} />
                 <div className="min-w-0">
-                  <div className="text-[10px] text-neutral-500 mb-0.5">الأعضاء</div>
-                  <div className="text-xs font-bold text-white">{contract.members.length} شركاء</div>
+                  <div className="text-[10px] text-neutral-500 mb-0.5">{t("membersLabel")}</div>
+                  <div className="text-xs font-bold text-white">{t("partnersCount", { n: contract.members.length })}</div>
                 </div>
               </div>
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5 flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-purple-400 flex-shrink-0" strokeWidth={1.5} />
                 <div className="min-w-0">
-                  <div className="text-[10px] text-neutral-500 mb-0.5">التاريخ</div>
+                  <div className="text-[10px] text-neutral-500 mb-0.5">{t("date")}</div>
                   <div className="text-xs font-bold text-white truncate">{contract.created_at}</div>
                 </div>
               </div>
@@ -478,7 +480,7 @@ export default function ContractDetailPage() {
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-4">
             <div className="flex items-center gap-2 mb-3">
               <Users className="w-4 h-4 text-neutral-400" strokeWidth={1.5} />
-              <div className="text-sm font-bold text-white">الشركاء ({contract.members.length})</div>
+              <div className="text-sm font-bold text-white">{t("partnersTitle")} ({contract.members.length})</div>
             </div>
             {/* Phase 13.58 — status badge next to each partner, fed by
                 the realtime `members` array (which has invite_status). */}
@@ -494,8 +496,8 @@ export default function ContractDetailPage() {
                       : "bg-red-400/[0.12] border-red-400/[0.3] text-red-400"
                 const statusIcon =
                   status === "accepted" ? "✓" : status === "pending" ? "⏳" : "✗"
-                const statusLabel =
-                  status === "accepted" ? "وافق" : status === "pending" ? "قيد الانتظار" : "رفض"
+                const memberStatusLabel =
+                  status === "accepted" ? t("stAccepted") : status === "pending" ? t("statusPending") : t("stDeclined")
                 return (
                   <div key={m.user_id} className="flex items-center gap-3 p-3 bg-white/[0.04] border border-white/[0.06] rounded-xl">
                     <div className="w-10 h-10 rounded-full bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-base font-bold text-white flex-shrink-0">
@@ -511,11 +513,11 @@ export default function ContractDetailPage() {
                           statusBadgeStyle,
                         )}>
                           <span>{statusIcon}</span>
-                          <span>{statusLabel}</span>
+                          <span>{memberStatusLabel}</span>
                         </span>
                       </div>
                       <div className="text-[10px] text-neutral-500 mt-0.5">
-                        حصة: <span className="text-yellow-400 font-mono font-bold">{m.share_percent}%</span>
+                        {t("shareColon")} <span className="text-yellow-400 font-mono font-bold">{m.share_percent}%</span>
                       </div>
                     </div>
                     <div className="text-base font-bold text-white font-mono flex-shrink-0">
@@ -532,10 +534,10 @@ export default function ContractDetailPage() {
             <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-4">
               <div className="flex items-center gap-2 mb-1">
                 <Users className="w-4 h-4 text-purple-400" strokeWidth={2} />
-                <div className="text-sm font-bold text-white">صلاحيات الشركاء</div>
+                <div className="text-sm font-bold text-white">{t("partnerPermissions")}</div>
               </div>
               <div className="text-[11px] text-neutral-500 mb-3">
-                تحكّم بما يستطيع كل شريك فعله من حساب العقد (الشراء/البيع/العرض فقط).
+                {t("permsHint")}
               </div>
               <div className="space-y-2">
                 {members
@@ -555,7 +557,7 @@ export default function ContractDetailPage() {
                             {m.user_name}
                           </div>
                           <div className="text-[10px] text-neutral-500 mt-0.5">
-                            حصة <span className="text-yellow-400 font-mono">{m.share_percent}%</span>
+                            {t("shareWord")} <span className="text-yellow-400 font-mono">{m.share_percent}%</span>
                             {" · "}
                             <span
                               className={cn(
@@ -567,10 +569,10 @@ export default function ContractDetailPage() {
                               )}
                             >
                               {m.invite_status === "accepted"
-                                ? "قابل الدعوة"
+                                ? t("inviteAccepted")
                                 : m.invite_status === "pending"
-                                  ? "قيد الانتظار"
-                                  : "رفض"}
+                                  ? t("statusPending")
+                                  : t("stDeclined")}
                             </span>
                           </div>
                         </div>
@@ -585,9 +587,9 @@ export default function ContractDetailPage() {
                           }
                           className="bg-white/[0.05] border border-white/[0.1] rounded-lg px-2.5 py-1.5 text-[11px] text-white outline-none disabled:opacity-50 cursor-pointer"
                         >
-                          <option value="view_only">عرض فقط</option>
-                          <option value="buy_only">شراء فقط</option>
-                          <option value="buy_and_sell">شراء وبيع</option>
+                          <option value="view_only">{t("optView")}</option>
+                          <option value="buy_only">{t("optBuyOnly")}</option>
+                          <option value="buy_and_sell">{t("optBuySell")}</option>
                         </select>
                       </div>
                     )
@@ -603,7 +605,7 @@ export default function ContractDetailPage() {
               className="w-full bg-red-500/[0.1] border border-red-500/30 hover:bg-red-500/[0.15] text-red-400 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors mb-6"
             >
               <AlertTriangle className="w-4 h-4" strokeWidth={2} />
-              إنهاء العقد وتوزيع الحصص
+              {t("endAndDistribute")}
             </button>
           )}
 
@@ -615,7 +617,7 @@ export default function ContractDetailPage() {
               className="w-full bg-red-500/[0.1] border border-red-500/30 hover:bg-red-500/[0.15] text-red-400 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors mb-6"
             >
               <Ban className="w-4 h-4" strokeWidth={2} />
-              إنهاء العقد وسحب الدعوات
+              {t("endAndWithdraw")}
             </button>
           )}
 
@@ -627,8 +629,8 @@ export default function ContractDetailPage() {
         <Modal
           isOpen={showEndModal}
           onClose={() => !submitting && setShowEndModal(false)}
-          title="⚠️ إنهاء العقد وتوزيع الحصص"
-          subtitle="هذا الإجراء لا يمكن التراجع عنه"
+          title={t("endModalTitle")}
+          subtitle={t("irreversible")}
           variant="warning"
           size="lg"
           footer={
@@ -638,7 +640,7 @@ export default function ContractDetailPage() {
                 disabled={submitting}
                 className="flex-1 bg-white/[0.05] border border-white/[0.1] text-white py-2.5 rounded-xl text-sm hover:bg-white/[0.08] disabled:opacity-50 transition-colors"
               >
-                إلغاء
+                {tc("buttons.cancel")}
               </button>
               <button
                 onClick={handleEndContract}
@@ -653,10 +655,10 @@ export default function ContractDetailPage() {
                 {submitting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    جاري التوزيع...
+                    {t("distributing")}
                   </>
                 ) : (
-                  "إنهاء وتوزيع"
+                  t("endDistributeBtn")
                 )}
               </button>
             </>
@@ -665,22 +667,22 @@ export default function ContractDetailPage() {
           <div className="space-y-4">
             {/* Summary */}
             <Card padding="md">
-              <div className="text-xs font-bold text-white mb-3">ملخّص التوزيع</div>
+              <div className="text-xs font-bold text-white mb-3">{t("distSummary")}</div>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div>
-                  <div className="text-[10px] text-neutral-500 mb-1">إجمالي الحصص</div>
+                  <div className="text-[10px] text-neutral-500 mb-1">{t("totalSharesLabel")}</div>
                   <div className="text-lg font-bold text-yellow-400 font-mono">
                     {distribution.total_shares.toLocaleString("en-US")}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-neutral-500 mb-1">عدد الأعضاء</div>
+                  <div className="text-[10px] text-neutral-500 mb-1">{t("membersCountLabel")}</div>
                   <div className="text-lg font-bold text-blue-400 font-mono">
                     {distribution.distribution.length}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] text-neutral-500 mb-1">قيمة العقد</div>
+                  <div className="text-[10px] text-neutral-500 mb-1">{t("contractValueLabel")}</div>
                   <div className="text-sm font-bold text-white font-mono">
                     {fmtIQD(distribution.total_value)}
                   </div>
@@ -690,13 +692,13 @@ export default function ContractDetailPage() {
 
             {/* Distribution table */}
             <div>
-              <div className="text-xs font-bold text-white mb-2">التوزيع المتوقّع</div>
+              <div className="text-xs font-bold text-white mb-2">{t("expectedDist")}</div>
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl overflow-hidden">
                 <div className="grid grid-cols-[1fr_60px_80px_100px] gap-2 px-3 py-2 bg-white/[0.04] border-b border-white/[0.06] text-[10px] text-neutral-500 font-bold">
-                  <span>العضو</span>
-                  <span className="text-center">النسبة</span>
-                  <span className="text-center">الحصص</span>
-                  <span className="text-left">القيمة</span>
+                  <span>{t("colMember")}</span>
+                  <span className="text-center">{t("colPct")}</span>
+                  <span className="text-center">{t("colShares")}</span>
+                  <span className="text-left">{t("colValue")}</span>
                 </div>
                 {distribution.distribution.map((row) => (
                   <div
@@ -717,16 +719,16 @@ export default function ContractDetailPage() {
             {/* Fee warning */}
             <Card variant="highlighted" color="yellow" padding="md">
               <div className="text-xs font-bold text-yellow-400 mb-2 flex items-center gap-1.5">
-                📌 رسوم إنهاء العقد
+                {t("endFeeTitle")}
               </div>
               <div className="flex justify-between items-center mb-2">
-                <span className="text-[11px] text-neutral-300">{CONTRACT_END_FEE_PCT}% من قيمة العقد</span>
+                <span className="text-[11px] text-neutral-300">{CONTRACT_END_FEE_PCT}{t("pctOfContractValue")}</span>
                 <span className="text-base font-bold text-yellow-400 font-mono">
-                  {fmtIQD(distribution.end_fee)} د.ع
+                  {fmtIQD(distribution.end_fee)} {t("iqd")}
                 </span>
               </div>
               <div className="text-[10px] text-neutral-500">
-                ستُخصم من رصيد وحدات الرسوم لمنشئ العقد
+                {t("deductedFromCreator")}
               </div>
             </Card>
 
@@ -745,7 +747,7 @@ export default function ContractDetailPage() {
                 {confirmCheck && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
               </button>
               <span className="text-xs text-neutral-300 leading-relaxed select-none">
-                أؤكد أنني أرغب في إنهاء العقد وتوزيع الحصص على جميع الأعضاء
+                {t("confirmEndCheck")}
               </span>
             </label>
           </div>
@@ -762,8 +764,8 @@ export default function ContractDetailPage() {
                   <Ban className="w-5 h-5 text-red-400" strokeWidth={2} />
                 </div>
                 <div>
-                  <div className="text-base font-bold text-white">إنهاء العقد المعلَّق</div>
-                  <div className="text-[11px] text-neutral-400">سحب الدعوات وإلغاء العقد</div>
+                  <div className="text-base font-bold text-white">{t("cancelPendingTitle")}</div>
+                  <div className="text-[11px] text-neutral-400">{t("cancelPendingSubtitle")}</div>
                 </div>
               </div>
               <button
@@ -776,10 +778,9 @@ export default function ContractDetailPage() {
             </div>
 
             <div className="bg-red-400/[0.05] border border-red-400/[0.2] rounded-xl p-3 mb-4 text-xs text-red-300 leading-relaxed">
-              ⚠ سيتم إلغاء العقد "<b className="text-white">{contract.title}</b>" وسحب الدعوات
-              المرسَلة. سيُخطَر كل من تلقّى دعوة بأنّك قمت بسحبها.
+              {t("cancelBodyPre")}<b className="text-white">{contract.title}</b>{t("cancelBodyPost")}
               <span className="block mt-1 text-red-300/80 text-[11px]">
-                لا توجد رسوم — العقد لم يتفعّل بعد. الإجراء نهائي.
+                {t("cancelNoFee")}
               </span>
             </div>
 
@@ -789,7 +790,7 @@ export default function ContractDetailPage() {
                 disabled={cancellingPending}
                 className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
               >
-                تراجع
+                {t("undo")}
               </button>
               <button
                 onClick={handleCancelPending}
@@ -797,7 +798,7 @@ export default function ContractDetailPage() {
                 className="flex-1 py-3 rounded-xl bg-red-500/[0.18] border border-red-500/[0.4] text-red-300 text-sm font-bold hover:bg-red-500/[0.25] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <Ban className="w-4 h-4" strokeWidth={2.5} />
-                {cancellingPending ? "جارٍ..." : "نعم، ألغِ العقد"}
+                {cancellingPending ? t("workingShort") : t("yesCancelContract")}
               </button>
             </div>
           </div>
