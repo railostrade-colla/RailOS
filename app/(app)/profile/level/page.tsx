@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 import { TrendingUp, AlertTriangle, Flag, Star } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -22,7 +23,34 @@ import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
+// level id → i18n key (lib only exposes display_name_ar; we localize
+// the small fixed enum here without touching the levels lib).
+const LEVEL_KEY: Record<string, string> = {
+  basic: "lvlBasic",
+  advanced: "lvlAdvanced",
+  pro: "lvlPro",
+  elite: "lvlElite",
+}
+// CHANGE_TYPE_META.label → i18n key (icon/color stay lib-canonical).
+const CHANGE_TYPE_KEY: Record<string, string> = {
+  auto_upgrade: "ctAutoUpgrade",
+  auto_downgrade: "ctAutoDowngrade",
+  admin_override: "ctAdminOverride",
+  admin_revert: "ctAdminRevert",
+}
+// getRequirementChecklist returns a fixed-order array; map by index.
+const REQ_META: ReadonlyArray<{ labelKey: string; unitKey: string }> = [
+  { labelKey: "reqVolume",          unitKey: "unitIqd" },
+  { labelKey: "reqTrades",          unitKey: "unitDeal" },
+  { labelKey: "reqSuccessRate",     unitKey: "unitPct" },
+  { labelKey: "reqDaysActive",      unitKey: "unitDay" },
+  { labelKey: "reqDisputesLost",    unitKey: "unitDispute" },
+  { labelKey: "reqReportsReceived", unitKey: "unitReport" },
+  { labelKey: "reqRating",          unitKey: "unitOf5" },
+]
+
 export default function MyLevelPage() {
+  const t = useTranslations("profile")
   // Initial paint uses mock fixture so the layout never flashes empty.
   // Real DB-backed values swap in on mount.
   const [stats, setStats] = useState<UserStats>(MOCK_USER_STATS)
@@ -51,8 +79,8 @@ export default function MyLevelPage() {
       <div className="relative">
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
           <PageHeader
-            title="🏆 مستواي"
-            subtitle="إحصائياتك التداولية + تقدّمك للمستوى التالي"
+            title={t("levelTitle")}
+            subtitle={t("levelSubtitle")}
             backHref="/profile"
           />
 
@@ -75,16 +103,16 @@ export default function MyLevelPage() {
                 {levelSetting?.icon}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[10px] text-neutral-500 mb-0.5">المستوى الحالي</div>
+                <div className="text-[10px] text-neutral-500 mb-0.5">{t("currentLevel")}</div>
                 <div className="text-2xl font-bold mb-1" style={{ color: levelSetting?.color }}>
-                  {levelSetting?.display_name_ar}
+                  {LEVEL_KEY[stats.level] ? t(LEVEL_KEY[stats.level]) : levelSetting?.display_name_ar}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {stats.level_override && <Badge color="purple">🛡️ تجاوز يدوي</Badge>}
-                  {stats.level_locked && <Badge color="yellow">🔒 مقفل</Badge>}
+                  {stats.level_override && <Badge color="purple">{t("manualOverride")}</Badge>}
+                  {stats.level_locked && <Badge color="yellow">{t("locked")}</Badge>}
                   {stats.level_upgraded_at && (
                     <span className="text-[10px] text-neutral-500" dir="ltr">
-                      تمّت الترقية {new Date(stats.level_upgraded_at).toLocaleDateString("en-GB")}
+                      {t("upgradedOn", { date: new Date(stats.level_upgraded_at).toLocaleDateString("en-GB") })}
                     </span>
                   )}
                 </div>
@@ -96,23 +124,24 @@ export default function MyLevelPage() {
           {nextLevel ? (
             <Card className="mb-5">
               <div className="text-sm font-bold text-white mb-3">
-                📈 التقدّم نحو {nextLevel.icon} {nextLevel.display_name_ar}
+                {t("progressTo")} {nextLevel.icon} {LEVEL_KEY[nextLevel.level] ? t(LEVEL_KEY[nextLevel.level]) : nextLevel.display_name_ar}
               </div>
               <div className="space-y-3">
                 {checklist.map((req, i) => {
                   const pct = req.required > 0 ? Math.min(100, (req.current / req.required) * 100) : 100
+                  const rm = REQ_META[i]
                   return (
                     <div key={i}>
                       <div className="flex justify-between text-xs mb-1">
                         <span className={cn(req.met ? "text-green-400" : "text-neutral-300")}>
-                          {req.met ? "✓" : "○"} {req.label}
+                          {req.met ? "✓" : "○"} {rm ? t(rm.labelKey) : req.label}
                         </span>
                         <span className="font-mono text-neutral-500">
                           <span className={req.met ? "text-green-400" : "text-white"}>
                             {fmtNum(req.current)}
                           </span>
                           {" / "}
-                          <span>{fmtNum(req.required)}</span> {req.unit}
+                          <span>{fmtNum(req.required)}</span> {rm ? t(rm.unitKey) : req.unit}
                         </span>
                       </div>
                       {!req.inverse && (
@@ -135,9 +164,9 @@ export default function MyLevelPage() {
             <Card variant="gradient" color="yellow" className="mb-5">
               <div className="text-center py-2">
                 <div className="text-3xl mb-2">👑</div>
-                <div className="text-base font-bold text-white">أنت في أعلى مستوى!</div>
+                <div className="text-base font-bold text-white">{t("topLevel")}</div>
                 <div className="text-xs text-neutral-300 mt-1">
-                  استفد من جميع المزايا الحصرية لمستوى النخبة
+                  {t("topLevelDesc")}
                 </div>
               </div>
             </Card>
@@ -149,16 +178,16 @@ export default function MyLevelPage() {
             <Card>
               <div className="flex items-center gap-2 mb-3 pb-3 border-b border-white/[0.06]">
                 <TrendingUp className="w-4 h-4 text-green-400" strokeWidth={2} />
-                <div className="text-sm font-bold text-white">💼 إحصائيات التداول</div>
+                <div className="text-sm font-bold text-white">{t("tradingStats")}</div>
               </div>
               <div className="space-y-1.5 text-xs">
-                <Row label="حجم التداول" value={`${fmtNum(stats.total_trade_volume)} د.ع`} />
-                <Row label="إجمالي الصفقات" value={fmtNum(stats.total_trades)} />
-                <Row label="ناجحة" value={fmtNum(stats.successful_trades)} color="text-green-400" />
-                <Row label="فاشلة" value={fmtNum(stats.failed_trades)} color="text-red-400" />
-                <Row label="ملغاة" value={fmtNum(stats.cancelled_trades)} />
+                <Row label={t("tradeVolume")} value={`${fmtNum(stats.total_trade_volume)} ${t("unitIqd")}`} />
+                <Row label={t("totalTrades")} value={fmtNum(stats.total_trades)} />
+                <Row label={t("successful")} value={fmtNum(stats.successful_trades)} color="text-green-400" />
+                <Row label={t("failed")} value={fmtNum(stats.failed_trades)} color="text-red-400" />
+                <Row label={t("cancelled")} value={fmtNum(stats.cancelled_trades)} />
                 <Row
-                  label="معدّل النجاح"
+                  label={t("successRate")}
                   value={`${stats.success_rate}%`}
                   color={stats.success_rate >= 95 ? "text-green-400" : "text-yellow-400"}
                 />
@@ -169,14 +198,14 @@ export default function MyLevelPage() {
             <Card>
               <div className="flex items-center gap-2 mb-3 pb-3 border-b border-white/[0.06]">
                 <AlertTriangle className="w-4 h-4 text-yellow-400" strokeWidth={2} />
-                <div className="text-sm font-bold text-white">⚖️ النزاعات</div>
+                <div className="text-sm font-bold text-white">{t("disputesTitle")}</div>
               </div>
               <div className="space-y-1.5 text-xs">
-                <Row label="إجمالي النزاعات" value={fmtNum(stats.disputes_total)} />
-                <Row label="ربحتها" value={fmtNum(stats.disputes_won)} color="text-green-400" />
-                <Row label="خسرتها" value={fmtNum(stats.disputes_lost)} color="text-red-400" />
+                <Row label={t("disputesTotal")} value={fmtNum(stats.disputes_total)} />
+                <Row label={t("disputesWon")} value={fmtNum(stats.disputes_won)} color="text-green-400" />
+                <Row label={t("disputesLost")} value={fmtNum(stats.disputes_lost)} color="text-red-400" />
                 <Row
-                  label="نسبة النزاعات"
+                  label={t("disputeRate")}
                   value={`${stats.dispute_rate}%`}
                   color={stats.dispute_rate > 5 ? "text-red-400" : "text-yellow-400"}
                 />
@@ -187,15 +216,15 @@ export default function MyLevelPage() {
             <Card>
               <div className="flex items-center gap-2 mb-3 pb-3 border-b border-white/[0.06]">
                 <Flag className="w-4 h-4 text-red-400" strokeWidth={2} />
-                <div className="text-sm font-bold text-white">🚨 البلاغات</div>
+                <div className="text-sm font-bold text-white">{t("reportsTitle")}</div>
               </div>
               <div className="space-y-1.5 text-xs">
                 <Row
-                  label="بلاغات استلمتها"
+                  label={t("reportsReceived")}
                   value={fmtNum(stats.reports_received)}
                   color={stats.reports_received > 0 ? "text-red-400" : "text-green-400"}
                 />
-                <Row label="بلاغات أرسلتها" value={fmtNum(stats.reports_against_others)} />
+                <Row label={t("reportsSent")} value={fmtNum(stats.reports_against_others)} />
               </div>
             </Card>
 
@@ -203,17 +232,17 @@ export default function MyLevelPage() {
             <Card>
               <div className="flex items-center gap-2 mb-3 pb-3 border-b border-white/[0.06]">
                 <Star className="w-4 h-4 text-purple-400" strokeWidth={2} />
-                <div className="text-sm font-bold text-white">⭐ التقييم</div>
+                <div className="text-sm font-bold text-white">{t("ratingTitle")}</div>
               </div>
               <div className="space-y-1.5 text-xs">
                 <Row
-                  label="التقييم"
+                  label={t("ratingLabel")}
                   value={`${stats.rating_average} / 5`}
                   color="text-purple-400"
                 />
-                <Row label="عدد التقييمات" value={fmtNum(stats.rating_count)} />
-                <Row label="أيام النشاط" value={fmtNum(stats.days_active)} />
-                <Row label="عمر الحساب" value={`${stats.account_age_days} يوم`} />
+                <Row label={t("ratingCount")} value={fmtNum(stats.rating_count)} />
+                <Row label={t("daysActive")} value={fmtNum(stats.days_active)} />
+                <Row label={t("accountAge")} value={t("accountAgeDays", { n: stats.account_age_days })} />
               </div>
             </Card>
           </div>
@@ -221,10 +250,10 @@ export default function MyLevelPage() {
           {/* Level history (last 5) */}
           <Card>
             <div className="text-sm font-bold text-white mb-3 pb-3 border-b border-white/[0.06]">
-              📅 سجلّ المستوى (آخر 5 تغييرات)
+              {t("levelHistory")}
             </div>
             {history.length === 0 ? (
-              <div className="text-xs text-neutral-500 py-4 text-center">— لا تغييرات —</div>
+              <div className="text-xs text-neutral-500 py-4 text-center">{t("noChanges")}</div>
             ) : (
               <div className="space-y-2.5">
                 {history.map((h) => {
@@ -237,11 +266,11 @@ export default function MyLevelPage() {
                       <div className="text-2xl flex-shrink-0">{meta.icon}</div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <Badge color={meta.color}>{meta.label}</Badge>
+                          <Badge color={meta.color}>{CHANGE_TYPE_KEY[h.change_type] ? t(CHANGE_TYPE_KEY[h.change_type]) : meta.label}</Badge>
                           <span className="text-xs text-white font-bold">
-                            {h.from_level ? getLevelSetting(h.from_level)?.display_name_ar : "—"}
+                            {h.from_level ? (LEVEL_KEY[h.from_level] ? t(LEVEL_KEY[h.from_level]) : getLevelSetting(h.from_level)?.display_name_ar) : "—"}
                             {" → "}
-                            {getLevelSetting(h.to_level)?.display_name_ar}
+                            {LEVEL_KEY[h.to_level] ? t(LEVEL_KEY[h.to_level]) : getLevelSetting(h.to_level)?.display_name_ar}
                           </span>
                         </div>
                         <div className="text-[11px] text-neutral-400 leading-relaxed">{h.reason}</div>
