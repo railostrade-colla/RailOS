@@ -2,6 +2,7 @@
 
 import { use, useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Sparkles, Copy, Check, Calendar, MapPin } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { GridBackground } from "@/components/layout/GridBackground"
@@ -9,8 +10,8 @@ import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader, Modal, Badge, EmptyState } from "@/components/ui"
 // Phase 15.01 — types + label constants only. Runtime is DB-only.
 import {
-  CATEGORY_LABELS,
-  LEVEL_LABELS,
+  type DiscountCategory,
+  type RequiredLevel,
   type UserCoupon,
   type Discount,
 } from "@/lib/mock-data/discounts"
@@ -22,6 +23,21 @@ import { showError, showSuccess } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
+
+// Icon stays lib-canonical; label resolved via t() at the call site.
+const CATEGORY_META: Record<DiscountCategory, { labelKey: string; icon: string }> = {
+  restaurants: { labelKey: "catRestaurants", icon: "🍽️" },
+  clothing:    { labelKey: "catClothing",    icon: "👔" },
+  electronics: { labelKey: "catElectronics", icon: "💻" },
+  services:    { labelKey: "catServices",    icon: "🛠️" },
+  travel:      { labelKey: "catTravel",      icon: "✈️" },
+  groceries:   { labelKey: "catGroceries",   icon: "🛒" },
+}
+const LEVEL_META: Record<RequiredLevel, { labelKey: string; icon: string }> = {
+  basic:    { labelKey: "lvlBasic",    icon: "🌱" },
+  advanced: { labelKey: "lvlAdvanced", icon: "⭐" },
+  pro:      { labelKey: "lvlPro",      icon: "👑" },
+}
 
 // Simple SVG barcode generator (visual only — code-39 style)
 function Barcode({ value }: { value: string }) {
@@ -46,6 +62,7 @@ function Barcode({ value }: { value: string }) {
 export default function DiscountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
+  const t = useTranslations("discounts")
   // Phase 15.01 — null initial state, populated from DB only.
   const [discount, setDiscount] = useState<Discount | null>(null)
   const [loading, setLoading] = useState(true)
@@ -74,7 +91,7 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
         <div className="relative">
           <GridBackground showCircles={false} />
           <div className="relative z-10 px-3 lg:px-8 py-12 max-w-3xl mx-auto text-center">
-            <div className="text-sm text-neutral-500">جاري تحميل الخصم...</div>
+            <div className="text-sm text-neutral-500">{t("loadingDiscount")}</div>
           </div>
         </div>
       </AppLayout>
@@ -87,16 +104,16 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
         <div className="relative">
           <GridBackground showCircles={false} />
           <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
-            <PageHeader title="غير موجود" />
-            <EmptyState icon="🔍" title="هذا الخصم غير متاح" action={{ label: "العودة للخصومات", onClick: () => router.push("/discounts") }} />
+            <PageHeader title={t("notFoundTitle")} />
+            <EmptyState icon="🔍" title={t("notAvailable")} action={{ label: t("backToDiscounts"), onClick: () => router.push("/discounts") }} />
           </div>
         </div>
       </AppLayout>
     )
   }
 
-  const cat = CATEGORY_LABELS[discount.category]
-  const lvl = LEVEL_LABELS[discount.required_level]
+  const cat = CATEGORY_META[discount.category]
+  const lvl = LEVEL_META[discount.required_level]
   const daysLeft = Math.max(0, Math.ceil((new Date(discount.ends_at).getTime() - Date.now()) / 86_400_000))
 
   const handleClaim = async () => {
@@ -121,24 +138,24 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
         expires_at: discount.ends_at,
       }
       setShowCoupon(coupon)
-      showSuccess("✅ تم الحصول على القسيمة")
+      showSuccess(t("claimSuccess"))
       return
     }
     // Failure paths.
     if (result.reason === "already_claimed") {
-      showError("لديك قسيمة بالفعل لهذا العرض")
+      showError(t("alreadyClaimed"))
     } else if (result.reason === "fully_claimed") {
-      showError("نفذت كل القسائم لهذا العرض")
+      showError(t("fullyClaimed"))
     } else if (result.reason === "insufficient_level") {
-      showError(`هذا العرض يحتاج مستوى ${result.required_level} — مستواك الحالي ${result.current_level}`)
+      showError(t("insufficientLevel", { req: result.required_level ?? "", cur: result.current_level ?? "" }))
     } else if (result.reason === "inactive") {
-      showError("العرض غير نشط حالياً")
+      showError(t("inactive"))
     } else if (result.reason === "expired" || result.reason === "not_started") {
-      showError("العرض خارج فترة الصلاحية")
+      showError(t("outOfPeriod"))
     } else if (result.reason === "missing_table") {
-      showError("الميزة غير متاحة على الخادم بعد")
+      showError(t("featureUnavailable"))
     } else {
-      showError(result.error || "تعذّر الحصول على القسيمة")
+      showError(result.error || t("claimFailed"))
     }
   }
 
@@ -147,10 +164,10 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
     try {
       await navigator.clipboard.writeText(showCoupon.code)
       setCopied(true)
-      showSuccess("تم نسخ الرمز")
+      showSuccess(t("copyDone"))
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      showError("تعذّر النسخ")
+      showError(t("copyFailed"))
     }
   }
 
@@ -161,7 +178,7 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
 
         <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
-          <PageHeader title={discount.brand_name} subtitle={cat.label} />
+          <PageHeader title={discount.brand_name} subtitle={t(cat.labelKey)} />
 
           {/* Hero */}
           <Card variant="gradient" color={discount.cover_color} padding="lg" className="mb-5">
@@ -182,7 +199,7 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
                   <div className="text-base font-bold text-white">{discount.brand_name}</div>
                   <div className="text-[11px] text-neutral-400 flex items-center gap-1.5 mt-1">
                     <span>{cat.icon}</span>
-                    <span>{cat.label}</span>
+                    <span>{t(cat.labelKey)}</span>
                   </div>
                 </div>
               </div>
@@ -202,14 +219,14 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
 
           {/* Description */}
           <Card padding="md" className="mb-3">
-            <div className="text-base font-bold text-white mb-2">📝 الوصف</div>
+            <div className="text-base font-bold text-white mb-2">{t("descTitle")}</div>
             <div className="text-sm text-neutral-200 leading-relaxed">{discount.description}</div>
           </Card>
 
           {/* Conditions */}
           {discount.conditions.length > 0 && (
             <Card padding="md" className="mb-3">
-              <div className="text-base font-bold text-white mb-3">📋 الشروط</div>
+              <div className="text-base font-bold text-white mb-3">{t("condTitle")}</div>
               <div className="space-y-2">
                 {discount.conditions.map((c, i) => (
                   <div key={i} className="flex items-start gap-2 text-xs text-neutral-300">
@@ -225,20 +242,20 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
           <Card padding="md" className="mb-3">
             <div className="flex items-center gap-3 mb-2">
               <Calendar className="w-4 h-4 text-blue-400" strokeWidth={1.5} />
-              <div className="text-base font-bold text-white">⏰ المدّة</div>
+              <div className="text-base font-bold text-white">{t("periodTitle")}</div>
             </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
-                <div className="text-[10px] text-neutral-500 mb-0.5">يبدأ</div>
+                <div className="text-[10px] text-neutral-500 mb-0.5">{t("startsLabel")}</div>
                 <div className="text-white font-mono" dir="ltr">{discount.starts_at}</div>
               </div>
               <div>
-                <div className="text-[10px] text-neutral-500 mb-0.5">ينتهي</div>
+                <div className="text-[10px] text-neutral-500 mb-0.5">{t("endsLabel")}</div>
                 <div className="text-white font-mono" dir="ltr">{discount.ends_at}</div>
               </div>
             </div>
             <div className="mt-3 pt-3 border-t border-white/[0.05] text-[11px] text-yellow-400 text-center">
-              ⏳ متبقّي <span className="font-bold font-mono">{daysLeft}</span> يوماً
+              {t("daysLeftLabel", { n: daysLeft })}
             </div>
           </Card>
 
@@ -246,7 +263,7 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
           <Card padding="md" className="mb-3">
             <div className="flex items-center gap-3 mb-3">
               <MapPin className="w-4 h-4 text-green-400" strokeWidth={1.5} />
-              <div className="text-base font-bold text-white">📍 الفروع المشاركة</div>
+              <div className="text-base font-bold text-white">{t("branchesTitle")}</div>
             </div>
             <div className="flex flex-wrap gap-2">
               {discount.branches.map((b, i) => (
@@ -262,8 +279,8 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
             <div className="flex items-center gap-3">
               <div className="text-2xl">{lvl.icon}</div>
               <div>
-                <div className="text-[10px] text-neutral-500">المستوى المطلوب</div>
-                <div className="text-sm text-white font-bold">{lvl.label} فأعلى</div>
+                <div className="text-[10px] text-neutral-500">{t("requiredLevel")}</div>
+                <div className="text-sm text-white font-bold">{t("lvlAndAbove", { lvl: t(lvl.labelKey) })}</div>
               </div>
             </div>
           </Card>
@@ -274,7 +291,7 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
             className="w-full py-4 rounded-xl bg-gradient-to-r from-orange-500 to-pink-500 text-white text-base font-bold hover:from-orange-600 hover:to-pink-600 transition-colors flex items-center justify-center gap-2 shadow-lg"
           >
             <Sparkles className="w-5 h-5" strokeWidth={2} />
-            احصل على القسيمة
+            {t("getCoupon")}
           </button>
 
         </div>
@@ -284,7 +301,7 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
       <Modal
         isOpen={!!showCoupon}
         onClose={() => setShowCoupon(null)}
-        title="🎟️ قسيمتك"
+        title={t("couponModalTitle")}
         subtitle={discount.brand_name}
         size="md"
         footer={
@@ -292,19 +309,19 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
             <button
               onClick={() => {
                 setShowCoupon(null)
-                showSuccess("💾 تم حفظ القسيمة في قسائمي")
+                showSuccess(t("savedToCoupons"))
                 router.push("/discounts/my-coupons")
               }}
               className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
             >
-              💾 حفظ في قسائمي
+              {t("saveToCoupons")}
             </button>
             <button
               onClick={handleCopy}
               className="flex-1 py-2.5 rounded-xl bg-neutral-100 text-black text-sm font-bold hover:bg-neutral-200 flex items-center justify-center gap-1.5"
             >
               {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-3.5 h-3.5" />}
-              {copied ? "تم النسخ" : "نسخ الرمز"}
+              {copied ? t("copiedShort") : t("copyCode")}
             </button>
           </>
         }
@@ -335,12 +352,12 @@ export default function DiscountDetailPage({ params }: { params: Promise<{ id: s
 
             {/* Code */}
             <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 mb-3">
-              <div className="text-[10px] text-neutral-500 mb-1 text-center">رمز الكوبون</div>
+              <div className="text-[10px] text-neutral-500 mb-1 text-center">{t("couponCodeLabel")}</div>
               <div className="text-lg font-mono font-bold text-white text-center tracking-widest" dir="ltr">{showCoupon.code}</div>
             </div>
 
             <div className="bg-yellow-400/[0.05] border border-yellow-400/[0.2] rounded-xl p-3 text-[11px] text-yellow-400 text-center">
-              📱 اعرض هذا للموظّف عند الدفع · صالح حتى {showCoupon.expires_at}
+              {t("showToStaffM", { date: showCoupon.expires_at })}
             </div>
           </>
         )}
