@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Send, Download, Zap, CreditCard, TrendingUp, X, Coins, ArrowDownToLine, ArrowUpFromLine, Briefcase, BarChart3, History, Trophy, Sparkles, Users } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -93,35 +94,63 @@ const fmtDate = (iso: string | null | undefined): string => {
   return d.toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" })
 }
 
-const reasonLabel = (reason: string) => {
-  if (reason === "admin_topup") return "👨‍💼 من الإدارة"
-  if (reason === "listing_fee") return "📝 رسوم إدراج"
-  if (reason === "auction_fee") return "🏆 رسوم مزاد"
-  if (reason === "direct_buy_fee") return "🛒 رسوم شراء"
-  if (reason === "quick_sell_fee") return "⚡ بيع سريع"
-  return "💳 " + reason
+/** Returns the i18n key for a known fee reason, or null (caller then
+ *  falls back to the raw DB reason with the 💳 prefix). */
+const reasonKey = (reason: string): string | null => {
+  if (reason === "admin_topup") return "reason_adminTopup"
+  if (reason === "listing_fee") return "reason_listingFee"
+  if (reason === "auction_fee") return "reason_auctionFee"
+  if (reason === "direct_buy_fee") return "reason_directBuyFee"
+  if (reason === "quick_sell_fee") return "reason_quickSellFee"
+  return null
 }
 
-const opLabel = (op: string) => {
-  // Legacy share-movement types (will be wired in Phase 4.4 /deals).
-  if (op === "deal_buy") return { icon: "📈", label: "شراء حصص (صفقة)", color: "text-green-400", bg: "bg-green-400/10" }
-  if (op === "deal_sell") return { icon: "📉", label: "بيع حصص (صفقة)", color: "text-red-400", bg: "bg-red-400/10" }
-  if (op === "shares_sent") return { icon: "📤", label: "إرسال حصص", color: "text-orange-400", bg: "bg-orange-400/10" }
-  if (op === "shares_received") return { icon: "📥", label: "استلام حصص", color: "text-blue-400", bg: "bg-blue-400/10" }
-  // Phase 4.2 — fee_unit_transactions.type values.
-  if (op === "deposit") return { icon: "💰", label: "إيداع وحدات", color: "text-green-400", bg: "bg-green-400/10" }
-  if (op === "withdrawal") return { icon: "💸", label: "خصم وحدات", color: "text-red-400", bg: "bg-red-400/10" }
-  if (op === "subscription") return { icon: "⚡", label: "اشتراك", color: "text-purple-400", bg: "bg-purple-400/10" }
-  if (op === "bonus") return { icon: "🎁", label: "مكافأة", color: "text-yellow-400", bg: "bg-yellow-400/10" }
-  if (op === "refund") return { icon: "↩️", label: "استرجاع", color: "text-blue-400", bg: "bg-blue-400/10" }
-  if (op === "adjustment") return { icon: "🔧", label: "تعديل", color: "text-neutral-400", bg: "bg-white/[0.08]" }
-  return { icon: "💼", label: op, color: "text-white", bg: "bg-white/[0.08]" }
+/** icon/color stay here; `labelKey` is resolved via t() at the call
+ *  site (hooks can't run at module scope). `rawLabel` carries the
+ *  untranslatable DB op string for the default case. */
+const opLabel = (op: string): {
+  icon: string; labelKey: string | null; rawLabel: string;
+  color: string; bg: string
+} => {
+  if (op === "deal_buy") return { icon: "📈", labelKey: "op_dealBuy", rawLabel: op, color: "text-green-400", bg: "bg-green-400/10" }
+  if (op === "deal_sell") return { icon: "📉", labelKey: "op_dealSell", rawLabel: op, color: "text-red-400", bg: "bg-red-400/10" }
+  if (op === "shares_sent") return { icon: "📤", labelKey: "op_sharesSent", rawLabel: op, color: "text-orange-400", bg: "bg-orange-400/10" }
+  if (op === "shares_received") return { icon: "📥", labelKey: "op_sharesReceived", rawLabel: op, color: "text-blue-400", bg: "bg-blue-400/10" }
+  if (op === "deposit") return { icon: "💰", labelKey: "op_deposit", rawLabel: op, color: "text-green-400", bg: "bg-green-400/10" }
+  if (op === "withdrawal") return { icon: "💸", labelKey: "op_withdrawal", rawLabel: op, color: "text-red-400", bg: "bg-red-400/10" }
+  if (op === "subscription") return { icon: "⚡", labelKey: "op_subscription", rawLabel: op, color: "text-purple-400", bg: "bg-purple-400/10" }
+  if (op === "bonus") return { icon: "🎁", labelKey: "op_bonus", rawLabel: op, color: "text-yellow-400", bg: "bg-yellow-400/10" }
+  if (op === "refund") return { icon: "↩️", labelKey: "op_refund", rawLabel: op, color: "text-blue-400", bg: "bg-blue-400/10" }
+  if (op === "adjustment") return { icon: "🔧", labelKey: "op_adjustment", rawLabel: op, color: "text-neutral-400", bg: "bg-white/[0.08]" }
+  return { icon: "💼", labelKey: null, rawLabel: op, color: "text-white", bg: "bg-white/[0.08]" }
 }
 
 const VALID_TABS: ReadonlyArray<PortfolioTab> = ["holdings", "stats", "history", "fee_units"]
 
 function PortfolioContent() {
   const router = useRouter()
+  const t = useTranslations("portfolio")
+  const tc = useTranslations("common")
+  // Canonical statusBadge token → localized label. Tokens stay
+  // language-independent so the pending-count logic keeps working.
+  const badgeLabel = (b?: string): string => {
+    if (!b) return ""
+    const map: Record<string, string> = {
+      deal_pending: t("badgePending"),
+      deal_cancelled: t("badgeCancelled"),
+      deal_disputed: t("badgeDisputed"),
+      pending: t("badgePending"),
+      cancelled: t("badgeCancelled"),
+      disputed: t("badgeDisputed"),
+      approved: t("badgeApproved"),
+      rejected: t("badgeRejected"),
+      in_review: t("badgeInReview"),
+      completed: t("badgeCompleted"),
+      accepted: t("badgeAccepted"),
+      expired: t("badgeExpired"),
+    }
+    return map[b] ?? b
+  }
   const searchParams = useSearchParams()
   const initialTab = (() => {
     const t = searchParams.get("tab") as PortfolioTab | null
@@ -424,15 +453,18 @@ function PortfolioContent() {
     next.add(confirmHideEntry.id)
     persistHiddenIds(next)
     setConfirmHideEntry(null)
-    showSuccess("تم مسح الحركة من السجل")
+    showSuccess(t("toastHistoryCleared"))
   }
 
   // Phase 10.96 — pendingCount = pending fee requests + pending shares
   // (deals/transfers awaiting buyer/seller/admin action). The history feed
   // populates extraHistory asynchronously, so until it loads we fall back
   // to the fee-request count alone.
+  // Canonical token "deal_pending" (set in the deals loop below).
+  // Kept distinct from raw transfer statuses so this count stays
+  // deals-only — exactly matching the pre-i18n behaviour.
   const pendingShareCount = extraHistory.filter(
-    (e) => e.statusBadge === "معلّقة" || e.statusBadge === "بانتظار"
+    (e) => e.statusBadge === "deal_pending"
   ).length
   const pendingCount = pendingFeeCount + pendingShareCount
 
@@ -442,7 +474,7 @@ function PortfolioContent() {
   const pendingItems: PendingItem[] = useMemo(() => {
     const out: PendingItem[] = []
     for (const e of extraHistory) {
-      if (e.statusBadge !== "معلّقة" && e.statusBadge !== "بانتظار") continue
+      if (e.statusBadge !== "deal_pending") continue
       if (e.id.startsWith("deal-")) {
         out.push({
           kind: "deal",
@@ -451,7 +483,7 @@ function PortfolioContent() {
           title: e.title,
           subtitle: e.subtitle,
           amount: e.amount,
-          statusLabel: e.statusBadge,
+          statusLabel: badgeLabel(e.statusBadge),
           created_at: e.created_at,
         })
       } else if (e.id.startsWith("xfer-")) {
@@ -462,7 +494,7 @@ function PortfolioContent() {
           title: e.title,
           subtitle: e.subtitle,
           amount: e.amount,
-          statusLabel: e.statusBadge,
+          statusLabel: badgeLabel(e.statusBadge),
           created_at: e.created_at,
         })
       }
@@ -474,9 +506,9 @@ function PortfolioContent() {
         kind: "fee_request",
         id: r.id,
         icon: "💎",
-        title: `طلب شحن ${r.amount_requested} وحدة`,
+        title: t("feeChargeReqTitle", { n: r.amount_requested }),
         subtitle: r.payment_method,
-        statusLabel: "قيد المراجعة",
+        statusLabel: t("badgeInReview"),
         created_at: r.created_at,
       })
     }
@@ -515,16 +547,16 @@ function PortfolioContent() {
               id: "deal-" + d.id,
               kind: "deal",
               icon: isBuyer ? "📥" : "📤",
-              title: (isBuyer ? "شراء" : "بيع") + " " + d.shares + " حصة",
-              subtitle: "صفقة #" + d.id.slice(0, 8),
+              title: (isBuyer ? t("buyWord") : t("sellWord")) + " " + d.shares + " " + t("shareUnit"),
+              subtitle: t("dealHash") + d.id.slice(0, 8),
               amount: d.status === "completed"
                 ? (isBuyer ? -d.total_amount : d.total_amount)
                 : undefined,
               statusBadge:
                 d.status === "completed" ? undefined :
-                d.status === "cancelled" ? "ملغاة" :
-                d.status === "disputed" ? "نزاع" :
-                "معلّقة",
+                d.status === "cancelled" ? "deal_cancelled" :
+                d.status === "disputed" ? "deal_disputed" :
+                "deal_pending",
               created_at: d.created_at,
             })
           }
@@ -538,20 +570,20 @@ function PortfolioContent() {
             .or(`from_user_id.eq.${uid},to_user_id.eq.${uid}`)
             .order("created_at", { ascending: false })
             .limit(50)
-          for (const t of (transfers ?? []) as Array<{
+          for (const tr of (transfers ?? []) as Array<{
             id: string; from_user_id: string; to_user_id: string;
             shares: number; status: string; created_at: string;
           }>) {
-            const isOutgoing = t.from_user_id === uid
+            const isOutgoing = tr.from_user_id === uid
             out.push({
-              id: "xfer-" + t.id,
+              id: "xfer-" + tr.id,
               kind: "transfer",
               icon: isOutgoing ? "↗️" : "↙️",
-              title: (isOutgoing ? "إرسال " : "استلام ") + t.shares + " حصة",
-              subtitle: "تحويل #" + t.id.slice(0, 8),
+              title: (isOutgoing ? t("sendWord") : t("receiveWord")) + " " + tr.shares + " " + t("shareUnit"),
+              subtitle: t("transferHash") + tr.id.slice(0, 8),
               amount: undefined,
-              statusBadge: t.status,
-              created_at: t.created_at,
+              statusBadge: tr.status,
+              created_at: tr.created_at,
             })
           }
         } catch { /* ignore */ }
@@ -568,32 +600,32 @@ function PortfolioContent() {
     const out: HistoryEntry[] = [...extraHistory]
 
     // Add fee unit transactions (already loaded)
-    for (const t of feeTransactions) {
-      const op = opLabel(t.op_type)
-      const isInflow = t.op_type.includes("buy") || t.op_type.includes("received") || t.op_type.includes("deposit")
+    for (const ftx of feeTransactions) {
+      const op = opLabel(ftx.op_type)
+      const isInflow = ftx.op_type.includes("buy") || ftx.op_type.includes("received") || ftx.op_type.includes("deposit")
       out.push({
-        id: "fee-tx-" + t.id,
+        id: "fee-tx-" + ftx.id,
         kind: "fee",
         icon: op.icon,
-        title: op.label,
-        subtitle: t.project_name || undefined,
-        amount: isInflow ? t.amount : -t.amount,
-        created_at: t.created_at,
+        title: op.labelKey ? t(op.labelKey) : op.rawLabel,
+        subtitle: ftx.project_name || undefined,
+        amount: isInflow ? ftx.amount : -ftx.amount,
+        created_at: ftx.created_at,
       })
     }
 
-    // Add fee requests (pending/approved/rejected)
+    // Add fee requests (pending/approved/rejected) — canonical tokens.
     for (const r of feeRequests) {
       out.push({
         id: "fee-req-" + r.id,
         kind: "request",
         icon: "💎",
-        title: "طلب شحن وحدات",
+        title: t("feeChargeReqGeneric"),
         subtitle: r.payment_method,
         statusBadge:
-          r.status === "approved" ? "موافق" :
-          r.status === "rejected" ? "مرفوض" :
-          "قيد المراجعة",
+          r.status === "approved" ? "approved" :
+          r.status === "rejected" ? "rejected" :
+          "in_review",
         created_at: r.created_at,
       })
     }
@@ -601,20 +633,21 @@ function PortfolioContent() {
     return out.sort((a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extraHistory, feeTransactions, feeRequests])
   // ─── /Phase 10.82 ─────────────────────────────────────────────
 
   const submitFeeRequest = async () => {
     if (!feeAmount || feeAmount < 1) {
-      showError("أدخل عدداً صحيحاً موجباً")
+      showError(t("toastEnterValidPositive"))
       return
     }
     if (!paymentMethod) {
-      showError("اختر طريقة الدفع")
+      showError(t("toastChoosePayment"))
       return
     }
     if (!feeProofDataUrl) {
-      showError("يجب رفع صورة إثبات الدفع")
+      showError(t("toastUploadProof"))
       return
     }
     setSubmittingFee(true)
@@ -627,7 +660,7 @@ function PortfolioContent() {
     setSubmittingFee(false)
 
     if (id) {
-      showSuccess("✅ تم إرسال الطلب — بانتظار موافقة الإدارة")
+      showSuccess(t("toastFeeReqSent"))
       setShowFeeModal(false)
       setFeeAmount(0)
       setFeeNote("")
@@ -635,7 +668,7 @@ function PortfolioContent() {
       // Refresh to show the new pending request immediately.
       void refresh()
     } else {
-      showError("تعذّر إرسال الطلب — حاول مرة أخرى")
+      showError(t("toastFeeReqFailed"))
     }
   }
 
@@ -647,21 +680,21 @@ function PortfolioContent() {
           <PageHeader
             title={
               active.kind === "contract"
-                ? `محفظة العقد · ${active.contractTitle}`
-                : "المحفظة"
+                ? t("contractWalletTitle", { title: active.contractTitle })
+                : t("walletTitle")
             }
             subtitle={
               active.kind === "contract"
-                ? `صلاحيتك: ${
-                    active.isCreator
-                      ? "منشئ"
+                ? t("permissionLabel", {
+                    perm: active.isCreator
+                      ? t("permCreator")
                       : active.permission === "buy_and_sell"
-                        ? "شراء وبيع"
+                        ? t("permBuySell")
                         : active.permission === "buy_only"
-                          ? "شراء فقط"
-                          : "عرض فقط"
-                  }`
-                : "حصصك والمعاملات والوحدات في مكان واحد"
+                          ? t("permBuyOnly")
+                          : t("permViewOnly"),
+                  })
+                : t("walletSubtitle")
             }
             rightAction={<AccountSwitcher />}
           />
@@ -693,9 +726,9 @@ function PortfolioContent() {
             {/* Single-row compact layout */}
             <div className="flex items-center justify-between gap-2 mb-1.5">
               <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                <span className="text-[9px] text-neutral-500 shrink-0">حدّك الشهري:</span>
+                <span className="text-[9px] text-neutral-500 shrink-0">{t("monthlyLimitLabel")}</span>
                 <span className="text-xs font-bold text-white font-mono truncate">
-                  {fmtLimit(LEVEL_LIMITS[userLevel])} د.ع
+                  {fmtLimit(LEVEL_LIMITS[userLevel])} {t("iqd")}
                 </span>
               </div>
               <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] rounded-md px-1.5 py-0.5 shrink-0">
@@ -707,7 +740,7 @@ function PortfolioContent() {
             {/* Tiny progress bar */}
             <div>
               <div className="flex justify-between text-[9px] text-neutral-500 mb-0.5">
-                <span>المستخدم</span>
+                <span>{t("usedLabel")}</span>
                 <span className="font-mono">
                   {fmtLimit(monthlySpent)} / {fmtLimit(LEVEL_LIMITS[userLevel])}
                 </span>
@@ -727,7 +760,7 @@ function PortfolioContent() {
               <div className="border-t border-white/[0.05] pt-4">
                 <div className="flex items-center gap-2 mb-3">
                   <Sparkles className="w-4 h-4 text-purple-400" strokeWidth={1.5} />
-                  <span className="text-xs font-bold text-purple-400">حدود إضافية من العقود</span>
+                  <span className="text-xs font-bold text-purple-400">{t("extraLimitsFromContracts")}</span>
                 </div>
 
                 <div className="space-y-2">
@@ -744,7 +777,7 @@ function PortfolioContent() {
                           <div className="min-w-0">
                             <div className="text-xs font-bold text-white truncate">{ct.name}</div>
                             <div className="text-[10px] text-neutral-500 mt-0.5">
-                              {ct.members.length} أعضاء · مكافأة 25%
+                              {t("membersBonus", { n: ct.members.length })}
                             </div>
                           </div>
                         </div>
@@ -752,7 +785,7 @@ function PortfolioContent() {
                           <div className="text-sm font-bold text-purple-400 font-mono">
                             {fmtLimit(result.totalLimit)}
                           </div>
-                          <div className="text-[9px] text-neutral-500">د.ع/شهر</div>
+                          <div className="text-[9px] text-neutral-500">{t("iqdPerMonth")}</div>
                         </div>
                       </div>
                     )
@@ -766,7 +799,7 @@ function PortfolioContent() {
           <div className="shadow-card bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-3">
             {/* القيمة الإجمالية */}
             <div className="mb-4">
-              <div className="text-[11px] text-neutral-500 mb-1">القيمة الإجمالية للمحفظة</div>
+              <div className="text-[11px] text-neutral-500 mb-1">{t("totalPortfolioValue")}</div>
               <div className="flex items-baseline gap-2 flex-wrap">
                 <span className="text-3xl lg:text-4xl font-bold text-white tracking-tight font-mono">
                   {fmtIQD(totalValue)}
@@ -781,15 +814,15 @@ function PortfolioContent() {
             {/* 4 خلايا */}
             <div className="grid grid-cols-2 gap-2 mb-4">
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
-                <div className="text-[10px] text-neutral-500 mb-1">الحصص المملوكة</div>
+                <div className="text-[10px] text-neutral-500 mb-1">{t("ownedShares")}</div>
                 <div className="text-sm font-bold text-white">{totalShares} SHR</div>
               </div>
               <div className="bg-blue-400/[0.08] border border-blue-400/[0.2] rounded-lg p-3">
-                <div className="text-[10px] text-blue-400 mb-1">💳 وحدات الرسوم</div>
+                <div className="text-[10px] text-blue-400 mb-1">{t("feeUnits")}</div>
                 <div className="text-sm font-bold text-blue-400">{feeBalance.toLocaleString("en-US")}</div>
               </div>
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
-                <div className="text-[10px] text-neutral-500 mb-1">صافي الربح / الخسارة</div>
+                <div className="text-[10px] text-neutral-500 mb-1">{t("netPL")}</div>
                 <div className={cn("text-sm font-bold", isUp ? "text-green-400" : "text-red-400")}>
                   {isUp ? "+" : ""}{fmtIQD(netProfit)} IQD
                 </div>
@@ -805,13 +838,13 @@ function PortfolioContent() {
                 )}
               >
                 <div className={cn("text-[10px] mb-1", pendingCount > 0 ? "text-yellow-400" : "text-neutral-500")}>
-                  ⏳ طلبات معلقة
+                  {t("pendingRequests")}
                   {pendingCount > 0 && (
-                    <span className="text-[9px] text-yellow-300 mr-1">(اضغط)</span>
+                    <span className="text-[9px] text-yellow-300 mr-1">{t("tapHint")}</span>
                   )}
                 </div>
                 <div className={cn("text-sm font-bold", pendingCount > 0 ? "text-yellow-400" : "text-white")}>
-                  {pendingCount} طلب
+                  {pendingCount} {t("requestUnit")}
                 </div>
               </button>
             </div>
@@ -824,13 +857,13 @@ function PortfolioContent() {
                 //   استلام   → blue   (shares coming IN)
                 //   بيع سريع → green  (sell / cash out)
                 //   طلب وحدات→ purple (fee-units request)
-                { label: "إرسال", icon: Send, onClick: () => router.push("/wallet/send"),
+                { label: t("actSend"), icon: Send, onClick: () => router.push("/wallet/send"),
                   cls: "bg-orange-400/[0.08] border-orange-400/25 text-orange-400 hover:bg-orange-400/[0.14]" },
-                { label: "استلام", icon: Download, onClick: () => router.push("/wallet/receive"),
+                { label: t("actReceive"), icon: Download, onClick: () => router.push("/wallet/receive"),
                   cls: "bg-blue-400/[0.08] border-blue-400/25 text-blue-400 hover:bg-blue-400/[0.14]" },
-                { label: "بيع سريع", icon: Zap, onClick: () => router.push("/quick-sale"), disabled: totalShares === 0,
+                { label: t("actQuickSell"), icon: Zap, onClick: () => router.push("/quick-sale"), disabled: totalShares === 0,
                   cls: "bg-green-400/[0.08] border-green-400/25 text-green-400 hover:bg-green-400/[0.14]" },
-                { label: "طلب وحدات", icon: CreditCard, onClick: () => setShowFeeModal(true),
+                { label: t("actRequestUnits"), icon: CreditCard, onClick: () => setShowFeeModal(true),
                   cls: "bg-purple-400/[0.08] border-purple-400/25 text-purple-400 hover:bg-purple-400/[0.14]" },
               ].map((btn) => {
                 const Icon = btn.icon
@@ -859,21 +892,21 @@ function PortfolioContent() {
               all in one timeline (per founder spec). */}
           <div className="shadow-card flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-4">
             {[
-              { key: "holdings" as const, label: "الحصص", icon: Briefcase },
-              { key: "stats" as const, label: "الإحصائيات", icon: BarChart3 },
-              { key: "history" as const, label: "السجل", icon: History },
-            ].map((t) => (
+              { key: "holdings" as const, label: t("tabHoldings"), icon: Briefcase },
+              { key: "stats" as const, label: t("tabStats"), icon: BarChart3 },
+              { key: "history" as const, label: t("tabHistory"), icon: History },
+            ].map((tb) => (
               <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
+                key={tb.key}
+                onClick={() => setTab(tb.key)}
                 className={cn(
                   "flex-1 py-2 rounded-lg text-[11px] transition-colors flex items-center justify-center gap-1.5",
-                  tab === t.key
+                  tab === tb.key
                     ? "bg-white/[0.08] text-white font-bold border border-white/[0.1]"
                     : "text-neutral-500 hover:text-white"
                 )}
               >
-                {t.label}
+                {tb.label}
               </button>
             ))}
           </div>
@@ -904,12 +937,12 @@ function PortfolioContent() {
             ) : holdings.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-5xl mb-4">📭</div>
-                <div className="text-sm text-neutral-400 mb-4">لا توجد حصص في محفظتك</div>
+                <div className="text-sm text-neutral-400 mb-4">{t("noHoldings")}</div>
                 <button
                   onClick={() => router.push("/market")}
                   className="bg-neutral-100 text-black px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-neutral-200"
                 >
-                  استعرض السوق
+                  {t("browseMarket")}
                 </button>
               </div>
             ) : (
@@ -964,7 +997,7 @@ function PortfolioContent() {
                                 )}
                               </div>
                               <div className="text-[10px] text-neutral-500 mt-0.5">
-                                {h.shares_owned} حصة • سعر السوق: {fmtIQD(marketPrice)} IQD
+                                {h.shares_owned} {t("shareUnit")} • {t("marketPriceLabel")} {fmtIQD(marketPrice)} IQD
                               </div>
                             </div>
                           </div>
@@ -984,7 +1017,7 @@ function PortfolioContent() {
                           />
                         </div>
                         <div className="flex justify-between mt-1.5">
-                          <span className="text-[10px] text-neutral-500">مُموَّل {fundedPct.toFixed(1)}%</span>
+                          <span className="text-[10px] text-neutral-500">{t("fundedLabel")} {fundedPct.toFixed(1)}%</span>
                           <span className={cn("text-[10px] font-mono", up ? "text-green-400" : "text-red-400")}>
                             {up ? "+" : ""}{fmtIQD(pl)} IQD
                           </span>
@@ -994,9 +1027,9 @@ function PortfolioContent() {
                         {(sharesBought > 0 || sharesSold > 0) && (
                           <div className="mt-3 pt-3 border-t border-white/[0.05] grid grid-cols-2 gap-2">
                             <div className="bg-blue-400/[0.05] border border-blue-400/[0.15] rounded-lg p-2">
-                              <div className="text-[9px] text-blue-300/70 mb-0.5">📈 شراء (تمويل)</div>
+                              <div className="text-[9px] text-blue-300/70 mb-0.5">{t("buyFundLabel")}</div>
                               <div className="text-[11px] font-bold text-blue-300 font-mono">
-                                {sharesBought} حصة
+                                {sharesBought} {t("shareUnit")}
                               </div>
                               {h.total_bought_amount !== undefined && h.total_bought_amount > 0 && (
                                 <div className="text-[9px] text-neutral-500 mt-0.5 font-mono">
@@ -1005,13 +1038,13 @@ function PortfolioContent() {
                               )}
                             </div>
                             <div className="bg-purple-400/[0.05] border border-purple-400/[0.15] rounded-lg p-2">
-                              <div className="text-[9px] text-purple-300/70 mb-0.5">📉 بيع</div>
+                              <div className="text-[9px] text-purple-300/70 mb-0.5">{t("sellLabel")}</div>
                               <div className="text-[11px] font-bold text-purple-300 font-mono">
-                                {sharesSold} حصة
+                                {sharesSold} {t("shareUnit")}
                               </div>
                               {sharesSold > 0 && (
                                 <div className="text-[9px] text-neutral-500 mt-0.5 font-mono">
-                                  متوسط سعر البيع: {fmtIQD(avgSellPrice)} IQD
+                                  {t("avgSellPriceLabel")} {fmtIQD(avgSellPrice)} IQD
                                 </div>
                               )}
                             </div>
@@ -1030,8 +1063,8 @@ function PortfolioContent() {
                             })
                           }}
                           className="absolute top-3 left-3 w-8 h-8 rounded-lg bg-purple-500/[0.12] border border-purple-500/[0.3] hover:bg-purple-500/[0.2] flex items-center justify-center transition-colors"
-                          title="نقل حصص"
-                          aria-label="نقل حصص"
+                          title={t("transferSharesTitle")}
+                          aria-label={t("transferSharesTitle")}
                         >
                           <ArrowRightLeft className="w-3.5 h-3.5 text-purple-300" strokeWidth={2.5} />
                         </button>
@@ -1120,10 +1153,10 @@ function PortfolioContent() {
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { label: "إجمالي الاستثمار", value: fmtIQD(lifetime.total_ever_invested), unit: "IQD", hint: "تراكميّ — يبقى حتى بعد البيع" },
-                    { label: "إجمالي الأرباح", value: (isUp ? "+" : "") + fmtIQD(netProfit), unit: "IQD", color: isUp ? "text-green-400" : "text-red-400", hint: "محقَّق — بعد العمولات" },
-                    { label: "عدد الاستثمارات", value: String(lifetime.investment_events), unit: "صفقة", hint: "كم مرّة اشتريت حصصاً" },
-                    { label: "الاستثمارات المحفوظة", value: String(holdings.length), unit: "مشروع", hint: "تجلب لك العوائد", color: "text-[#4ADE80]" },
+                    { label: t("statTotalInvest"), value: fmtIQD(lifetime.total_ever_invested), unit: "IQD", hint: t("hintCumulative") },
+                    { label: t("statTotalProfit"), value: (isUp ? "+" : "") + fmtIQD(netProfit), unit: "IQD", color: isUp ? "text-green-400" : "text-red-400", hint: t("hintRealized") },
+                    { label: t("statInvestCount"), value: String(lifetime.investment_events), unit: t("unitDeal"), hint: t("hintHowMany") },
+                    { label: t("statSavedInvest"), value: String(holdings.length), unit: t("unitProject"), hint: t("hintBringsReturns"), color: "text-[#4ADE80]" },
                   ].map((s, i) => (
                     <div key={i} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4">
                       <div className="text-[10px] text-neutral-500 mb-2">{s.label}</div>
@@ -1143,43 +1176,43 @@ function PortfolioContent() {
                   <div className="bg-gradient-to-l from-[#4ADE80]/[0.06] to-white/[0.03] border border-[#4ADE80]/[0.2] rounded-2xl p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <Sparkles className="w-3.5 h-3.5 text-[#4ADE80]" strokeWidth={2} />
-                      <div className="text-xs font-bold text-white">حالة الاستثمارات المحفوظة</div>
+                      <div className="text-xs font-bold text-white">{t("savedInvestStatus")}</div>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {[
-                        { label: "القيمة الكلية", value: fmtIQD(heldValue), unit: "IQD", accent: false },
-                        { label: "العائد المتوقّع", value: avgReturn > 0 ? `${avgReturn.toFixed(1)}%` : "—", unit: "سنويّاً", accent: true },
+                        { label: t("totalValueLabel"), value: fmtIQD(heldValue), unit: "IQD", accent: false },
+                        { label: t("expectedReturn"), value: avgReturn > 0 ? `${avgReturn.toFixed(1)}%` : "—", unit: t("annually"), accent: true },
                         {
-                          label: "مدة الاحتفاظ",
+                          label: t("holdDuration"),
                           value: avgDurationMonths > 0
                             ? avgDurationMonths >= 12
-                              ? `${(avgDurationMonths / 12).toFixed(1)}س`
-                              : `${Math.round(avgDurationMonths)}ش`
+                              ? `${(avgDurationMonths / 12).toFixed(1)}${t("yearShort")}`
+                              : `${Math.round(avgDurationMonths)}${t("monthShort")}`
                             : "—",
-                          unit: "متوسّط",
+                          unit: t("averageWord"),
                           accent: false,
                         },
                         {
-                          label: "استلام العوائد",
-                          value: nextDistDays != null ? `${nextDistDays}ي` : "—",
-                          unit: "بعد",
+                          label: t("receiveReturns"),
+                          value: nextDistDays != null ? `${nextDistDays}${t("dayShort")}` : "—",
+                          unit: t("afterWord"),
                           accent: true,
                         },
-                      ].map((t, i) => (
+                      ].map((st, i) => (
                         <div
                           key={i}
                           className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-2.5 text-center"
                         >
-                          <div className="text-[9px] text-neutral-500 mb-1">{t.label}</div>
+                          <div className="text-[9px] text-neutral-500 mb-1">{st.label}</div>
                           <div
                             className={cn(
                               "text-sm font-bold font-mono",
-                              t.accent ? "text-[#4ADE80]" : "text-white",
+                              st.accent ? "text-[#4ADE80]" : "text-white",
                             )}
                           >
-                            {t.value}
+                            {st.value}
                           </div>
-                          <div className="text-[9px] text-neutral-600 mt-0.5">{t.unit}</div>
+                          <div className="text-[9px] text-neutral-600 mt-0.5">{st.unit}</div>
                         </div>
                       ))}
                     </div>
@@ -1190,7 +1223,7 @@ function PortfolioContent() {
                   <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4">
                     <div className="text-[11px] text-neutral-500 mb-3 flex items-center gap-1.5">
                       <Trophy className="w-3 h-3 text-yellow-400" />
-                      أفضل مشروع أداء
+                      {t("bestPerformer")}
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-white/[0.08] border border-white/[0.1] flex items-center justify-center text-lg">
@@ -1225,8 +1258,8 @@ function PortfolioContent() {
                   <div className="text-5xl mb-4">📋</div>
                   <div className="text-sm text-neutral-400">
                     {unifiedHistory.length === 0
-                      ? "لا توجد عمليات مسجّلة بعد"
-                      : "كل الحركات مخفيّة — يمكنك استرجاعها بمسح بيانات المتصفّح"}
+                      ? t("noHistory")
+                      : t("allHidden")}
                   </div>
                 </div>
               )
@@ -1270,7 +1303,7 @@ function PortfolioContent() {
                         )}
                         {entry.statusBadge && (
                           <span className="text-[9px] block text-neutral-400 mt-0.5">
-                            {entry.statusBadge}
+                            {badgeLabel(entry.statusBadge)}
                           </span>
                         )}
                       </div>
@@ -1283,8 +1316,8 @@ function PortfolioContent() {
                         setConfirmHideEntry(entry)
                       }}
                       className="w-7 h-7 rounded-lg bg-red-400/[0.06] border border-red-400/[0.2] hover:bg-red-400/[0.12] flex items-center justify-center text-red-400 flex-shrink-0"
-                      aria-label="مسح من السجل"
-                      title="مسح من السجل"
+                      aria-label={t("clearFromHistoryAria")}
+                      title={t("clearFromHistoryAria")}
                     >
                       <X className="w-3.5 h-3.5" strokeWidth={2.5} />
                     </button>
@@ -1305,16 +1338,15 @@ function PortfolioContent() {
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="px-5 py-4 border-b border-white/[0.06]">
-                  <div className="text-base font-bold text-white">🗑️ مسح من السجل</div>
+                  <div className="text-base font-bold text-white">{t("clearFromHistoryTitle")}</div>
                   <div className="text-[10px] text-neutral-500 mt-0.5">
                     {confirmHideEntry.title}
                   </div>
                 </div>
                 <div className="px-5 py-4 text-xs text-neutral-300 leading-relaxed">
-                  هل تريد مسح هذه الحركة من سجلّ محفظتك؟
+                  {t("confirmHideQ")}
                   <div className="mt-2 text-[10px] text-neutral-500">
-                    💡 الحركة لن تُحذف من قاعدة البيانات (سجلّ المحاسبة محفوظ)،
-                    فقط لن تظهر هنا على هذا الجهاز.
+                    {t("confirmHideNote")}
                   </div>
                 </div>
                 <div className="px-5 py-3 border-t border-white/[0.06] flex gap-2">
@@ -1322,13 +1354,13 @@ function PortfolioContent() {
                     onClick={() => setConfirmHideEntry(null)}
                     className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
                   >
-                    إلغاء
+                    {tc("buttons.cancel")}
                   </button>
                   <button
                     onClick={handleConfirmHide}
                     className="flex-1 py-2.5 rounded-xl bg-red-500/[0.15] border border-red-500/[0.3] text-red-300 text-sm font-bold hover:bg-red-500/[0.2]"
                   >
-                    🗑️ تأكيد المسح
+                    {t("confirmClear")}
                   </button>
                 </div>
               </div>
@@ -1340,17 +1372,17 @@ function PortfolioContent() {
             <div className="space-y-3">
               {/* Balance card أزرق */}
               <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-5 text-white">
-                <div className="text-xs opacity-85 mb-1.5">💳 رصيد وحدات الرسوم</div>
+                <div className="text-xs opacity-85 mb-1.5">{t("feeBalanceTitle")}</div>
                 <div className="text-4xl font-bold mb-1">{feeBalance.toLocaleString("en-US")}</div>
-                <div className="text-xs opacity-75">وحدة رسم</div>
+                <div className="text-xs opacity-75">{t("feeUnitWord")}</div>
               </div>
 
               {/* 3 stats */}
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { label: "⏳ معلقة", value: feeRequests.filter((r) => r.status === "pending").length, color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/20" },
-                  { label: "✅ موافق", value: feeRequests.filter((r) => r.status === "approved").length, color: "text-green-400", bg: "bg-green-400/10", border: "border-green-400/20" },
-                  { label: "❌ مرفوض", value: feeRequests.filter((r) => r.status === "rejected").length, color: "text-red-400", bg: "bg-red-400/10", border: "border-red-400/20" },
+                  { label: t("fuPending"), value: feeRequests.filter((r) => r.status === "pending").length, color: "text-yellow-400", bg: "bg-yellow-400/10", border: "border-yellow-400/20" },
+                  { label: t("fuApproved"), value: feeRequests.filter((r) => r.status === "approved").length, color: "text-green-400", bg: "bg-green-400/10", border: "border-green-400/20" },
+                  { label: t("fuRejected"), value: feeRequests.filter((r) => r.status === "rejected").length, color: "text-red-400", bg: "bg-red-400/10", border: "border-red-400/20" },
                 ].map((s, i) => (
                   <div key={i} className={cn("rounded-xl p-3 text-center border", s.bg, s.border)}>
                     <div className={cn("text-[10px] mb-1", s.color)}>{s.label}</div>
@@ -1364,18 +1396,18 @@ function PortfolioContent() {
                 onClick={() => setShowFeeModal(true)}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold text-sm"
               >
-                💳 طلب وحدات رسوم جديد
+                {t("newFeeReqBtn")}
               </button>
 
               {/* Requests list */}
               {feeRequests.length > 0 && (
                 <div>
-                  <div className="text-xs text-neutral-400 font-bold mb-2">الطلبات</div>
+                  <div className="text-xs text-neutral-400 font-bold mb-2">{t("requestsLabel")}</div>
                   <div className="space-y-2">
                     {feeRequests.map((r) => (
                       <div key={r.id} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3 flex justify-between items-center">
                         <div>
-                          <div className="text-sm font-bold text-white">{r.amount_requested.toLocaleString("en-US")} وحدة</div>
+                          <div className="text-sm font-bold text-white">{r.amount_requested.toLocaleString("en-US")} {t("unitsUnit")}</div>
                           <div className="text-[10px] text-neutral-500 mt-0.5">{fmtDate(r.created_at)}</div>
                         </div>
                         <span className={cn(
@@ -1384,7 +1416,7 @@ function PortfolioContent() {
                           r.status === "approved" && "bg-green-400/10 border-green-400/20 text-green-400",
                           r.status === "rejected" && "bg-red-400/10 border-red-400/20 text-red-400"
                         )}>
-                          {r.status === "pending" ? "⏳ معلق" : r.status === "approved" ? "✅ موافق" : "❌ مرفوض"}
+                          {r.status === "pending" ? t("badgePendingShort") : r.status === "approved" ? t("badgeApprovedShort") : t("badgeRejectedShort")}
                         </span>
                       </div>
                     ))}
@@ -1395,12 +1427,12 @@ function PortfolioContent() {
               {/* Ledger */}
               {feeTransactions.length > 0 && (
                 <div>
-                  <div className="text-xs text-neutral-400 font-bold mb-2">سجل الحركات</div>
+                  <div className="text-xs text-neutral-400 font-bold mb-2">{t("ledgerLabel")}</div>
                   <div className="space-y-2">
                     {feeTransactions.map((item) => (
                       <div key={item.id} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3 flex justify-between items-center">
                         <div>
-                          <div className="text-xs text-neutral-300">{reasonLabel(item.reason)}</div>
+                          <div className="text-xs text-neutral-300">{(() => { const rk = reasonKey(item.reason); return rk ? t(rk) : t("reasonPrefix") + item.reason })()}</div>
                           <div className="text-[10px] text-neutral-500 mt-0.5">{fmtDate(item.created_at)}</div>
                         </div>
                         <div className={cn("text-base font-bold", item.type === "addition" ? "text-green-400" : "text-red-400")}>
@@ -1426,8 +1458,8 @@ function PortfolioContent() {
           <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-w-md max-h-[85vh] overflow-y-auto">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <div className="text-lg font-bold text-white mb-1">💳 طلب وحدات رسوم</div>
-                <div className="text-xs text-neutral-400">سيتم مراجعة الطلب من قِبل الإدارة</div>
+                <div className="text-lg font-bold text-white mb-1">{t("feeModalTitle")}</div>
+                <div className="text-xs text-neutral-400">{t("feeModalSubtitle")}</div>
               </div>
               <button onClick={() => setShowFeeModal(false)} className="text-neutral-500 hover:text-white">
                 <X className="w-5 h-5" />
@@ -1436,23 +1468,23 @@ function PortfolioContent() {
 
             {/* Amount */}
             <div className="mb-4">
-              <label className="text-xs text-neutral-400 mb-2 block font-bold">عدد الوحدات المطلوبة *</label>
+              <label className="text-xs text-neutral-400 mb-2 block font-bold">{t("unitsRequestedLabel")}</label>
               <IntegerInput
                 value={feeAmount ? String(feeAmount) : ""}
                 onValueChange={(v) => setFeeAmount(parseIqdInput(v))}
-                placeholder="مثلاً: 50000"
+                placeholder={t("unitsPlaceholder")}
                 className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
               />
             </div>
 
             {/* Payment method */}
             <div className="mb-4">
-              <label className="text-xs text-neutral-400 mb-2 block font-bold">طريقة الدفع *</label>
+              <label className="text-xs text-neutral-400 mb-2 block font-bold">{t("paymentMethodLabel")}</label>
               <div className="space-y-2">
                 {[
-                  { key: "zaincash" as const, label: "ZainCash", desc: "تحويل عبر زين كاش" },
-                  { key: "mastercard" as const, label: "Master Card", desc: "بطاقة ماستركارد" },
-                  { key: "bank" as const, label: "تحويل بنكي", desc: "حوالة مصرفية مباشرة" },
+                  { key: "zaincash" as const, label: "ZainCash", desc: t("pmZainDesc") },
+                  { key: "mastercard" as const, label: "Master Card", desc: t("pmMasterDesc") },
+                  { key: "bank" as const, label: t("pmBankLabel"), desc: t("pmBankDesc") },
                 ].map((m) => (
                   <button
                     key={m.key}
@@ -1476,8 +1508,8 @@ function PortfolioContent() {
               <PaymentInstructionsBlock
                 proofDataUrl={feeProofDataUrl}
                 onProofChange={setFeeProofDataUrl}
-                title="💳 معلومات تحويل المبلغ"
-                subtitle="حوّل قيمة الوحدات وارفع صورة إثبات الدفع"
+                title={t("payInfoTitle")}
+                subtitle={t("payInfoSubtitle")}
                 required
                 compact
               />
@@ -1485,11 +1517,11 @@ function PortfolioContent() {
 
             {/* Note */}
             <div className="mb-5">
-              <label className="text-xs text-neutral-400 mb-2 block">ملاحظة (اختياري)</label>
+              <label className="text-xs text-neutral-400 mb-2 block">{t("noteOptional")}</label>
               <textarea
                 value={feeNote}
                 onChange={(e) => setFeeNote(e.target.value)}
-                placeholder="أي تفاصيل إضافية..."
+                placeholder={t("notePlaceholder")}
                 rows={2}
                 className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 resize-none"
               />
@@ -1500,14 +1532,14 @@ function PortfolioContent() {
                 onClick={() => setShowFeeModal(false)}
                 className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
               >
-                إلغاء
+                {tc("buttons.cancel")}
               </button>
               <button
                 onClick={submitFeeRequest}
                 disabled={submittingFee}
                 className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {submittingFee ? "جاري الإرسال..." : "إرسال الطلب"}
+                {submittingFee ? t("sending") : t("sendRequest")}
               </button>
             </div>
           </div>
@@ -1553,19 +1585,19 @@ function PortfolioContent() {
                   <span className="text-lg">{historyDetail.icon}</span>
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-bold text-white">تفاصيل العملية</div>
+                  <div className="text-sm font-bold text-white">{t("txDetails")}</div>
                   <div className="text-[10px] text-neutral-500 mt-0.5">
-                    {historyDetail.kind === "deal" ? "صفقة شراء/بيع" :
-                     historyDetail.kind === "fee" ? "حركة وحدات رسوم" :
-                     historyDetail.kind === "request" ? "طلب وحدات" :
-                     "تحويل حصص"}
+                    {historyDetail.kind === "deal" ? t("kindDealBuySell") :
+                     historyDetail.kind === "fee" ? t("kindFeeMove") :
+                     historyDetail.kind === "request" ? t("kindUnitRequest") :
+                     t("kindShareTransfer")}
                   </div>
                 </div>
               </div>
               <button
                 onClick={() => setHistoryDetail(null)}
                 className="text-neutral-500 hover:text-white"
-                aria-label="إغلاق"
+                aria-label={tc("buttons.close")}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1575,7 +1607,7 @@ function PortfolioContent() {
             <div className="p-5 space-y-3">
               {/* Title */}
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
-                <div className="text-[10px] text-neutral-500 mb-1">العنوان</div>
+                <div className="text-[10px] text-neutral-500 mb-1">{t("fieldTitle")}</div>
                 <div className="text-sm font-bold text-white">{historyDetail.title}</div>
                 {historyDetail.subtitle && (
                   <div className="text-[11px] text-neutral-400 mt-1">{historyDetail.subtitle}</div>
@@ -1585,7 +1617,7 @@ function PortfolioContent() {
               {/* Amount + status row */}
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
-                  <div className="text-[10px] text-neutral-500 mb-1">المبلغ</div>
+                  <div className="text-[10px] text-neutral-500 mb-1">{t("fieldAmount")}</div>
                   <div className={cn(
                     "text-base font-bold font-mono",
                     historyDetail.amount === undefined ? "text-neutral-500" :
@@ -1596,7 +1628,7 @@ function PortfolioContent() {
                         {historyDetail.amount >= 0 ? "+" : ""}
                         {fmtIQD(historyDetail.amount)}
                         <span className="text-[10px] text-neutral-500 mr-1">
-                          {historyDetail.kind === "fee" || historyDetail.kind === "request" ? "وحدة" : "د.ع"}
+                          {historyDetail.kind === "fee" || historyDetail.kind === "request" ? t("unitWord") : t("iqd")}
                         </span>
                       </>
                     ) : (
@@ -1605,16 +1637,16 @@ function PortfolioContent() {
                   </div>
                 </div>
                 <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
-                  <div className="text-[10px] text-neutral-500 mb-1">الحالة</div>
+                  <div className="text-[10px] text-neutral-500 mb-1">{t("fieldStatus")}</div>
                   <div className="text-sm font-bold text-white">
-                    {historyDetail.statusBadge ?? "مكتملة"}
+                    {historyDetail.statusBadge ? badgeLabel(historyDetail.statusBadge) : t("badgeCompleted")}
                   </div>
                 </div>
               </div>
 
               {/* Timestamp */}
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
-                <div className="text-[10px] text-neutral-500 mb-1">التاريخ والوقت</div>
+                <div className="text-[10px] text-neutral-500 mb-1">{t("fieldDateTime")}</div>
                 <div className="text-sm text-white font-mono" dir="ltr">
                   {historyDetail.created_at
                     ? new Date(historyDetail.created_at).toLocaleString("en-US", {
@@ -1628,7 +1660,7 @@ function PortfolioContent() {
 
               {/* Reference id */}
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3">
-                <div className="text-[10px] text-neutral-500 mb-1">المعرّف</div>
+                <div className="text-[10px] text-neutral-500 mb-1">{t("fieldRef")}</div>
                 <div className="text-[11px] text-neutral-300 font-mono break-all" dir="ltr">
                   {historyDetail.id}
                 </div>
@@ -1646,14 +1678,14 @@ function PortfolioContent() {
                   }}
                   className="flex-1 py-2.5 rounded-xl bg-blue-500/[0.15] border border-blue-500/[0.3] text-blue-300 text-sm font-bold hover:bg-blue-500/[0.2]"
                 >
-                  📄 فتح تفاصيل الصفقة
+                  {t("openDealDetails")}
                 </button>
               )}
               <button
                 onClick={() => setHistoryDetail(null)}
                 className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
               >
-                إغلاق
+                {tc("buttons.close")}
               </button>
             </div>
           </div>
@@ -1697,6 +1729,7 @@ function ContractPortfolioPanel({
   transactions,
   onOpenContract,
 }: ContractPortfolioPanelProps) {
+  const t = useTranslations("portfolio")
   void contractTitle
   void isCreator
   const totalShares = holdings.reduce((s, h) => s + h.shares, 0)
@@ -1707,10 +1740,10 @@ function ContractPortfolioPanel({
   )
 
   const permLabel =
-    permission === "creator" ? "منشئ"
-    : permission === "buy_and_sell" ? "شراء وبيع"
-    : permission === "buy_only" ? "شراء فقط"
-    : "عرض فقط"
+    permission === "creator" ? t("permCreator")
+    : permission === "buy_and_sell" ? t("permBuySell")
+    : permission === "buy_only" ? t("permBuyOnly")
+    : t("permViewOnly")
 
   return (
     <>
@@ -1720,38 +1753,38 @@ function ContractPortfolioPanel({
           <div>
             <div className="text-[11px] text-purple-400 mb-1 flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5" strokeWidth={2.5} />
-              <span className="font-bold">حساب عقد جماعي · {permLabel}</span>
+              <span className="font-bold">{t("contractGroupAccount", { perm: permLabel })}</span>
             </div>
             <div className="text-3xl font-bold text-white font-mono">
               {fmtIQD(totalBalance)}
             </div>
             <div className="text-xs text-neutral-400 mt-1">
-              الرصيد المتاح للعقد (IQD)
+              {t("contractAvailBalance")}
             </div>
           </div>
           <button
             onClick={onOpenContract}
             className="bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-lg px-3 py-2 text-[11px] text-white font-bold transition-colors"
           >
-            تفاصيل العقد ←
+            {t("contractDetailsBtn")}
           </button>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
           <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5 text-center">
-            <div className="text-[10px] text-neutral-500 mb-1">حصص</div>
+            <div className="text-[10px] text-neutral-500 mb-1">{t("sharesWord")}</div>
             <div className="text-sm font-bold text-white font-mono">
               {totalShares}
             </div>
           </div>
           <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5 text-center">
-            <div className="text-[10px] text-neutral-500 mb-1">المستثمر</div>
+            <div className="text-[10px] text-neutral-500 mb-1">{t("investorWord")}</div>
             <div className="text-sm font-bold text-white font-mono">
               {fmtIQD(totalInvested)}
             </div>
           </div>
           <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5 text-center">
-            <div className="text-[10px] text-neutral-500 mb-1">القيمة الحالية</div>
+            <div className="text-[10px] text-neutral-500 mb-1">{t("currentValueWord")}</div>
             <div className="text-sm font-bold text-green-400 font-mono">
               {fmtIQD(currentValue)}
             </div>
@@ -1763,11 +1796,11 @@ function ContractPortfolioPanel({
       <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-3">
         <div className="text-sm font-bold text-white mb-3 flex items-center gap-2">
           <Briefcase className="w-4 h-4 text-purple-400" strokeWidth={2} />
-          حصص العقد ({holdings.length})
+          {t("contractShares", { n: holdings.length })}
         </div>
         {holdings.length === 0 ? (
           <div className="text-center py-8 text-xs text-neutral-500">
-            لا توجد حصص في العقد بعد
+            {t("noContractShares")}
           </div>
         ) : (
           <div className="space-y-2">
@@ -1783,7 +1816,7 @@ function ContractPortfolioPanel({
                       {h.project_name}
                     </div>
                     <div className="text-[10px] text-neutral-500 mt-0.5">
-                      {h.shares} حصة · مستثمر {fmtIQD(h.total_invested)}
+                      {h.shares} {t("shareUnit")} · {t("investedWord")} {fmtIQD(h.total_invested)}
                     </div>
                   </div>
                   <div className="text-left flex-shrink-0">
@@ -1803,36 +1836,36 @@ function ContractPortfolioPanel({
       <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-3">
         <div className="text-sm font-bold text-white mb-3 flex items-center gap-2">
           <History className="w-4 h-4 text-purple-400" strokeWidth={2} />
-          آخر المعاملات ({transactions.length})
+          {t("recentTxns", { n: transactions.length })}
         </div>
         {transactions.length === 0 ? (
           <div className="text-center py-8 text-xs text-neutral-500">
-            لا توجد معاملات بعد
+            {t("noTxns")}
           </div>
         ) : (
           <div className="space-y-2">
-            {transactions.slice(0, 10).map((t) => {
-              const isOutflow = t.transaction_type === "buy" || t.transaction_type === "withdraw"
+            {transactions.slice(0, 10).map((tx) => {
+              const isOutflow = tx.transaction_type === "buy" || tx.transaction_type === "withdraw"
               const sign = isOutflow ? "-" : "+"
               const typeLabel =
-                t.transaction_type === "buy" ? "شراء"
-                : t.transaction_type === "sell" ? "بيع"
-                : t.transaction_type === "deposit" ? "إيداع"
-                : t.transaction_type === "withdraw" ? "سحب"
-                : "توزيع"
+                tx.transaction_type === "buy" ? t("txBuy")
+                : tx.transaction_type === "sell" ? t("txSell")
+                : tx.transaction_type === "deposit" ? t("txDeposit")
+                : tx.transaction_type === "withdraw" ? t("txWithdraw")
+                : t("txDistribute")
               return (
                 <div
-                  key={t.id}
+                  key={tx.id}
                   className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3 flex items-center justify-between gap-3"
                 >
                   <div className="min-w-0">
                     <div className="text-xs text-white font-bold">
                       {typeLabel}
-                      {t.project_name ? ` · ${t.project_name}` : ""}
+                      {tx.project_name ? ` · ${tx.project_name}` : ""}
                     </div>
                     <div className="text-[10px] text-neutral-500 mt-0.5">
-                      بواسطة {t.initiator_name} ·{" "}
-                      <span dir="ltr">{t.created_at?.slice(0, 10)}</span>
+                      {t("byWord")} {tx.initiator_name} ·{" "}
+                      <span dir="ltr">{tx.created_at?.slice(0, 10)}</span>
                     </div>
                   </div>
                   <div
@@ -1842,7 +1875,7 @@ function ContractPortfolioPanel({
                     )}
                   >
                     {sign}
-                    {fmtIQD(Math.abs(t.amount))}
+                    {fmtIQD(Math.abs(tx.amount))}
                   </div>
                 </div>
               )
