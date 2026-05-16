@@ -1,53 +1,36 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Info, Coins, FileCheck, Stethoscope, Eye, Users } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { Card, SectionHeader } from "@/components/ui"
 import { DISEASE_LABELS } from "@/lib/mock-data/healthcare"
 
-const SECTIONS = [
-  {
-    icon: Info,
-    color: "blue" as const,
-    title: "ما هو البرنامج؟",
-    body: "برنامج رعاية صحية يدعم المرضى المحتاجين من مستثمري رايلوس وعموم المواطنين. يموّل العلاجات الباهظة ويوفّر تأميناً صحياً ميسّراً.",
-  },
-  {
-    icon: Coins,
-    color: "green" as const,
-    title: "كيف يُموَّل؟",
-    body: "من 3 مصادر: (1) اشتراكات التأمين الشهرية، (2) تبرّعات مباشرة من الأعضاء، (3) نسبة من رسوم الصفقات (0.05%) تُخصّص لصندوق الصحّة.",
-  },
-  {
-    icon: FileCheck,
-    color: "purple" as const,
-    title: "شروط الاستفادة",
-    body: "حساب موثَّق KYC + تقرير طبّي رسمي من مستشفى معتمد + إثبات احتياج مالي. الأولوية للحالات العاجلة المهدّدة للحياة.",
-  },
-  {
-    icon: Stethoscope,
-    color: "red" as const,
-    title: "الأمراض المدعومة",
-    bodyList: Object.values(DISEASE_LABELS).map((d) => `${d.icon} ${d.label}`),
-  },
-  {
-    icon: Eye,
-    color: "yellow" as const,
-    title: "آلية المراجعة",
-    body: "كل طلب يُراجَع من فريق طبّي مختصّ خلال 5-7 أيام عمل. يتم التحقّق من التقارير + التواصل مع المستشفى + تقييم الحالة المالية.",
-  },
-  {
-    icon: Users,
-    color: "orange" as const,
-    title: "الشفافية",
-    body: "كل تبرّع موثَّق ومُتتبَّع. التقارير الدورية تُنشَر شهرياً. أي حالة لها صفحة عامّة تُظهر المبلغ المتجمّع وقائمة المتبرّعين (مع خيار إخفاء الاسم).",
-  },
-]
+// disease key → i18n key (icons stay lib-canonical).
+const DISEASE_KEY: Record<string, string> = {
+  cancer: "dCancer", heart: "dHeart", kidney: "dKidney",
+  neurological: "dNeurological", pediatric: "dPediatric",
+  transplant: "dTransplant", other: "dOther",
+}
 
 export default function HealthcareAboutPage() {
   const router = useRouter()
+  const t = useTranslations("healthcare")
+  const SECTIONS = [
+    { icon: Info,        color: "blue" as const,   title: t("s1Title"), body: t("s1Body") },
+    { icon: Coins,       color: "green" as const,  title: t("s2Title"), body: t("s2Body") },
+    { icon: FileCheck,   color: "purple" as const, title: t("s3Title"), body: t("s3Body") },
+    {
+      icon: Stethoscope, color: "red" as const,    title: t("s4Title"),
+      bodyList: Object.entries(DISEASE_LABELS).map(
+        ([k, d]) => `${d.icon} ${DISEASE_KEY[k] ? t(DISEASE_KEY[k]) : d.label}`,
+      ),
+    },
+    { icon: Eye,         color: "yellow" as const, title: t("s5Title"), body: t("s5Body") },
+    { icon: Users,       color: "orange" as const, title: t("s6Title"), body: t("s6Body") },
+  ]
 
   return (
     <AppLayout>
@@ -55,15 +38,15 @@ export default function HealthcareAboutPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader
-            title="عن البرنامج"
-            subtitle="كيف يعمل برنامج الرعاية الصحية"
+            title={t("aboutTitle")}
+            subtitle={t("aboutSubtitle")}
           />
 
           <Card variant="gradient" color="red" padding="lg" className="mb-6 text-center">
             <div className="text-4xl mb-3">🏥</div>
-            <div className="text-base font-bold text-white mb-2">دعم العلاج وتمكين الحياة</div>
+            <div className="text-base font-bold text-white mb-2">{t("heroTitle")}</div>
             <div className="text-xs text-neutral-300 leading-relaxed">
-              نؤمن أن الصحّة حقّ للجميع. هذا البرنامج وُلد ليجسر الفجوة بين تكاليف العلاج الباهظة وقدرة المواطن العراقي.
+              {t("heroDesc")}
             </div>
           </Card>
 
@@ -108,23 +91,23 @@ export default function HealthcareAboutPage() {
             })}
           </div>
 
-          <SectionHeader title="📞 لمزيد من المعلومات" />
+          <SectionHeader title={t("moreInfo")} />
           <Card padding="md" className="mb-6">
             <div className="text-xs text-neutral-300 leading-relaxed mb-3">
-              هل لديك سؤال؟ تواصل معنا عبر الدعم الفنّي أو زُر صفحة الأسئلة الشائعة.
+              {t("moreInfoDesc")}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => router.push("/support")}
                 className="flex-1 bg-blue-400/[0.08] border border-blue-400/[0.25] text-blue-400 py-2.5 rounded-xl text-xs font-bold hover:bg-blue-400/[0.12] transition-colors"
               >
-                تواصل معنا
+                {t("contactUs")}
               </button>
               <button
                 onClick={() => router.push("/healthcare/apply")}
                 className="flex-1 bg-neutral-100 text-black py-2.5 rounded-xl text-xs font-bold hover:bg-neutral-200 transition-colors"
               >
-                قدّم طلبك الآن
+                {t("applyNow")}
               </button>
             </div>
           </Card>
