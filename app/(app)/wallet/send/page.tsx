@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { ChevronDown, X, AlertTriangle, Check, Search, Camera, Upload, ArrowDownToLine, Coins, Send, Users, Clock } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -64,6 +65,8 @@ function safeInvestorLevel(raw: string | undefined | null): InvestorLevel {
 // ─── المكوّن الرئيسي ───
 export default function SendSharesPage() {
   const router = useRouter()
+  const t = useTranslations("wallet")
+  const tc = useTranslations("common")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Phase 4.3 — Real DB-backed state
@@ -130,18 +133,18 @@ export default function SendSharesPage() {
   // Errors
   const qtyError = useMemo(() => {
     if (qty === "") return null
-    if (qtyNum < 1) return "الكمية يجب أن تكون 1 على الأقل"
+    if (qtyNum < 1) return t("qtyMin1")
     if (selectedHolding && qtyNum > selectedHolding.shares_owned) {
-      return "تجاوزت رصيدك المتاح (" + selectedHolding.shares_owned + " حصة)"
+      return t("qtyExceedsBalance", { count: selectedHolding.shares_owned })
     }
     return null
-  }, [qty, qtyNum, selectedHolding])
+  }, [qty, qtyNum, selectedHolding, t])
 
   // Handlers
   const handleVerifyRecipient = async (id?: string) => {
     const targetId = (id || recipientId).trim()
     if (!targetId) {
-      showError("أدخل ID المستلم أولاً")
+      showError(t("toastEnterRecipientId"))
       return
     }
     setVerifying(true)
@@ -150,19 +153,19 @@ export default function SendSharesPage() {
 
     if (result.found && result.user) {
       setRecipientUser(result.user)
-      showSuccess("تم التحقق من المستلم")
+      showSuccess(t("toastRecipientVerified"))
       return
     }
 
     setRecipientUser(null)
     if (result.reason === "self") {
-      showError("لا يمكن الإرسال إلى نفسك")
+      showError(t("toastCantSendSelf"))
     } else if (result.reason === "banned") {
-      showError("هذا الحساب موقوف")
+      showError(t("toastAccountSuspended"))
     } else if (result.reason === "inactive") {
-      showError("هذا الحساب غير نشط")
+      showError(t("toastAccountInactive"))
     } else {
-      showError("المستخدم غير موجود")
+      showError(t("toastUserNotFound"))
     }
   }
 
@@ -186,7 +189,7 @@ export default function SendSharesPage() {
 
   const handleScannerSubmit = () => {
     if (!scannerInput.trim()) {
-      showError("أدخل ID المحفظة")
+      showError(t("toastEnterWalletId"))
       return
     }
     setRecipientId(scannerInput)
@@ -198,28 +201,28 @@ export default function SendSharesPage() {
   const handleBarcodeImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    showInfo("ميزة قراءة الباركود من صورة قادمة قريباً")
+    showInfo(t("toastBarcodeSoon"))
   }
 
   const handleOpenConfirm = () => {
     if (!recipientUser) {
-      showError("تحقق من المستلم أولاً")
+      showError(t("toastVerifyRecipientFirst"))
       return
     }
     if (!selectedHolding) {
-      showError("اختر الحصة المراد إرسالها")
+      showError(t("toastSelectShare"))
       return
     }
     if (qtyNum < 1 || qtyError) {
-      showError("راجع عدد الحصص")
+      showError(t("toastReviewShareCount"))
       return
     }
     if (!hasEnoughFeeBalance) {
-      showError("رصيد وحدات الرسوم غير كافٍ")
+      showError(t("toastInsufficientFeeBalance"))
       return
     }
     if (exceedsMonthlyLimit) {
-      showError("العملية تتجاوز حدّك الشهري")
+      showError(t("toastExceedsMonthly"))
       return
     }
     setShowConfirm(true)
@@ -255,11 +258,11 @@ export default function SendSharesPage() {
       // raw error string so we can see what's actually wrong.
       const msg = (result.reason ?? "").toLowerCase()
       const friendly =
-        msg.includes("kyc_required") ? "مطلوب توثيق KYC للطرفَين قبل التحويل"
-        : msg.includes("insufficient_shares") ? "ليس لديك حصص كافية للإرسال"
-        : msg.includes("insufficient_fee_units") ? "رصيد وحدات الرسوم غير كافٍ لتغطية العمولة"
-        : msg.includes("cannot_transfer_to_self") ? "لا يمكن التحويل لنفس الحساب"
-        : `❌ ${result.reason ?? "تعذّر تنفيذ التحويل"}`
+        msg.includes("kyc_required") ? t("errKyc")
+        : msg.includes("insufficient_shares") ? t("errInsufficientShares")
+        : msg.includes("insufficient_fee_units") ? t("errInsufficientFeeUnits")
+        : msg.includes("cannot_transfer_to_self") ? t("errCantSelfTransfer")
+        : `❌ ${result.reason ?? t("transferFailed")}`
       showError(friendly)
       setSending(false)
       return
@@ -271,7 +274,7 @@ export default function SendSharesPage() {
     // the visible /invoices/[id] page.
     const invoice = createInvoice({
       type: "transfer_send",
-      from: { id: currentUserId, name: "أنا" },
+      from: { id: currentUserId, name: t("meLabel") },
       to: { id: recipientUser.id, name: recipientUser.name },
       project_id: selectedHolding.project_id,
       project_name: selectedHolding.project.name,
@@ -282,7 +285,7 @@ export default function SendSharesPage() {
       notes: note.trim() || undefined,
     })
 
-    showSuccess(`✅ تم تحويل ${qtyNum} حصة إلى ${recipientUser.name}`)
+    showSuccess(t("transferSuccess", { count: qtyNum, name: recipientUser.name }))
     setShowConfirm(false)
     setSending(false)
     setTimeout(() => router.replace(`/invoices/${invoice.id}`), 800)
@@ -294,8 +297,8 @@ export default function SendSharesPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader
-            title="إرسال الحصص"
-            subtitle="حوّل حصصك إلى مستثمر آخر بأمان"
+            title={t("sendTitle")}
+            subtitle={t("sendSubtitle")}
             backHref="/wallet"
           />
 
@@ -303,16 +306,16 @@ export default function SendSharesPage() {
           <div className="bg-red-500/[0.06] border border-red-500/25 rounded-xl p-3.5 mb-5 flex gap-3 items-start">
             <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" strokeWidth={2} />
             <div className="text-[11px] text-red-300 leading-relaxed">
-              <span className="font-bold">لا يمكن التراجع</span> عن عملية الإرسال بعد التأكيد. تحقق من جميع البيانات بعناية.
+              <span className="font-bold">{t("noUndoBold")}</span> {t("noUndoBody")}
             </div>
           </div>
 
           {/* الحد الشهري + رصيد الرسوم */}
           <div className="grid grid-cols-2 gap-3 mb-5">
             <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3">
-              <div className="text-[10px] text-neutral-500 mb-1">الحد الشهري المتبقي</div>
+              <div className="text-[10px] text-neutral-500 mb-1">{t("monthlyRemainingLabel")}</div>
               <div className="text-base font-bold text-white font-mono">
-                {fmtLimit(monthlyRemaining)} د.ع
+                {fmtLimit(monthlyRemaining)} {t("iqd")}
               </div>
               <div className="h-1 bg-white/[0.05] rounded-full mt-2 overflow-hidden">
                 <div
@@ -327,12 +330,12 @@ export default function SendSharesPage() {
             <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3">
               <div className="text-[10px] text-neutral-500 mb-1 flex items-center gap-1">
                 <Coins className="w-3 h-3 text-yellow-400" strokeWidth={2} />
-                وحدات الرسوم
+                {t("feeUnits")}
               </div>
               <div className="text-base font-bold text-yellow-400 font-mono">
                 {feeBalance.toLocaleString("en-US")}
               </div>
-              <div className="text-[10px] text-neutral-600 mt-1">رصيد متاح</div>
+              <div className="text-[10px] text-neutral-600 mt-1">{t("availableBalance")}</div>
             </div>
           </div>
 
@@ -340,7 +343,7 @@ export default function SendSharesPage() {
           <div className="mb-5">
             <div className="text-[11px] text-neutral-400 mb-2 font-bold flex items-center gap-1.5">
               <Users className="w-3 h-3" strokeWidth={2} />
-              ID محفظة المستلم
+              {t("recipientWalletId")}
             </div>
 
             <div className="flex gap-2 mb-2">
@@ -350,7 +353,7 @@ export default function SendSharesPage() {
                   setRecipientId(e.target.value)
                   setRecipientUser(null)
                 }}
-                placeholder="أدخل ID المستخدم..."
+                placeholder={t("enterUserIdPlaceholder")}
                 className="flex-1 bg-white/[0.05] border border-white/[0.08] focus:border-white/20 rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none font-mono transition-colors"
                 dir="ltr"
               />
@@ -364,7 +367,7 @@ export default function SendSharesPage() {
                 ) : (
                   <Search className="w-3.5 h-3.5" strokeWidth={2} />
                 )}
-                تحقق
+                {t("verify")}
               </button>
             </div>
 
@@ -375,7 +378,7 @@ export default function SendSharesPage() {
                 className="flex items-center justify-center gap-1.5 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.06] rounded-xl py-2.5 text-[11px] text-neutral-300 transition-colors"
               >
                 <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
-                رفع صورة باركود
+                {t("uploadBarcode")}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -389,7 +392,7 @@ export default function SendSharesPage() {
                 className="flex items-center justify-center gap-1.5 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.06] rounded-xl py-2.5 text-[11px] text-neutral-300 transition-colors"
               >
                 <Camera className="w-3.5 h-3.5" strokeWidth={1.5} />
-                مسح باركود
+                {t("scanBarcode")}
               </button>
             </div>
 
@@ -405,7 +408,7 @@ export default function SendSharesPage() {
                     {recipientUser.verified && (
                       <span className="bg-green-400/[0.15] border border-green-400/30 text-green-400 text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
                         <Check className="w-2 h-2" strokeWidth={3} />
-                        موثق
+                        {t("verified")}
                       </span>
                     )}
                   </div>
@@ -422,7 +425,7 @@ export default function SendSharesPage() {
               <div className="mt-3">
                 <div className="text-[10px] text-neutral-500 font-bold mb-2 flex items-center gap-1">
                   <Clock className="w-3 h-3" strokeWidth={2} />
-                  آخر المستلمين
+                  {t("recentRecipients")}
                 </div>
                 <div className="space-y-1.5">
                   {RECENT_RECIPIENTS.map((r) => (
@@ -451,12 +454,12 @@ export default function SendSharesPage() {
 
           {/* القسم 2: اختيار الحصة */}
           <div className="mb-5">
-            <div className="text-[11px] text-neutral-400 mb-2 font-bold">الحصة المراد إرسالها</div>
+            <div className="text-[11px] text-neutral-400 mb-2 font-bold">{t("shareToSend")}</div>
 
             {holdings.length === 0 ? (
               <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-5 text-center">
                 <div className="text-3xl mb-2 opacity-40">📦</div>
-                <div className="text-xs text-neutral-500">لا توجد حصص في محفظتك</div>
+                <div className="text-xs text-neutral-500">{t("noSharesInWallet")}</div>
               </div>
             ) : (
               <div className="relative">
@@ -473,12 +476,12 @@ export default function SendSharesPage() {
                     </span>
                     <div className="text-right min-w-0">
                       <div className="text-sm font-bold text-white truncate">
-                        {selectedHolding ? selectedHolding.project.name : "اختر الحصة..."}
+                        {selectedHolding ? selectedHolding.project.name : t("chooseShare")}
                       </div>
                       {selectedHolding && (
                         <div className="text-[10px] text-neutral-500 mt-0.5">
-                          متاح: <span className="font-mono text-yellow-400">{selectedHolding.shares_owned}</span> حصة
-                          <span className="mr-2">· <span className="font-mono">{selectedHolding.project.share_price.toLocaleString("en-US")}</span> د.ع/حصة</span>
+                          {t("availablePrefix")} <span className="font-mono text-yellow-400">{selectedHolding.shares_owned}</span> {t("shareUnit")}
+                          <span className="mr-2">· <span className="font-mono">{selectedHolding.project.share_price.toLocaleString("en-US")}</span> {t("iqdPerShare")}</span>
                         </div>
                       )}
                     </div>
@@ -505,7 +508,7 @@ export default function SendSharesPage() {
                         <div className="flex-1 min-w-0">
                           <div className="text-xs font-bold text-white truncate">{h.project.name}</div>
                           <div className="text-[10px] text-neutral-500 mt-0.5">
-                            متاح: <span className="font-mono text-yellow-400">{h.shares_owned}</span> حصة
+                            {t("availablePrefix")} <span className="font-mono text-yellow-400">{h.shares_owned}</span> {t("shareUnit")}
                           </div>
                         </div>
                         {selectedHolding?.id === h.id && (
@@ -523,12 +526,12 @@ export default function SendSharesPage() {
           {selectedHolding && (
             <div className="mb-5">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-[11px] text-neutral-400 font-bold">عدد الحصص</div>
+                <div className="text-[11px] text-neutral-400 font-bold">{t("shareCount")}</div>
                 <button
                   onClick={() => setQty(String(selectedHolding.shares_owned))}
                   className="text-[10px] text-blue-400 hover:text-blue-300"
                 >
-                  الكل ({selectedHolding.shares_owned})
+                  {t("allCount", { count: selectedHolding.shares_owned })}
                 </button>
               </div>
               <IntegerInput
@@ -551,8 +554,8 @@ export default function SendSharesPage() {
                 </div>
               ) : qtyNum > 0 ? (
                 <div className="text-[10px] text-neutral-500 mt-1.5 flex items-center justify-between">
-                  <span>سيستلم المستلم كاملاً: <span className="text-green-400 font-mono font-bold">{qtyNum}</span> حصة</span>
-                  <span>رسوم التحويل: <span className="text-yellow-400 font-mono">{transferFee.toLocaleString("en-US")}</span> وحدة</span>
+                  <span>{t("recipientGetsFullPrefix")} <span className="text-green-400 font-mono font-bold">{qtyNum}</span> {t("shareUnit")}</span>
+                  <span>{t("transferFeeLabel")} <span className="text-yellow-400 font-mono">{transferFee.toLocaleString("en-US")}</span> {t("feeUnit")}</span>
                 </div>
               ) : null}
             </div>
@@ -561,13 +564,13 @@ export default function SendSharesPage() {
           {/* القسم 4: ملاحظة */}
           <div className="mb-5">
             <div className="text-[11px] text-neutral-400 mb-2 font-bold flex items-center gap-1">
-              ملاحظة
-              <span className="text-[10px] text-neutral-600 font-normal">(اختياري)</span>
+              {t("noteLabel")}
+              <span className="text-[10px] text-neutral-600 font-normal">{t("optional")}</span>
             </div>
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="مثال: تحويل استثماري، شراكة..."
+              placeholder={t("notePlaceholder")}
               maxLength={120}
               className="w-full bg-white/[0.05] border border-white/[0.08] focus:border-white/20 rounded-xl px-4 py-3 text-sm text-white outline-none transition-colors"
             />
@@ -578,8 +581,8 @@ export default function SendSharesPage() {
             <div className="bg-red-500/[0.06] border border-red-500/25 rounded-xl p-3.5 mb-5 flex gap-3 items-start">
               <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" strokeWidth={2} />
               <div className="text-[11px] text-red-300 leading-relaxed">
-                <div className="font-bold mb-1">العملية تتجاوز حدّك الشهري</div>
-                قيمة العملية <span className="font-mono font-bold">{fmtLimit(totalValue)}</span> د.ع تتخطى المتبقي <span className="font-mono font-bold">{fmtLimit(monthlyRemaining)}</span> د.ع.
+                <div className="font-bold mb-1">{t("exceedsMonthlyLimit")}</div>
+                {t("opValuePrefix")} <span className="font-mono font-bold">{fmtLimit(totalValue)}</span> {t("iqd")} {t("exceedsRemaining")} <span className="font-mono font-bold">{fmtLimit(monthlyRemaining)}</span> {t("iqd")}.
               </div>
             </div>
           )}
@@ -587,16 +590,16 @@ export default function SendSharesPage() {
           {/* ملخص العملية */}
           {qtyNum > 0 && selectedHolding && !qtyError && (
             <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4 mb-5 backdrop-blur">
-              <div className="text-xs font-bold text-white mb-3">ملخص العملية</div>
+              <div className="text-xs font-bold text-white mb-3">{t("operationSummary")}</div>
               <div className="space-y-2">
                 {[
-                  { label: "المستلم", value: recipientUser?.name || "—", color: "white" },
-                  { label: "المشروع", value: selectedHolding.project.name, color: "white" },
-                  { label: "الحصص المُرسَلة", value: qtyNum + " حصة", color: "white" },
-                  { label: "يستلم المستلم", value: qtyNum + " حصة (كاملاً)", color: "green" },
-                  { label: "رصيدك بعد الإرسال", value: (selectedHolding.shares_owned - qtyNum) + " حصة", color: "white" },
-                  { label: "رسوم التحويل", value: transferFee.toLocaleString("en-US") + " وحدة", color: "yellow" },
-                  { label: "رصيد وحدات الرسوم بعد الخصم", value: (feeBalance - transferFee).toLocaleString("en-US") + " وحدة", color: "yellow" },
+                  { label: t("recipientLabel"), value: recipientUser?.name || "—", color: "white" },
+                  { label: t("projectLabel"), value: selectedHolding.project.name, color: "white" },
+                  { label: t("sharesSent"), value: qtyNum + " " + t("shareUnit"), color: "white" },
+                  { label: t("recipientReceives"), value: qtyNum + " " + t("shareUnit") + " (" + t("inFull") + ")", color: "green" },
+                  { label: t("balanceAfterSend"), value: (selectedHolding.shares_owned - qtyNum) + " " + t("shareUnit"), color: "white" },
+                  { label: t("transferFeeRow"), value: transferFee.toLocaleString("en-US") + " " + t("feeUnit"), color: "yellow" },
+                  { label: t("feeBalanceAfter"), value: (feeBalance - transferFee).toLocaleString("en-US") + " " + t("feeUnit"), color: "yellow" },
                 ].map((row, i) => (
                   <div key={i} className="flex justify-between items-center py-1.5 border-b border-white/[0.04] last:border-0">
                     <span className="text-[11px] text-neutral-500">{row.label}</span>
@@ -622,7 +625,7 @@ export default function SendSharesPage() {
               onClick={() => router.push("/wallet")}
               className="flex-1 bg-white/[0.05] border border-white/[0.1] text-white py-3.5 rounded-xl text-sm hover:bg-white/[0.08] transition-colors"
             >
-              إلغاء
+              {tc("buttons.cancel")}
             </button>
             <button
               onClick={handleOpenConfirm}
@@ -643,7 +646,7 @@ export default function SendSharesPage() {
               )}
             >
               <Send className="w-4 h-4" strokeWidth={2} />
-              مراجعة وإرسال
+              {t("reviewAndSend")}
             </button>
           </div>
 
@@ -662,8 +665,8 @@ export default function SendSharesPage() {
           >
             <div className="flex justify-between items-start mb-4">
               <div>
-                <div className="text-base font-bold text-white">مسح باركود المحفظة</div>
-                <div className="text-[11px] text-neutral-500 mt-0.5">صوّب الكاميرا على الباركود</div>
+                <div className="text-base font-bold text-white">{t("scanWalletBarcode")}</div>
+                <div className="text-[11px] text-neutral-500 mt-0.5">{t("aimCamera")}</div>
               </div>
               <button onClick={() => setShowScanner(false)} className="text-neutral-500 hover:text-white">
                 <X className="w-5 h-5" />
@@ -681,7 +684,7 @@ export default function SendSharesPage() {
               </div>
             </div>
 
-            <div className="text-[11px] text-neutral-500 text-center mb-2">أو أدخل ID المحفظة يدوياً</div>
+            <div className="text-[11px] text-neutral-500 text-center mb-2">{t("orEnterIdManually")}</div>
             <input
               value={scannerInput}
               onChange={(e) => setScannerInput(e.target.value)}
@@ -695,13 +698,13 @@ export default function SendSharesPage() {
                 onClick={() => setShowScanner(false)}
                 className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
               >
-                إلغاء
+                {tc("buttons.cancel")}
               </button>
               <button
                 onClick={handleScannerSubmit}
                 className="flex-[2] py-3 rounded-xl bg-neutral-100 text-black text-sm font-bold hover:bg-neutral-200"
               >
-                تأكيد
+                {tc("buttons.confirm")}
               </button>
             </div>
           </div>
@@ -722,20 +725,20 @@ export default function SendSharesPage() {
               <div className="w-14 h-14 rounded-full bg-blue-400/[0.12] border border-blue-400/30 flex items-center justify-center mx-auto mb-3">
                 <Send className="w-6 h-6 text-blue-400" strokeWidth={1.5} />
               </div>
-              <div className="text-base font-bold text-white">تأكيد الإرسال</div>
-              <div className="text-[11px] text-neutral-500 mt-1">راجع التفاصيل قبل التنفيذ</div>
+              <div className="text-base font-bold text-white">{t("confirmSend")}</div>
+              <div className="text-[11px] text-neutral-500 mt-1">{t("reviewBeforeExecute")}</div>
             </div>
 
             <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-4 mb-4 space-y-2.5">
               {[
-                ["المستلم", recipientUser.name],
-                ["ID المستلم", formatID(recipientUser.id)],
-                ["المشروع", selectedHolding.project.name],
-                ["الحصص المُرسَلة", qtyNum + " حصة"],
-                ["يستلم المستلم", qtyNum + " حصة (كاملاً)"],
-                ["رسوم التحويل (وحدات)", transferFee.toLocaleString("en-US") + " وحدة"],
-                ["خصم من رصيد الرسوم", transferFee.toLocaleString("en-US") + " وحدة"],
-                ...(note ? [["الملاحظة", note] as [string, string]] : []),
+                [t("recipientLabel"), recipientUser.name],
+                [t("recipientIdLabel"), formatID(recipientUser.id)],
+                [t("projectLabel"), selectedHolding.project.name],
+                [t("sharesSent"), qtyNum + " " + t("shareUnit")],
+                [t("recipientReceives"), qtyNum + " " + t("shareUnit") + " (" + t("inFull") + ")"],
+                [t("transferFeeUnits"), transferFee.toLocaleString("en-US") + " " + t("feeUnit")],
+                [t("feeDeducted"), transferFee.toLocaleString("en-US") + " " + t("feeUnit")],
+                ...(note ? [[t("noteRow"), note] as [string, string]] : []),
               ].map(([l, v], i) => (
                 <div key={i} className="flex justify-between gap-2">
                   <span className="text-[11px] text-neutral-500 flex-shrink-0">{l}</span>
@@ -747,7 +750,7 @@ export default function SendSharesPage() {
             <div className="bg-red-500/[0.04] border border-red-500/20 rounded-xl p-3 mb-4 flex gap-2 items-start">
               <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" strokeWidth={2} />
               <div className="text-[11px] text-red-300 leading-relaxed">
-                <span className="font-bold">العملية نهائية</span> ولا يمكن التراجع عنها بعد التأكيد.
+                <span className="font-bold">{t("finalOpBold")}</span> {t("finalOpBody")}
               </div>
             </div>
 
@@ -757,7 +760,7 @@ export default function SendSharesPage() {
                 disabled={sending}
                 className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
               >
-                رجوع
+                {tc("buttons.back")}
               </button>
               <button
                 onClick={handleSubmit}
@@ -770,12 +773,12 @@ export default function SendSharesPage() {
                 {sending ? (
                   <>
                     <div className="w-4 h-4 border-2 border-neutral-400 border-t-transparent rounded-full animate-spin" />
-                    جاري الإرسال...
+                    {t("sending")}
                   </>
                 ) : (
                   <>
                     <Check className="w-4 h-4" strokeWidth={3} />
-                    تأكيد الإرسال
+                    {t("confirmSend")}
                   </>
                 )}
               </button>
