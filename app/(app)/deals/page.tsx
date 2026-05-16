@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { ChevronLeft, Clock, ArrowDownLeft, ArrowUpRight } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -38,24 +39,30 @@ const TAB_STATUS_MAP: Record<DealsTab, DBDealStatus[]> = {
   cancelled:     ["cancelled", "expired", "rejected"],
 }
 
-const TABS: Array<{ id: DealsTab; label: string; icon: string }> = [
-  { id: "active",       label: "نشطة",         icon: "🔥" },
-  { id: "cancellation", label: "إلغاء معلّق",   icon: "🚫" },
-  { id: "disputed",     label: "نزاع",         icon: "⚖️" },
-  { id: "completed",    label: "مكتملة",       icon: "✅" },
-  { id: "cancelled",    label: "ملغاة",        icon: "❌" },
+const TABS: Array<{ id: DealsTab; labelKey: string; icon: string }> = [
+  { id: "active",       labelKey: "tabActive",       icon: "🔥" },
+  { id: "cancellation", labelKey: "tabCancellation", icon: "🚫" },
+  { id: "disputed",     labelKey: "tabDisputed",     icon: "⚖️" },
+  { id: "completed",    labelKey: "tabCompleted",    icon: "✅" },
+  { id: "cancelled",    labelKey: "tabCancelled",    icon: "❌" },
 ]
 
-function formatTimeLeft(ms: number): string {
-  if (ms <= 0) return "انتهى"
-  const hrs = Math.floor(ms / 3_600_000)
-  const mins = Math.floor((ms % 3_600_000) / 60_000)
-  if (hrs > 0) return `${hrs}س ${mins}د`
-  return `${mins}د`
+/** DB deal status → deals-namespace translation key (display only;
+ *  STATUS_META_DB still drives the Badge color). */
+const STATUS_KEY: Record<DBDealStatus, string> = {
+  pending_seller_approval: "statusPendingSeller",
+  accepted:                "statusAccepted",
+  payment_submitted:       "statusPaymentSubmitted",
+  completed:               "statusCompleted",
+  rejected:                "statusRejected",
+  cancelled:               "statusCancelled",
+  expired:                 "statusExpired",
+  disputed:                "statusDisputed",
 }
 
 export default function DealsPage() {
   const router = useRouter()
+  const t = useTranslations("deals")
   const [tab, setTab] = useState<DealsTab>("active")
 
   // Real DB-backed state (Phase 4.4)
@@ -120,15 +127,15 @@ export default function DealsPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
           <PageHeader
-            title="🤝 صفقاتي"
-            subtitle={loading ? "جاري التحميل..." : `${allDeals.length} صفقة على هذا الحساب`}
+            title={t("pageTitle")}
+            subtitle={loading ? t("loading") : t("dealsCount", { count: allDeals.length })}
             backHref="/dashboard"
           />
 
           {/* ═══ Tabs ═══ */}
           <div className="mb-4">
             <Tabs
-              tabs={TABS.map((t) => ({ ...t, count: counts[t.id] }))}
+              tabs={TABS.map((tb) => ({ id: tb.id, label: t(tb.labelKey), icon: tb.icon, count: counts[tb.id] }))}
               activeTab={tab}
               onChange={(id) => setTab(id as DealsTab)}
             />
@@ -163,15 +170,15 @@ export default function DealsPage() {
           ) : filtered.length === 0 ? (
             <EmptyState
               icon="📋"
-              title="لا توجد صفقات في هذا التصنيف"
+              title={t("emptyTitle")}
               description={
                 tab === "active"
-                  ? "ابدأ بفتح صفقة من السوق أو التبادل"
+                  ? t("emptyActiveDesc")
                   : tab === "cancellation"
-                    ? "لا توجد طلبات إلغاء معلّقة حالياً"
-                    : "ستظهر الصفقات هنا حسب حالتها"
+                    ? t("emptyCancellationDesc")
+                    : t("emptyDefaultDesc")
               }
-              action={tab === "active" ? { label: "فتح السوق", onClick: () => router.push("/exchange") } : undefined}
+              action={tab === "active" ? { label: t("openMarket"), onClick: () => router.push("/exchange") } : undefined}
               size="md"
             />
           ) : (
@@ -205,11 +212,19 @@ function DealCard({
   currentUserId: string
   onClick: () => void
 }) {
+  const t = useTranslations("deals")
+  const tc = useTranslations("common")
   const role: "buyer" | "seller" =
     deal.buyer_id === currentUserId ? "buyer" : "seller"
   const counterparty = role === "buyer" ? deal.seller_name : deal.buyer_name
   const statusMeta = STATUS_META_DB[deal.status]
   const timeLeft = new Date(deal.expires_at).getTime() - Date.now()
+  const timeLeftLabel = (() => {
+    if (timeLeft <= 0) return t("ended")
+    const hrs = Math.floor(timeLeft / 3_600_000)
+    const mins = Math.floor((timeLeft % 3_600_000) / 60_000)
+    return hrs > 0 ? t("timeHM", { h: hrs, m: mins }) : t("timeM", { m: mins })
+  })()
   const showTimer =
     (deal.status === "pending_seller_approval" ||
       deal.status === "accepted" ||
@@ -239,27 +254,27 @@ function DealCard({
               {deal.project_name}
             </div>
             <div className="text-[11px] text-neutral-400">
-              {role === "buyer" ? "شراء من" : "بيع إلى"}{" "}
+              {role === "buyer" ? t("buyFrom") : t("sellTo")}{" "}
               <span className="text-white">{counterparty}</span>
             </div>
           </div>
         </div>
         <Badge color={statusMeta.color} variant="soft" size="xs">
-          {statusMeta.label}
+          {t(STATUS_KEY[deal.status])}
         </Badge>
       </div>
 
       <div className="grid grid-cols-3 gap-2 mb-3">
         <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2 text-center">
-          <div className="text-[9px] text-neutral-500 mb-0.5">الكمية</div>
+          <div className="text-[9px] text-neutral-500 mb-0.5">{t("qty")}</div>
           <div className="text-xs font-bold text-white font-mono">{fmtNum(deal.shares)}</div>
         </div>
         <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2 text-center">
-          <div className="text-[9px] text-neutral-500 mb-0.5">السعر</div>
+          <div className="text-[9px] text-neutral-500 mb-0.5">{t("price")}</div>
           <div className="text-xs font-bold text-white font-mono">{fmtNum(deal.price_per_share)}</div>
         </div>
         <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2 text-center">
-          <div className="text-[9px] text-neutral-500 mb-0.5">الإجمالي</div>
+          <div className="text-[9px] text-neutral-500 mb-0.5">{t("total")}</div>
           <div className="text-xs font-bold text-yellow-400 font-mono">{fmtNum(deal.total_amount)}</div>
         </div>
       </div>
@@ -268,7 +283,7 @@ function DealCard({
         {showTimer ? (
           <div className="flex items-center gap-1 text-[10px] text-yellow-400 font-bold">
             <Clock className="w-3 h-3" strokeWidth={2} />
-            متبقّي: {formatTimeLeft(timeLeft)}
+            {t("timeLeftPrefix")} {timeLeftLabel}
           </div>
         ) : (
           <span className="text-[10px] text-neutral-500" dir="ltr">
@@ -276,7 +291,7 @@ function DealCard({
           </span>
         )}
         <span className="text-[11px] text-blue-400 font-bold flex items-center gap-1">
-          التفاصيل
+          {tc("buttons.details")}
           <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
         </span>
       </div>
