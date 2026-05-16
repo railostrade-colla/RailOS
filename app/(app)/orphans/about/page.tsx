@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Info, ListChecks, Home, BookOpen, Heart, FileText } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -10,62 +11,55 @@ import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
-const SECTIONS = [
-  {
-    icon: Info,
-    color: "blue" as const,
-    title: "ما هو البرنامج؟",
-    body: "برنامج إنساني لرعاية الأطفال الذين فقدوا أحد والديهم أو كليهما — يوفّر دعماً تعليمياً وصحّياً ومعيشياً عبر نظام الكفالة الفردية أو التبرّع العام.",
-  },
-  {
-    icon: ListChecks,
-    color: "green" as const,
-    title: "كيف نختار الأطفال؟",
-    body: "نتعاون مع جمعيات معتمدة في كل المحافظات. كل طفل يخضع لزيارة ميدانية + مقابلة الأسرة الحاضنة + مراجعة الوضع المالي/الصحّي/التعليمي.",
-  },
-  {
-    icon: Heart,
-    color: "red" as const,
-    title: "ماذا تشمل الكفالة؟",
-    bodyList: [
-      { icon: "🏠", title: "السكن",   body: "مساهمة في إيجار/إصلاح المنزل" },
-      { icon: "📚", title: "التعليم", body: "كتب + قرطاسية + رسوم مدرسية" },
-      { icon: "🍎", title: "الطعام",   body: "حصّة شهرية من الأساسيات" },
-      { icon: "💊", title: "الصحّة",   body: "فحوصات دورية + علاج" },
-    ],
-  },
-  {
-    icon: FileText,
-    color: "purple" as const,
-    title: "التقارير الدورية",
-    body: "تصلك تقارير شهرية أو ربع سنوية تشمل: تقدّم الطفل الدراسي + الحالة الصحّية + صور حديثة + رسائل من الطفل (إن أمكن).",
-  },
-]
+// plan id → name key + cover keys (lib monthly/color stay canonical).
+const PLAN_NAME_KEY: Record<string, string> = {
+  basic: "planBasic", advanced: "planAdvanced", comprehensive: "planComprehensive",
+}
+const PLAN_COVER_KEYS: Record<string, string[]> = {
+  basic: ["coverBasic1", "coverBasic2"],
+  advanced: ["coverAdv1", "coverAdv2", "coverAdv3", "coverAdv4"],
+  comprehensive: ["coverComp1", "coverComp2", "coverComp3", "coverComp4"],
+}
 
 export default function OrphansAboutPage() {
   const router = useRouter()
+  const t = useTranslations("orphans")
+  const SECTIONS = [
+    { icon: Info,       color: "blue" as const,   title: t("s1Title"), body: t("s1Body") },
+    { icon: ListChecks, color: "green" as const,  title: t("s2Title"), body: t("s2Body") },
+    {
+      icon: Heart,      color: "red" as const,    title: t("s3Title"),
+      bodyList: [
+        { icon: "🏠", title: t("bl1Title"), body: t("bl1Body") },
+        { icon: "📚", title: t("bl2Title"), body: t("bl2Body") },
+        { icon: "🍎", title: t("bl3Title"), body: t("bl3Body") },
+        { icon: "💊", title: t("bl4Title"), body: t("bl4Body") },
+      ],
+    },
+    { icon: FileText,   color: "purple" as const, title: t("s4Title"), body: t("s4Body") },
+  ]
 
   return (
     <AppLayout>
       <div className="relative">
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
-          <PageHeader title="عن البرنامج" subtitle="كيف يعمل برنامج رعاية الأيتام" />
+          <PageHeader title={t("aboutTitle")} subtitle={t("aboutSubtitle")} />
 
           <Card variant="gradient" color="blue" padding="lg" className="mb-6 text-center">
             <div className="text-4xl mb-3">👶</div>
-            <div className="text-base font-bold text-white mb-2">كل طفل يستحق فرصة</div>
+            <div className="text-base font-bold text-white mb-2">{t("heroTitle")}</div>
             <div className="text-xs text-neutral-300 leading-relaxed">
-              نؤمن أن دعم طفل يتيم اليوم يصنع جيلاً واعياً متعلّماً غداً. هدفنا: 1000 طفل مكفول حتى نهاية 2027.
+              {t("heroDesc")}
             </div>
           </Card>
 
           {/* Sponsorship plans */}
-          <SectionHeader title="💰 خطط الكفالة الشهرية" subtitle="اختر ما يناسب قدرتك" />
+          <SectionHeader title={t("plansTitle")} subtitle={t("plansSubtitle")} />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
             {SPONSORSHIP_PLANS.map((plan) => (
               <Card key={plan.id} variant="gradient" color={plan.color} padding="md">
-                <div className="text-base font-bold text-white mb-1">{plan.name}</div>
+                <div className="text-base font-bold text-white mb-1">{t(PLAN_NAME_KEY[plan.id] ?? "planBasic")}</div>
                 <div className={cn(
                   "text-2xl font-bold font-mono mb-1",
                   plan.color === "blue"   && "text-blue-400",
@@ -74,14 +68,16 @@ export default function OrphansAboutPage() {
                 )}>
                   {fmtNum(plan.monthly)}
                 </div>
-                <div className="text-[10px] text-neutral-500 mb-3">د.ع / شهرياً</div>
+                <div className="text-[10px] text-neutral-500 mb-3">{t("perMonth")}</div>
                 <div className="space-y-1.5">
-                  {plan.covers.map((c, i) => (
+                  {plan.covers.map((c, i) => {
+                    const ck = PLAN_COVER_KEYS[plan.id]?.[i]
+                    return (
                     <div key={i} className="text-[11px] text-neutral-300 flex items-center gap-1">
                       <span className="text-green-400">✓</span>
-                      <span>{c}</span>
+                      <span>{ck ? t(ck) : c}</span>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </Card>
             ))}
@@ -135,13 +131,13 @@ export default function OrphansAboutPage() {
               onClick={() => router.push("/orphans/children")}
               className="bg-blue-400/[0.08] border border-blue-400/[0.25] text-blue-400 py-3 rounded-xl text-sm font-bold hover:bg-blue-400/[0.12] transition-colors"
             >
-              تصفّح الأطفال
+              {t("browseChildren")}
             </button>
             <button
               onClick={() => router.push("/orphans/sponsor")}
               className="bg-neutral-100 text-black py-3 rounded-xl text-sm font-bold hover:bg-neutral-200 transition-colors"
             >
-              ابدأ كفالة الآن
+              {t("startSponsorship")}
             </button>
           </div>
 
