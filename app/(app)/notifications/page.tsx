@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useTranslations } from "next-intl"
 import { BellRing, CheckCheck, Trash2, X } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -18,13 +19,13 @@ import { cn } from "@/lib/utils/cn"
 // ─── Filter families (map notification_type → tab) ────────────────
 type FilterKey = "all" | "deals" | "auctions" | "projects" | "support" | "system"
 
-const FILTERS: ReadonlyArray<{ key: FilterKey; label: string }> = [
-  { key: "all",       label: "الكل" },
-  { key: "deals",     label: "الصفقات" },
-  { key: "auctions",  label: "المزادات" },
-  { key: "projects",  label: "المشاريع" },
-  { key: "support",   label: "الدعم" },
-  { key: "system",    label: "النظام" },
+const FILTERS: ReadonlyArray<{ key: FilterKey; labelKey: string }> = [
+  { key: "all",       labelKey: "filterAll" },
+  { key: "deals",     labelKey: "filterDeals" },
+  { key: "auctions",  labelKey: "filterAuctions" },
+  { key: "projects",  labelKey: "filterProjects" },
+  { key: "support",   labelKey: "filterSupport" },
+  { key: "system",    labelKey: "filterSystem" },
 ]
 
 /** Returns the filter family a notification belongs to (or null = always all). */
@@ -65,6 +66,7 @@ function buildCounts(items: DBNotification[]): Record<FilterKey, number> {
 }
 
 export default function NotificationsPage() {
+  const t = useTranslations("notificationsPage")
   const { notifications, unreadCount, loading, refresh } = useNotifications(100)
   const [filter, setFilter] = useState<FilterKey>("all")
   // Phase 13.62 — bulk-delete confirmation state.
@@ -81,20 +83,20 @@ export default function NotificationsPage() {
   async function handleMarkAllRead() {
     const ok = await markAllAsRead()
     if (ok) {
-      showSuccess("تم تعليم الكل كمقروء")
+      showSuccess(t("markedAllRead"))
       refresh()
     } else {
-      showError("تعذّر التعليم — حاول مرة أخرى")
+      showError(t("markFailed"))
     }
   }
 
   async function handleDelete(id: string) {
     const ok = await deleteNotification(id)
     if (ok) {
-      showSuccess("تم الحذف")
+      showSuccess(t("deleted"))
       refresh()
     } else {
-      showError("تعذّر الحذف")
+      showError(t("deleteFailed"))
     }
   }
 
@@ -104,11 +106,11 @@ export default function NotificationsPage() {
     const ok = await deleteAllNotifications()
     setClearing(false)
     if (ok) {
-      showSuccess("✅ تم مسح جميع الإشعارات")
+      showSuccess(t("clearedAll"))
       setShowClearAll(false)
       refresh()
     } else {
-      showError("تعذّر مسح الإشعارات — حاول مرة أخرى")
+      showError(t("clearFailed"))
     }
   }
 
@@ -117,11 +119,11 @@ export default function NotificationsPage() {
       <div className="relative">
         <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
           <PageHeader
-            badge={`NOTIFICATIONS · ${
-              unreadCount > 0 ? `${unreadCount} جديد` : "كل شي مقروء"
-            }`}
-            title="الإشعارات"
-            description="آخر التحديثات والأنشطة في حسابك"
+            badge={t("badge", {
+              status: unreadCount > 0 ? t("newCount", { n: unreadCount }) : t("allRead"),
+            })}
+            title={t("title")}
+            description={t("description")}
           />
 
           {/* Filters */}
@@ -137,7 +139,7 @@ export default function NotificationsPage() {
                     : "bg-white/[0.05] border border-white/[0.08] text-neutral-400 hover:text-white",
                 )}
               >
-                {f.label} ({counts[f.key]})
+                {t(f.labelKey)} ({counts[f.key]})
               </button>
             ))}
           </div>
@@ -153,7 +155,7 @@ export default function NotificationsPage() {
                   className="text-[11px] text-neutral-400 hover:text-white transition-colors flex items-center gap-1"
                 >
                   <CheckCheck className="w-3 h-3" strokeWidth={1.75} />
-                  تعليم الكل كمقروء
+                  {t("markAllRead")}
                 </button>
               )}
               <button
@@ -161,7 +163,7 @@ export default function NotificationsPage() {
                 className="text-[11px] text-red-400 hover:text-red-300 transition-colors flex items-center gap-1"
               >
                 <Trash2 className="w-3 h-3" strokeWidth={1.75} />
-                مسح الكل
+                {t("clearAll")}
               </button>
             </div>
           )}
@@ -169,7 +171,7 @@ export default function NotificationsPage() {
           {/* List */}
           {loading ? (
             <div className="text-center py-12">
-              <div className="text-sm text-neutral-400">جاري التحميل...</div>
+              <div className="text-sm text-neutral-400">{t("loading")}</div>
             </div>
           ) : displayed.length === 0 ? (
             <div className="text-center py-12">
@@ -179,11 +181,11 @@ export default function NotificationsPage() {
               />
               <div className="text-sm text-white font-bold mb-1">
                 {notifications.length === 0
-                  ? "لا توجد إشعارات بعد"
-                  : "لا إشعارات في هذا التصنيف"}
+                  ? t("noNotifs")
+                  : t("noInCategory")}
               </div>
               <div className="text-xs text-neutral-500">
-                ستظهر هنا الإشعارات الجديدة
+                {t("willAppear")}
               </div>
             </div>
           ) : (
@@ -222,8 +224,8 @@ export default function NotificationsPage() {
                   <Trash2 className="w-5 h-5 text-red-400" strokeWidth={2} />
                 </div>
                 <div>
-                  <div className="text-base font-bold text-white">مسح جميع الإشعارات</div>
-                  <div className="text-[11px] text-neutral-400">إجراء لا يمكن التراجع عنه</div>
+                  <div className="text-base font-bold text-white">{t("clearAllTitle")}</div>
+                  <div className="text-[11px] text-neutral-400">{t("irreversible")}</div>
                 </div>
               </div>
               <button
@@ -236,9 +238,9 @@ export default function NotificationsPage() {
             </div>
 
             <div className="bg-red-400/[0.05] border border-red-400/[0.2] rounded-xl p-3 mb-4 text-xs text-red-300 leading-relaxed">
-              ⚠ ستُحذف <span className="font-bold text-white">{notifications.length.toLocaleString("en-US")}</span> إشعار من حسابك (المقروءة وغير المقروءة).
+              {t("clearWarnPre")}<span className="font-bold text-white">{notifications.length.toLocaleString("en-US")}</span>{t("clearWarnPost")}
               <span className="block mt-1 text-red-300/80 text-[11px]">
-                لا يمكن استرجاعها بعد المسح.
+                {t("cannotRestore")}
               </span>
             </div>
 
@@ -248,7 +250,7 @@ export default function NotificationsPage() {
                 disabled={clearing}
                 className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
               >
-                تراجع
+                {t("undo")}
               </button>
               <button
                 onClick={handleClearAll}
@@ -256,7 +258,7 @@ export default function NotificationsPage() {
                 className="flex-1 py-3 rounded-xl bg-red-500/[0.18] border border-red-500/[0.4] text-red-300 text-sm font-bold hover:bg-red-500/[0.25] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <Trash2 className="w-4 h-4" strokeWidth={2.5} />
-                {clearing ? "جارٍ المسح..." : "نعم، امسح الكل"}
+                {clearing ? t("clearingShort") : t("yesClearAll")}
               </button>
             </div>
           </div>
