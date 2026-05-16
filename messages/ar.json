@@ -1301,7 +1301,15 @@
     "supportContactTitle": "التواصل المباشر",
     "supportContactSub": "تواصل مع فريق الدعم",
     "supportReportTitle": "الإبلاغ عن مشكلة",
-    "supportReportSub": "أبلغنا عن خلل أو اقتراح"
+    "supportReportSub": "أبلغنا عن خلل أو اقتراح",
+    "accountTitle": "الحساب الشخصي",
+    "accountSubtitle": "البيانات الشخصية، KYC",
+    "accPersonalTitle": "البيانات الشخصية",
+    "accPersonalSub": "الاسم، البريد، الهاتف",
+    "accKycTitle": "التحقّق من الهوية (KYC)",
+    "accKycSub": "حالة التوثيق ومستوى الحساب",
+    "accAvatarTitle": "الصورة الشخصية",
+    "accAvatarSub": "تحديث صورة الملف الشخصي"
   },
   "legal": {},
   "company": {

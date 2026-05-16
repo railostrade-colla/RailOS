@@ -1301,7 +1301,15 @@
     "supportContactTitle": "Direct contact",
     "supportContactSub": "Reach the support team",
     "supportReportTitle": "Report an issue",
-    "supportReportSub": "Tell us about a bug or suggestion"
+    "supportReportSub": "Tell us about a bug or suggestion",
+    "accountTitle": "Personal account",
+    "accountSubtitle": "Personal info, KYC",
+    "accPersonalTitle": "Personal info",
+    "accPersonalSub": "Name, email, phone",
+    "accKycTitle": "Identity verification (KYC)",
+    "accKycSub": "Verification status and account level",
+    "accAvatarTitle": "Profile photo",
+    "accAvatarSub": "Update your profile picture"
   },
   "legal": {},
   "company": {
