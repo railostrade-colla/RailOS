@@ -1686,6 +1686,26 @@
     "lvlAdvanced": "Advanced",
     "lvlPro": "Pro"
   },
-  "gifts": {},
+  "gifts": {
+    "typeFreeContract": "Free group contract",
+    "ctaFreeContract": "Use to create a contract",
+    "typeFeeUnits": "Fee units",
+    "typeFeeDiscount": "Fee discount",
+    "admin": "Administration",
+    "title": "🎁 My gifts",
+    "subtitle": "Gifts granted to you by the administration",
+    "loading": "Loading...",
+    "noGifts": "No gifts yet",
+    "noGiftsHint": "They'll appear here when the administration grants you a gift",
+    "activeGifts": "✨ Active gifts ({n})",
+    "history": "📜 History",
+    "fromLabel": "From: {name}",
+    "expiresOn": "Expires {date}",
+    "useNow": "Use now",
+    "usedShort": "Used",
+    "expiredFull": "Expired",
+    "usedBadge": "Used",
+    "expiredBadge": "Expired"
+  },
   "profile": {}
 }

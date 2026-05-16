@@ -1686,6 +1686,26 @@
     "lvlAdvanced": "متقدّم",
     "lvlPro": "محترف"
   },
-  "gifts": {},
+  "gifts": {
+    "typeFreeContract": "عقد جماعي مجاني",
+    "ctaFreeContract": "استخدم لإنشاء عقد",
+    "typeFeeUnits": "وحدات رسوم",
+    "typeFeeDiscount": "خصم رسوم",
+    "admin": "الإدارة",
+    "title": "🎁 هداياي",
+    "subtitle": "الهدايا المُمنوحة لك من الإدارة",
+    "loading": "جاري التحميل...",
+    "noGifts": "لا توجد هدايا بعد",
+    "noGiftsHint": "ستظهر هنا عندما تمنحك الإدارة هدية",
+    "activeGifts": "✨ هدايا نشطة ({n})",
+    "history": "📜 السجل",
+    "fromLabel": "من: {name}",
+    "expiresOn": "ينتهي {date}",
+    "useNow": "استخدم الآن",
+    "usedShort": "مُستخدَمة",
+    "expiredFull": "منتهية الصلاحية",
+    "usedBadge": "مُستخدَمة",
+    "expiredBadge": "منتهية"
+  },
   "profile": {}
 }

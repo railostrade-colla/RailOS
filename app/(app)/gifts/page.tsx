@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Gift, Clock, Check, X, ArrowLeft } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -16,21 +17,23 @@ import { getMyUnusedGifts, type UserGiftRow } from "@/lib/data/gifts"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils/cn"
 
-const GIFT_TYPE_LABELS: Record<string, { label: string; icon: string; ctaLabel?: string; ctaHref?: string }> = {
+// labelKey/ctaLabelKey resolved via t(); icon/href stay here.
+const GIFT_TYPE_META: Record<string, { labelKey: string; icon: string; ctaLabelKey?: string; ctaHref?: string }> = {
   free_contract: {
-    label: "عقد جماعي مجاني",
+    labelKey: "typeFreeContract",
     icon: "🤝",
-    ctaLabel: "استخدم لإنشاء عقد",
+    ctaLabelKey: "ctaFreeContract",
     ctaHref: "/contracts/create",
   },
-  fee_units: { label: "وحدات رسوم", icon: "💎" },
-  fee_discount: { label: "خصم رسوم", icon: "💸" },
+  fee_units: { labelKey: "typeFeeUnits", icon: "💎" },
+  fee_discount: { labelKey: "typeFeeDiscount", icon: "💸" },
 }
 
 const fmtDate = (iso: string | null | undefined) => iso?.slice(0, 10) ?? ""
 
 export default function GiftsPage() {
   const router = useRouter()
+  const t = useTranslations("gifts")
   const [loading, setLoading] = useState(true)
   const [allGifts, setAllGifts] = useState<UserGiftRow[]>([])
 
@@ -94,7 +97,7 @@ export default function GiftsPage() {
           used_target_id: r.used_target_id,
           expires_at: r.expires_at,
           granted_by: r.granted_by,
-          granted_by_name: g?.full_name?.trim() || g?.username?.trim() || "الإدارة",
+          granted_by_name: g?.full_name?.trim() || g?.username?.trim() || t("admin"),
           granted_reason: r.granted_reason,
           created_at: r.created_at,
           status,
@@ -107,6 +110,7 @@ export default function GiftsPage() {
       cancelled = true
     }
     void getMyUnusedGifts // force keep import for future use
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const active = allGifts.filter((g) => g.status === "active")
@@ -118,20 +122,20 @@ export default function GiftsPage() {
       <div className="relative">
         <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
           <PageHeader
-            title="🎁 هداياي"
-            subtitle="الهدايا المُمنوحة لك من الإدارة"
+            title={t("title")}
+            subtitle={t("subtitle")}
             backHref="/portfolio"
           />
 
           {loading ? (
-            <div className="text-center py-16 text-sm text-neutral-400">جاري التحميل...</div>
+            <div className="text-center py-16 text-sm text-neutral-400">{t("loading")}</div>
           ) : allGifts.length === 0 ? (
             <div className="text-center py-16">
               <div className="w-20 h-20 rounded-2xl bg-purple-500/[0.08] border border-purple-500/[0.2] flex items-center justify-center mx-auto mb-4">
                 <Gift className="w-10 h-10 text-purple-400" strokeWidth={1.5} />
               </div>
-              <div className="text-base font-bold text-white mb-1">لا توجد هدايا بعد</div>
-              <div className="text-xs text-neutral-500">ستظهر هنا عندما تمنحك الإدارة هدية</div>
+              <div className="text-base font-bold text-white mb-1">{t("noGifts")}</div>
+              <div className="text-xs text-neutral-500">{t("noGiftsHint")}</div>
             </div>
           ) : (
             <>
@@ -139,13 +143,16 @@ export default function GiftsPage() {
               {active.length > 0 && (
                 <div className="mb-6">
                   <div className="text-xs font-bold text-green-400 mb-3 px-1">
-                    ✨ هدايا نشطة ({active.length})
+                    {t("activeGifts", { n: active.length })}
                   </div>
                   <div className="space-y-3">
                     {active.map((g) => {
-                      const meta = GIFT_TYPE_LABELS[g.gift_type] ?? {
-                        label: g.gift_type,
-                        icon: "🎁",
+                      const m = GIFT_TYPE_META[g.gift_type]
+                      const meta = {
+                        label: m ? t(m.labelKey) : g.gift_type,
+                        icon: m?.icon ?? "🎁",
+                        ctaLabel: m?.ctaLabelKey ? t(m.ctaLabelKey) : undefined,
+                        ctaHref: m?.ctaHref,
                       }
                       return (
                         <div
@@ -162,7 +169,7 @@ export default function GiftsPage() {
                                 <div className="text-[11px] text-neutral-300 leading-relaxed">{g.granted_reason}</div>
                               )}
                               <div className="text-[10px] text-neutral-500 mt-1.5 flex items-center gap-2 flex-wrap">
-                                <span>من: {g.granted_by_name}</span>
+                                <span>{t("fromLabel", { name: g.granted_by_name ?? "" })}</span>
                                 <span>·</span>
                                 <span dir="ltr">{fmtDate(g.created_at)}</span>
                                 {g.expires_at && (
@@ -170,7 +177,7 @@ export default function GiftsPage() {
                                     <span>·</span>
                                     <span className="flex items-center gap-1 text-yellow-400">
                                       <Clock className="w-2.5 h-2.5" />
-                                      ينتهي {fmtDate(g.expires_at)}
+                                      {t("expiresOn", { date: fmtDate(g.expires_at) })}
                                     </span>
                                   </>
                                 )}
@@ -182,7 +189,7 @@ export default function GiftsPage() {
                               onClick={() => router.push(meta.ctaHref!)}
                               className="w-full bg-purple-500/[0.15] border border-purple-500/[0.3] text-purple-300 hover:bg-purple-500/[0.2] py-2.5 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
                             >
-                              {meta.ctaLabel ?? "استخدم الآن"}
+                              {meta.ctaLabel ?? t("useNow")}
                               <ArrowLeft className="w-3 h-3" strokeWidth={2.5} />
                             </button>
                           )}
@@ -196,12 +203,13 @@ export default function GiftsPage() {
               {/* Used + Expired */}
               {(used.length > 0 || expired.length > 0) && (
                 <div>
-                  <div className="text-xs font-bold text-neutral-500 mb-3 px-1">📜 السجل</div>
+                  <div className="text-xs font-bold text-neutral-500 mb-3 px-1">{t("history")}</div>
                   <div className="space-y-2">
                     {[...used, ...expired].map((g) => {
-                      const meta = GIFT_TYPE_LABELS[g.gift_type] ?? {
-                        label: g.gift_type,
-                        icon: "🎁",
+                      const m = GIFT_TYPE_META[g.gift_type]
+                      const meta = {
+                        label: m ? t(m.labelKey) : g.gift_type,
+                        icon: m?.icon ?? "🎁",
                       }
                       const isUsed = g.status === "used"
                       return (
@@ -218,12 +226,12 @@ export default function GiftsPage() {
                               {isUsed ? (
                                 <>
                                   <Check className="w-2.5 h-2.5 text-green-400" />
-                                  <span>مُستخدَمة {g.used_at && `(${fmtDate(g.used_at)})`}</span>
+                                  <span>{t("usedShort")} {g.used_at && `(${fmtDate(g.used_at)})`}</span>
                                 </>
                               ) : (
                                 <>
                                   <X className="w-2.5 h-2.5 text-red-400" />
-                                  <span>منتهية الصلاحية</span>
+                                  <span>{t("expiredFull")}</span>
                                 </>
                               )}
                             </div>
@@ -236,7 +244,7 @@ export default function GiftsPage() {
                                 : "bg-neutral-500/10 border-neutral-500/30 text-neutral-400",
                             )}
                           >
-                            {isUsed ? "مُستخدَمة" : "منتهية"}
+                            {isUsed ? t("usedBadge") : t("expiredBadge")}
                           </span>
                         </div>
                       )
