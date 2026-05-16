@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { ChevronRight, Search, X, Plus, AlertTriangle } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -35,6 +36,8 @@ interface Partner {
 
 export default function CreateContractPage() {
   const router = useRouter()
+  const t = useTranslations("contracts")
+  const tc = useTranslations("common")
 
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
@@ -155,7 +158,7 @@ export default function CreateContractPage() {
   // lookup converge here.
   const addPartner = (user: Partner["user"]) => {
     if (partners.some((p) => p.user.id === user.id)) {
-      showError("هذا الشخص مضاف بالفعل")
+      showError(t("alreadyAdded"))
       return
     }
     const newList = [...partners, { user, role: "partner" as const, share_percentage: 0 }]
@@ -183,11 +186,11 @@ export default function CreateContractPage() {
     // UUID v4 pattern (loose — accepts any v1-v5).
     const uuidPat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     if (!uuidPat.test(id)) {
-      showError("معرّف غير صالح — يجب أن يكون UUID")
+      showError(t("invalidUuid"))
       return
     }
     if (partners.some((p) => p.user.id === id)) {
-      showError("هذا الشخص مضاف بالفعل")
+      showError(t("alreadyAdded"))
       return
     }
     setIdLookupLoading(true)
@@ -199,7 +202,7 @@ export default function CreateContractPage() {
         .eq("id", id)
         .maybeSingle()
       if (error || !data) {
-        showError("لم يُعثر على مستخدم بهذا المعرّف")
+        showError(t("userNotFoundById"))
         return
       }
       type Row = {
@@ -222,9 +225,9 @@ export default function CreateContractPage() {
         is_verified: r.kyc_status === "approved",
         level: safeLevel,
       })
-      showSuccess("تمت إضافة الشريك ✓")
+      showSuccess(t("partnerAdded"))
     } catch {
-      showError("فشل البحث — تحقّق من الاتصال")
+      showError(t("searchFailed"))
     } finally {
       setIdLookupLoading(false)
     }
@@ -254,12 +257,12 @@ export default function CreateContractPage() {
   const hasEnoughFees = mockFeeBalance >= feeAmount
 
   const createContract = async () => {
-    if (!title.trim()) return showError("أدخل اسم العقد")
-    if (!description.trim()) return showError("أدخل وصف العقد")
-    if (investmentNum < 1) return showError("أدخل قيمة استثمار صحيحة")
-    if (partners.length < 2) return showError("يجب إضافة شريك واحد على الأقل")
-    if (!sharesValid) return showError("مجموع النسب يجب أن يساوي 100%")
-    if (!agreed) return showError("يجب الموافقة على الشروط")
+    if (!title.trim()) return showError(t("enterTitle"))
+    if (!description.trim()) return showError(t("enterDesc"))
+    if (investmentNum < 1) return showError(t("enterValidInvestment"))
+    if (partners.length < 2) return showError(t("minOnePartner"))
+    if (!sharesValid) return showError(t("sharesMust100"))
+    if (!agreed) return showError(t("mustAgree"))
     // Skip the fee gate when the user is redeeming a free_contract gift —
     // the end-fee will be waived server-side when the gift is consumed.
     if (!useGift && !hasEnoughFees) {
@@ -287,29 +290,29 @@ export default function CreateContractPage() {
           // Soft warn but don't block — contract is created.
           showError(
             redeem.reason === "no_gift_available"
-              ? "لم يتم العثور على هدية صالحة — العقد أُنشئ بدون استخدام الهدية"
-              : "تعذّر استخدام الهدية — العقد أُنشئ كالمعتاد",
+              ? t("giftNotFoundCreated")
+              : t("giftFailedCreated"),
           )
         } else {
-          showSuccess("🎁 تم إنشاء العقد مجاناً باستخدام هديتك!")
+          showSuccess(t("createdFreeWithGift"))
         }
       }
       setLoading(false)
       if (!useGift) {
-        showSuccess("تم إنشاء العقد وإرسال الدعوات للشركاء! 🎉")
+        showSuccess(t("createdInvitesSent"))
       }
       router.push("/contracts")
       return
     }
     setLoading(false)
     if (result.reason === "share_percent_not_100") {
-      showError(result.error || "مجموع النسب يجب أن يساوي 100%")
+      showError(result.error || t("sharesMust100"))
     } else if (result.reason === "missing_table") {
-      showError("الميزة غير متاحة على الخادم بعد")
+      showError(t("featureUnavailable"))
     } else if (result.reason === "unauthenticated") {
-      showError("سجّل دخول للمتابعة")
+      showError(t("loginToContinue"))
     } else {
-      showError(result.error || "تعذّر إنشاء العقد")
+      showError(result.error || t("createFailed"))
     }
   }
 
@@ -319,15 +322,15 @@ export default function CreateContractPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
 
           <PageHeader
-            title="إنشاء عقد"
-            subtitle="عقد شراكة استثمارية بنسب محددة بين الشركاء"
+            title={t("createTitle")}
+            subtitle={t("createSubtitle")}
             backHref="/contracts"
           />
 
           {/* معلومات تلقائية — Phase 13.53: real creator from auth */}
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4 mb-4">
             <div className="flex justify-between items-center text-xs">
-              <span className="text-neutral-500">منشئ العقد</span>
+              <span className="text-neutral-500">{t("contractCreator")}</span>
               {currentUser ? (
                 <div className="flex items-center gap-1.5">
                   <span className="text-white font-bold">
@@ -338,7 +341,7 @@ export default function CreateContractPage() {
                   </span>
                   {currentUser.is_verified && (
                     <span className="bg-green-400/10 border border-green-400/20 text-green-400 px-1 py-0.5 rounded text-[9px] font-bold">
-                      ✓ موثّق
+                      {t("verified")}
                     </span>
                   )}
                   <span className="bg-white/[0.08] border border-white/[0.12] text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
@@ -347,19 +350,19 @@ export default function CreateContractPage() {
                   </span>
                 </div>
               ) : (
-                <span className="text-neutral-500 text-[11px] animate-pulse">جاري التحميل…</span>
+                <span className="text-neutral-500 text-[11px] animate-pulse">{t("loadingDots")}</span>
               )}
             </div>
             <div className="h-px bg-white/[0.05] my-2.5" />
             <div className="flex justify-between items-center text-xs">
-              <span className="text-neutral-500">التاريخ</span>
+              <span className="text-neutral-500">{t("date")}</span>
               <span className="text-white">{new Date().toLocaleDateString("en-US")}</span>
             </div>
             <div className="h-px bg-white/[0.05] my-2.5" />
             <div className="flex justify-between items-center text-xs">
-              <span className="text-neutral-500">رصيد وحدات الرسوم</span>
+              <span className="text-neutral-500">{t("feeUnitsBalance")}</span>
               <span className={cn("font-bold font-mono", hasEnoughFees ? "text-green-400" : "text-red-400")}>
-                {mockFeeBalance.toLocaleString("en-US")} وحدة
+                {mockFeeBalance.toLocaleString("en-US")} {t("unitWord")}
               </span>
             </div>
           </div>
@@ -373,10 +376,10 @@ export default function CreateContractPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-bold text-white mb-0.5">
-                    🎁 لديك هدية متاحة
+                    {t("giftAvailable")}
                   </div>
                   <div className="text-[11px] text-neutral-300 leading-relaxed mb-3">
-                    استخدم هديتك لإنشاء عقد جماعي مجاني — يتجاوز رسوم الإنهاء (10%).
+                    {t("giftDesc")}
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -389,7 +392,7 @@ export default function CreateContractPage() {
                       "text-xs font-bold",
                       useGift ? "text-purple-300" : "text-neutral-400",
                     )}>
-                      استخدم الهدية لهذا العقد
+                      {t("useGiftForContract")}
                     </span>
                   </label>
                 </div>
@@ -399,23 +402,23 @@ export default function CreateContractPage() {
 
           {/* اسم العقد */}
           <div className="mb-4">
-            <label className="text-xs text-neutral-400 mb-2 block font-bold">اسم العقد *</label>
+            <label className="text-xs text-neutral-400 mb-2 block font-bold">{t("titleLabel")}</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="مثال: عقد استثمار — مشروع الشمال"
+              placeholder={t("titlePlaceholder")}
               className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
             />
           </div>
 
           {/* وصف العقد */}
           <div className="mb-4">
-            <label className="text-xs text-neutral-400 mb-2 block font-bold">وصف العقد *</label>
+            <label className="text-xs text-neutral-400 mb-2 block font-bold">{t("descLabel")}</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="اكتب وصف يوضح هدف الشراكة والاستثمار..."
+              placeholder={t("descPlaceholder")}
               rows={3}
               className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 resize-none"
             />
@@ -423,11 +426,11 @@ export default function CreateContractPage() {
 
           {/* قيمة الاستثمار */}
           <div className="mb-4">
-            <label className="text-xs text-neutral-400 mb-2 block font-bold">قيمة الاستثمار (IQD) *</label>
+            <label className="text-xs text-neutral-400 mb-2 block font-bold">{t("investmentLabel")}</label>
             <IntegerInput
               value={investment}
               onValueChange={setInvestment}
-              placeholder="مثال: 1000000"
+              placeholder={t("investmentPlaceholder")}
               dir="ltr"
               className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 font-mono"
             />
@@ -435,9 +438,9 @@ export default function CreateContractPage() {
               <div className="mt-2 flex items-start gap-1.5 text-[11px] text-neutral-400">
                 <span>💳</span>
                 <span>
-                  عمولة المنصة (2%): <span className="text-blue-400 font-bold">{feeAmount.toLocaleString("en-US")}</span> وحدة رسم
+                  {t("platformFeeLabel")} <span className="text-blue-400 font-bold">{feeAmount.toLocaleString("en-US")}</span> {t("feeUnitWord")}
                   {!hasEnoughFees && (
-                    <span className="text-red-400 mr-2">— رصيدك غير كافٍ</span>
+                    <span className="text-red-400 mr-2">{t("insufficientBalance")}</span>
                   )}
                 </span>
               </div>
@@ -446,7 +449,7 @@ export default function CreateContractPage() {
 
           {/* إضافة شركاء — Phase 13.53: مُد modes (partners list OR ID) */}
           <div className="mb-4">
-            <label className="text-xs text-neutral-400 mb-2 block font-bold">إضافة شركاء</label>
+            <label className="text-xs text-neutral-400 mb-2 block font-bold">{t("addPartners")}</label>
 
             {/* Mode toggle */}
             <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.08] rounded-xl p-1 mb-2 max-w-md">
@@ -460,7 +463,7 @@ export default function CreateContractPage() {
                 )}
               >
                 <Handshake className="w-3 h-3" strokeWidth={2} />
-                من شركائي ({myPartners.length})
+                {t("fromMyPartners", { n: myPartners.length })}
               </button>
               <button
                 onClick={() => setPickerMode("id")}
@@ -472,7 +475,7 @@ export default function CreateContractPage() {
                 )}
               >
                 <Hash className="w-3 h-3" strokeWidth={2} />
-                إدخال معرّف UUID
+                {t("enterUuid")}
               </button>
             </div>
 
@@ -481,15 +484,15 @@ export default function CreateContractPage() {
                 <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 text-center">
                   <Handshake className="w-7 h-7 text-neutral-600 mx-auto mb-1.5" strokeWidth={1.5} />
                   <div className="text-xs text-neutral-400 leading-relaxed">
-                    لا يوجد شركاء بعد. اذهب إلى{" "}
+                    {t("noPartnersYetPre")}{" "}
                     <button
                       type="button"
                       onClick={() => router.push("/community")}
                       className="text-blue-400 underline-offset-2 hover:underline"
                     >
-                      المجتمع → الأصدقاء
+                      {t("communityFriends")}
                     </button>{" "}
-                    ورقّ صديقاً إلى شريك ليظهر هنا، أو استخدم الإدخال بالـ UUID.
+                    {t("noPartnersYetPost")}
                   </div>
                 </div>
               ) : (
@@ -499,7 +502,7 @@ export default function CreateContractPage() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="ابحث في شركائك بالاسم..."
+                    placeholder={t("searchPartnersPlaceholder")}
                     className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl pr-10 pl-4 py-3 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
                   />
 
@@ -523,11 +526,11 @@ export default function CreateContractPage() {
                                 </span>
                               )}
                               <span className="bg-[#4ADE80]/[0.12] border border-[#4ADE80]/[0.25] text-[#4ADE80] px-1 py-0.5 rounded text-[9px] font-bold flex-shrink-0">
-                                شريك
+                                {t("partnerTag")}
                               </span>
                             </div>
                             <div className="text-[10px] text-neutral-500 mt-0.5">
-                              ثقة: <span className="font-mono text-yellow-400">{f.trust_score}</span> · {f.total_trades} صفقة
+                              {t("trustLabel")} <span className="font-mono text-yellow-400">{f.trust_score}</span> · {t("dealsCount", { n: f.total_trades })}
                             </div>
                           </div>
                           <Plus className="w-4 h-4 text-white flex-shrink-0" strokeWidth={2} />
@@ -538,7 +541,7 @@ export default function CreateContractPage() {
 
                   {searchQuery && searchResults.length === 0 && (
                     <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-[#1c1c1c] border border-white/[0.1] rounded-xl p-4 text-center text-xs text-neutral-500">
-                      لا يطابق أيّ من شركائك. جرّب إدخال UUID مباشر.
+                      {t("noPartnerMatch")}
                     </div>
                   )}
                 </div>
@@ -558,7 +561,7 @@ export default function CreateContractPage() {
                   disabled={idLookupLoading || !idInput.trim()}
                   className="bg-white text-black px-4 py-3 rounded-xl text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-neutral-200 transition-colors"
                 >
-                  {idLookupLoading ? "..." : "+ إضافة"}
+                  {idLookupLoading ? "..." : t("addBtn")}
                 </button>
               </div>
             )}
@@ -568,7 +571,7 @@ export default function CreateContractPage() {
           <div className="mb-4">
             <div className="flex justify-between items-center mb-3">
               <label className="text-xs text-neutral-400 font-bold">
-                الشركاء <span className="text-neutral-500">({partners.length})</span>
+                {t("partnersTitle")} <span className="text-neutral-500">({partners.length})</span>
               </label>
               <div className="flex gap-1.5">
                 <button
@@ -583,7 +586,7 @@ export default function CreateContractPage() {
                       : "bg-white/[0.05] border border-white/[0.08] text-neutral-400 hover:text-white"
                   )}
                 >
-                  تساوي
+                  {t("equal")}
                 </button>
                 <button
                   onClick={() => setDistMode("manual")}
@@ -594,7 +597,7 @@ export default function CreateContractPage() {
                       : "bg-white/[0.05] border border-white/[0.08] text-neutral-400 hover:text-white"
                   )}
                 >
-                  يدوي
+                  {t("manual")}
                 </button>
               </div>
             </div>
@@ -609,7 +612,7 @@ export default function CreateContractPage() {
             {!sharesValid && (
               <div className="text-[11px] text-red-400 mb-3 flex items-center gap-1.5">
                 <AlertTriangle className="w-3 h-3" />
-                مجموع النسب {totalShares.toFixed(1)}% — يجب أن يساوي 100%
+                {t("sharesSumWarn", { pct: totalShares.toFixed(1) })}
               </div>
             )}
 
@@ -637,7 +640,7 @@ export default function CreateContractPage() {
                       )}
                     </div>
                     <div className="text-[10px] text-neutral-500 mt-0.5">
-                      {p.role === "creator" ? "👑 منشئ العقد" : "شريك"}
+                      {p.role === "creator" ? t("creatorRole") : t("partnerRole")}
                     </div>
                   </div>
 
@@ -666,7 +669,7 @@ export default function CreateContractPage() {
                       onClick={() => removePartner(p.user.id)}
                       className="bg-red-500/[0.1] border border-red-500/[0.2] text-red-400 rounded-lg px-2 py-1.5 text-[10px] font-bold hover:bg-red-500/[0.15] transition-colors flex-shrink-0"
                     >
-                      حذف
+                      {t("remove")}
                     </button>
                   )}
                 </div>
@@ -684,27 +687,27 @@ export default function CreateContractPage() {
           {/* بنود الاتفاق */}
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4 mb-5">
             <div className="text-xs text-neutral-400 leading-relaxed mb-4">
-              <div className="font-bold text-white mb-2">📋 بنود الاتفاق:</div>
+              <div className="font-bold text-white mb-2">{t("agreementTerms")}</div>
               <ul className="space-y-1.5">
                 <li className="flex gap-2">
                   <span className="text-yellow-400">•</span>
-                  <span>الدخول في الاستثمارات يتم عبر العقد فقط</span>
+                  <span>{t("term1")}</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="text-yellow-400">•</span>
-                  <span>لا يُفعَّل العقد إلا بعد موافقة جميع الشركاء</span>
+                  <span>{t("term2")}</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="text-yellow-400">•</span>
-                  <span>توزيع الأرباح حسب النسب المحددة</span>
+                  <span>{t("term3")}</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="text-yellow-400">•</span>
-                  <span>لا يمكن تعديل النسب بعد التفعيل</span>
+                  <span>{t("term4")}</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="text-yellow-400">•</span>
-                  <span>عمولة المنصة 2% من قيمة الاستثمار</span>
+                  <span>{t("term5")}</span>
                 </li>
               </ul>
             </div>
@@ -724,7 +727,7 @@ export default function CreateContractPage() {
                 {agreed && <span className="text-black text-xs font-bold">✓</span>}
               </div>
               <span className="text-xs text-neutral-400 leading-relaxed">
-                أوافق على شروط العقد وأتحمل المسؤولية القانونية والالتزامات المترتبة
+                {t("agreeText")}
               </span>
             </button>
           </div>
@@ -740,7 +743,7 @@ export default function CreateContractPage() {
                 : "bg-white/[0.2] text-neutral-500 cursor-not-allowed"
             )}
           >
-            {loading ? "جاري الإنشاء..." : "إنشاء العقد وإرسال الدعوات"}
+            {loading ? t("creating") : t("createAndInvite")}
           </button>
 
         </div>
@@ -754,27 +757,27 @@ export default function CreateContractPage() {
               <div className="w-16 h-16 rounded-full bg-red-500/[0.1] border-2 border-red-500/[0.3] flex items-center justify-center mx-auto mb-3">
                 <AlertTriangle className="w-8 h-8 text-red-400" strokeWidth={1.5} />
               </div>
-              <div className="text-base font-bold text-white mb-1">رصيد وحدات الرسوم غير كافٍ</div>
+              <div className="text-base font-bold text-white mb-1">{t("feeInsufficientTitle")}</div>
               <div className="text-xs text-neutral-400 leading-relaxed">
-                إنشاء عقد يتطلب دفع عمولة من وحدات الرسوم
+                {t("feeInsufficientDesc")}
               </div>
             </div>
 
             <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3.5 mb-5">
               <div className="flex justify-between items-center py-1.5">
-                <span className="text-xs text-neutral-500">المطلوب</span>
-                <span className="text-sm font-bold text-red-400 font-mono">{feeAmount.toLocaleString("en-US")} وحدة</span>
+                <span className="text-xs text-neutral-500">{t("required")}</span>
+                <span className="text-sm font-bold text-red-400 font-mono">{feeAmount.toLocaleString("en-US")} {t("unitWord")}</span>
               </div>
               <div className="h-px bg-white/[0.05] my-1" />
               <div className="flex justify-between items-center py-1.5">
-                <span className="text-xs text-neutral-500">رصيدك الحالي</span>
-                <span className="text-sm font-bold text-white font-mono">{mockFeeBalance.toLocaleString("en-US")} وحدة</span>
+                <span className="text-xs text-neutral-500">{t("currentBalance")}</span>
+                <span className="text-sm font-bold text-white font-mono">{mockFeeBalance.toLocaleString("en-US")} {t("unitWord")}</span>
               </div>
               <div className="h-px bg-white/[0.05] my-1" />
               <div className="flex justify-between items-center py-1.5">
-                <span className="text-xs text-neutral-500">النقص</span>
+                <span className="text-xs text-neutral-500">{t("shortfall")}</span>
                 <span className="text-sm font-bold text-yellow-400 font-mono">
-                  {(feeAmount - mockFeeBalance).toLocaleString("en-US")} وحدة
+                  {(feeAmount - mockFeeBalance).toLocaleString("en-US")} {t("unitWord")}
                 </span>
               </div>
             </div>
@@ -784,13 +787,13 @@ export default function CreateContractPage() {
                 onClick={() => setShowFeeBlock(false)}
                 className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
               >
-                إغلاق
+                {tc("buttons.close")}
               </button>
               <button
                 onClick={() => router.push("/portfolio?tab=fee_units")}
                 className="flex-1 py-3 rounded-xl bg-neutral-100 text-black text-sm font-bold hover:bg-neutral-200"
               >
-                شحن وحدات
+                {t("topUpUnits")}
               </button>
             </div>
           </div>
