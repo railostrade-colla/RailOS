@@ -1293,7 +1293,15 @@
   "settings": {
     "notifBadge": "SETTINGS · إشعارات",
     "notifTitle": "إعدادات الإشعارات",
-    "notifDesc": "تحكّم في الإشعارات التي تتلقاها على أجهزتك"
+    "notifDesc": "تحكّم في الإشعارات التي تتلقاها على أجهزتك",
+    "supportTitle": "الدعم والمساعدة",
+    "supportSubtitle": "الأسئلة، التواصل، الإبلاغ",
+    "supportFaqTitle": "الأسئلة الشائعة",
+    "supportFaqSub": "إجابات لأكثر الأسئلة تكراراً",
+    "supportContactTitle": "التواصل المباشر",
+    "supportContactSub": "تواصل مع فريق الدعم",
+    "supportReportTitle": "الإبلاغ عن مشكلة",
+    "supportReportSub": "أبلغنا عن خلل أو اقتراح"
   },
   "legal": {},
   "company": {

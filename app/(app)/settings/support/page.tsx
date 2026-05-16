@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import { HelpCircle, MessageCircle, Flag } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import {
@@ -12,35 +13,36 @@ import {
  * the existing /support surface.
  */
 export default function SupportSettingsPage() {
+  const t = useTranslations("settings")
   return (
     <AppLayout>
       <div className="relative">
         <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
           <SettingsSectionHeader
-            title="الدعم والمساعدة"
-            subtitle="الأسئلة، التواصل، الإبلاغ"
+            title={t("supportTitle")}
+            subtitle={t("supportSubtitle")}
             backHref="/settings"
           />
 
           <div className="flex flex-col gap-3">
             <SettingsCategoryCard
               icon={HelpCircle}
-              title="الأسئلة الشائعة"
-              subtitle="إجابات لأكثر الأسئلة تكراراً"
+              title={t("supportFaqTitle")}
+              subtitle={t("supportFaqSub")}
               color="#22D3EE"
               href="/support"
             />
             <SettingsCategoryCard
               icon={MessageCircle}
-              title="التواصل المباشر"
-              subtitle="تواصل مع فريق الدعم"
+              title={t("supportContactTitle")}
+              subtitle={t("supportContactSub")}
               color="#4ADE80"
               href="/support"
             />
             <SettingsCategoryCard
               icon={Flag}
-              title="الإبلاغ عن مشكلة"
-              subtitle="أبلغنا عن خلل أو اقتراح"
+              title={t("supportReportTitle")}
+              subtitle={t("supportReportSub")}
               color="#FBBF24"
               href="/support"
             />

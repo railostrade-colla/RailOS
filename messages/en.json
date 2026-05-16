@@ -1293,7 +1293,15 @@
   "settings": {
     "notifBadge": "SETTINGS · Notifications",
     "notifTitle": "Notification settings",
-    "notifDesc": "Control the notifications you receive on your devices"
+    "notifDesc": "Control the notifications you receive on your devices",
+    "supportTitle": "Support & help",
+    "supportSubtitle": "FAQs, contact, reporting",
+    "supportFaqTitle": "FAQ",
+    "supportFaqSub": "Answers to the most frequent questions",
+    "supportContactTitle": "Direct contact",
+    "supportContactSub": "Reach the support team",
+    "supportReportTitle": "Report an issue",
+    "supportReportSub": "Tell us about a bug or suggestion"
   },
   "legal": {},
   "company": {
