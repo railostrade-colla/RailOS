@@ -1290,7 +1290,11 @@
     "yesCancelContract": "Yes, cancel the contract"
   },
   "admin": {},
-  "settings": {},
+  "settings": {
+    "notifBadge": "SETTINGS · Notifications",
+    "notifTitle": "Notification settings",
+    "notifDesc": "Control the notifications you receive on your devices"
+  },
   "legal": {},
   "company": {
     "pageTitle": "Company details",

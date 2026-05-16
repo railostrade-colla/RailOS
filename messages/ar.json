@@ -1290,7 +1290,11 @@
     "yesCancelContract": "نعم، ألغِ العقد"
   },
   "admin": {},
-  "settings": {},
+  "settings": {
+    "notifBadge": "SETTINGS · إشعارات",
+    "notifTitle": "إعدادات الإشعارات",
+    "notifDesc": "تحكّم في الإشعارات التي تتلقاها على أجهزتك"
+  },
   "legal": {},
   "company": {
     "pageTitle": "تفاصيل الشركة",
