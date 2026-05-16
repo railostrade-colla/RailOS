@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import {
   Edit2, LogOut, Crown, Calendar, Briefcase, TrendingUp, Trophy,
   Mail, User, Wallet, Lock, BarChart3, Gift, Settings,
@@ -39,6 +40,8 @@ function Skel({ className }: { className: string }) {
  */
 export default function ProfilePage() {
   const router = useRouter()
+  const t = useTranslations("profile")
+  const tc = useTranslations("common")
   const [showLogoutModal, setShowLogoutModal] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
 
@@ -107,7 +110,7 @@ export default function ProfilePage() {
       // best-effort — we navigate either way so a stale session
       // can't trap the user inside the (app) shell.
     }
-    showSuccess("تم تسجيل الخروج بنجاح")
+    showSuccess(t("logoutSuccess"))
     // Phase 11.03 — HARD navigation. window.location.replace clears all
     // React state, dedup caches, realtime channels, and prevents the
     // back button from returning into a logged-out session.
@@ -120,43 +123,43 @@ export default function ProfilePage() {
   const categories = [
     {
       icon: User,
-      title: "البيانات الشخصية",
-      subtitle: "الاسم، البريد، الهاتف",
+      title: t("catPersonalTitle"),
+      subtitle: t("catPersonalSub"),
       color: "#F472B6",
       href: "/profile-setup",
     },
     {
       icon: Wallet,
-      title: "المحفظة",
-      subtitle: "الرصيد، الحصص، العمليات",
+      title: t("catWalletTitle"),
+      subtitle: t("catWalletSub"),
       color: "#60A5FA",
       href: "/portfolio",
     },
     {
       icon: Lock,
-      title: "الأمان والخصوصية",
-      subtitle: "كلمة السر، البصمة، الجلسات",
+      title: t("catSecurityTitle"),
+      subtitle: t("catSecuritySub"),
       color: "#4ADE80",
       href: "/settings/security",
     },
     {
       icon: BarChart3,
-      title: "النشاط والصفقات",
-      subtitle: "صفقاتك وعملياتك وسجلّك",
+      title: t("catActivityTitle"),
+      subtitle: t("catActivitySub"),
       color: "#FBBF24",
       href: "/orders",
     },
     {
       icon: Gift,
-      title: "برنامج السفراء",
-      subtitle: "رمز الإحالة، المحالون، المكافآت",
+      title: t("catAmbassadorTitle"),
+      subtitle: t("catAmbassadorSub"),
       color: "#C084FC",
       href: "/ambassador",
     },
     {
       icon: Settings,
-      title: "الإعدادات",
-      subtitle: "كل تفضيلات التطبيق",
+      title: t("catSettingsTitle"),
+      subtitle: t("catSettingsSub"),
       color: "#22D3EE",
       href: "/settings",
     },
@@ -169,7 +172,7 @@ export default function ProfilePage() {
       <div className="relative">
         <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto pb-20">
 
-          <PageHeader title="ملفي الشخصي" subtitle="إدارة حسابك" showBack={false} />
+          <PageHeader title={t("pageTitle")} subtitle={t("pageSubtitle")} showBack={false} />
 
           {/* ═══ § 1 Hero — centered avatar + level + KYC ═══ */}
           <Card variant="gradient" color="purple" className="mb-6">
@@ -193,7 +196,7 @@ export default function ProfilePage() {
                       {profile?.level_label ?? "—"}
                     </Badge>
                     {profile?.is_verified && (
-                      <Badge color="green" variant="soft" size="xs">✓ موثق</Badge>
+                      <Badge color="green" variant="soft" size="xs">{t("verifiedBadge")}</Badge>
                     )}
                   </>
                 )}
@@ -213,7 +216,7 @@ export default function ProfilePage() {
                 className="bg-white/[0.06] border border-white/[0.1] hover:bg-white/[0.1] text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors"
               >
                 <Edit2 className="w-3 h-3" strokeWidth={2} />
-                تعديل الملف
+                {t("editProfile")}
               </button>
             </div>
 
@@ -221,19 +224,19 @@ export default function ProfilePage() {
             <div className="grid grid-cols-3 gap-2 mt-5">
               <StatCard
                 size="sm"
-                label="تاريخ الانضمام"
+                label={t("joinDate")}
                 value={loading ? "..." : (profile?.joined_year_month || "—")}
                 icon={<Calendar className="w-3 h-3" />}
               />
               <StatCard
                 size="sm"
-                label="الصفقات"
+                label={t("tradesLabel")}
                 value={loading ? "..." : (profile?.total_trades ?? 0)}
                 color="blue"
               />
               <StatCard
                 size="sm"
-                label="نسبة النجاح"
+                label={t("successRateP")}
                 value={loading ? "..." : `${profile?.success_rate ?? 0}%`}
                 color="green"
               />
@@ -253,19 +256,19 @@ export default function ProfilePage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <h3 className="text-base font-bold text-white">Quick Sell Premium</h3>
-                    <Badge color="yellow" variant="soft" size="xs">جديد</Badge>
+                    <Badge color="yellow" variant="soft" size="xs">{t("premiumNew")}</Badge>
                   </div>
                   <p className="text-xs text-neutral-300 leading-relaxed">
-                    احصل على 15% خصم على عمولة البيع السريع
+                    {t("premiumDesc")}
                   </p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
                 {[
-                  { icon: "⚡", text: "بيع فوري بدون انتظار" },
-                  { icon: "💰", text: "خصم 15% على العمولة" },
-                  { icon: "🎯", text: "أولوية في المعالجة" },
+                  { icon: "⚡", text: t("feat1") },
+                  { icon: "💰", text: t("feat2") },
+                  { icon: "🎯", text: t("feat3") },
                 ].map((f) => (
                   <div key={f.icon} className="bg-white/[0.05] border border-white/[0.08] rounded-lg p-2.5 text-center">
                     <div className="text-base mb-0.5">{f.icon}</div>
@@ -279,35 +282,35 @@ export default function ProfilePage() {
                 className="w-full bg-gradient-to-r from-yellow-400 to-orange-400 text-black py-3 rounded-xl text-sm font-bold hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
               >
                 <Crown className="w-4 h-4" strokeWidth={2.5} />
-                اشترك الآن — 10,000 وحدة رسوم
+                {t("subscribeNow")}
               </button>
-              <p className="text-[10px] text-neutral-500 text-center mt-2">إلغاء في أي وقت</p>
+              <p className="text-[10px] text-neutral-500 text-center mt-2">{t("cancelAnytime")}</p>
             </div>
           </Card>
 
           {/* ═══ § 3 Quick Stats ═══ */}
           <div className="mb-6">
-            <SectionHeader title="📊 نظرة سريعة" subtitle="ملخص أدائك على المنصة" />
+            <SectionHeader title={t("quickGlance")} subtitle={t("quickGlanceSub")} />
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
               <StatCard
-                label="إجمالي محفظتي"
-                value={fmtLimit(portfolio.totalValue) + " د.ع"}
+                label={t("totalPortfolio")}
+                value={fmtLimit(portfolio.totalValue) + " " + t("iqd")}
                 color="blue"
                 icon={<Briefcase className="w-3 h-3" />}
               />
               <StatCard
-                label="استثمارات نشطة"
+                label={t("activeInvestments")}
                 value={portfolio.holdingsCount}
                 color="green"
               />
               <StatCard
-                label="إجمالي الأرباح"
+                label={t("totalProfit")}
                 value={(portfolio.totalProfit >= 0 ? "+" : "") + fmtLimit(portfolio.totalProfit)}
                 color={portfolio.totalProfit >= 0 ? "green" : "red"}
                 icon={<TrendingUp className="w-3 h-3" />}
               />
               <StatCard
-                label="مستواي"
+                label={t("myLevel")}
                 value={loading ? "..." : (profile?.level_label ?? "—")}
                 color="purple"
                 icon={<Trophy className="w-3 h-3" />}
@@ -316,26 +319,26 @@ export default function ProfilePage() {
             {/* Phase 10.81 — extra row: watchlist count + KYC + onboarding */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mt-2.5">
               <StatCard
-                label="أتابعهم"
+                label={t("iFollow")}
                 value={loading ? "..." : followsCount}
                 color="blue"
               />
               <StatCard
-                label="حالة التوثيق"
+                label={t("kycStatus")}
                 value={loading ? "..." :
-                  profile?.kyc_status === "approved" ? "موثَّق" :
-                  profile?.kyc_status === "pending" ? "قيد المراجعة" :
-                  profile?.kyc_status === "rejected" ? "مرفوض" : "—"
+                  profile?.kyc_status === "approved" ? t("kycVerified") :
+                  profile?.kyc_status === "pending" ? t("kycPending") :
+                  profile?.kyc_status === "rejected" ? t("kycRejected") : "—"
                 }
                 color={profile?.kyc_status === "approved" ? "green" : "yellow"}
               />
               <StatCard
-                label="المهنة"
+                label={t("profession")}
                 value={loading ? "..." : (extras?.profession ?? "—")}
                 color="purple"
               />
               <StatCard
-                label="المدينة"
+                label={t("city")}
                 value={loading ? "..." : (extras?.city ?? "—")}
                 color="blue"
               />
@@ -343,7 +346,7 @@ export default function ProfilePage() {
           </div>
 
           {/* ═══ § 4 Category cards ═══ */}
-          <SectionHeader title="⚙️ الإعدادات" subtitle="إدارة كاملة لحسابك" />
+          <SectionHeader title={t("settingsSection")} subtitle={t("settingsSectionSub")} />
           <div className="flex flex-col gap-3 mb-6">
             {categories.map((c) => (
               <SettingsCategoryCard
@@ -363,7 +366,7 @@ export default function ProfilePage() {
             className="w-full bg-red-400/[0.06] border border-red-400/25 hover:bg-red-400/[0.1] text-red-400 py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors"
           >
             <LogOut className="w-4 h-4" strokeWidth={2} />
-            تسجيل الخروج
+            {t("logout")}
           </button>
 
         </div>
@@ -373,8 +376,8 @@ export default function ProfilePage() {
       <Modal
         isOpen={showLogoutModal}
         onClose={() => !loggingOut && setShowLogoutModal(false)}
-        title="تسجيل الخروج"
-        subtitle="هل أنت متأكد من رغبتك في تسجيل الخروج؟"
+        title={t("logout")}
+        subtitle={t("logoutConfirmSub")}
         variant="warning"
         size="sm"
         footer={
@@ -384,7 +387,7 @@ export default function ProfilePage() {
               disabled={loggingOut}
               className="flex-1 bg-white/[0.05] border border-white/[0.1] text-white py-2.5 rounded-xl text-sm hover:bg-white/[0.08] disabled:opacity-50 transition-colors"
             >
-              إلغاء
+              {tc("buttons.cancel")}
             </button>
             <button
               onClick={handleLogout}
@@ -394,12 +397,12 @@ export default function ProfilePage() {
               {loggingOut ? (
                 <>
                   <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
-                  جاري...
+                  {t("working")}
                 </>
               ) : (
                 <>
                   <LogOut className="w-4 h-4" strokeWidth={2} />
-                  تسجيل الخروج
+                  {t("logout")}
                 </>
               )}
             </button>
@@ -407,7 +410,7 @@ export default function ProfilePage() {
         }
       >
         <p className="text-sm text-neutral-300 leading-relaxed">
-          ستحتاج لتسجيل الدخول مرة أخرى للوصول لحسابك.
+          {t("logoutWarn")}
         </p>
       </Modal>
     </AppLayout>
