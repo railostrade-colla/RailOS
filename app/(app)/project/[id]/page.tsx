@@ -9,11 +9,12 @@ import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { CreateDealModal } from "@/components/deals/CreateDealModal"
 import { showSuccess, showError } from "@/lib/utils/toast"
+import { useTranslations } from "next-intl"
 import { cn } from "@/lib/utils/cn"
 
 const fmtIQD = (n: number) => n.toLocaleString("en-US")
 const sectorIcon = (s: string) => s?.includes("طب") ? "🏥" : s?.includes("تقن") ? "💻" : s?.includes("زراع") ? "🌾" : s?.includes("تجار") ? "🏪" : "🏢"
-const riskLabel = (r: string) => r === "low" ? "منخفض" : r === "medium" ? "متوسط" : "مرتفع"
+const riskKey = (r: string) => r === "low" ? "risk_low" : r === "medium" ? "risk_medium" : "risk_high"
 const riskColor = (r: string) => r === "low" ? "text-green-400" : r === "medium" ? "text-yellow-400" : "text-red-400"
 
 // Mock projects — fallback ONLY (Phase 14.07.1: chart + history now real).
@@ -84,6 +85,8 @@ interface RecentDealRow {
 export default function ProjectDetailPage() {
   const router = useRouter()
   const params = useParams()
+  const t = useTranslations("project")
+  const tc = useTranslations("common")
   const id = params?.id as string
 
   const [project, setProject] = useState<MockProject | null>(mockProjects[id] || null)
@@ -367,16 +370,16 @@ export default function ProjectDetailPage() {
       setFollowing(!next)
       const code = result.reason ?? ""
       const map: Record<string, string> = {
-        unauthenticated: "يجب تسجيل الدخول",
-        missing_target: "المشروع غير صالح",
-        missing_table:  "ميزة المتابعة غير منشورة بعد",
-        already_following: "أنت تتابع المشروع بالفعل",
-        not_following: "أنت لا تتابع المشروع",
+        unauthenticated: t("mustLogin"),
+        missing_target: t("invalidProject"),
+        missing_table:  t("followNotPublished"),
+        already_following: t("alreadyFollowing"),
+        not_following: t("notFollowing"),
       }
-      showError(map[code] ?? "تعذّر حفظ المتابعة")
+      showError(map[code] ?? t("followFail"))
       return
     }
-    showSuccess(next ? "✅ تمت متابعة المشروع" : "تم إلغاء المتابعة")
+    showSuccess(next ? t("followedToast") : t("unfollowedToast"))
   }
 
   if (loading || !project) {
@@ -488,7 +491,7 @@ export default function ProjectDetailPage() {
         <div className="relative z-10 px-3 lg:px-8 py-6 max-w-3xl mx-auto">
 
           <PageHeader
-            title="تفاصيل المشروع"
+            title={t("pageTitle")}
             subtitle={project.name}
             rightAction={
               <button
@@ -512,7 +515,7 @@ export default function ProjectDetailPage() {
                     strokeWidth={1.5}
                   />
                 )}
-                {following ? "متابَع" : "متابعة"}
+                {following ? t("following") : t("follow")}
               </button>
             }
           />
@@ -548,7 +551,7 @@ export default function ProjectDetailPage() {
                     project.risk_level === "medium" ? "bg-yellow-400/10 border-yellow-400/20 text-yellow-400" :
                     "bg-red-400/10 border-red-400/20 text-red-400"
                   )}>
-                    خطر {riskLabel(project.risk_level)}
+                    {t("riskPrefix")} {t(riskKey(project.risk_level))}
                   </span>
                 </div>
               </div>
@@ -556,7 +559,7 @@ export default function ProjectDetailPage() {
 
             {/* Price (Phase 12.9 — prefer current_market_price) */}
             <div className="mb-3">
-              <div className="text-[11px] text-neutral-500 mb-1">السعر الحالي للحصة</div>
+              <div className="text-[11px] text-neutral-500 mb-1">{t("currentSharePrice")}</div>
               <div className="flex items-baseline gap-2">
                 <span className="text-3xl font-bold text-white tracking-tight font-mono">
                   {(project.current_market_price ?? project.share_price).toLocaleString("en-US")}
@@ -570,7 +573,7 @@ export default function ProjectDetailPage() {
               {project.current_market_price &&
                project.current_market_price !== project.share_price && (
                 <div className="text-[10px] text-neutral-600 mt-1">
-                  السعر الاسمي: {project.share_price.toLocaleString("en-US")} د.ع
+                  {t("nominalPrice")} {project.share_price.toLocaleString("en-US")} {t("iqd")}
                 </div>
               )}
             </div>
@@ -578,7 +581,7 @@ export default function ProjectDetailPage() {
             {/* Progress */}
             <div className="mb-3">
               <div className="flex justify-between mb-1.5">
-                <span className="text-[11px] text-neutral-500">نسبة التمويل</span>
+                <span className="text-[11px] text-neutral-500">{t("fundingPct")}</span>
                 <span className="text-[11px] font-bold text-white">{pct}%</span>
               </div>
               <div className="h-2 bg-white/[0.06] rounded-full overflow-hidden">
@@ -595,13 +598,13 @@ export default function ProjectDetailPage() {
             {/* Stats grid */}
             <div className="grid grid-cols-2 gap-2">
               {[
-                { label: "القيمة السوقية", value: fmtIQD(marketCap) + " IQD" },
-                { label: "المستثمرين", value: investors.toLocaleString("en-US") },
+                { label: t("marketCap"), value: fmtIQD(marketCap) + " IQD" },
+                { label: t("investors"), value: investors.toLocaleString("en-US") },
                 {
-                  label: "حصص متاحة",
+                  label: t("availableShares"),
                   value: liveAvailable.toLocaleString("en-US"),
                 },
-                { label: "إجمالي الحصص", value: project.total_shares.toLocaleString("en-US") },
+                { label: t("totalShares"), value: project.total_shares.toLocaleString("en-US") },
               ].map((s, i) => (
                 <div key={i} className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5">
                   <div className="text-[10px] text-neutral-500 mb-0.5">{s.label}</div>
@@ -619,9 +622,9 @@ export default function ProjectDetailPage() {
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-3">
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
               <div>
-                <div className="text-sm font-bold text-white">حركة السعر</div>
+                <div className="text-sm font-bold text-white">{t("priceMovement")}</div>
                 <div className="text-[10px] text-neutral-500 mt-0.5">
-                  بيانات حقيقية من سجل التداول
+                  {t("realTradingData")}
                 </div>
               </div>
               <div className="flex gap-1">
@@ -636,7 +639,7 @@ export default function ProjectDetailPage() {
                         : "bg-white/[0.04] text-neutral-400 hover:text-white",
                     )}
                   >
-                    {p}
+                    {p === "كل" ? t("periodAll") : p}
                   </button>
                 ))}
               </div>
@@ -644,21 +647,21 @@ export default function ProjectDetailPage() {
 
             {priceTimelineLoading ? (
               <div className="h-32 flex items-center justify-center text-[11px] text-neutral-500">
-                جاري تحميل سجل السعر...
+                {t("loadingPriceHistory")}
               </div>
             ) : chartData.length < 2 ? (
               <div className="h-32 flex flex-col items-center justify-center text-center px-4">
                 <div className="text-2xl mb-1 opacity-50">📉</div>
                 <div className="text-[11px] text-neutral-500 leading-relaxed">
-                  لا توجد بيانات تداول كافية لرسم المنحنى{" "}
-                  {period !== "كل" && "في هذه الفترة"}
+                  {t("notEnoughData")}{" "}
+                  {period !== "كل" && t("inThisPeriod")}
                 </div>
                 {period !== "كل" && (
                   <button
                     onClick={() => setPeriod("كل")}
                     className="mt-2 text-[10px] text-green-400 hover:text-green-300 underline underline-offset-2"
                   >
-                    عرض السجل الكامل
+                    {t("viewFullHistory")}
                   </button>
                 )}
               </div>
@@ -670,22 +673,22 @@ export default function ProjectDetailPage() {
           {/* Tabs */}
           <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-3">
             {([
-              { key: "info", label: "المعلومات" },
-              { key: "updates", label: `التحديثات${updates.length > 0 ? ` (${updates.length})` : ""}` },
-              { key: "gallery", label: "معرض الصور" },
-              { key: "history", label: "السجل" },
-            ] as const).map((t) => (
+              { key: "info", label: t("tabInfo") },
+              { key: "updates", label: `${t("tabUpdates")}${updates.length > 0 ? ` (${updates.length})` : ""}` },
+              { key: "gallery", label: t("gallery") },
+              { key: "history", label: t("tabHistory") },
+            ] as const).map((tb) => (
               <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
+                key={tb.key}
+                onClick={() => setTab(tb.key)}
                 className={cn(
                   "flex-1 py-2 rounded-lg text-xs transition-colors",
-                  tab === t.key
+                  tab === tb.key
                     ? "bg-white/[0.08] text-white font-bold border border-white/[0.1]"
                     : "text-neutral-500 hover:text-white"
                 )}
               >
-                {t.label}
+                {tb.label}
               </button>
             ))}
           </div>
@@ -695,22 +698,22 @@ export default function ProjectDetailPage() {
             <>
               {project.description && (
                 <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-3">
-                  <div className="text-sm font-bold text-white mb-2">عن المشروع</div>
+                  <div className="text-sm font-bold text-white mb-2">{t("about")}</div>
                   <div className="text-xs text-neutral-300 leading-relaxed">{project.description}</div>
                 </div>
               )}
 
               <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-3">
-                <div className="text-sm font-bold text-white mb-3">البيانات المالية</div>
+                <div className="text-sm font-bold text-white mb-3">{t("financials")}</div>
                 <div className="divide-y divide-white/[0.04]">
                   {[
-                    { label: "رأس المال الكلي", value: fmtIQD(project.share_price * project.total_shares) + " IQD" },
+                    { label: t("totalCapital"), value: fmtIQD(project.share_price * project.total_shares) + " IQD" },
                     // Phase 12.11 — funded = sold × share_price (real money raised).
-                    { label: "المبلغ الممول", value: fmtIQD(fundedAmount) + " IQD" },
+                    { label: t("fundedAmount"), value: fmtIQD(fundedAmount) + " IQD" },
                     // Remaining = available × share_price (still on the market).
-                    { label: "المتبقي للتمويل", value: fmtIQD(remainingAmount) + " IQD" },
-                    { label: "الحد الأدنى للاستثمار", value: project.share_price.toLocaleString("en-US") + " IQD" },
-                    { label: "إجمالي الحصص", value: project.total_shares.toLocaleString("en-US") + " SHR" },
+                    { label: t("remainingToFund"), value: fmtIQD(remainingAmount) + " IQD" },
+                    { label: t("minInvestment"), value: project.share_price.toLocaleString("en-US") + " IQD" },
+                    { label: t("totalShares"), value: project.total_shares.toLocaleString("en-US") + " SHR" },
                   ].map((item, i) => (
                     <div key={i} className="flex justify-between py-2.5">
                       <span className="text-xs text-neutral-500">{item.label}</span>
@@ -721,7 +724,7 @@ export default function ProjectDetailPage() {
               </div>
 
               <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-3">
-                <div className="text-sm font-bold text-white mb-3">العوائد المتوقعة</div>
+                <div className="text-sm font-bold text-white mb-3">{t("expectedReturns")}</div>
                 {/* Phase 10.87 — Monthly + annual side-by-side cards.
                     DB stores annual; monthly = annual / 12. */}
                 {(() => {
@@ -734,13 +737,13 @@ export default function ProjectDetailPage() {
                   return (
                     <div className="grid grid-cols-2 gap-2 mb-3">
                       <div className="bg-green-400/[0.06] border border-green-400/[0.2] rounded-xl p-3 text-center">
-                        <div className="text-[10px] text-neutral-400 mb-1">العائد الشهري المتوقع</div>
+                        <div className="text-[10px] text-neutral-400 mb-1">{t("expectedMonthly")}</div>
                         <div className="text-base font-bold text-green-400 font-mono">
                           {fmt(monthlyMin)}% — {fmt(monthlyMax)}%
                         </div>
                       </div>
                       <div className="bg-emerald-400/[0.06] border border-emerald-400/[0.2] rounded-xl p-3 text-center">
-                        <div className="text-[10px] text-neutral-400 mb-1">العائد السنوي المتوقع</div>
+                        <div className="text-[10px] text-neutral-400 mb-1">{t("expectedAnnual")}</div>
                         <div className="text-base font-bold text-emerald-400 font-mono">
                           {fmt(annualMin)}% — {fmt(annualMax)}%
                         </div>
@@ -751,14 +754,14 @@ export default function ProjectDetailPage() {
                 <div className="divide-y divide-white/[0.04]">
                   {[
                     {
-                      label: "مستوى المخاطر",
+                      label: t("riskLevel"),
                       value:
-                        project.risk_level === "low" ? "🟢 منخفض" :
-                        project.risk_level === "medium" ? "🟡 متوسط" :
-                        project.risk_level === "high" ? "🔴 مرتفع" : "—",
+                        project.risk_level === "low" ? t("riskLowEmoji") :
+                        project.risk_level === "medium" ? t("riskMedEmoji") :
+                        project.risk_level === "high" ? t("riskHighEmoji") : "—",
                     },
-                    { label: "آلية التوزيع", value: project.distribution_type === "monthly" ? "شهري" : project.distribution_type === "quarterly" ? "ربع سنوي" : project.distribution_type === "semi_annual" ? "نصف سنوي" : "سنوي" },
-                    { label: "مصدر العوائد", value: project.profit_source || "أرباح التشغيل" },
+                    { label: t("distMechanism"), value: project.distribution_type === "monthly" ? t("periodMonthly") : project.distribution_type === "quarterly" ? t("periodQuarterly") : project.distribution_type === "semi_annual" ? t("periodSemiannual") : t("periodAnnual") },
+                    { label: t("returnSource"), value: project.profit_source || t("operatingProfit") },
                   ].map((item, i) => (
                     <div key={i} className="flex justify-between py-2.5">
                       <span className="text-xs text-neutral-500">{item.label}</span>
@@ -767,51 +770,51 @@ export default function ProjectDetailPage() {
                   ))}
                 </div>
                 <div className="mt-3 bg-white/[0.04] border-r-2 border-white/[0.15] rounded-lg p-2.5 text-[10px] text-neutral-400">
-                  ⚠️ العوائد تقديرية وتعتمد على الأداء الفعلي
+                  {t("returnsEstimateNote")}
                 </div>
               </div>
 
               {/* ═══ Extended classification (admin form data) ═══ */}
               {(project.symbol || project.entity_type || project.build_status || project.quality) && (
                 <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-3">
-                  <div className="text-sm font-bold text-white mb-3">التصنيف</div>
+                  <div className="text-sm font-bold text-white mb-3">{t("classification")}</div>
                   <div className="grid grid-cols-2 gap-2">
                     {project.symbol && (
                       <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5">
-                        <div className="text-[10px] text-neutral-500 mb-0.5">الرمز</div>
+                        <div className="text-[10px] text-neutral-500 mb-0.5">{t("code")}</div>
                         <div className="text-sm font-bold text-blue-400 font-mono" dir="ltr">{project.symbol}</div>
                       </div>
                     )}
                     {project.entity_type && (
                       <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5">
-                        <div className="text-[10px] text-neutral-500 mb-0.5">نوع الكيان</div>
+                        <div className="text-[10px] text-neutral-500 mb-0.5">{t("entityType")}</div>
                         <div className="text-sm font-bold text-white">
-                          {project.entity_type === "company" ? "🏢 شركة"
-                            : project.entity_type === "project" ? "🏗️ مشروع"
-                            : project.entity_type === "individual" ? "👤 فرد"
-                            : "🤝 شراكة"}
+                          {project.entity_type === "company" ? t("entityCompany")
+                            : project.entity_type === "project" ? t("entityProject")
+                            : project.entity_type === "individual" ? t("entityIndividual")
+                            : t("entityPartnership")}
                         </div>
                       </div>
                     )}
                     {project.build_status && (
                       <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5">
-                        <div className="text-[10px] text-neutral-500 mb-0.5">حالة الإنشاء</div>
+                        <div className="text-[10px] text-neutral-500 mb-0.5">{t("constructionStatus")}</div>
                         <div className="text-sm font-bold text-white">
-                          {project.build_status === "planning" ? "قيد الإنشاء"
-                            : project.build_status === "active" ? "نشط" : "منجز"}
+                          {project.build_status === "planning" ? t("underConstruction")
+                            : project.build_status === "active" ? t("statusActive") : t("statusDone")}
                         </div>
                       </div>
                     )}
                     {project.quality && (
                       <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5">
-                        <div className="text-[10px] text-neutral-500 mb-0.5">الجودة</div>
+                        <div className="text-[10px] text-neutral-500 mb-0.5">{t("quality")}</div>
                         <div className="text-sm font-bold">
                           <span className={
                             project.quality === "high" ? "text-green-400"
                             : project.quality === "medium" ? "text-yellow-400" : "text-red-400"
                           }>
-                            {project.quality === "high" ? "🟢 عالي"
-                              : project.quality === "medium" ? "🟡 متوسط" : "🔴 منخفض"}
+                            {project.quality === "high" ? t("qualityHigh")
+                              : project.quality === "medium" ? t("qualityMedium") : t("qualityLow")}
                           </span>
                         </div>
                       </div>
@@ -823,15 +826,15 @@ export default function ProjectDetailPage() {
               {/* ═══ Capital progress (admin form data) ═══ */}
               {project.capital_needed && project.capital_needed > 0 && (
                 <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-3">
-                  <div className="text-sm font-bold text-white mb-3">رأس المال</div>
+                  <div className="text-sm font-bold text-white mb-3">{t("capital")}</div>
                   <div className="space-y-2.5">
                     <div className="flex justify-between text-xs">
-                      <span className="text-neutral-500">رأس المال المطلوب</span>
-                      <span className="text-white font-bold font-mono">{fmtIQD(project.capital_needed)} د.ع</span>
+                      <span className="text-neutral-500">{t("requiredCapital")}</span>
+                      <span className="text-white font-bold font-mono">{fmtIQD(project.capital_needed)} {t("iqd")}</span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span className="text-neutral-500">المُحقَّق حتى الآن</span>
-                      <span className="text-yellow-400 font-bold font-mono">{fmtIQD(project.capital_raised ?? 0)} د.ع</span>
+                      <span className="text-neutral-500">{t("achievedSoFar")}</span>
+                      <span className="text-yellow-400 font-bold font-mono">{fmtIQD(project.capital_raised ?? 0)} {t("iqd")}</span>
                     </div>
                     <div className="h-2 bg-white/[0.05] rounded-full overflow-hidden">
                       <div
@@ -842,7 +845,7 @@ export default function ProjectDetailPage() {
                       />
                     </div>
                     <div className="flex justify-between text-[10px]">
-                      <span className="text-neutral-500">نسبة التحقيق</span>
+                      <span className="text-neutral-500">{t("realizationPct")}</span>
                       <span className="text-yellow-400 font-mono">
                         {(((project.capital_raised ?? 0) / project.capital_needed) * 100).toFixed(1)}%
                       </span>
@@ -851,13 +854,13 @@ export default function ProjectDetailPage() {
                       <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/[0.04]">
                         {project.owner_percent !== undefined && (
                           <div>
-                            <div className="text-[10px] text-neutral-500">نسبة المالك</div>
+                            <div className="text-[10px] text-neutral-500">{t("ownerPct")}</div>
                             <div className="text-sm font-bold text-white font-mono">{project.owner_percent}%</div>
                           </div>
                         )}
                         {project.offer_percent !== undefined && (
                           <div>
-                            <div className="text-[10px] text-neutral-500">نسبة المطروح</div>
+                            <div className="text-[10px] text-neutral-500">{t("offeredPct")}</div>
                             <div className="text-sm font-bold text-white font-mono">{project.offer_percent}%</div>
                           </div>
                         )}
@@ -870,35 +873,35 @@ export default function ProjectDetailPage() {
               {/* ═══ Owner contact (admin form data) ═══ */}
               {(project.owner_name || project.address) && (
                 <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-3">
-                  <div className="text-sm font-bold text-white mb-3">المالك</div>
+                  <div className="text-sm font-bold text-white mb-3">{t("owner")}</div>
                   <div className="space-y-2">
                     {project.owner_name && (
                       <div className="flex justify-between py-1.5">
-                        <span className="text-xs text-neutral-500">اسم المالك</span>
+                        <span className="text-xs text-neutral-500">{t("ownerName")}</span>
                         <span className="text-xs font-bold text-white">{project.owner_name}</span>
                       </div>
                     )}
                     {project.owner_phone && myShares > 0 && (
                       <div className="flex justify-between py-1.5">
-                        <span className="text-xs text-neutral-500">الهاتف</span>
+                        <span className="text-xs text-neutral-500">{t("phone")}</span>
                         <span className="text-xs font-bold text-white font-mono" dir="ltr">{project.owner_phone}</span>
                       </div>
                     )}
                     {project.owner_email && myShares > 0 && (
                       <div className="flex justify-between py-1.5">
-                        <span className="text-xs text-neutral-500">البريد</span>
+                        <span className="text-xs text-neutral-500">{t("email")}</span>
                         <span className="text-xs font-bold text-white font-mono" dir="ltr">{project.owner_email}</span>
                       </div>
                     )}
                     {project.address && (
                       <div className="py-1.5">
-                        <div className="text-xs text-neutral-500 mb-1">العنوان</div>
+                        <div className="text-xs text-neutral-500 mb-1">{t("address")}</div>
                         <div className="text-xs text-white leading-relaxed">{project.address}</div>
                       </div>
                     )}
                     {!myShares && (project.owner_phone || project.owner_email) && (
                       <div className="bg-blue-400/[0.05] border border-blue-400/20 rounded-lg p-2.5 text-[10px] text-blue-400 leading-relaxed">
-                        🔒 بيانات التواصل (هاتف/بريد) متاحة للمستثمرين فقط
+                        {t("contactInvestorsOnly")}
                       </div>
                     )}
                   </div>
@@ -908,7 +911,7 @@ export default function ProjectDetailPage() {
               {/* ═══ Documents (Phase 10.90 — uploaded files OR external links) ═══ */}
               {project.documents && project.documents.length > 0 && (
                 <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-4 mb-3">
-                  <div className="text-sm font-bold text-white mb-3">📁 الأوراق الرسمية</div>
+                  <div className="text-sm font-bold text-white mb-3">{t("officialDocs")}</div>
                   <div className="space-y-2">
                     {project.documents.map((doc, i) => {
                       const isUpload = doc.url?.startsWith("data:")
@@ -933,7 +936,7 @@ export default function ProjectDetailPage() {
                             )}
                           </div>
                           <span className="text-[10px] text-blue-400">
-                            {isUpload ? "↓ تنزيل" : "↗ فتح"}
+                            {isUpload ? t("download") : t("openLink")}
                           </span>
                         </a>
                       )
@@ -944,13 +947,13 @@ export default function ProjectDetailPage() {
 
               {myShares > 0 && (
                 <div className="bg-green-400/[0.06] border border-green-400/20 rounded-2xl p-4 mb-3">
-                  <div className="text-sm font-bold text-green-400 mb-3">استثماري الشخصي</div>
+                  <div className="text-sm font-bold text-green-400 mb-3">{t("myPersonalInvestment")}</div>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { label: "الحصص المملوكة", value: myShares + " SHR" },
-                      { label: "القيمة الحالية", value: fmtIQD(myShares * project.share_price) + " IQD" },
-                      { label: "العائد التقديري", value: "+" + priceChange + "%", color: "text-green-400" },
-                      { label: "نسبة المشروع", value: ((myShares / project.total_shares) * 100).toFixed(2) + "%" },
+                      { label: t("ownedShares"), value: myShares + " SHR" },
+                      { label: t("currentValue"), value: fmtIQD(myShares * project.share_price) + " IQD" },
+                      { label: t("estReturn"), value: "+" + priceChange + "%", color: "text-green-400" },
+                      { label: t("projectPct"), value: ((myShares / project.total_shares) * 100).toFixed(2) + "%" },
                     ].map((item, i) => (
                       <div key={i} className="bg-white/[0.04] border border-green-400/[0.15] rounded-lg p-2.5">
                         <div className="text-[10px] text-green-400/70 mb-0.5">{item.label}</div>
@@ -969,9 +972,9 @@ export default function ProjectDetailPage() {
               {updates.length === 0 ? (
                 <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl text-center py-12">
                   <div className="text-3xl mb-2 opacity-50">📰</div>
-                  <div className="text-sm font-bold text-white mb-1">لا توجد تحديثات بعد</div>
+                  <div className="text-sm font-bold text-white mb-1">{t("noUpdates")}</div>
                   <div className="text-xs text-neutral-500">
-                    ستظهر هنا عند نشر تحديثات جديدة من قِبل صاحب المشروع
+                    {t("updatesEmptyHint")}
                   </div>
                 </div>
               ) : (
@@ -1063,7 +1066,7 @@ export default function ProjectDetailPage() {
                   </div>
                   <div className="text-center mt-3 text-[11px] text-neutral-500">
                     <ImageIcon className="w-4 h-4 mx-auto mb-1.5 opacity-40" />
-                    لا توجد صور بعد — أضِفها من لوحة التحكم
+                    {t("galleryEmptyHint")}
                   </div>
                 </div>
               )
@@ -1080,7 +1083,7 @@ export default function ProjectDetailPage() {
                   >
                     <Image
                       src={src}
-                      alt={`صورة ${i + 1}`}
+                      alt={t("imageAlt", { n: i + 1 })}
                       fill
                       sizes="(max-width: 768px) 50vw, 33vw"
                       className="object-cover"
@@ -1100,16 +1103,16 @@ export default function ProjectDetailPage() {
             <div className="space-y-2 mb-3">
               {recentDealsLoading ? (
                 <div className="text-center py-12 text-sm text-neutral-500">
-                  جاري تحميل سجل الصفقات...
+                  {t("loadingDeals")}
                 </div>
               ) : recentDeals.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="text-3xl mb-2 opacity-50">📜</div>
                   <div className="text-sm text-neutral-400 mb-1">
-                    لا توجد صفقات مسجلة بعد
+                    {t("noDealsTitle")}
                   </div>
                   <div className="text-[11px] text-neutral-500 leading-relaxed">
-                    ستظهر هنا كل الصفقات المكتملة على هذا المشروع
+                    {t("noDealsHint")}
                   </div>
                 </div>
               ) : (
@@ -1131,7 +1134,7 @@ export default function ProjectDetailPage() {
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-bold text-white">
-                            {d.shares.toLocaleString("en-US")} حصة
+                            {d.shares.toLocaleString("en-US")} {t("sharesUnit")}
                           </div>
                           <div className="text-[10px] text-neutral-500 mt-0.5">{when}</div>
                           {(d.buyer_name || d.seller_name) && (
@@ -1144,10 +1147,10 @@ export default function ProjectDetailPage() {
                         </div>
                         <div className="text-left">
                           <div className="text-sm font-bold text-yellow-400 font-mono">
-                            {fmtIQD(d.total_amount)} د.ع
+                            {fmtIQD(d.total_amount)} {t("iqd")}
                           </div>
                           <div className="text-[10px] text-neutral-500 font-mono">
-                            {d.price_per_share.toLocaleString("en-US")} /حصة
+                            {d.price_per_share.toLocaleString("en-US")} {t("perShare")}
                           </div>
                         </div>
                       </div>
@@ -1166,12 +1169,12 @@ export default function ProjectDetailPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-bold text-red-300 mb-0.5">
-                  البيع المباشر معلَّق حالياً
+                  {t("suspendedTitle")}
                 </div>
                 <div className="text-[11px] text-neutral-300 leading-relaxed">
-                  لا يمكن طلب شراء مباشر من المنصة بالوقت الحالي.
-                  {offeringSuspensionReason ? ` السبب: ${offeringSuspensionReason}.` : ""}
-                  {" "}لا يزال بإمكانك الشراء من المستثمرين الآخرين عبر سوق التبادل.
+                  {t("suspendedBody")}
+                  {offeringSuspensionReason ? t("suspendedReason", { reason: offeringSuspensionReason }) : ""}
+                  {t("stillBuyFromInvestors")}
                 </div>
               </div>
             </div>
@@ -1190,14 +1193,14 @@ export default function ProjectDetailPage() {
               )}
             >
               <ShoppingCart className="w-4 h-4" strokeWidth={2} />
-              {project.available_shares === 0 ? "نفذت الحصص" : "شراء حصص"}
+              {project.available_shares === 0 ? t("soldOut") : t("buyShares")}
             </button>
             {myShares > 0 && (
               <button
                 onClick={() => router.push("/market/new")}
                 className="flex-1 py-3.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm font-bold hover:bg-white/[0.08]"
               >
-                بيع
+                {t("sellBtn")}
               </button>
             )}
           </div>
@@ -1211,8 +1214,8 @@ export default function ProjectDetailPage() {
           <div className="bg-[#0a0a0a] border-t border-white/[0.1] sm:border sm:rounded-2xl rounded-t-3xl p-5 w-full max-w-md">
             <div className="flex justify-between items-start mb-1">
               <div>
-                <div className="text-base font-bold text-white">اختر طريقة الشراء</div>
-                <div className="text-[11px] text-neutral-500 mt-0.5">{project.name} • {(project.current_market_price ?? project.share_price).toLocaleString("en-US")} IQD/حصة</div>
+                <div className="text-base font-bold text-white">{t("chooseBuyMethod")}</div>
+                <div className="text-[11px] text-neutral-500 mt-0.5">{project.name} • {(project.current_market_price ?? project.share_price).toLocaleString("en-US")} IQD{t("perShare")}</div>
               </div>
               <button onClick={() => setShowBuyOptions(false)} className="text-neutral-500 hover:text-white">
                 <X className="w-5 h-5" />
@@ -1240,28 +1243,28 @@ export default function ProjectDetailPage() {
                   {offeringSuspended ? "🔒" : "🏦"}
                 </div>
                 <div className="flex-1">
-                  <div className="text-sm font-bold text-white">طلب شراء مباشر</div>
+                  <div className="text-sm font-bold text-white">{t("directBuyRequest")}</div>
                   <div className="text-[11px] text-neutral-400 mt-0.5">
                     {offeringSuspended
-                      ? "غير متوفر حالياً"
-                      : "الشراء مباشرةً من المنصة"}
+                      ? t("unavailableNow")
+                      : t("buyFromPlatform")}
                   </div>
                 </div>
               </div>
               {offeringSuspended ? (
                 <div className="bg-red-400/[0.06] border border-red-400/20 rounded-lg p-2.5 text-[11px] text-red-300 leading-relaxed">
-                  ⛔ <span className="font-bold">البيع المباشر غير متوفر بالوقت الحالي.</span>
-                  {" "}يمكنك الشراء من المستثمرين عبر الخيار أدناه.
+                  ⛔ <span className="font-bold">{t("directSellUnavailableBold")}</span>
+                  {t("canBuyViaOption")}
                   {offeringSuspensionReason && (
                     <div className="mt-1 text-neutral-400">
-                      السبب: {offeringSuspensionReason}
+                      {t("reasonPrefix")}{offeringSuspensionReason}
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="bg-yellow-400/[0.06] border border-yellow-400/20 rounded-lg p-2.5 text-[11px] text-yellow-400 leading-relaxed">
                   <Clock className="w-3 h-3 inline ml-1" />
-                  الطلب يذهب للبائع فوراً، يحتاج رد خلال 5 دقائق
+                  {t("directReqGoesToSeller")}
                 </div>
               )}
             </button>
@@ -1279,12 +1282,12 @@ export default function ProjectDetailPage() {
                   ⚡
                 </div>
                 <div className="flex-1">
-                  <div className="text-sm font-bold text-green-400">شراء من المستثمرين</div>
-                  <div className="text-[11px] text-neutral-400 mt-0.5">سوق التبادل بين المستثمرين</div>
+                  <div className="text-sm font-bold text-green-400">{t("buyFromInvestors")}</div>
+                  <div className="text-[11px] text-neutral-400 mt-0.5">{t("exchangeMarket")}</div>
                 </div>
               </div>
               <div className="bg-green-400/[0.06] border border-green-400/20 rounded-lg p-2.5 text-[11px] text-green-400 leading-relaxed">
-                ✅ يتم بسرعة حسب الإعلانات المتاحة
+                {t("fastByListings")}
               </div>
             </button>
 
@@ -1292,7 +1295,7 @@ export default function ProjectDetailPage() {
               onClick={() => setShowBuyOptions(false)}
               className="w-full mt-4 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
             >
-              إلغاء
+              {tc("buttons.cancel")}
             </button>
           </div>
         </div>
@@ -1310,7 +1313,7 @@ export default function ProjectDetailPage() {
         }}
         seller={{
           id: project.seller_id || "seller_main",
-          name: project.seller_name || "إدارة المنصة",
+          name: project.seller_name || t("platformAdmin"),
         }}
       />
     </AppLayout>
