@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import {
   Vote,
   Award,
@@ -50,19 +51,21 @@ function useCountdown(endsAt: string) {
       })
     }
     calc()
-    const t = setInterval(calc, 60_000)
-    return () => clearInterval(t)
+    const iv = setInterval(calc, 60_000)
+    return () => clearInterval(iv)
   }, [endsAt])
   return parts
 }
 
 export default function ElectionsPage() {
   const router = useRouter()
+  const t = useTranslations("council")
+  const tc = useTranslations("common")
 
   // Production mode — DB only. Empty election placeholder until DB has one.
   const [election, setElection] = useState<CouncilElection>(() => ({
     id: "",
-    title: "لا توجد انتخابات نشطة",
+    title: t("noActiveElection"),
     status: "registration",
     registration_starts: new Date().toISOString(),
     registration_ends: new Date().toISOString(),
@@ -155,16 +158,16 @@ export default function ElectionsPage() {
     const result = await castElectionVote(election.id, voteTarget.id)
     if (!result.success) {
       const map: Record<string, string> = {
-        unauthenticated: "سجّل دخولك أولاً",
-        election_not_found: "الانتخابات غير موجودة",
-        voting_not_open: "التصويت مُغلق",
-        voting_expired: "انتهى وقت التصويت",
-        invalid_candidate: "المرشّح غير صحيح",
-        already_voted: "لقد صوّت سابقاً",
-        missing_table: "الجداول غير منشورة بعد",
-        rls: "صلاحياتك لا تسمح بالتصويت",
+        unauthenticated: t("pdLoginFirst"),
+        election_not_found: t("electionNotFound"),
+        voting_not_open: t("votingClosed"),
+        voting_expired: t("votingExpired"),
+        invalid_candidate: t("invalidCandidate"),
+        already_voted: t("alreadyVoted"),
+        missing_table: t("tablesNotPub"),
+        rls: t("noVotePermission"),
       }
-      showError(map[result.reason ?? ""] ?? "فشل التصويت")
+      showError(map[result.reason ?? ""] ?? t("elVoteFailed"))
       setSubmitting(false)
       return
     }
@@ -173,14 +176,14 @@ export default function ElectionsPage() {
       prev.map((c) => (c.id === voteTarget.id ? { ...c, votes_received: c.votes_received + 1 } : c)),
     )
     setVotedFor(voteTarget.id)
-    showSuccess(`تم تسجيل صوتك لـ ${voteTarget.name}`)
+    showSuccess(t("voteRecordedFor", { name: voteTarget.name }))
     setSubmitting(false)
     setVoteTarget(null)
   }
 
   const handleRegister = async () => {
     if (!campaignStatement.trim() || campaignStatement.length < 30) {
-      showError("بيان الحملة يجب أن يكون 30 حرف على الأقل")
+      showError(t("stmtMin30"))
       return
     }
     setSubmitting(true)
@@ -188,21 +191,21 @@ export default function ElectionsPage() {
     const result = await registerAsCandidate(election.id, campaignStatement.trim())
     if (!result.success) {
       const map: Record<string, string> = {
-        unauthenticated: "سجّل دخولك أولاً",
-        statement_too_short: "بيان الحملة قصير جداً",
-        election_not_found: "الانتخابات غير موجودة",
-        registration_closed: "باب الترشّح مُغلق",
-        kyc_not_approved: "أكمل التوثيق KYC أولاً",
-        level_too_low: "مستواك لا يسمح بالترشّح",
-        missing_table: "الجداول غير منشورة بعد",
-        rls: "صلاحياتك لا تسمح بالترشّح",
+        unauthenticated: t("pdLoginFirst"),
+        statement_too_short: t("statementTooShort"),
+        election_not_found: t("electionNotFound"),
+        registration_closed: t("registrationClosed"),
+        kyc_not_approved: t("kycNotApproved"),
+        level_too_low: t("levelTooLow"),
+        missing_table: t("tablesNotPub"),
+        rls: t("noRegPermission"),
       }
-      showError(map[result.reason ?? ""] ?? "فشل التسجيل")
+      showError(map[result.reason ?? ""] ?? t("regFailed"))
       setSubmitting(false)
       return
     }
 
-    showSuccess("تم تسجيل ترشّحك بنجاح!")
+    showSuccess(t("regSuccess"))
     setShowRegisterModal(false)
     setCampaignStatement("")
     setSubmitting(false)
@@ -214,7 +217,7 @@ export default function ElectionsPage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-5xl mx-auto pb-20">
 
           <PageHeader
-            title="🗳️ انتخابات مجلس السوق"
+            title={t("electionsTitle")}
             subtitle={election.title}
             backHref="/council"
           />
@@ -225,27 +228,27 @@ export default function ElectionsPage() {
               <div>
                 <h2 className="text-base font-bold text-white mb-1">{election.title}</h2>
                 <Badge color={electionLabel === "active" ? "green" : electionLabel === "upcoming" ? "yellow" : "neutral"} variant="soft">
-                  {electionLabel === "active" ? "🟢 التصويت نشط" : electionLabel === "upcoming" ? "⏳ ترشّح" : "منتهية"}
+                  {electionLabel === "active" ? t("elStatusActive") : electionLabel === "upcoming" ? t("elStatusUpcoming") : t("elStatusEnded")}
                 </Badge>
               </div>
               {election.status === "voting" && !countdown.ended && (
                 <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl px-3 py-2">
                   <div className="text-[10px] text-neutral-500 mb-0.5 flex items-center gap-1">
                     <Clock className="w-2.5 h-2.5" />
-                    ينتهي خلال
+                    {t("endsWithin")}
                   </div>
                   <div className="text-sm font-bold text-white font-mono">
-                    {countdown.d}ي {countdown.h}س {countdown.m}د
+                    {t("countdownDHM", { d: countdown.d, h: countdown.h, m: countdown.m })}
                   </div>
                 </div>
               )}
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-              <StatCard size="sm" label="المقاعد" value={election.seats_available} color="orange" />
-              <StatCard size="sm" label="المرشّحون" value={election.candidates_count} color="purple" />
-              <StatCard size="sm" label="أصوات مُدلى" value={election.votes_cast.toLocaleString("en-US")} color="blue" />
-              <StatCard size="sm" label="نسبة المشاركة" value={participation + "%"} color="green" />
+              <StatCard size="sm" label={t("stSeats")} value={election.seats_available} color="orange" />
+              <StatCard size="sm" label={t("stCandidates")} value={election.candidates_count} color="purple" />
+              <StatCard size="sm" label={t("stVotesCast")} value={election.votes_cast.toLocaleString("en-US")} color="blue" />
+              <StatCard size="sm" label={t("stParticipation")} value={participation + "%"} color="green" />
             </div>
           </Card>
 
@@ -255,9 +258,9 @@ export default function ElectionsPage() {
               <div className="flex items-start gap-3 mb-3">
                 <Award className="w-6 h-6 text-green-400 flex-shrink-0 mt-1" strokeWidth={2} />
                 <div>
-                  <h3 className="text-base font-bold text-white mb-1">🎯 أنت مؤهّل للترشّح</h3>
+                  <h3 className="text-base font-bold text-white mb-1">{t("eligibleTitle")}</h3>
                   <p className="text-[11px] text-neutral-300 leading-relaxed">
-                    تحقّق من وضعك وتقديم بيانك للترشّح في الدورة القادمة
+                    {t("eligibleDesc")}
                   </p>
                 </div>
               </div>
@@ -266,12 +269,12 @@ export default function ElectionsPage() {
                 className="w-full bg-green-500 hover:bg-green-600 text-white py-3 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
               >
                 <Award className="w-4 h-4" strokeWidth={2.5} />
-                ترشّح للانتخابات
+                {t("runForElection")}
               </button>
             </Card>
           ) : (
             <Card variant="highlighted" color="yellow" className="mb-6">
-              <SectionHeader title="📋 شروط الترشّح" subtitle="حالتك الحالية" />
+              <SectionHeader title={t("eligTitle")} subtitle={t("currentStatus")} />
               <div className="space-y-2">
                 {eligibility.checks.map((c, i) => (
                   <div key={i} className="flex items-center gap-2 text-xs">
@@ -290,7 +293,7 @@ export default function ElectionsPage() {
                 onClick={() => router.push("/council/about")}
                 className="w-full bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] text-white py-2.5 rounded-xl text-xs font-bold mt-3 transition-colors"
               >
-                اعرف أكثر عن الشروط
+                {t("learnMoreReqs")}
               </button>
             </Card>
           )}
@@ -300,18 +303,18 @@ export default function ElectionsPage() {
             <Card variant="highlighted" color="blue" className="mb-6">
               <div className="flex items-center gap-2 mb-2">
                 <Vote className="w-5 h-5 text-blue-400" strokeWidth={2} />
-                <h3 className="text-sm font-bold text-white">✅ يمكنك التصويت الآن</h3>
+                <h3 className="text-sm font-bold text-white">{t("canVoteTitle")}</h3>
               </div>
               <p className="text-[11px] text-neutral-300 leading-relaxed">
-                اختر أحد المرشّحين أدناه واضغط "صوّت" — صوتك سرّي ولا يُغيَّر بعد التأكيد.
+                {t("canVoteDesc")}
               </p>
             </Card>
           )}
 
           {/* ═══ § 4: Candidates ═══ */}
           <SectionHeader
-            title="👥 المرشّحون"
-            subtitle={`${candidates.length} مرشّح`}
+            title={t("candidatesTitle")}
+            subtitle={t("candidatesCount", { n: candidates.length })}
           />
 
           {/* Sort dropdown */}
@@ -321,16 +324,16 @@ export default function ElectionsPage() {
               className="bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.06] rounded-lg px-3 py-1.5 text-xs text-white flex items-center gap-1.5 transition-colors"
             >
               <span>
-                {sortBy === "votes" ? "الأكثر أصواتاً" : sortBy === "level" ? "الأعلى مستوى" : "ترتيب أبجدي"}
+                {sortBy === "votes" ? t("sortVotes") : sortBy === "level" ? t("sortLevel") : t("sortName")}
               </span>
               <ChevronDown className={cn("w-3 h-3 transition-transform", sortOpen && "rotate-180")} />
             </button>
             {sortOpen && (
               <div className="absolute top-full left-0 mt-1 w-44 bg-[rgba(15,15,15,0.98)] border border-white/[0.08] rounded-lg shadow-2xl z-20 overflow-hidden">
                 {([
-                  { id: "votes", label: "الأكثر أصواتاً" },
-                  { id: "level", label: "الأعلى مستوى" },
-                  { id: "name",  label: "ترتيب أبجدي" },
+                  { id: "votes", label: t("sortVotes") },
+                  { id: "level", label: t("sortLevel") },
+                  { id: "name",  label: t("sortName") },
                 ] as Array<{ id: SortBy; label: string }>).map((s) => (
                   <button
                     key={s.id}
@@ -355,12 +358,12 @@ export default function ElectionsPage() {
                   <div className="flex items-center gap-1.5">
                     {i === 0 && sortBy === "votes" && (
                       <Badge color="yellow" variant="soft" size="xs" icon={<Star className="w-2 h-2 fill-yellow-400" />}>
-                        المتصدّر
+                        {t("topCandidate")}
                       </Badge>
                     )}
-                    {c.is_eligible && <Badge color="green" variant="soft" size="xs">✓ مؤهّل</Badge>}
+                    {c.is_eligible && <Badge color="green" variant="soft" size="xs">{t("eligibleBadge")}</Badge>}
                   </div>
-                  {votedFor === c.id && <Badge color="blue" variant="solid" size="xs">✓ صوّت</Badge>}
+                  {votedFor === c.id && <Badge color="blue" variant="solid" size="xs">{t("votedBadge")}</Badge>}
                 </div>
 
                 {/* Avatar + name */}
@@ -371,7 +374,7 @@ export default function ElectionsPage() {
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-bold text-white truncate mb-1">{c.name}</h3>
                     <Badge color={c.level === "pro" ? "purple" : "blue"} variant="soft" size="xs">
-                      {c.level === "pro" ? "محترف" : "متقدم"}
+                      {c.level === "pro" ? t("levelPro") : t("levelAdvanced")}
                     </Badge>
                   </div>
                 </div>
@@ -379,19 +382,19 @@ export default function ElectionsPage() {
                 {/* 4 mini stats */}
                 <div className="grid grid-cols-4 gap-1.5 mb-3">
                   <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2 text-center">
-                    <div className="text-[9px] text-neutral-500">صفقات</div>
+                    <div className="text-[9px] text-neutral-500">{t("msTrades")}</div>
                     <div className="text-xs font-bold text-white font-mono">{c.trades_count}</div>
                   </div>
                   <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2 text-center">
-                    <div className="text-[9px] text-neutral-500">نجاح %</div>
+                    <div className="text-[9px] text-neutral-500">{t("msSuccess")}</div>
                     <div className="text-xs font-bold text-green-400 font-mono">{c.success_rate}</div>
                   </div>
                   <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2 text-center">
-                    <div className="text-[9px] text-neutral-500">أشهر</div>
+                    <div className="text-[9px] text-neutral-500">{t("msMonths")}</div>
                     <div className="text-xs font-bold text-white font-mono">{c.months_on_platform}</div>
                   </div>
                   <div className="bg-orange-400/[0.08] border border-orange-400/25 rounded-lg p-2 text-center">
-                    <div className="text-[9px] text-orange-400/70">أصوات</div>
+                    <div className="text-[9px] text-orange-400/70">{t("msVotes")}</div>
                     <div className="text-xs font-bold text-orange-400 font-mono">{c.votes_received.toLocaleString("en-US")}</div>
                   </div>
                 </div>
@@ -416,7 +419,7 @@ export default function ElectionsPage() {
                     )}
                   >
                     <Vote className="w-3.5 h-3.5" strokeWidth={2.5} />
-                    {votedFor === c.id ? "صوّت لهذا المرشّح" : votedFor ? "صوّت لمرشّح آخر" : "صوّت"}
+                    {votedFor === c.id ? t("voteForThis") : votedFor ? t("voteForOther") : t("voteBtn")}
                   </button>
                 )}
               </Card>
@@ -431,8 +434,8 @@ export default function ElectionsPage() {
         <Modal
           isOpen={!!voteTarget}
           onClose={() => !submitting && setVoteTarget(null)}
-          title="🗳️ تأكيد التصويت"
-          subtitle={`ستصوّت لـ ${voteTarget.name}`}
+          title={t("confirmModalTitle")}
+          subtitle={t("willVoteFor", { name: voteTarget.name })}
           variant="warning"
           size="sm"
           footer={
@@ -442,7 +445,7 @@ export default function ElectionsPage() {
                 disabled={submitting}
                 className="flex-1 bg-white/[0.05] border border-white/[0.1] text-white py-2.5 rounded-xl text-sm hover:bg-white/[0.08] disabled:opacity-50 transition-colors"
               >
-                إلغاء
+                {tc("buttons.cancel")}
               </button>
               <button
                 onClick={handleVote}
@@ -452,12 +455,12 @@ export default function ElectionsPage() {
                 {submitting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    جاري...
+                    {t("workingShort")}
                   </>
                 ) : (
                   <>
                     <Check className="w-4 h-4" strokeWidth={2.5} />
-                    تأكيد التصويت
+                    {t("confirmVoteBtn")}
                   </>
                 )}
               </button>
@@ -465,7 +468,7 @@ export default function ElectionsPage() {
           }
         >
           <p className="text-sm text-neutral-300 leading-relaxed">
-            ⚠️ <strong className="text-white">لا يمكن تغيير صوتك</strong> بعد التأكيد.
+            {t("ccvPre")}<strong className="text-white">{t("ccvBold")}</strong>{t("ccvPost")}
           </p>
           <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3 mt-3 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-neutral-700 to-neutral-900 border border-white/10 flex items-center justify-center text-base font-bold text-white">
@@ -474,7 +477,7 @@ export default function ElectionsPage() {
             <div>
               <div className="text-sm font-bold text-white">{voteTarget.name}</div>
               <div className="text-[10px] text-neutral-500">
-                {voteTarget.level === "pro" ? "محترف" : "متقدم"} · {voteTarget.trades_count} صفقة
+                {voteTarget.level === "pro" ? t("levelPro") : t("levelAdvanced")} · {voteTarget.trades_count} {t("dealsUnit")}
               </div>
             </div>
           </div>
@@ -486,8 +489,8 @@ export default function ElectionsPage() {
         <Modal
           isOpen={showRegisterModal}
           onClose={() => !submitting && setShowRegisterModal(false)}
-          title="🎯 ترشّح للانتخابات"
-          subtitle="اكتب بيان حملتك"
+          title={t("registerTitle")}
+          subtitle={t("registerSubtitle")}
           variant="success"
           size="md"
           footer={
@@ -497,7 +500,7 @@ export default function ElectionsPage() {
                 disabled={submitting}
                 className="flex-1 bg-white/[0.05] border border-white/[0.1] text-white py-2.5 rounded-xl text-sm hover:bg-white/[0.08] disabled:opacity-50 transition-colors"
               >
-                إلغاء
+                {tc("buttons.cancel")}
               </button>
               <button
                 onClick={handleRegister}
@@ -512,21 +515,21 @@ export default function ElectionsPage() {
                 {submitting ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    جاري...
+                    {t("workingShort")}
                   </>
                 ) : (
-                  "تأكيد الترشّح"
+                  t("confirmRegBtn")
                 )}
               </button>
             </>
           }
         >
           <div>
-            <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">بيان حملتك</div>
+            <div className="text-[11px] text-neutral-400 mb-1.5 font-bold">{t("campaignLabel")}</div>
             <textarea
               value={campaignStatement}
               onChange={(e) => setCampaignStatement(e.target.value)}
-              placeholder="عرّف الناخبين بنفسك ورؤيتك (30 حرف على الأقل)..."
+              placeholder={t("campaignPlaceholder")}
               rows={5}
               maxLength={200}
               className="w-full bg-white/[0.05] border border-white/[0.08] focus:border-white/20 rounded-xl px-4 py-3 text-sm text-white outline-none resize-none transition-colors"
