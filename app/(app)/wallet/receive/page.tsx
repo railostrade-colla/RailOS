@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Copy, Download, Share2, Check, ShieldCheck, Clock, ArrowDownToLine, Link2 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -36,6 +37,7 @@ const formatID = (id: string): string => {
 
 export default function ReceivePage() {
   const router = useRouter()
+  const t = useTranslations("wallet")
   const [copiedID, setCopiedID] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -57,7 +59,7 @@ export default function ReceivePage() {
   }, [])
 
   const userId = user?.id ?? ""
-  const userName = user?.full_name || user?.username || "مستخدم"
+  const userName = user?.full_name || user?.username || t("defaultUser")
   const userVerified = user?.is_verified ?? false
 
   const formattedID = formatID(userId)
@@ -73,10 +75,10 @@ export default function ReceivePage() {
     try {
       await navigator.clipboard.writeText(userId)
       setCopiedID(true)
-      showSuccess("تم نسخ الـ ID")
+      showSuccess(t("idCopied"))
       setTimeout(() => setCopiedID(false), 2000)
     } catch {
-      showError("تعذر النسخ")
+      showError(t("copyFailed"))
     }
   }
 
@@ -84,10 +86,10 @@ export default function ReceivePage() {
     try {
       await navigator.clipboard.writeText(inviteLink)
       setCopiedLink(true)
-      showSuccess("تم نسخ رابط الدعوة")
+      showSuccess(t("inviteLinkCopied"))
       setTimeout(() => setCopiedLink(false), 2000)
     } catch {
-      showError("تعذر النسخ")
+      showError(t("copyFailed"))
     }
   }
 
@@ -105,17 +107,17 @@ export default function ReceivePage() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      showSuccess("تم حفظ الباركود ✓")
+      showSuccess(t("qrSaved"))
     } catch {
-      showError("تعذّر تحميل الباركود")
+      showError(t("qrDownloadFailed"))
     }
     setDownloading(false)
   }
 
   const handleShare = async () => {
     const shareData = {
-      title: "باركود استلام الحصص — رايلوس",
-      text: userName + "\nID المحفظة: " + formattedID + "\n\nاستخدم هذا الرابط لإرسال الحصص:\n" + inviteLink,
+      title: t("shareTitle"),
+      text: t("shareText", { name: userName, id: formattedID, link: inviteLink }),
       url: inviteLink,
     }
     if (navigator.share) {
@@ -133,8 +135,8 @@ export default function ReceivePage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-2xl mx-auto pb-20">
 
           <PageHeader
-            title="استلام الحصص"
-            subtitle="شارك باركودك أو رابطك مع المُرسل"
+            title={t("receiveTitle")}
+            subtitle={t("receiveSubtitle")}
             backHref="/wallet"
           />
 
@@ -142,7 +144,7 @@ export default function ReceivePage() {
           <div className="bg-green-400/[0.06] border border-green-400/20 rounded-xl p-3.5 mb-5 flex gap-3 items-start">
             <ShieldCheck className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" strokeWidth={2} />
             <div className="text-[11px] text-green-300 leading-relaxed">
-              <span className="font-bold">آمن للمشاركة:</span> الباركود يحتوي فقط على ID محفظتك ولا يكشف أي معلومات شخصية حساسة.
+              <span className="font-bold">{t("safeToShareBold")}</span> {t("safeToShareBody")}
             </div>
           </div>
 
@@ -160,7 +162,7 @@ export default function ReceivePage() {
                     {userVerified && (
                       <div className="bg-green-400/[0.15] border border-green-400/30 text-green-400 text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1">
                         <Check className="w-2.5 h-2.5" strokeWidth={3} />
-                        موثق
+                        {t("verified")}
                       </div>
                     )}
                   </>
@@ -197,10 +199,10 @@ export default function ReceivePage() {
 
             {/* نوع الاستلام */}
             <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg px-4 py-2.5 flex items-center justify-between mb-3">
-              <span className="text-[11px] text-neutral-500">نوع الاستلام</span>
+              <span className="text-[11px] text-neutral-500">{t("receiveType")}</span>
               <span className="text-xs font-bold text-white flex items-center gap-1.5">
                 <ArrowDownToLine className="w-3 h-3 text-green-400" strokeWidth={2} />
-                حصص استثمارية
+                {t("investmentShares")}
               </span>
             </div>
 
@@ -216,7 +218,7 @@ export default function ReceivePage() {
                 ) : (
                   <Download className="w-4 h-4 text-white" strokeWidth={1.5} />
                 )}
-                <span className="text-[11px] text-white font-bold">تحميل</span>
+                <span className="text-[11px] text-white font-bold">{t("download")}</span>
               </button>
               <button
                 onClick={handleCopyLink}
@@ -227,14 +229,14 @@ export default function ReceivePage() {
                 ) : (
                   <Link2 className="w-4 h-4 text-white" strokeWidth={1.5} />
                 )}
-                <span className="text-[11px] text-white font-bold">نسخ الرابط</span>
+                <span className="text-[11px] text-white font-bold">{t("copyLink")}</span>
               </button>
               <button
                 onClick={handleShare}
                 className="flex flex-col items-center gap-1.5 bg-neutral-100 text-black rounded-xl py-3 hover:bg-neutral-200 transition-colors"
               >
                 <Share2 className="w-4 h-4" strokeWidth={1.5} />
-                <span className="text-[11px] font-bold">مشاركة</span>
+                <span className="text-[11px] font-bold">{t("share")}</span>
               </button>
             </div>
           </div>
@@ -242,15 +244,15 @@ export default function ReceivePage() {
           {/* إحصائيات الاستلامات */}
           <div className="grid grid-cols-3 gap-3 mb-5">
             <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3">
-              <div className="text-[10px] text-neutral-500 mb-1">الاستلامات</div>
+              <div className="text-[10px] text-neutral-500 mb-1">{t("receipts")}</div>
               <div className="text-base font-bold text-white font-mono">{RECEIVE_STATS.total_received}</div>
             </div>
             <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3">
-              <div className="text-[10px] text-neutral-500 mb-1">المُرسلين</div>
+              <div className="text-[10px] text-neutral-500 mb-1">{t("senders")}</div>
               <div className="text-base font-bold text-white font-mono">{RECEIVE_STATS.total_senders}</div>
             </div>
             <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3">
-              <div className="text-[10px] text-neutral-500 mb-1">آخر استلام</div>
+              <div className="text-[10px] text-neutral-500 mb-1">{t("lastReceipt")}</div>
               <div className="text-xs font-bold text-white">{RECEIVE_STATS.last_received}</div>
             </div>
           </div>
@@ -260,7 +262,7 @@ export default function ReceivePage() {
             <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4 mb-5">
               <div className="text-xs font-bold text-white mb-3 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-neutral-400" strokeWidth={2} />
-                آخر من أرسلوا لك
+                {t("recentSendersTitle")}
               </div>
               <div className="space-y-2">
                 {RECENT_SENDERS.map((s, i) => (
@@ -275,7 +277,7 @@ export default function ReceivePage() {
                           {s.verified && <Check className="w-2.5 h-2.5 text-green-400" strokeWidth={3} />}
                         </div>
                         <div className="text-[10px] text-neutral-500 mt-0.5 truncate">
-                          <span className="font-mono text-yellow-400">{s.shares}</span> حصة · {s.project}
+                          <span className="font-mono text-yellow-400">{s.shares}</span> {t("shareUnit")} · {s.project}
                         </div>
                       </div>
                     </div>
@@ -288,13 +290,9 @@ export default function ReceivePage() {
 
           {/* تعليمات الاستخدام */}
           <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-4">
-            <div className="text-xs font-bold text-white mb-3">📌 كيفية الاستخدام</div>
+            <div className="text-xs font-bold text-white mb-3">{t("howToUseTitle")}</div>
             <div className="space-y-2.5">
-              {[
-                "شارك الباركود أو ID المحفظة (RX-A8F9-3C2B) مع المُرسل",
-                "يقوم المُرسل بإدخال ID محفظتك أو مسح الباركود",
-                "تأكيد الاستلام وظهور الحصص في محفظتك تلقائياً",
-              ].map((step, i) => (
+              {[t("step1"), t("step2"), t("step3")].map((step, i) => (
                 <div key={i} className="flex items-start gap-2.5">
                   <div className="w-5 h-5 rounded-full bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 mt-0.5">
                     {i + 1}
