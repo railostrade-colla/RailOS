@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import {
   Search,
   ChevronDown,
@@ -114,11 +115,19 @@ function tileValueSize(n: number): string {
   return "text-base"
 }
 
-function getGreeting(): string {
+// Returns a translation key; resolved at the call site via t().
+function getGreetingKey(): "greetMorning" | "greetEvening" {
   const h = new Date().getHours()
-  if (h >= 5 && h < 12) return "صباح الخير"
-  return "مساء الخير"
+  if (h >= 5 && h < 12) return "greetMorning"
+  return "greetEvening"
 }
+
+// Module-scope month keys for the 12-month volume chart axis;
+// resolved to localized labels inside the component via t().
+const MONTH_KEYS = [
+  "monthJan", "monthFeb", "monthMar", "monthApr", "monthMay", "monthJun",
+  "monthJul", "monthAug", "monthSep", "monthOct", "monthNov", "monthDec",
+] as const
 
 // ─── Phase 13.48 — wallet-header change pills ──────────────────
 function pillTone(positive: boolean, neutral: boolean) {
@@ -234,28 +243,28 @@ const VOLUME_HISTORY: Array<{ month: string; volume: number }> = [
 // separate icon container.
 const QUICK_ACTIONS = [
   {
-    label: "محفظة",
+    labelKey: "actionPortfolio",
     path: "/portfolio",
     icon: Wallet,
     badge: 0,
     tile: "bg-green-400/[0.08] border-green-400/25 text-green-400 hover:bg-green-400/[0.14]",
   },
   {
-    label: "تبادل",
+    labelKey: "actionExchange",
     path: "/exchange",
     icon: ArrowLeftRight,
     badge: 0,
     tile: "bg-blue-400/[0.08] border-blue-400/25 text-blue-400 hover:bg-blue-400/[0.14]",
   },
   {
-    label: "مزاد",
+    labelKey: "actionAuction",
     path: "/auctions",
     icon: Gavel,
     badge: 0,
     tile: "bg-orange-400/[0.08] border-orange-400/25 text-orange-400 hover:bg-orange-400/[0.14]",
   },
   {
-    label: "عقود",
+    labelKey: "actionContracts",
     path: "/contracts",
     icon: FileText,
     badge: 0,
@@ -268,6 +277,8 @@ const QUICK_ACTIONS = [
 // ════════════════════════════════════════════════════════════════
 export default function DashboardPage() {
   const router = useRouter()
+  const t = useTranslations("dashboard")
+  const tc = useTranslations("common")
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [showDropdown, setShowDropdown] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -432,7 +443,7 @@ export default function DashboardPage() {
     const loadAds = () => {
       getActiveAds("dashboard").then((ads) => {
         if (cancelled) return
-        setDbAds(ads.map(dbAdToMockShape))
+        setDbAds(ads.map(dbAdToMockShape).map((ad) => ({ ...ad, action_label: t("adLearnMore") })))
       }).catch(() => {})
     }
 
@@ -493,6 +504,7 @@ export default function DashboardPage() {
       document.removeEventListener("visibilitychange", handleVisibility)
       window.removeEventListener("focus", handleVisibility)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ─── Phase 14.07f — selected-project price timeline ─────────────
@@ -556,15 +568,22 @@ export default function DashboardPage() {
   // DB projects only — no mock fallback.
   const allProjects = dbProjects
 
+  // Localized 12-month axis labels for the volume chart (values stay
+  // the flat zero baseline from VOLUME_HISTORY).
+  const volumeHistory = useMemo(
+    () => VOLUME_HISTORY.map((m, i) => ({ ...m, month: t(MONTH_KEYS[i]) })),
+    [t],
+  )
+
   const filteredProjects = allProjects.filter(
     (p) => !searchQuery.trim() || p.name.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
   const discoverItems = discoverTab === "trending" ? trending : discoverTab === "closing" ? closing : newProjects
   const discoverEmptyMsg =
-    discoverTab === "trending" ? "لا توجد مشاريع رائجة حالياً" :
-    discoverTab === "closing" ? "لا توجد فرص تنتهي قريباً" :
-    "لا توجد مشاريع جديدة"
+    discoverTab === "trending" ? t("emptyTrending") :
+    discoverTab === "closing" ? t("emptyClosing") :
+    t("emptyNew")
 
   // Phase 13.13 — only show the skeleton on the FIRST visit (cold
   // localStorage cache). On subsequent visits we already painted with
@@ -624,7 +643,7 @@ export default function DashboardPage() {
                     <Search className="w-3.5 h-3.5 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
-                      placeholder="ابحث عن مشروع..."
+                      placeholder={t("searchPlaceholder")}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full bg-secondary border border-border rounded-lg pr-9 pl-3 py-1.5 text-xs text-foreground outline-none"
@@ -633,7 +652,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="max-h-56 overflow-y-auto">
                   {filteredProjects.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-neutral-500">لا توجد نتائج</div>
+                    <div className="p-4 text-center text-xs text-neutral-500">{t("noResults")}</div>
                   ) : (
                     filteredProjects.map((p) => (
                       <button
@@ -660,7 +679,7 @@ export default function DashboardPage() {
                         )}
                         <div className="flex-1 text-right">
                           <div className="text-xs text-white font-medium">{p.name}</div>
-                          <div className="text-[10px] text-neutral-500">{(p.current_market_price ?? p.share_price).toLocaleString("en-US")} د.ع</div>
+                          <div className="text-[10px] text-neutral-500">{(p.current_market_price ?? p.share_price).toLocaleString("en-US")} {t("iqd")}</div>
                         </div>
                         {selectedProject.id === p.id && <span className="text-white text-sm">✓</span>}
                       </button>
@@ -685,7 +704,7 @@ export default function DashboardPage() {
               width on desktop. */}
           <div className="shadow-card bg-gradient-to-br from-white/[0.06] to-white/[0.04] border border-white/[0.08] rounded-2xl p-5 lg:p-6 mb-6 backdrop-blur">
             <div className="min-w-0">
-                <div className="text-xs text-neutral-400 mb-1">{getGreeting()} 👋</div>
+                <div className="text-xs text-neutral-400 mb-1">{t(getGreetingKey())} 👋</div>
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <h1 className="text-base font-bold text-white truncate">{userName}</h1>
                   <span className="bg-white/[0.08] border border-white/[0.12] text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -694,7 +713,7 @@ export default function DashboardPage() {
                   </span>
                 </div>
 
-                <div className="text-[11px] text-neutral-500 mb-1">إجمالي محفظتك</div>
+                <div className="text-[11px] text-neutral-500 mb-1">{t("totalPortfolio")}</div>
                 <div className="flex items-baseline gap-2 mb-2">
                   {/* Phase 11.14 — show the full numeric value (with
                       thousand separators), not the compact "ألف/مليون"
@@ -717,28 +736,28 @@ export default function DashboardPage() {
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
                   <ChangePill
                     valueIqd={changeMetrics.reference_delta_iqd}
-                    label="عن السعر المرجعي"
+                    label={t("vsReferencePrice")}
                   />
                   <span className="text-neutral-700 text-[10px] hidden sm:inline">·</span>
                   <ChangePillPct
                     pct={changeMetrics.daily_change_pct}
-                    label="اليوم"
+                    label={t("today")}
                   />
                   <span className="text-neutral-700 text-[10px] hidden sm:inline">·</span>
                   <ChangePillPct
                     pct={changeMetrics.weekly_change_pct}
-                    label="الأسبوع"
+                    label={t("thisWeek")}
                   />
                 </div>
 
                 <div className="flex gap-2 flex-wrap mb-4">
                   <span className="bg-white/[0.05] border border-white/[0.08] rounded-lg px-2.5 py-1 flex items-center gap-1.5 text-[11px] text-neutral-300">
                     <Briefcase className="w-3 h-3 text-blue-400" strokeWidth={2} />
-                    {portfolio.holdingsCount} استثمار
+                    {portfolio.holdingsCount} {t("investmentsUnit")}
                   </span>
                   <span className="bg-white/[0.05] border border-white/[0.08] rounded-lg px-2.5 py-1 flex items-center gap-1.5 text-[11px] text-neutral-300">
                     <span className="text-blue-400">●</span>
-                    {sectorsCount} قطاعات
+                    {sectorsCount} {t("sectorsUnit")}
                   </span>
                 </div>
 
@@ -746,7 +765,7 @@ export default function DashboardPage() {
                   onClick={() => router.push("/portfolio")}
                   className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
                 >
-                  التفاصيل
+                  {tc("buttons.details")}
                   <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
                 </button>
             </div>
@@ -758,7 +777,7 @@ export default function DashboardPage() {
               const Icon = item.icon
               return (
                 <button
-                  key={item.label}
+                  key={item.labelKey}
                   onClick={() => router.push(item.path)}
                   className={cn(
                     "shadow-card flex flex-col items-center gap-1.5 py-3 rounded-xl border relative transition-colors",
@@ -766,7 +785,7 @@ export default function DashboardPage() {
                   )}
                 >
                   <Icon className="w-4 h-4" strokeWidth={1.8} />
-                  <span className="text-[10px] font-medium">{item.label}</span>
+                  <span className="text-[10px] font-medium">{t(item.labelKey)}</span>
                   {item.badge > 0 && (
                     <div className="absolute top-1.5 left-1.5 w-3.5 h-3.5 rounded-full bg-red-400 text-[8px] font-bold text-white flex items-center justify-center">
                       {item.badge}
@@ -783,13 +802,13 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] text-yellow-400 font-bold flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-                  تنبيهات تحتاج انتباهك
+                  {t("alertsNeedAttention")}
                 </span>
                 <button
                   onClick={() => router.push("/notifications")}
                   className="text-[10px] text-yellow-400 hover:text-yellow-300 flex items-center gap-1 transition-colors"
                 >
-                  عرض الكل
+                  {tc("buttons.viewAll")}
                   <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
                 </button>
               </div>
@@ -818,7 +837,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-green-400 shadow-[0_0_6px_rgba(74,222,158,0.6)]" />
-                <span className="text-[11px] text-green-400 font-semibold">السوق مفتوح</span>
+                <span className="text-[11px] text-green-400 font-semibold">{t("marketOpen")}</span>
               </div>
               <span className="text-[11px] text-neutral-500">{selectedProject.name}</span>
             </div>
@@ -841,7 +860,7 @@ export default function DashboardPage() {
                     : "text-neutral-500"
               return (
                 <div className="mb-4">
-                  <div className="text-[11px] text-neutral-500 mb-1">سعر الحصة الحالي</div>
+                  <div className="text-[11px] text-neutral-500 mb-1">{t("currentSharePrice")}</div>
                   <div className="flex items-baseline gap-2.5">
                     <span className="text-3xl lg:text-4xl font-bold text-white tracking-tight font-mono">
                       {livePrice.toLocaleString("en-US")}
@@ -875,10 +894,10 @@ export default function DashboardPage() {
                 unit: string
                 highlight?: boolean
               }> = [
-                { label: "حجم تداول الحصة", raw: tradingVolume, unit: "IQD" },
-                { label: "حصص الشركة", raw: selectedProject.total_shares - offering, unit: "SHR" },
-                { label: "الحصص المتداولة", raw: soldCount, unit: "SHR", highlight: true },
-                { label: "القيمة السوقية", raw: selectedProject.project_value ?? 0, unit: "IQD" },
+                { label: t("shareTradingVolume"), raw: tradingVolume, unit: "IQD" },
+                { label: t("companyShares"), raw: selectedProject.total_shares - offering, unit: "SHR" },
+                { label: t("tradedShares"), raw: soldCount, unit: "SHR", highlight: true },
+                { label: t("marketValue"), raw: selectedProject.project_value ?? 0, unit: "IQD" },
               ]
               return (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
@@ -911,20 +930,20 @@ export default function DashboardPage() {
                   data     → Recharts AreaChart, green-up / red-down. */}
             <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2.5 mb-4">
               <div className="text-[10px] text-neutral-500 mb-1.5">
-                حركة السعر — بيانات حقيقية
+                {t("priceMovementReal")}
               </div>
               {(() => {
                 if (selectedProjectTimelineLoading) {
                   return (
                     <div className="h-[50px] flex items-center justify-center text-[10px] text-neutral-600">
-                      جاري التحميل...
+                      {t("loading")}
                     </div>
                   )
                 }
                 if (selectedProjectTimeline.length < 2) {
                   return (
                     <div className="h-[50px] flex items-center justify-center text-[10px] text-neutral-600">
-                      لا توجد بيانات تداول بعد
+                      {t("noTradingData")}
                     </div>
                   )
                 }
@@ -949,16 +968,16 @@ export default function DashboardPage() {
               onClick={() => router.push(`/project/${selectedProject.id}`)}
               className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors"
             >
-              تفاصيل المشروع
+              {t("projectDetails")}
               <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
             </button>
           </div>
           ) : (
             <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-8 mb-7 text-center">
               <div className="text-4xl mb-3 opacity-50">🏗️</div>
-              <div className="text-sm text-white font-bold mb-1">لا توجد مشاريع بعد</div>
+              <div className="text-sm text-white font-bold mb-1">{t("noProjectsYet")}</div>
               <div className="text-[11px] text-neutral-500">
-                ستظهر تفاصيل سعر الحصص والتداول هنا فور إطلاق أول مشروع.
+                {t("noProjectsHint")}
               </div>
             </div>
           )}
@@ -966,9 +985,9 @@ export default function DashboardPage() {
           {/* ═════════════ § 5: Volume Chart (moved from bottom) ═════════════ */}
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-7 backdrop-blur">
             <SectionHeader
-              title="📈 حجم تداول المنصة"
-              subtitle="آخر 12 شهر"
-              action={{ label: "تفاصيل أكثر", href: "/market" }}
+              title={t("platformTradingVolume")}
+              subtitle={t("last12Months")}
+              action={{ label: t("moreDetails"), href: "/market" }}
             />
 
             {/* Mini stats — Phase 11.15: real platform-wide totals.
@@ -992,17 +1011,17 @@ export default function DashboardPage() {
               return (
                 <div className="grid grid-cols-3 gap-2 mb-4">
                   <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
-                    <div className="text-[10px] text-neutral-500 mb-1">القيمة الإجمالية</div>
+                    <div className="text-[10px] text-neutral-500 mb-1">{t("totalValueLabel")}</div>
                     <div className={cn("font-bold text-white font-mono leading-tight", tileValueSize(totalVolume))}>
                       {fmtCompact(totalVolume)} <span className="text-[10px] text-neutral-500 font-sans">IQD</span>
                     </div>
                   </div>
                   <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
-                    <div className="text-[10px] text-neutral-500 mb-1">مشاريع نشطة</div>
+                    <div className="text-[10px] text-neutral-500 mb-1">{t("activeProjects")}</div>
                     <div className={cn("font-bold text-white font-mono leading-tight", tileValueSize(dbProjects.length))}>{dbProjects.length}</div>
                   </div>
                   <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
-                    <div className="text-[10px] text-neutral-500 mb-1">حصص متداولة</div>
+                    <div className="text-[10px] text-neutral-500 mb-1">{t("tradedSharesShort")}</div>
                     <div className={cn("font-bold text-white font-mono leading-tight", tileValueSize(totalSold))}>
                       {totalSold.toLocaleString("en-US")}
                     </div>
@@ -1013,7 +1032,7 @@ export default function DashboardPage() {
 
             {/* Phase 14.11 A6 — recharts volume chart, code-split via
                 next/dynamic. Replaces the former inline AreaChart. */}
-            <DashboardVolumeChart data={VOLUME_HISTORY} />
+            <DashboardVolumeChart data={volumeHistory} />
           </div>
 
           {/* ═════════════ § 6: Ads banner — only when real ads exist ═════════════ */}
@@ -1036,30 +1055,30 @@ export default function DashboardPage() {
             {/* Discover — col-span-2 on lg */}
             <div className="lg:col-span-2 bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 backdrop-blur">
               <SectionHeader
-                title="🌟 اكتشف"
-                subtitle="فرص استثمارية مختارة"
-                action={{ label: "كل المشاريع", href: "/market" }}
+                title={t("discover")}
+                subtitle={t("discoverSubtitle")}
+                action={{ label: t("allProjects"), href: "/market" }}
               />
 
               {/* Discover tabs — same bespoke design as the Community
                   page (founder spec): glass strip, active = filled. */}
               <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 mb-3">
                 {([
-                  { key: "trending", label: "رائج" },
-                  { key: "closing",  label: "قريباً" },
-                  { key: "new",      label: "جديد" },
-                ] as const).map((t) => (
+                  { key: "trending", label: t("tabTrending") },
+                  { key: "closing",  label: t("tabClosing") },
+                  { key: "new",      label: t("tabNew") },
+                ] as const).map((tb) => (
                   <button
-                    key={t.key}
-                    onClick={() => setDiscoverTab(t.key as typeof discoverTab)}
+                    key={tb.key}
+                    onClick={() => setDiscoverTab(tb.key as typeof discoverTab)}
                     className={cn(
                       "flex-1 py-2 rounded-lg text-[11px] transition-colors flex items-center justify-center gap-1",
-                      discoverTab === t.key
+                      discoverTab === tb.key
                         ? "bg-white/[0.08] text-white font-bold border border-white/[0.1]"
                         : "text-neutral-500 hover:text-white",
                     )}
                   >
-                    <span>{t.label}</span>
+                    <span>{tb.label}</span>
                   </button>
                 ))}
               </div>
@@ -1087,9 +1106,9 @@ export default function DashboardPage() {
             {/* News — col-span-1 on lg */}
             <div className="lg:col-span-1 bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 backdrop-blur">
               <SectionHeader
-                title="📰 آخر الأخبار"
-                subtitle="آخر مستجدات المنصة"
-                action={{ label: "الكل", href: "/notifications" }}
+                title={t("latestNews")}
+                subtitle={t("newsSubtitle")}
+                action={{ label: t("all"), href: "/notifications" }}
               />
 
               <div className="space-y-1">
@@ -1110,7 +1129,7 @@ export default function DashboardPage() {
                         <span className="text-xs font-bold text-white truncate">{n.title}</span>
                         {n.is_new && (
                           <span className="bg-green-400/[0.12] border border-green-400/30 text-green-400 text-[8px] font-bold px-1 py-0.5 rounded font-mono flex-shrink-0">
-                            جديد
+                            {t("badgeNew")}
                           </span>
                         )}
                       </div>
