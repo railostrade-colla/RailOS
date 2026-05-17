@@ -1,5 +1,6 @@
 "use client"
 
+import { useTranslations } from "next-intl"
 import { Users, Sparkles, TrendingUp } from "lucide-react"
 import {
   computeContractLimit,
@@ -18,12 +19,13 @@ interface ContractLimitCardProps {
 }
 
 export function ContractLimitCard({ members, variant = "full" }: ContractLimitCardProps) {
+  const t = useTranslations("contracts")
 
   if (members.length === 0) {
     return (
       <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-5 text-center">
         <Users className="w-8 h-8 text-neutral-600 mx-auto mb-2" strokeWidth={1.5} />
-        <div className="text-sm text-neutral-500">أضف أعضاء لحساب الحد الجماعي</div>
+        <div className="text-sm text-neutral-500">{t("limitAddMembers")}</div>
       </div>
     )
   }
@@ -36,10 +38,10 @@ export function ContractLimitCard({ members, variant = "full" }: ContractLimitCa
       <div className="bg-purple-400/[0.06] border border-purple-400/25 rounded-xl p-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-purple-400" strokeWidth={1.5} />
-          <span className="text-xs text-neutral-300">الحد الشهري للعقد</span>
+          <span className="text-xs text-neutral-300">{t("limitMonthlyShort")}</span>
         </div>
         <div className="text-base font-bold text-purple-400 font-mono">
-          {fmtLimit(result.totalLimit)} د.ع
+          {fmtLimit(result.totalLimit)} {t("iqdUnit")}
         </div>
       </div>
     )
@@ -56,9 +58,9 @@ export function ContractLimitCard({ members, variant = "full" }: ContractLimitCa
             <Sparkles className="w-4 h-4 text-purple-400" strokeWidth={1.5} />
           </div>
           <div>
-            <div className="text-sm font-bold text-white">الحد الشهري الجماعي</div>
+            <div className="text-sm font-bold text-white">{t("limitMonthlyGroup")}</div>
             <div className="text-[10px] text-neutral-500 mt-0.5">
-              {result.memberCount} عضو + مكافأة {result.bonusPercent}%
+              {t("limitMembersBonus", { n: result.memberCount, b: result.bonusPercent })}
             </div>
           </div>
         </div>
@@ -66,7 +68,7 @@ export function ContractLimitCard({ members, variant = "full" }: ContractLimitCa
           <div className="text-xl font-bold text-purple-400 font-mono leading-none">
             {fmtLimit(result.totalLimit)}
           </div>
-          <div className="text-[10px] text-neutral-500 mt-1 font-mono">د.ع/شهر</div>
+          <div className="text-[10px] text-neutral-500 mt-1 font-mono">{t("limitPerMonth")}</div>
         </div>
       </div>
 
@@ -92,25 +94,25 @@ export function ContractLimitCard({ members, variant = "full" }: ContractLimitCa
       {/* الحساب التفصيلي */}
       <div className="bg-black/40 border border-white/[0.06] rounded-lg p-3 space-y-1.5">
         <div className="flex justify-between items-center">
-          <span className="text-[11px] text-neutral-500">مجموع حدود الأعضاء</span>
+          <span className="text-[11px] text-neutral-500">{t("limitSumMembers")}</span>
           <span className="text-xs font-bold text-white font-mono">
-            {fmtLimit(result.sumLimit)} د.ع
+            {fmtLimit(result.sumLimit)} {t("iqdUnit")}
           </span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-[11px] text-green-400 flex items-center gap-1">
             <TrendingUp className="w-3 h-3" strokeWidth={2} />
-            مكافأة العقد ({result.bonusPercent}%)
+            {t("limitContractBonus", { b: result.bonusPercent })}
           </span>
           <span className="text-xs font-bold text-green-400 font-mono">
-            +{fmtLimit(result.bonus)} د.ع
+            +{fmtLimit(result.bonus)} {t("iqdUnit")}
           </span>
         </div>
         <div className="h-px bg-white/[0.06]" />
         <div className="flex justify-between items-center">
-          <span className="text-xs font-bold text-purple-400">الإجمالي الشهري</span>
+          <span className="text-xs font-bold text-purple-400">{t("limitMonthlyTotal")}</span>
           <span className="text-sm font-bold text-purple-400 font-mono">
-            {fmtLimit(result.totalLimit)} د.ع
+            {fmtLimit(result.totalLimit)} {t("iqdUnit")}
           </span>
         </div>
       </div>

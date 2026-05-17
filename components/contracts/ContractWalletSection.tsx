@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useState, useCallback } from "react"
+import { useTranslations } from "next-intl"
 import {
   Wallet, Activity, RefreshCw, Banknote, Users as UsersIcon,
   TrendingUp, Package, Gavel, Zap, Building2, ArrowLeftRight,
@@ -41,42 +42,46 @@ const fmtCompactIqd = (n: number | null): string => {
   return Math.round(v).toLocaleString("en-US")
 }
 
-const fmtRelative = (s: string): string => {
+type TFn = (key: string, values?: Record<string, string | number>) => string
+
+const fmtRelative = (s: string, t: TFn): string => {
   if (!s) return ""
   try {
     const diff = Date.now() - new Date(s).getTime()
-    if (diff < 60_000) return "الآن"
-    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} دقيقة`
-    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} ساعة`
-    if (diff < 30 * 86_400_000) return `${Math.floor(diff / 86_400_000)} يوم`
+    if (diff < 60_000) return t("wsNow")
+    if (diff < 3_600_000) return t("wsMinutes", { n: Math.floor(diff / 60_000) })
+    if (diff < 86_400_000) return t("wsHours", { n: Math.floor(diff / 3_600_000) })
+    if (diff < 30 * 86_400_000) return t("wsDays", { n: Math.floor(diff / 86_400_000) })
     return new Date(s).toLocaleDateString("en-GB")
   } catch { return s }
 }
 
-const ACTIVITY_META: Record<ContractActivityType, { label: string; Icon: typeof FilePlus; tone: string }> = {
-  contract_created:    { label: "أُنشئ العقد",            Icon: FilePlus,       tone: "text-blue-400" },
-  member_invited:      { label: "دعوة شريك",              Icon: UsersIcon,      tone: "text-yellow-400" },
-  member_accepted:     { label: "موافقة شريك",            Icon: CheckCircle2,   tone: "text-green-400" },
-  member_declined:     { label: "رفض شريك",               Icon: XCircle,        tone: "text-red-400" },
-  member_removed:      { label: "إزالة شريك",             Icon: AlertTriangle,  tone: "text-orange-400" },
-  contract_activated:  { label: "تفعيل العقد",            Icon: Sparkles,       tone: "text-[#4ADE80]" },
-  contract_ended:      { label: "إنهاء العقد",            Icon: CheckCircle2,   tone: "text-neutral-300" },
-  contract_cancelled:  { label: "إلغاء العقد",            Icon: XCircle,        tone: "text-red-400" },
-  investment_recorded: { label: "استثمار جديد",           Icon: Banknote,       tone: "text-emerald-400" },
-  share_purchased:     { label: "شراء حصص",               Icon: TrendingUp,     tone: "text-blue-400" },
-  share_sold:          { label: "بيع حصص",                Icon: TrendingUp,     tone: "text-red-400" },
-  distribution_paid:   { label: "توزيع أرباح",            Icon: Banknote,       tone: "text-purple-400" },
+// activity_type / source codes are DB-canonical; display labels
+// resolve via i18n keys (labelKey) at render time.
+const ACTIVITY_META: Record<ContractActivityType, { labelKey: string; Icon: typeof FilePlus; tone: string }> = {
+  contract_created:    { labelKey: "actContractCreated",     Icon: FilePlus,       tone: "text-blue-400" },
+  member_invited:      { labelKey: "actMemberInvited",       Icon: UsersIcon,      tone: "text-yellow-400" },
+  member_accepted:     { labelKey: "actMemberAccepted",      Icon: CheckCircle2,   tone: "text-green-400" },
+  member_declined:     { labelKey: "actMemberDeclined",      Icon: XCircle,        tone: "text-red-400" },
+  member_removed:      { labelKey: "actMemberRemoved",       Icon: AlertTriangle,  tone: "text-orange-400" },
+  contract_activated:  { labelKey: "actContractActivated",   Icon: Sparkles,       tone: "text-[#4ADE80]" },
+  contract_ended:      { labelKey: "actContractEnded",       Icon: CheckCircle2,   tone: "text-neutral-300" },
+  contract_cancelled:  { labelKey: "actContractCancelled",   Icon: XCircle,        tone: "text-red-400" },
+  investment_recorded: { labelKey: "actInvestmentRecorded",  Icon: Banknote,       tone: "text-emerald-400" },
+  share_purchased:     { labelKey: "actSharePurchased",      Icon: TrendingUp,     tone: "text-blue-400" },
+  share_sold:          { labelKey: "actShareSold",           Icon: TrendingUp,     tone: "text-red-400" },
+  distribution_paid:   { labelKey: "actDistributionPaid",    Icon: Banknote,       tone: "text-purple-400" },
 }
 
-const SOURCE_META: Record<ContractActivitySource, { label: string; Icon: typeof Package; tone: string }> = {
-  auction:    { label: "مزاد",         Icon: Gavel,           tone: "text-orange-400" },
-  quick_sale: { label: "بيع سريع",     Icon: Zap,             tone: "text-yellow-400" },
-  direct_buy: { label: "شراء مباشر",   Icon: Building2,       tone: "text-blue-400" },
-  exchange:   { label: "تبادل",        Icon: ArrowLeftRight,  tone: "text-purple-400" },
-  deal:       { label: "صفقة",         Icon: Package,         tone: "text-cyan-400" },
-  admin:      { label: "إدارة",        Icon: SettingsIcon,    tone: "text-neutral-400" },
-  manual:     { label: "تسجيل يدوي",   Icon: FilePlus,        tone: "text-neutral-400" },
-  system:     { label: "نظام",         Icon: SettingsIcon,    tone: "text-neutral-500" },
+const SOURCE_META: Record<ContractActivitySource, { labelKey: string; Icon: typeof Package; tone: string }> = {
+  auction:    { labelKey: "srcAuction",    Icon: Gavel,           tone: "text-orange-400" },
+  quick_sale: { labelKey: "srcQuickSale",  Icon: Zap,             tone: "text-yellow-400" },
+  direct_buy: { labelKey: "srcDirectBuy",  Icon: Building2,       tone: "text-blue-400" },
+  exchange:   { labelKey: "srcExchange",   Icon: ArrowLeftRight,  tone: "text-purple-400" },
+  deal:       { labelKey: "srcDeal",       Icon: Package,         tone: "text-cyan-400" },
+  admin:      { labelKey: "srcAdmin",      Icon: SettingsIcon,    tone: "text-neutral-400" },
+  manual:     { labelKey: "srcManual",     Icon: FilePlus,        tone: "text-neutral-400" },
+  system:     { labelKey: "srcSystem",     Icon: SettingsIcon,    tone: "text-neutral-500" },
 }
 
 interface Props {
@@ -84,6 +89,7 @@ interface Props {
 }
 
 export function ContractWalletSection({ contractId }: Props) {
+  const t = useTranslations("contracts")
   const [data, setData] = useState<ContractWallet>(EMPTY_CONTRACT_WALLET)
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<"overview" | "activities">("overview")
@@ -136,8 +142,8 @@ export function ContractWalletSection({ contractId }: Props) {
             <Wallet className="w-4 h-4 text-[#4ADE80]" strokeWidth={2} />
           </div>
           <div>
-            <div className="text-sm font-bold text-white">💼 محفظة العقد</div>
-            <div className="text-[10px] text-neutral-500">الاستثمارات والنشاطات داخل هذا العقد</div>
+            <div className="text-sm font-bold text-white">{t("wsWalletTitle")}</div>
+            <div className="text-[10px] text-neutral-500">{t("wsWalletSub")}</div>
           </div>
         </div>
         <button
@@ -146,16 +152,16 @@ export function ContractWalletSection({ contractId }: Props) {
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/[0.06] border border-white/[0.08] text-[11px] text-white hover:bg-white/[0.1] disabled:opacity-50"
         >
           <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} strokeWidth={2} />
-          تحديث
+          {t("wsRefresh")}
         </button>
       </div>
 
       {/* Error */}
       {!loading && !data.success && (
         <div className="bg-amber-400/[0.06] border border-amber-400/[0.2] rounded-xl p-3 text-xs text-amber-300">
-          ⚠ تعذّر قراءة بيانات المحفظة
+          {t("wsReadError")}
           {data.error ? <span className="block mt-1 font-mono text-[10px] text-amber-200" dir="ltr">{data.error}</span> : null}
-          <span className="block mt-1 text-[11px] text-amber-200/80">طبّق migration <code>20260512_phase13_71</code></span>
+          <span className="block mt-1 text-[11px] text-amber-200/80">{t("wsApplyMigrationPre")}<code>20260512_phase13_71</code></span>
         </div>
       )}
 
@@ -171,7 +177,7 @@ export function ContractWalletSection({ contractId }: Props) {
           )}
         >
           <Wallet className="w-3 h-3" strokeWidth={2} />
-          نظرة عامة
+          {t("wsTabOverview")}
         </button>
         <button
           onClick={() => setTab("activities")}
@@ -183,7 +189,7 @@ export function ContractWalletSection({ contractId }: Props) {
           )}
         >
           <Activity className="w-3 h-3" strokeWidth={2} />
-          النشاطات ({activities.length})
+          {t("wsTabActivities", { n: activities.length })}
         </button>
       </div>
 
@@ -193,23 +199,23 @@ export function ContractWalletSection({ contractId }: Props) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <KpiTile
               icon={<Banknote className="w-3 h-3 text-emerald-400" />}
-              label="استُثمر"
+              label={t("wsKpiInvested")}
               value={fmtCompactIqd(wallet.invested_iqd)}
               unit="IQD"
             />
             <KpiTile
               icon={<Package className="w-3 h-3 text-blue-400" />}
-              label="حصص محفوظة"
+              label={t("wsKpiSharesHeld")}
               value={(wallet.shares_count ?? 0).toLocaleString("en-US")}
             />
             <KpiTile
               icon={<UsersIcon className="w-3 h-3 text-purple-400" />}
-              label="شركاء فعّالون"
+              label={t("wsKpiActivePartners")}
               value={(wallet.members_count ?? 0).toLocaleString("en-US")}
             />
             <KpiTile
               icon={<TrendingUp className="w-3 h-3 text-[#4ADE80]" />}
-              label="مخطّط"
+              label={t("wsKpiPlanned")}
               value={fmtCompactIqd(wallet.planned_investment)}
               unit="IQD"
             />
@@ -219,7 +225,7 @@ export function ContractWalletSection({ contractId }: Props) {
           {wallet.planned_investment > 0 && (
             <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[11px] text-neutral-400">نسبة التمويل</span>
+                <span className="text-[11px] text-neutral-400">{t("wsFundingRatio")}</span>
                 <span className="text-xs font-mono font-bold text-[#4ADE80]">
                   {fundedPct}%
                 </span>
@@ -231,18 +237,18 @@ export function ContractWalletSection({ contractId }: Props) {
                 />
               </div>
               <div className="text-[10px] text-neutral-500 mt-1.5 leading-relaxed">
-                المتبقّي: <span className="font-mono text-amber-300">{fmtIqd(wallet.remaining_to_invest)} IQD</span>
+                {t("wsRemainingPre")}<span className="font-mono text-amber-300">{fmtIqd(wallet.remaining_to_invest)} IQD</span>
               </div>
             </div>
           )}
 
           {/* Source breakdown */}
           <div>
-            <div className="text-xs font-bold text-white mb-2">📊 الحصص حسب المصدر</div>
+            <div className="text-xs font-bold text-white mb-2">{t("wsSharesBySource")}</div>
             {Object.keys(sources).length === 0 ? (
               <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 text-center">
                 <div className="text-[11px] text-neutral-500">
-                  لم تُسجَّل عمليّات شراء بعد. ستظهر هنا الحصص المشتراة من المزاد، البيع السريع، الشراء المباشر، أو التبادل.
+                  {t("wsNoPurchases")}
                 </div>
               </div>
             ) : (
@@ -254,18 +260,18 @@ export function ContractWalletSection({ contractId }: Props) {
                     <div key={src} className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
                       <div className="flex items-center gap-2 mb-1.5">
                         <Icon className={cn("w-3.5 h-3.5", meta.tone)} strokeWidth={2} />
-                        <span className="text-xs font-bold text-white">{meta.label}</span>
+                        <span className="text-xs font-bold text-white">{t(meta.labelKey)}</span>
                         <span className="text-[10px] text-neutral-500 mr-auto">×{e.count}</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <div className="text-[9px] text-neutral-500">إجمالي القيمة</div>
+                          <div className="text-[9px] text-neutral-500">{t("wsTotalValue")}</div>
                           <div className="text-xs font-mono font-bold text-emerald-400">
                             {fmtCompactIqd(e.total_amount)} <span className="text-[8px] text-neutral-500">IQD</span>
                           </div>
                         </div>
                         <div>
-                          <div className="text-[9px] text-neutral-500">إجمالي الحصص</div>
+                          <div className="text-[9px] text-neutral-500">{t("wsTotalShares")}</div>
                           <div className="text-xs font-mono font-bold text-blue-400">
                             {(e.total_shares ?? 0).toLocaleString("en-US")}
                           </div>
@@ -285,7 +291,7 @@ export function ContractWalletSection({ contractId }: Props) {
           {activities.length === 0 ? (
             <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-6 text-center">
               <Activity className="w-8 h-8 text-neutral-600 mx-auto mb-2" strokeWidth={1.5} />
-              <div className="text-xs text-neutral-500">لا توجد نشاطات بعد</div>
+              <div className="text-xs text-neutral-500">{t("wsNoActivities")}</div>
             </div>
           ) : (
             activities.map((a) => <ActivityRow key={a.id} a={a} />)
@@ -314,6 +320,7 @@ function KpiTile({ icon, label, value, unit }: {
 }
 
 function ActivityRow({ a }: { a: ContractActivity }) {
+  const t = useTranslations("contracts")
   const meta = ACTIVITY_META[a.activity_type] ?? ACTIVITY_META.contract_created
   const Icon = meta.Icon
   const srcMeta = a.source_type ? SOURCE_META[a.source_type] : null
@@ -326,32 +333,32 @@ function ActivityRow({ a }: { a: ContractActivity }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-          <span className="text-xs font-bold text-white">{meta.label}</span>
+          <span className="text-xs font-bold text-white">{t(meta.labelKey)}</span>
           {srcMeta && (
             <span className={cn(
               "text-[9px] font-bold px-1.5 py-0.5 rounded border bg-white/[0.04] border-white/[0.08]",
               srcMeta.tone,
             )}>
-              {srcMeta.label}
+              {t(srcMeta.labelKey)}
             </span>
           )}
-          <span className="text-[10px] text-neutral-500 mr-auto">{fmtRelative(a.created_at)}</span>
+          <span className="text-[10px] text-neutral-500 mr-auto">{fmtRelative(a.created_at, t)}</span>
         </div>
         <div className="text-[11px] text-neutral-300 leading-snug">
           {a.actor_name && (
-            <span className="text-neutral-400">بواسطة: <span className="text-white font-bold">{a.actor_name}</span></span>
+            <span className="text-neutral-400">{t("wsByActor")}<span className="text-white font-bold">{a.actor_name}</span></span>
           )}
           {a.amount_iqd != null && a.amount_iqd > 0 && (
             <span> · <span className="font-mono text-emerald-400">{fmtIqd(a.amount_iqd)} IQD</span></span>
           )}
           {a.shares_count != null && a.shares_count > 0 && (
-            <span> · <span className="font-mono text-blue-400">{(a.shares_count ?? 0).toLocaleString("en-US")} حصّة</span></span>
+            <span> · <span className="font-mono text-blue-400">{(a.shares_count ?? 0).toLocaleString("en-US")} {t("wsSharesUnit")}</span></span>
           )}
         </div>
         {/* Metadata extras */}
         {Boolean(a.metadata && Object.keys(a.metadata).length > 0) && (
           <div className="text-[10px] text-neutral-500 mt-1 leading-snug">
-            {renderMetadataNote(a)}
+            {renderMetadataNote(a, t)}
           </div>
         )}
       </div>
@@ -359,16 +366,16 @@ function ActivityRow({ a }: { a: ContractActivity }) {
   )
 }
 
-function renderMetadataNote(a: ContractActivity): React.ReactNode {
+function renderMetadataNote(a: ContractActivity, t: TFn): React.ReactNode {
   const m = a.metadata as Record<string, unknown>
   if (a.activity_type === "member_invited" && typeof m.share_percent === "number") {
-    return <>حصّة مقترَحة: <span className="font-mono text-yellow-400">{(m.share_percent as number).toFixed(1)}%</span></>
+    return <>{t("wsProposedShare")}<span className="font-mono text-yellow-400">{(m.share_percent as number).toFixed(1)}%</span></>
   }
   if (a.activity_type === "member_declined" && typeof m.decline_reason === "string" && m.decline_reason) {
-    return <>السبب: {m.decline_reason}</>
+    return <>{t("wsReason")}{m.decline_reason}</>
   }
   if (a.activity_type === "contract_cancelled" && typeof m.reason === "string" && m.reason) {
-    return <>السبب: {m.reason}</>
+    return <>{t("wsReason")}{m.reason}</>
   }
   return null
 }

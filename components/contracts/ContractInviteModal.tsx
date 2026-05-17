@@ -15,6 +15,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { X, FileText, Banknote, Percent, UserCheck, UserX } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -29,6 +30,7 @@ const fmtIqd = (n: number) => Math.round(n || 0).toLocaleString("en-US")
 
 export function ContractInviteModal() {
   const router = useRouter()
+  const t = useTranslations("contracts")
   const [invite, setInvite] = useState<PendingContractInvite | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [showDecline, setShowDecline] = useState(false)
@@ -100,17 +102,17 @@ export function ContractInviteModal() {
     setSubmitting(false)
     if (!r.success) {
       const map: Record<string, string> = {
-        unauthenticated: "سجّل دخولك أولاً",
-        no_pending_invite: "الدعوة لم تعد متاحة",
-        invalid_input: "مدخلات غير صحيحة",
+        unauthenticated: t("inviteErrUnauth"),
+        no_pending_invite: t("inviteErrNoPending"),
+        invalid_input: t("inviteErrInvalidInput"),
       }
       // Phase 13.68 — if the reason isn't in our known list, surface
       // the raw DB error string so the founder can diagnose schema /
-      // RLS issues instead of seeing a generic "فشلت الموافقة".
-      showError(map[r.reason ?? ""] ?? `فشلت الموافقة: ${r.reason ?? "خطأ غير معروف"}`)
+      // RLS issues instead of seeing a generic approval-failed message.
+      showError(map[r.reason ?? ""] ?? t("inviteApproveFailed", { reason: r.reason ?? t("inviteUnknownError") }))
       return
     }
-    showSuccess("✅ تمت الموافقة على عقد الشراكة")
+    showSuccess(t("inviteApproved"))
     setDismissed((prev) => new Set([...prev, invite.contract_id]))
     setInvite(null)
     router.push(`/contracts/${invite.contract_id}`)
@@ -130,13 +132,13 @@ export function ContractInviteModal() {
     setSubmitting(false)
     if (!r.success) {
       const map: Record<string, string> = {
-        unauthenticated: "سجّل دخولك أولاً",
-        no_pending_invite: "الدعوة لم تعد متاحة",
+        unauthenticated: t("inviteErrUnauth"),
+        no_pending_invite: t("inviteErrNoPending"),
       }
-      showError(map[r.reason ?? ""] ?? "فشل الرفض")
+      showError(map[r.reason ?? ""] ?? t("inviteDeclineFailed"))
       return
     }
-    showSuccess("تم رفض الدعوة")
+    showSuccess(t("inviteDeclined"))
     setDismissed((prev) => new Set([...prev, invite.contract_id]))
     setShowDecline(false)
     setDeclineReason("")
@@ -157,9 +159,9 @@ export function ContractInviteModal() {
               <FileText className="w-5 h-5 text-[#4ADE80]" strokeWidth={2} />
             </div>
             <div>
-              <div className="text-base font-bold text-white">📄 دعوة شراكة جديدة</div>
+              <div className="text-base font-bold text-white">{t("inviteTitle")}</div>
               <div className="text-[10px] text-neutral-400">
-                {invite.creator_name} يدعوك للانضمام
+                {t("inviteInvitesYou", { name: invite.creator_name })}
               </div>
             </div>
           </div>
@@ -170,7 +172,7 @@ export function ContractInviteModal() {
             }}
             className="text-neutral-500 hover:text-white"
             disabled={submitting}
-            title="إغلاق (يمكنك الرد لاحقاً من /contracts)"
+            title={t("inviteCloseTitle")}
           >
             <X className="w-5 h-5" />
           </button>
@@ -189,7 +191,7 @@ export function ContractInviteModal() {
             <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-2.5">
               <div className="flex items-center gap-1 mb-1">
                 <Banknote className="w-3 h-3 text-emerald-400" />
-                <span className="text-[10px] text-neutral-500">إجمالي الاستثمار</span>
+                <span className="text-[10px] text-neutral-500">{t("inviteTotalInvestment")}</span>
               </div>
               <div className="text-sm font-bold text-white font-mono">
                 {fmtIqd(invite.total_investment)} <span className="text-[9px] text-neutral-500 font-sans">IQD</span>
@@ -198,7 +200,7 @@ export function ContractInviteModal() {
             <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-2.5">
               <div className="flex items-center gap-1 mb-1">
                 <Percent className="w-3 h-3 text-[#4ADE80]" />
-                <span className="text-[10px] text-neutral-500">حصّتك المقترَحة</span>
+                <span className="text-[10px] text-neutral-500">{t("inviteYourShare")}</span>
               </div>
               <div className="text-sm font-bold text-[#4ADE80] font-mono">
                 {invite.share_percent.toFixed(1)}%
@@ -207,10 +209,10 @@ export function ContractInviteModal() {
           </div>
 
           <div className="mt-3 bg-blue-400/[0.05] border border-blue-400/[0.15] rounded-lg p-2.5 text-[11px] text-blue-300 leading-relaxed">
-            قيمة حصّتك ≈ <span className="font-mono font-bold">{fmtIqd(myShareValue)} IQD</span>.
+            {t("inviteShareValuePre")}<span className="font-mono font-bold">{fmtIqd(myShareValue)} IQD</span>.
             {invite.end_fee_pct != null && (
               <span className="block mt-1">
-                رسوم إنهاء العقد: <span className="font-mono">{invite.end_fee_pct}%</span> من قيمة حصّتك.
+                {t("inviteEndFeePre")}<span className="font-mono">{invite.end_fee_pct}%</span>{t("inviteEndFeePost")}
               </span>
             )}
           </div>
@@ -221,13 +223,13 @@ export function ContractInviteModal() {
           <div className="space-y-3">
             <div>
               <label className="text-xs text-neutral-400 mb-1.5 block">
-                سبب الرفض (اختياري)
+                {t("inviteDeclineReasonLabel")}
               </label>
               <textarea
                 value={declineReason}
                 onChange={(e) => setDeclineReason(e.target.value)}
                 rows={3}
-                placeholder="مثال: مشغول حالياً، حصّة غير مناسبة، إلخ..."
+                placeholder={t("inviteDeclinePlaceholder")}
                 className="w-full bg-white/[0.04] border border-white/[0.1] rounded-xl px-3 py-2 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-white/20 resize-none"
               />
             </div>
@@ -237,14 +239,14 @@ export function ContractInviteModal() {
                 disabled={submitting}
                 className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
               >
-                تراجع
+                {t("inviteRevert")}
               </button>
               <button
                 onClick={submitDecline}
                 disabled={submitting}
                 className="flex-1 py-3 rounded-xl bg-red-500/[0.15] border border-red-500/[0.3] text-red-400 text-sm font-bold hover:bg-red-500/[0.2] disabled:opacity-50"
               >
-                {submitting ? "جارٍ..." : "تأكيد الرفض"}
+                {submitting ? t("inviteSubmitting") : t("inviteConfirmDecline")}
               </button>
             </div>
           </div>
@@ -260,7 +262,7 @@ export function ContractInviteModal() {
               )}
             >
               <UserX className="w-4 h-4" strokeWidth={2.5} />
-              رفض
+              {t("inviteReject")}
             </button>
             <button
               onClick={handleAccept}
@@ -272,13 +274,13 @@ export function ContractInviteModal() {
               )}
             >
               <UserCheck className="w-4 h-4" strokeWidth={2.5} />
-              {submitting ? "جارٍ..." : "الموافقة على الانضمام"}
+              {submitting ? t("inviteSubmitting") : t("inviteAcceptJoin")}
             </button>
           </div>
         )}
 
         <div className="text-[10px] text-neutral-600 text-center mt-3">
-          يمكنك الرد لاحقاً من <span className="text-blue-400">/contracts</span> إذا أغلقت هذه النافذة.
+          {t("inviteRespondLaterPre")}<span className="text-blue-400">/contracts</span>{t("inviteRespondLaterPost")}
         </div>
       </div>
     </div>
