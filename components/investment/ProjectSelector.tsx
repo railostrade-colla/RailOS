@@ -14,6 +14,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Image from "next/image"
+import { useTranslations } from "next-intl"
 import { ChevronDown, Search, Check } from "lucide-react"
 import type { Project } from "@/lib/mock-data/types"
 import { cn } from "@/lib/utils/cn"
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export function ProjectSelector({ projects, value, onChange, label, className }: Props) {
+  const t = useTranslations("portfolioUI")
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const ref = useRef<HTMLDivElement>(null)
@@ -94,7 +96,7 @@ export function ProjectSelector({ projects, value, onChange, label, className }:
         ) : (
           <>
             <div className="w-9 h-9 rounded-lg bg-white/[0.05] border border-white/[0.08] flex-shrink-0" />
-            <div className="flex-1 text-sm text-neutral-500">اختر مشروعاً...</div>
+            <div className="flex-1 text-sm text-neutral-500">{t("psChooseProject")}</div>
           </>
         )}
         <ChevronDown
@@ -117,7 +119,7 @@ export function ProjectSelector({ projects, value, onChange, label, className }:
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="ابحث بالاسم أو الرمز..."
+                placeholder={t("psSearchPlaceholder")}
                 className="w-full bg-white/[0.04] border border-white/[0.06] rounded-lg pr-9 pl-3 py-2 text-xs text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
               />
             </div>
@@ -127,7 +129,7 @@ export function ProjectSelector({ projects, value, onChange, label, className }:
           <div className="max-h-72 overflow-y-auto">
             {filtered.length === 0 ? (
               <div className="text-center py-6 text-xs text-neutral-500">
-                لا توجد نتائج
+                {t("psNoResults")}
               </div>
             ) : (
               filtered.map((p) => {
@@ -171,7 +173,7 @@ export function ProjectSelector({ projects, value, onChange, label, className }:
                           <>
                             <span>·</span>
                             <span className="font-mono text-yellow-400">
-                              {p.share_price.toLocaleString("en-US")} د.ع
+                              {p.share_price.toLocaleString("en-US")} {t("iqd")}
                             </span>
                           </>
                         )}

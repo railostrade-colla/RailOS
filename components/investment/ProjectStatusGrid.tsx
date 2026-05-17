@@ -24,6 +24,7 @@
  * can announce them. The grid stacks on mobile (1 col → 3 col on lg+).
  */
 
+import { useTranslations } from "next-intl"
 import { Building2, Users, Coins } from "lucide-react"
 import { cn } from "@/lib/utils/cn"
 
@@ -45,6 +46,7 @@ interface Props {
 }
 
 export function ProjectStatusGrid({ values, loading }: Props) {
+  const t = useTranslations("portfolioUI")
   const { fundedPct, sharesSold, offeringTotal, investorsCount, dividendsTotal } = values
   const fmt = (n: number) => n.toLocaleString("en-US")
 
@@ -53,32 +55,32 @@ export function ProjectStatusGrid({ values, loading }: Props) {
       {/* Funded % */}
       <Tile
         icon={<Building2 className="w-3.5 h-3.5" strokeWidth={2} />}
-        label="نسبة التمويل المُحقَّق"
+        label={t("psgFundedLabel")}
         value={`${fundedPct.toFixed(1)}%`}
-        sub={`${fmt(sharesSold)} / ${fmt(offeringTotal)} حصة`}
+        sub={t("psgSharesSub", { sold: fmt(sharesSold), total: fmt(offeringTotal) })}
         tone="green"
         bar={fundedPct}
       />
       {/* Investors */}
       <Tile
         icon={<Users className="w-3.5 h-3.5" strokeWidth={2} />}
-        label="عدد المستثمرين الحاليين"
+        label={t("psgInvestorsLabel")}
         value={fmt(investorsCount)}
         sub={
           investorsCount === 0
-            ? "كن أوّل المستثمرين"
+            ? t("psgBeFirst")
             : investorsCount === 1
-              ? "مستثمر واحد"
-              : `${fmt(investorsCount)} مستثمر`
+              ? t("psgOneInvestor")
+              : t("psgInvestorsCount", { n: fmt(investorsCount) })
         }
         tone="blue"
       />
       {/* Dividends */}
       <Tile
         icon={<Coins className="w-3.5 h-3.5" strokeWidth={2} />}
-        label="إجمالي العوائد الموزَّعة"
+        label={t("psgDividendsLabel")}
         value={dividendsTotal < 0 ? "—" : `${fmt(dividendsTotal)}`}
-        sub={dividendsTotal < 0 ? "لم تُوَزَّع عوائد بعد" : "د.ع"}
+        sub={dividendsTotal < 0 ? t("psgNoDividends") : t("iqd")}
         tone="yellow"
       />
     </div>

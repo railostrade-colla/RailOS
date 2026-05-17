@@ -22,6 +22,7 @@
  */
 
 import { useMemo, useState } from "react"
+import { useTranslations } from "next-intl"
 import {
   AreaChart, Area, LineChart, Line,
   ComposedChart, Bar,
@@ -37,18 +38,18 @@ import type { PriceHistoryPoint } from "@/lib/data/price-history"
 import { cn } from "@/lib/utils/cn"
 
 const PERIODS = [
-  { id: "1d",  label: "1ي", days: 1   },
-  { id: "7d",  label: "7ي", days: 7   },
-  { id: "30d", label: "1ش", days: 30  },
-  { id: "1y",  label: "1س", days: 365 },
-  { id: "all", label: "الكل", days: 9999 },
+  { id: "1d",  labelKey: "pcPeriod1d",  days: 1   },
+  { id: "7d",  labelKey: "pcPeriod7d",  days: 7   },
+  { id: "30d", labelKey: "pcPeriod30d", days: 30  },
+  { id: "1y",  labelKey: "pcPeriod1y",  days: 365 },
+  { id: "all", labelKey: "pcPeriodAll", days: 9999 },
 ] as const
 type PeriodId = typeof PERIODS[number]["id"]
 
 const MODES = [
-  { id: "area",   label: "منطقة", icon: AreaIcon },
-  { id: "line",   label: "خطّي",  icon: LineIcon },
-  { id: "candle", label: "شموع",  icon: CandleIcon },
+  { id: "area",   labelKey: "pcModeArea",   icon: AreaIcon },
+  { id: "line",   labelKey: "pcModeLine",   icon: LineIcon },
+  { id: "candle", labelKey: "pcModeCandle", icon: CandleIcon },
 ] as const
 type ChartMode = typeof MODES[number]["id"]
 
@@ -140,6 +141,7 @@ interface Props {
 }
 
 export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol }: Props) {
+  const tr = useTranslations("portfolioUI")
   const [period, setPeriod] = useState<PeriodId>("30d")
   const [mode, setMode] = useState<ChartMode>("area")
 
@@ -253,7 +255,7 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
                     : "text-neutral-500 hover:text-white",
                 )}
               >
-                {p.label}
+                {tr(p.labelKey)}
               </button>
             )
           })}
@@ -268,8 +270,8 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
               <button
                 key={m.id}
                 onClick={() => setMode(m.id)}
-                title={m.label}
-                aria-label={m.label}
+                title={tr(m.labelKey)}
+                aria-label={tr(m.labelKey)}
                 className={cn(
                   "p-1.5 rounded-md transition-colors",
                   active
@@ -295,7 +297,7 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
           <span className="text-xl sm:text-2xl font-bold text-white font-mono">
             {fmt(currentPrice)}
           </span>
-          <span className="text-[10px] text-neutral-500">د.ع</span>
+          <span className="text-[10px] text-neutral-500">{tr("iqd")}</span>
         </div>
         <div
           className={cn(
@@ -331,10 +333,10 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
             <div>
               <div className="text-3xl mb-2 opacity-50">📊</div>
               <div className="text-xs text-neutral-500">
-                لا يوجد سجل أسعار لهذا المشروع بعد
+                {tr("pcNoHistory")}
               </div>
               <div className="text-[10px] text-neutral-600 mt-1">
-                ستُعرَض الحركات لحظة وقوعها
+                {tr("pcMovementsLive")}
               </div>
             </div>
           </div>
@@ -434,7 +436,7 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
                     fontSize: 12,
                   }}
                   labelFormatter={(v) => new Date(v).toLocaleString("en-GB")}
-                  formatter={(v) => [`${fmt(Number(v ?? 0))} د.ع`, "السعر"]}
+                  formatter={(v) => [`${fmt(Number(v ?? 0))} ${tr("iqd")}`, tr("pcPriceTooltip")]}
                   cursor={{ stroke: accent, strokeWidth: 1, strokeOpacity: 0.4 }}
                 />
                 {currentPrice > 0 && (
@@ -485,7 +487,7 @@ export function ProjectChart({ points, currentPrice, loading, hasFetched, symbol
                     fontSize: 12,
                   }}
                   labelFormatter={(v) => new Date(v).toLocaleString("en-GB")}
-                  formatter={(v) => [`${fmt(Number(v ?? 0))} د.ع`, "السعر"]}
+                  formatter={(v) => [`${fmt(Number(v ?? 0))} ${tr("iqd")}`, tr("pcPriceTooltip")]}
                   cursor={{ stroke: accent, strokeWidth: 1, strokeOpacity: 0.4 }}
                 />
                 {currentPrice > 0 && (

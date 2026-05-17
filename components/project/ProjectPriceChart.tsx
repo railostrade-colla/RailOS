@@ -15,6 +15,7 @@
  * `isUp` boolean that drives the up-green / down-red color.
  */
 
+import { useTranslations } from "next-intl"
 import {
   AreaChart,
   Area,
@@ -36,6 +37,7 @@ interface ProjectPriceChartProps {
 }
 
 export function ProjectPriceChart({ data, isUp }: ProjectPriceChartProps) {
+  const t = useTranslations("portfolioUI")
   return (
     <div className="h-40 -mx-1">
       <ResponsiveContainer width="100%" height="100%">
@@ -84,8 +86,8 @@ export function ProjectPriceChart({ data, isUp }: ProjectPriceChartProps) {
               return p?.label ?? ""
             }}
             formatter={(value) => [
-              `${Number(value ?? 0).toLocaleString("en-US")} د.ع`,
-              "السعر",
+              `${Number(value ?? 0).toLocaleString("en-US")} ${t("iqd")}`,
+              t("pcPriceTooltip"),
             ]}
           />
           <Area

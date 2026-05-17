@@ -20,6 +20,7 @@
  * the finished arrays down.
  */
 
+import { useTranslations } from "next-intl"
 import {
   AreaChart,
   Area,
@@ -42,6 +43,7 @@ export function DashboardSparkline({
   data: SparklinePoint[]
   isUp: boolean
 }) {
+  const t = useTranslations("portfolioUI")
   return (
     <div className="h-[50px]">
       <ResponsiveContainer width="100%" height="100%">
@@ -72,8 +74,8 @@ export function DashboardSparkline({
             }}
             labelFormatter={() => ""}
             formatter={(value) => [
-              `${Number(value ?? 0).toLocaleString("en-US")} د.ع`,
-              "السعر",
+              `${Number(value ?? 0).toLocaleString("en-US")} ${t("iqd")}`,
+              t("pcPriceTooltip"),
             ]}
           />
           <Area
@@ -96,6 +98,7 @@ export interface VolumePoint {
 }
 
 export function DashboardVolumeChart({ data }: { data: VolumePoint[] }) {
+  const t = useTranslations("portfolioUI")
   return (
     <div className="h-40 -mx-2">
       <ResponsiveContainer width="100%" height="100%">
@@ -123,7 +126,7 @@ export function DashboardVolumeChart({ data }: { data: VolumePoint[] }) {
               fontSize: "11px",
             }}
             labelStyle={{ color: "#a3a3a3", fontSize: "10px" }}
-            formatter={(value) => [`${value}B IQD`, "الحجم"]}
+            formatter={(value) => [`${value}B IQD`, t("dcVolumeTooltip")]}
           />
           <Area
             type="monotone"

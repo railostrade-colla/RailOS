@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useRef, useState } from "react"
+import { useTranslations } from "next-intl"
 import { ChevronDown, User, Users, Check, Eye, ShoppingCart, ArrowLeftRight } from "lucide-react"
 import { useActiveAccount } from "@/contexts/ActiveAccountContext"
 import type { ContractMemberPermission } from "@/lib/data/contracts"
@@ -21,15 +22,16 @@ import { cn } from "@/lib/utils/cn"
 
 const fmtIQD = (n: number) => n.toLocaleString("en-US")
 
-const PERMISSION_LABELS: Record<ContractMemberPermission, { label: string; icon: typeof Eye }> = {
-  creator:       { label: "منشئ",         icon: Users },
-  buy_and_sell:  { label: "شراء وبيع",   icon: ArrowLeftRight },
-  buy_only:      { label: "شراء فقط",    icon: ShoppingCart },
-  view_only:     { label: "عرض فقط",     icon: Eye },
+const PERMISSION_LABELS: Record<ContractMemberPermission, { labelKey: string; icon: typeof Eye }> = {
+  creator:       { labelKey: "asPermCreator",  icon: Users },
+  buy_and_sell:  { labelKey: "asPermBuySell",  icon: ArrowLeftRight },
+  buy_only:      { labelKey: "asPermBuyOnly",  icon: ShoppingCart },
+  view_only:     { labelKey: "asPermViewOnly", icon: Eye },
 }
 
 export function AccountSwitcher() {
   const { active, contracts, loading, setPersonal, setContract } = useActiveAccount()
+  const t = useTranslations("portfolioUI")
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
 
@@ -53,7 +55,7 @@ export function AccountSwitcher() {
 
   const isPersonal = active.kind === "personal"
   const currentLabel = isPersonal
-    ? "الحساب الرئيسي"
+    ? t("asMainAccount")
     : active.contractTitle
   const CurrentIcon = isPersonal ? User : Users
 
@@ -79,7 +81,7 @@ export function AccountSwitcher() {
           </div>
           {!isPersonal && (
             <div className="text-[10px] text-neutral-500 font-mono">
-              {fmtIQD(active.totalBalance)} د.ع
+              {fmtIQD(active.totalBalance)} {t("iqd")}
             </div>
           )}
         </div>
@@ -99,7 +101,7 @@ export function AccountSwitcher() {
         >
           <div className="px-3 py-2 border-b border-white/[0.06]">
             <div className="text-[10px] text-neutral-500 font-bold">
-              تبديل الحساب
+              {t("asSwitchAccount")}
             </div>
           </div>
 
@@ -118,8 +120,8 @@ export function AccountSwitcher() {
               <User className="w-4 h-4 text-neutral-300" strokeWidth={2} />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-xs text-white font-bold">الحساب الرئيسي</div>
-              <div className="text-[10px] text-neutral-500">حسابك الشخصي</div>
+              <div className="text-xs text-white font-bold">{t("asMainAccount")}</div>
+              <div className="text-[10px] text-neutral-500">{t("asPersonalAccount")}</div>
             </div>
             {isPersonal && (
               <Check className="w-4 h-4 text-green-400 flex-shrink-0" strokeWidth={2.5} />
@@ -159,11 +161,11 @@ export function AccountSwitcher() {
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-[10px] text-neutral-500 font-mono">
-                        {fmtIQD(c.total_balance)} د.ع
+                        {fmtIQD(c.total_balance)} {t("iqd")}
                       </span>
                       <span className="flex items-center gap-1 text-[10px] text-neutral-400">
                         <PIcon className="w-2.5 h-2.5" strokeWidth={2.5} />
-                        {PMeta.label}
+                        {t(PMeta.labelKey)}
                       </span>
                     </div>
                   </div>

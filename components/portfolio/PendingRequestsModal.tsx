@@ -17,6 +17,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import {
   X,
   ArrowLeft,
@@ -71,6 +72,7 @@ export function PendingRequestsModal({
   onChanged,
 }: Props) {
   const router = useRouter()
+  const t = useTranslations("portfolioUI")
   const [busyId, setBusyId] = useState<string | null>(null)
 
   const handleComplete = (item: PendingItem) => {
@@ -105,7 +107,7 @@ export function PendingRequestsModal({
           .from("fee_unit_requests")
           .update({
             status: "rejected",
-            rejection_reason: "ألغاه المستخدم",
+            rejection_reason: t("prCancelledByUser"),
           })
           .eq("id", item.id)
         if (error) {
@@ -115,14 +117,14 @@ export function PendingRequestsModal({
             .delete()
             .eq("id", item.id)
           if (del.error) {
-            showError("تعذّر إلغاء الطلب — تواصل مع الدعم")
+            showError(t("prCancelFailedSupport"))
             return
           }
         }
-        showSuccess("✅ تم إلغاء طلب الشحن")
+        showSuccess(t("prTopupCancelled"))
         onChanged?.()
       } catch {
-        showError("تعذّر إلغاء الطلب")
+        showError(t("prCancelFailed"))
       } finally {
         setBusyId(null)
       }
@@ -143,11 +145,11 @@ export function PendingRequestsModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="⏳ الطلبات المعلّقة"
+      title={t("prTitle")}
       subtitle={
         items.length === 0
-          ? "لا توجد طلبات معلّقة"
-          : `${items.length} طلب بانتظار إجراء`
+          ? t("prNoPending")
+          : t("prCountWaiting", { n: items.length })
       }
       size="md"
     >
@@ -155,7 +157,7 @@ export function PendingRequestsModal({
         <div className="py-10 text-center">
           <Clock className="w-10 h-10 text-neutral-600 mx-auto mb-3" strokeWidth={1.5} />
           <div className="text-sm text-neutral-400">
-            ليس لديك طلبات معلّقة حالياً.
+            {t("prNoneNow")}
           </div>
         </div>
       ) : (
@@ -174,9 +176,9 @@ export function PendingRequestsModal({
           <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-400/[0.06] border border-blue-400/20 rounded-lg mt-4">
             <AlertCircle className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
             <p className="text-[10px] text-blue-300 leading-relaxed">
-              <strong>إكمال</strong> ينقلك لصفحة الإجراء التفصيلية.{" "}
-              <strong>إلغاء</strong> يُلغي الطلب نهائياً.{" "}
-              <strong>تجاهل</strong> يبقي الطلب في القائمة.
+              <strong>{t("prHintCompleteWord")}</strong>{t("prHintCompleteRest")}
+              <strong>{t("prHintCancelWord")}</strong>{t("prHintCancelRest")}
+              <strong>{t("prHintIgnoreWord")}</strong>{t("prHintIgnoreRest")}
             </p>
           </div>
         </div>
@@ -198,13 +200,14 @@ function PendingItemRow({
   onComplete: () => void
   onCancel: () => void
 }) {
+  const t = useTranslations("portfolioUI")
   const showCancel = item.kind !== "transfer" // transfers are admin-only
   const completeLabel =
     item.kind === "deal"
-      ? "فتح الصفقة"
+      ? t("prOpenDeal")
       : item.kind === "fee_request"
-        ? "متابعة"
-        : "عرض"
+        ? t("prFollow")
+        : t("prView")
 
   return (
     <div className="bg-white/[0.03] border border-white/[0.08] rounded-xl p-3.5">
@@ -239,7 +242,7 @@ function PendingItemRow({
                   )}
                 >
                   {item.amount >= 0 ? "+" : ""}
-                  {fmtNum(item.amount)} د.ع
+                  {fmtNum(item.amount)} {t("iqd")}
                 </span>
               </>
             )}
@@ -260,7 +263,7 @@ function PendingItemRow({
             ) : (
               <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
             )}
-            إلغاء
+            {t("cancel")}
           </button>
         )}
         <button
