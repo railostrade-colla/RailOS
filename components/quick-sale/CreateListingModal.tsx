@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useTranslations } from "next-intl"
 import { X, Tag, ShoppingCart, Lock, Building2, Users as UsersIcon, Zap } from "lucide-react"
 import {
   createSellListing,
@@ -36,6 +37,7 @@ interface ProjectOption {
 const fmtIQD = (n: number) => n.toLocaleString("en-US")
 
 export function CreateListingModal({ onClose, onSuccess }: CreateListingModalProps) {
+  const t = useTranslations("quickSale")
   const [tab, setTab] = useState<"sell" | "buy">("sell")
   // Phase 13.59 — when tab === "sell" the user picks WHO they sell to:
   //   • "users"  — existing P2P listing (the legacy flow)
@@ -126,21 +128,21 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
         const r = await executeAdminQuickBuy(projectId, sharesNum)
         if (!r.success) {
           const map: Record<string, string> = {
-            unauthenticated: "سجّل دخولك أولاً",
-            invalid_input: "مدخلات غير صحيحة",
-            project_not_found: "المشروع غير موجود",
-            feature_disabled: "ميزة البيع للنظام غير متوفّرة لهذا المشروع",
-            no_market_price: "لا يوجد سعر سوق محدَّد للمشروع",
-            no_holdings: "لا تملك حصصاً في هذا المشروع",
+            unauthenticated: t("errUnauth"),
+            invalid_input: t("errInvalidInput"),
+            project_not_found: t("errProjectNotFound"),
+            feature_disabled: t("errFeatureDisabled"),
+            no_market_price: t("errNoMarketPrice"),
+            no_holdings: t("errNoHoldings"),
             insufficient_shares:
-              `الحصص المتاحة ${r.free_shares ?? 0} وطلبت ${r.requested ?? sharesNum}`,
+              t("errInsufficientShares", { free: r.free_shares ?? 0, req: r.requested ?? sharesNum }),
           }
-          showError(map[r.error ?? ""] ?? r.error ?? "فشل البيع")
+          showError(map[r.error ?? ""] ?? r.error ?? t("errSellFailed"))
           setSubmitting(false)
           return
         }
         showSuccess(
-          `✅ تم بيع ${r.shares} حصّة للنظام بمبلغ ${(r.total_amount ?? 0).toLocaleString("en-US")} IQD`,
+          t("soldToSystem", { shares: r.shares ?? 0, amount: (r.total_amount ?? 0).toLocaleString("en-US") }),
         )
       } else if (tab === "sell") {
         await createSellListing({
@@ -149,7 +151,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
           is_unlimited: unlimited,
           note: note.trim() || undefined,
         })
-        showSuccess("✅ تم نشر إعلان البيع")
+        showSuccess(t("sellListingPublished"))
       } else {
         await createBuyListing({
           project_id: projectId,
@@ -158,11 +160,11 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
           discount_percent: discount,
           note: note.trim() || undefined,
         })
-        showSuccess("✅ تم نشر إعلان الشراء")
+        showSuccess(t("buyListingPublished"))
       }
       onSuccess()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "فشل إنشاء الإعلان"
+      const msg = err instanceof Error ? err.message : t("failCreateListing")
       showError(msg)
       setSubmitting(false)
     }
@@ -173,11 +175,11 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
       <div className="w-full max-w-lg bg-[#0f0f0f] border border-white/[0.08] rounded-2xl overflow-hidden shadow-2xl my-8">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
-          <h2 className="text-lg font-bold text-white">📢 إعلان جديد</h2>
+          <h2 className="text-lg font-bold text-white">{t("newListing")}</h2>
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-lg hover:bg-white/[0.05] flex items-center justify-center transition-colors"
-            aria-label="إغلاق"
+            aria-label={t("close")}
           >
             <X size={16} className="text-neutral-400" />
           </button>
@@ -195,7 +197,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
               }`}
             >
               <Tag size={14} />
-              إعلان بيع
+              {t("sellListing")}
             </button>
             <button
               onClick={() => setTab("buy")}
@@ -206,7 +208,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
               }`}
             >
               <ShoppingCart size={14} />
-              إعلان شراء
+              {t("buyListing")}
             </button>
           </div>
           <div
@@ -215,15 +217,15 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
             }`}
           >
             {tab === "sell"
-              ? `🔥 الخصم ثابت ${QS_SELL_DISCOUNT}% (يحدّده النظام)`
-              : `💰 أنت تحدّد نسبة الخصم (${QS_BUY_DISCOUNT_MIN}% إلى ${QS_BUY_DISCOUNT_MAX}%)`}
+              ? t("sellDiscountFixed", { pct: QS_SELL_DISCOUNT })
+              : t("buyDiscountChoose", { min: QS_BUY_DISCOUNT_MIN, max: QS_BUY_DISCOUNT_MAX })}
           </div>
 
           {/* Phase 13.59 — sell-target picker (only in sell tab) */}
           {tab === "sell" && (
             <div className="mt-3">
               <div className="text-[10px] text-neutral-500 mb-1.5 font-bold">
-                إلى مَن تبيع؟
+                {t("whoSellTo")}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -236,7 +238,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
                   )}
                 >
                   <UsersIcon className="w-3.5 h-3.5" strokeWidth={2} />
-                  للمستخدمين (تفاوض)
+                  {t("toUsersNegotiate")}
                 </button>
                 <button
                   onClick={() => setSellTarget("system")}
@@ -248,7 +250,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
                   )}
                 >
                   <Building2 className="w-3.5 h-3.5" strokeWidth={2} />
-                  للنظام (فوري)
+                  {t("toSystemInstant")}
                 </button>
               </div>
               <div className={cn(
@@ -256,8 +258,8 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
                 sellTarget === "system" ? "text-[#4ADE80]" : "text-neutral-500",
               )}>
                 {sellTarget === "system"
-                  ? "⚡ بيع فوري للنظام بسعر ثابت (-15% من سعر السوق). يتطلّب تفعيل الميزة على المشروع."
-                  : "📝 إعلان للمستخدمين بسعر -15%؛ يمكنهم القبول والتفاوض."}
+                  ? t("sellSystemDesc")
+                  : t("sellUsersDesc")}
               </div>
             </div>
           )}
@@ -268,15 +270,15 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
           {/* Project selector */}
           <div>
             <label className="text-xs text-neutral-400 mb-1.5 block font-bold">
-              اختر المشروع
+              {t("chooseProject")}
             </label>
             {loadingProjects ? (
               <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-neutral-500">
-                جاري تحميل المشاريع...
+                {t("loadingProjects")}
               </div>
             ) : projects.length === 0 ? (
               <div className="bg-yellow-400/[0.05] border border-yellow-400/20 rounded-xl px-4 py-3 text-xs text-yellow-400">
-                ⚠ لا توجد مشاريع متاحة حالياً
+                {t("noProjects")}
               </div>
             ) : (
               <select
@@ -284,11 +286,11 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
                 onChange={(e) => setProjectId(e.target.value)}
                 className="w-full bg-white/[0.05] border border-white/[0.08] focus:border-white/20 rounded-xl px-4 py-3 text-sm text-white outline-none transition-colors"
               >
-                <option value="">— اختر مشروع —</option>
+                <option value="">{t("chooseProjectOption")}</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id} className="bg-[#0f0f0f]">
                     {p.name} {p.symbol ? `(${p.symbol})` : ""} —{" "}
-                    {fmtIQD(p.current_market_price)} د.ع
+                    {fmtIQD(p.current_market_price)} {t("iqd")}
                   </option>
                 ))}
               </select>
@@ -300,23 +302,22 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
             <>
               {statusLoading ? (
                 <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 text-xs text-neutral-400 animate-pulse text-center">
-                  جاري التحقّق من حالة الميزة…
+                  {t("checkingFeature")}
                 </div>
               ) : !quickBuyStatus?.enabled ? (
                 <div className="bg-red-500/[0.06] border border-red-500/[0.2] rounded-xl p-3 text-xs text-red-300 leading-relaxed">
-                  ⛔ <span className="font-bold">غير متوفّر حالياً</span>
+                  ⛔ <span className="font-bold">{t("dsNotAvailable")}</span>
                   <span className="block mt-1 text-red-300/80">
-                    البيع المباشر للنظام مُعطَّل على هذا المشروع.
-                    استخدم خيار "للمستخدمين" أو اطلب من الإدارة تفعيل الميزة.
+                    {t("dsDisabledBody")}
                   </span>
                 </div>
               ) : (
                 <div className="bg-[#4ADE80]/[0.06] border border-[#4ADE80]/[0.25] rounded-xl p-3 text-xs text-[#4ADE80] leading-relaxed flex items-start gap-2">
                   <Zap className="w-4 h-4 flex-shrink-0 mt-0.5" strokeWidth={2.5} />
                   <span>
-                    البيع المباشر <b>مفعَّل</b> لهذا المشروع.
-                    خصم: <span className="font-mono">{quickBuyStatus.discount_pct}%</span> ·
-                    السعر للحصّة: <span className="font-mono">{fmtIQD(quickBuyStatus.price_per_share)} IQD</span>
+                    {t("dsEnabledPre")}<b>{t("dsEnabledBold")}</b>{t("dsEnabledMid")}{" "}
+                    {t("dsDiscountPre")}<span className="font-mono">{quickBuyStatus.discount_pct}%</span> ·{" "}
+                    {t("dsPricePre")}<span className="font-mono">{fmtIQD(quickBuyStatus.price_per_share)} IQD</span>
                   </span>
                 </div>
               )}
@@ -326,7 +327,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
           {/* Quantity type — system mode forces a specific count */}
           <div>
             <label className="text-xs text-neutral-400 mb-1.5 block font-bold">
-              {isSystemMode ? "عدد الحصص للبيع" : "نوع الكمية"}
+              {isSystemMode ? t("sharesToSell") : t("qtyType")}
             </label>
             {!isSystemMode && (
               <div className="grid grid-cols-2 gap-2 mb-2">
@@ -338,7 +339,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
                       : "bg-white/[0.03] text-neutral-400 border-white/[0.06] hover:bg-white/[0.05]"
                   }`}
                 >
-                  كمية محدّدة
+                  {t("fixedQty")}
                 </button>
                 <button
                   onClick={() => setUnlimited(true)}
@@ -348,7 +349,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
                       : "bg-white/[0.03] text-neutral-400 border-white/[0.06] hover:bg-white/[0.05]"
                   }`}
                 >
-                  🌊 كميات مفتوحة
+                  {t("openQtyTag")}
                 </button>
               </div>
             )}
@@ -356,7 +357,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
               <IntegerInput
                 value={shares}
                 onValueChange={setShares}
-                placeholder="عدد الحصص"
+                placeholder={t("sharesPlaceholder")}
                 dir="ltr"
                 className="w-full bg-white/[0.05] border border-white/[0.08] focus:border-white/20 rounded-xl px-4 py-3 text-sm text-white text-center font-mono outline-none transition-colors"
               />
@@ -368,7 +369,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs text-neutral-400 font-bold">
-                  نسبة الخصم
+                  {t("discountPct")}
                 </label>
                 <span className="text-base font-bold text-[#4ADE80] font-mono">
                   {discount}%
@@ -395,39 +396,39 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
             <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3.5 space-y-1.5">
               <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 font-bold mb-1">
                 <Lock className="w-3 h-3" />
-                التسعير التلقائي
+                {t("autoPricing")}
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-neutral-400">سعر السوق</span>
+                <span className="text-neutral-400">{t("marketPrice")}</span>
                 <span className="font-mono font-bold text-white">
-                  {fmtIQD(marketPrice)} د.ع
+                  {fmtIQD(marketPrice)} {t("iqd")}
                 </span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-neutral-400">
-                  الخصم ({effectiveDiscount}%)
+                  {t("discountParen", { pct: effectiveDiscount })}
                 </span>
                 <span
                   className={`font-mono font-bold ${
                     tab === "sell" ? "text-[#F87171]" : "text-[#4ADE80]"
                   }`}
                 >
-                  −{fmtIQD(marketPrice - finalPrice)} د.ع
+                  −{fmtIQD(marketPrice - finalPrice)} {t("iqd")}
                 </span>
               </div>
               <div className="flex justify-between text-sm border-t border-white/[0.06] pt-2 mt-1">
                 <span className="text-neutral-300 font-bold">
-                  السعر النهائي
+                  {t("finalPrice")}
                 </span>
                 <span className="font-mono font-bold text-yellow-400">
-                  {fmtIQD(finalPrice)} د.ع
+                  {fmtIQD(finalPrice)} {t("iqd")}
                 </span>
               </div>
               {/* Phase 13.59 — total proceeds for system mode */}
               {isSystemMode && sharesNum > 0 && (
                 <div className="flex justify-between text-sm border-t border-[#4ADE80]/[0.15] pt-2 mt-1">
                   <span className="text-[#4ADE80] font-bold">
-                    إجمالي المبلغ ({sharesNum.toLocaleString("en-US")} حصّة)
+                    {t("totalAmountShares", { n: sharesNum.toLocaleString("en-US") })}
                   </span>
                   <span className="font-mono font-bold text-[#4ADE80]">
                     {fmtIQD(finalPrice * sharesNum)} IQD
@@ -440,12 +441,12 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
           {/* Note */}
           <div>
             <label className="text-xs text-neutral-400 mb-1.5 block font-bold">
-              ملاحظة (اختياري)
+              {t("noteOptional")}
             </label>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="أي تفاصيل إضافية..."
+              placeholder={t("notePlaceholder")}
               rows={2}
               className="w-full bg-white/[0.05] border border-white/[0.08] focus:border-white/20 rounded-xl px-4 py-3 text-sm text-white outline-none resize-none transition-colors"
             />
@@ -458,7 +459,7 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
             onClick={onClose}
             className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] transition-colors"
           >
-            إلغاء
+            {t("cancel")}
           </button>
           <button
             onClick={handleSubmit}
@@ -473,8 +474,8 @@ export function CreateListingModal({ onClose, onSuccess }: CreateListingModalPro
             )}
           >
             {submitting
-              ? (isSystemMode ? "جاري التنفيذ..." : "جاري النشر...")
-              : isSystemMode ? "⚡ بيع فوري للنظام" : "إنشاء الإعلان"}
+              ? (isSystemMode ? t("executing") : t("publishing"))
+              : isSystemMode ? t("instantSellSystem") : t("createListing")}
           </button>
         </div>
       </div>

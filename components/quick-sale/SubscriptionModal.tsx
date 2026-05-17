@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 import { X, Zap, Check } from "lucide-react"
 import {
   subscribeToQuickSale,
@@ -16,17 +17,10 @@ interface SubscriptionModalProps {
   onSuccess: () => void
 }
 
-const FEATURES: string[] = [
-  "عروض بيع بأسعار 15% أقل من السوق",
-  "إنشاء عروض شراء بنسبة خصم تختارها (3-10%)",
-  "كميات مفتوحة أو محدّدة",
-  "صفقات فورية مع مشتركين موثوقين",
-  "تفاصيل كاملة عن البائع/المشتري",
-  "اشتراك شهري قابل للتجديد",
-]
-
 export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps) {
   const router = useRouter()
+  const t = useTranslations("quickSale")
+  const FEATURES = t.raw("subFeatures") as string[]
   const [balance, setBalance] = useState<number>(0)
   const [loadingBalance, setLoadingBalance] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -67,10 +61,10 @@ export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps
     const result = await subscribeToQuickSale()
 
     if (result.success) {
-      showSuccess(isRenewal ? "🔁 تم تجديد الاشتراك (+30 يوم)" : "🎉 تم الاشتراك بنجاح (30 يوم)")
+      showSuccess(isRenewal ? t("subRenewSuccess") : t("subSuccess"))
       onSuccess()
     } else {
-      showError(result.error || "فشل الاشتراك")
+      showError(result.error || t("subFailed"))
       setSubmitting(false)
     }
   }
@@ -83,7 +77,7 @@ export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps
           <button
             onClick={onClose}
             className="absolute top-4 left-4 w-8 h-8 rounded-lg hover:bg-white/[0.05] flex items-center justify-center transition-colors"
-            aria-label="إغلاق"
+            aria-label={t("close")}
           >
             <X size={16} className="text-neutral-400" />
           </button>
@@ -93,12 +87,12 @@ export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps
               <Zap size={32} className="text-white" strokeWidth={2.5} />
             </div>
             <h2 className="text-xl font-bold text-white">
-              {isRenewal ? "تجديد اشتراك البيع السريع" : "اشتراك البيع السريع"}
+              {isRenewal ? t("subRenewTitle") : t("subTitle")}
             </h2>
             <p className="text-sm text-neutral-400 mt-1">
               {isRenewal
-                ? `يضيف 30 يوماً للوقت المتبقّي (${existingDaysLeft} يوم)`
-                : "اشتراك شهري — صالح لـ 30 يوم"}
+                ? t("subRenewDesc", { n: existingDaysLeft })
+                : t("subDesc")}
             </p>
           </div>
         </div>
@@ -110,9 +104,9 @@ export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps
             <div className="text-4xl font-bold font-mono text-white">
               {QS_SUBSCRIPTION_FEE.toLocaleString("en-US")}
             </div>
-            <div className="text-sm text-neutral-400 mt-1">وحدة رسوم / شهر</div>
+            <div className="text-sm text-neutral-400 mt-1">{t("subUnitPerMonth")}</div>
             <div className="text-xs text-[#4ADE80] mt-2 font-bold">
-              30 يوم وصول كامل — قابل للتجديد
+              {t("subFullAccess")}
             </div>
           </div>
 
@@ -144,21 +138,21 @@ export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps
             }`}
           >
             {loadingBalance ? (
-              "جاري التحقّق من رصيدك..."
+              t("subCheckingBalance")
             ) : (
               <>
-                رصيدك:{" "}
+                {t("subBalancePre")}
                 <span className="font-mono font-bold">
                   {balance.toLocaleString("en-US")}
                 </span>{" "}
-                وحدة
+                {t("subUnit")}
                 {!canAfford && (
                   <div className="text-xs mt-1 opacity-90">
-                    تحتاج{" "}
+                    {t("subNeedPre")}
                     <span className="font-mono font-bold">
                       {shortBy.toLocaleString("en-US")}
                     </span>{" "}
-                    وحدة إضافية
+                    {t("subNeedPost")}
                   </div>
                 )}
               </>
@@ -176,12 +170,12 @@ export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps
             }`}
           >
             {submitting
-              ? (isRenewal ? "جاري التجديد..." : "جاري الاشتراك...")
+              ? (isRenewal ? t("subRenewing") : t("subSubscribing"))
               : loadingBalance
               ? "..."
               : canAfford
-              ? (isRenewal ? "🔁 جدّد الآن (+30 يوم)" : "⚡ اشترك الآن (30 يوم)")
-              : "الرصيد غير كافٍ"}
+              ? (isRenewal ? t("subRenewNow") : t("subSubscribeNow"))
+              : t("subInsufficient")}
           </button>
 
           {!canAfford && !loadingBalance && (
@@ -189,7 +183,7 @@ export function SubscriptionModal({ onClose, onSuccess }: SubscriptionModalProps
               onClick={() => router.push("/portfolio?tab=fee_units")}
               className="w-full py-2 text-sm text-[#60A5FA] hover:underline"
             >
-              شحن وحدات الرسوم →
+              {t("subTopUp")}
             </button>
           )}
         </div>

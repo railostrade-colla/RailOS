@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Star, Shield, AlertTriangle, Flag, Zap, X } from "lucide-react"
 import {
   cancelListing,
@@ -25,6 +26,7 @@ const fmtIQD = (n: number) => n.toLocaleString("en-US")
 
 export function QuickSaleListingCard({ listing, onUpdate }: Props) {
   const router = useRouter()
+  const t = useTranslations("quickSale")
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [showQuantityModal, setShowQuantityModal] = useState(false)
   const [quantity, setQuantity] = useState<string>("")
@@ -50,11 +52,11 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
 
   async function handleOpenDeal() {
     if (!qtyNum || qtyNum < 1) {
-      showError("أدخل كمية صحيحة")
+      showError(t("errValidQty"))
       return
     }
     if (!listing.is_unlimited && qtyNum > listing.available_shares) {
-      showError(`المتوفّر فقط ${listing.available_shares} حصة`)
+      showError(t("errOnlyAvailable", { n: listing.available_shares }))
       return
     }
 
@@ -64,14 +66,14 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
         listing_id: listing.id,
         quantity: qtyNum,
       })
-      showSuccess("✅ تم فتح الصفقة")
+      showSuccess(t("dealOpened"))
       setShowQuantityModal(false)
       onUpdate()
       // Navigate to deal details if available
       const dealId = (deal as { id?: string } | null)?.id
       if (dealId) router.push(`/deals/${dealId}`)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "فشل فتح الصفقة"
+      const msg = err instanceof Error ? err.message : t("failOpenDeal")
       showError(msg)
       setSubmitting(false)
     }
@@ -81,10 +83,10 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
     setCancelling(true)
     try {
       await cancelListing(listing.id)
-      showSuccess("تم إلغاء الإعلان")
+      showSuccess(t("listingCancelled"))
       onUpdate()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "فشل الإلغاء"
+      const msg = err instanceof Error ? err.message : t("failCancel")
       showError(msg)
       setCancelling(false)
     }
@@ -109,24 +111,24 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
                   : "bg-[#4ADE80]/15 text-[#4ADE80] border border-[#4ADE80]/30"
               }`}
             >
-              {isSell ? "🔥" : "💰"} {isSell ? "بيع سريع" : "شراء"} −
+              {isSell ? "🔥" : "💰"} {isSell ? t("quickSell") : t("buy")} −
               {listing.discount_percent}%
             </span>
             {isOwner && (
               <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-blue-400/15 text-blue-400 border border-blue-400/30">
-                إعلانك
+                {t("yourListing")}
               </span>
             )}
           </div>
           {listing.is_unlimited && (
-            <span className="text-[10px] text-neutral-400">🌊 كميات مفتوحة</span>
+            <span className="text-[10px] text-neutral-400">{t("openQtyTag")}</span>
           )}
         </div>
 
         {/* Project name */}
         <div className="mb-3">
           <div className="text-base font-bold text-white">
-            {listing.project?.name || "—"}
+            {listing.project?.name ?? "—"}
             {listing.project?.symbol && (
               <span className="text-xs text-neutral-500 mr-2">
                 ({listing.project.symbol})
@@ -141,10 +143,10 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
             <span className="text-2xl font-bold font-mono text-yellow-400">
               {fmtIQD(listing.final_price)}
             </span>
-            <span className="text-xs text-neutral-500">د.ع / حصة</span>
+            <span className="text-xs text-neutral-500">{t("iqdPerShare")}</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-neutral-500">سعر السوق:</span>
+            <span className="text-neutral-500">{t("marketPriceLabel")}</span>
             <span className="font-mono text-neutral-400 line-through">
               {fmtIQD(listing.market_price)}
             </span>
@@ -161,18 +163,18 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
         {/* Quantity */}
         <div className="text-xs text-neutral-400 mb-3">
           {listing.is_unlimited ? (
-            <span className="text-[#4ADE80]">🌊 كميات مفتوحة (غير محدودة)</span>
+            <span className="text-[#4ADE80]">{t("openQtyUnlimited")}</span>
           ) : (
             <>
-              متاح:{" "}
+              {t("availablePre")}
               <span className="font-mono font-bold text-white">
                 {fmtIQD(listing.available_shares)}
-              </span>{" "}
-              من{" "}
+              </span>
+              {t("ofWord")}
               <span className="font-mono text-neutral-500">
                 {fmtIQD(listing.total_shares)}
               </span>{" "}
-              حصة
+              {t("sharesUnit")}
             </>
           )}
         </div>
@@ -188,7 +190,7 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
         <div className="border-t border-white/[0.06] pt-3 mb-3">
           <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
             <div className="text-sm font-bold text-white">
-              {listing.user?.display_name || "مستخدم"}
+              {listing.user?.display_name || t("defaultUser")}
             </div>
             <div className="flex items-center gap-1 text-xs">
               <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
@@ -199,16 +201,16 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
           </div>
           <div className="grid grid-cols-2 gap-2 text-[10px]">
             <div className="bg-white/[0.04] rounded-lg px-2 py-1.5">
-              <div className="text-neutral-500">الصفقات</div>
+              <div className="text-neutral-500">{t("trades")}</div>
               <div className="font-mono font-bold text-white mt-0.5">
                 {fmtIQD(listing.user?.total_trades ?? 0)}{" "}
                 <span className="text-neutral-500">
-                  (نجح {fmtIQD(listing.user?.successful_trades ?? 0)})
+                  ({t("succeededPre")}{fmtIQD(listing.user?.successful_trades ?? 0)})
                 </span>
               </div>
             </div>
             <div className="bg-white/[0.04] rounded-lg px-2 py-1.5">
-              <div className="text-neutral-500">نسبة النجاح</div>
+              <div className="text-neutral-500">{t("successRate")}</div>
               <div
                 className={`font-mono font-bold mt-0.5 ${
                   successRate >= 90
@@ -230,7 +232,7 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
             >
               <div className="text-neutral-500 flex items-center gap-1">
                 <AlertTriangle className="w-2.5 h-2.5" />
-                النزاعات
+                {t("disputes")}
               </div>
               <div
                 className={`font-mono font-bold mt-0.5 ${
@@ -249,7 +251,7 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
             >
               <div className="text-neutral-500 flex items-center gap-1">
                 <Flag className="w-2.5 h-2.5" />
-                البلاغات
+                {t("reports")}
               </div>
               <div
                 className={`font-mono font-bold mt-0.5 ${
@@ -269,7 +271,7 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
             disabled={cancelling}
             className="w-full py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-[#F87171] text-sm font-bold hover:bg-white/[0.08] transition-colors disabled:opacity-50"
           >
-            {cancelling ? "جاري الإلغاء..." : "إلغاء الإعلان"}
+            {cancelling ? t("cancelling") : t("cancelListing")}
           </button>
         ) : (
           <button
@@ -281,7 +283,7 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
             }`}
           >
             <Zap className="w-4 h-4" strokeWidth={2.5} />
-            فتح صفقة
+            {t("openDeal")}
           </button>
         )}
       </div>
@@ -291,11 +293,11 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-sm bg-[#0f0f0f] border border-white/[0.08] rounded-2xl overflow-hidden shadow-2xl">
             <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
-              <h3 className="text-base font-bold text-white">حدّد الكمية</h3>
+              <h3 className="text-base font-bold text-white">{t("setQty")}</h3>
               <button
                 onClick={() => setShowQuantityModal(false)}
                 className="w-8 h-8 rounded-lg hover:bg-white/[0.05] flex items-center justify-center"
-                aria-label="إغلاق"
+                aria-label={t("close")}
               >
                 <X size={16} className="text-neutral-400" />
               </button>
@@ -304,7 +306,7 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
             <div className="p-5 space-y-4">
               <div>
                 <div className="flex justify-between mb-2 text-xs">
-                  <span className="text-neutral-400">عدد الحصص</span>
+                  <span className="text-neutral-400">{t("sharesCount")}</span>
                   {!listing.is_unlimited && (
                     <button
                       onClick={() =>
@@ -312,7 +314,7 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
                       }
                       className="text-neutral-400 hover:text-white"
                     >
-                      الحد الأقصى ({fmtIQD(listing.available_shares)})
+                      {t("maxQty", { n: fmtIQD(listing.available_shares) })}
                     </button>
                   )}
                 </div>
@@ -329,23 +331,22 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
               {qtyNum > 0 && (
                 <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 space-y-1.5 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-neutral-500">القيمة الإجمالية</span>
+                    <span className="text-neutral-500">{t("totalValue")}</span>
                     <span className="font-mono font-bold text-white">
-                      {fmtIQD(totalAmount)} د.ع
+                      {fmtIQD(totalAmount)} {t("iqd")}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-neutral-500 flex items-center gap-1">
                       <Shield className="w-3 h-3" />
-                      عمولة المنصّة (
-                      {(QS_BUYER_COMMISSION_PCT * 100).toFixed(0)}%)
+                      {t("platformCommission", { pct: (QS_BUYER_COMMISSION_PCT * 100).toFixed(0) })}
                     </span>
                     <span className="font-mono font-bold text-blue-400">
-                      {fmtIQD(commission)} د.ع
+                      {fmtIQD(commission)} {t("iqd")}
                     </span>
                   </div>
                   <div className="text-[10px] text-neutral-500 pt-1 border-t border-white/[0.04] mt-1">
-                    💡 العمولة على المشتري دائماً في البيع السريع
+                    {t("commissionNote")}
                   </div>
                 </div>
               )}
@@ -355,7 +356,7 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
                   onClick={() => setShowQuantityModal(false)}
                   className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] transition-colors"
                 >
-                  إلغاء
+                  {t("cancel")}
                 </button>
                 <button
                   onClick={handleOpenDeal}
@@ -366,7 +367,7 @@ export function QuickSaleListingCard({ listing, onUpdate }: Props) {
                       : "bg-neutral-800 text-neutral-500 cursor-not-allowed"
                   }`}
                 >
-                  {submitting ? "جاري الفتح..." : "فتح الصفقة"}
+                  {submitting ? t("opening") : t("openTheDeal")}
                 </button>
               </div>
             </div>
