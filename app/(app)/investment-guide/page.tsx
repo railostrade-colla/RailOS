@@ -2,316 +2,60 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { TrendingUp, AlertTriangle, Lightbulb, Search, ShoppingCart, Wallet, ChevronDown, ChevronLeft, FileText, Users, BarChart3, ArrowLeftRight, Gavel, Heart, Bell, Info, Sparkles } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { cn } from "@/lib/utils/cn"
 
-// خطوات الاستثمار - من الصفر للنجاح
-const STEPS = [
-  {
-    n: 1,
-    icon: Search,
-    title: "اكتشف الفرص",
-    color: "blue",
-    desc: "تصفّح المشاريع المتاحة في صفحة السوق. اطلع على كل التفاصيل: القطاع، الحصص المتاحة، السعر، مستوى المخاطرة، والعوائد المتوقعة.",
-    tips: [
-      "ابدأ بالمشاريع منخفضة المخاطرة",
-      "اقرأ وصف المشروع بالكامل قبل الاستثمار",
-      "تابع الحركة السعرية في المخطط البياني",
-    ],
-  },
-  {
-    n: 2,
-    icon: BarChart3,
-    title: "ادرس وحلّل",
-    color: "purple",
-    desc: "افحص الأداء التاريخي للمشروع، نسبة التمويل، عدد المستثمرين، آلية توزيع الأرباح، وتقييمات الشركة. كل هذه المعلومات متاحة في صفحة تفاصيل المشروع.",
-    tips: [
-      "تحقق من نسبة الإنجاز قبل الشراء",
-      "قارن بين مشاريع نفس القطاع",
-      "راجع تقييمات المستثمرين السابقين",
-    ],
-  },
-  {
-    n: 3,
-    icon: ShoppingCart,
-    title: "اشترِ بثقة",
-    color: "green",
-    desc: "اضغط \"شراء حصص\" واختر بين الشراء المباشر من المنصة أو الشراء من المستثمرين الآخرين. حدد عدد الحصص واتمّ الصفقة بضغطة زر.",
-    tips: [
-      "ابدأ بكميات صغيرة في أول استثمار",
-      "تحقق من السعر قبل الشراء",
-      "اقرأ شروط الصفقة بعناية",
-    ],
-  },
-  {
-    n: 4,
-    icon: Wallet,
-    title: "تابع محفظتك",
-    color: "yellow",
-    desc: "من صفحة المحفظة، شاهد كل حصصك في مكان واحد. تابع قيمة استثماراتك بشكل لحظي، اطلع على العوائد المتوقعة والأرباح المحققة.",
-    tips: [
-      "افحص محفظتك مرة واحدة على الأقل أسبوعياً",
-      "احتفظ بسجل لكل صفقة تمت",
-      "احذر من اتخاذ قرارات متسرعة",
-    ],
-  },
-  {
-    n: 5,
-    icon: ArrowLeftRight,
-    title: "بِع متى تريد",
-    color: "orange",
-    desc: "عندما تريد بيع حصصك، توجه لصفحة التبادل وأنشئ إعلان بيع، أو استخدم البيع السريع للحصول على سيولة فورية بخصم 15%. أنت تتحكم في توقيت البيع.",
-    tips: [
-      "اختر الوقت المناسب للبيع - عندما يرتفع السعر",
-      "البيع السريع للحالات الطارئة فقط",
-      "تفاوض مع المشترين عبر الدردشة",
-    ],
-  },
-  {
-    n: 6,
-    icon: Gavel,
-    title: "شارك في المزادات",
-    color: "red",
-    desc: "المزادات فرصة للحصول على حصص بأسعار مخفضة. ادخل صفحة المزادات، اختر المزاد، وضع عرضك. إذا فزت، تحصل على الحصص بسعر أقل من السوق.",
-    tips: [
-      "ضع حد أعلى لعرضك ولا تتجاوزه",
-      "راقب الوقت المتبقي في المزاد",
-      "ابدأ بمزادات صغيرة للتعلم",
-    ],
-  },
-]
+// icon/color stay here; text resolved via t.raw("igSteps") by index.
+const STEP_META = [
+  { n: 1, icon: Search,        color: "blue" },
+  { n: 2, icon: BarChart3,     color: "purple" },
+  { n: 3, icon: ShoppingCart,  color: "green" },
+  { n: 4, icon: Wallet,        color: "yellow" },
+  { n: 5, icon: ArrowLeftRight, color: "orange" },
+  { n: 6, icon: Gavel,         color: "red" },
+] as const
 
-// كيف يحقق المستثمر فائدة من رايلوس
-const BENEFITS = [
-  {
-    icon: TrendingUp,
-    color: "green",
-    title: "نمو رأس المال",
-    desc: "مع نمو المشاريع وزيادة الطلب، ترتفع قيمة حصصك تدريجياً. يمكن بيعها لاحقاً بسعر أعلى.",
-  },
-  {
-    icon: Wallet,
-    color: "blue",
-    title: "عوائد دورية",
-    desc: "تحصل على عوائد ربع/نصف سنوية أو سنوية من أرباح المشاريع المُستثمر بها (بشرط الاحتفاظ 30 يوم).",
-  },
-  {
-    icon: Users,
-    color: "purple",
-    title: "تنويع المحفظة",
-    desc: "استثمر في قطاعات متعددة (زراعة، عقارات، صناعة، تجارة) لتقليل المخاطر.",
-  },
-  {
-    icon: Lightbulb,
-    color: "yellow",
-    title: "فرص حصرية",
-    desc: "وصول لمشاريع غير متاحة للعامة، مزادات بخصومات تصل لـ 40%، وفرص الشراء المبكر.",
-  },
-]
+const BENEFIT_META = [
+  { icon: TrendingUp, color: "green" },
+  { icon: Wallet,     color: "blue" },
+  { icon: Users,      color: "purple" },
+  { icon: Lightbulb,  color: "yellow" },
+] as const
 
-// ميزات رايلوس التي تساعد المستثمر
-const PLATFORM_FEATURES = [
-  {
-    icon: BarChart3,
-    title: "تحليلات مفصّلة",
-    desc: "مخططات بيانية + بيانات مالية + تقييمات لكل مشروع",
-  },
-  {
-    icon: ArrowLeftRight,
-    title: "تبادل بين المستثمرين",
-    desc: "بِع واشترِ بسعر السوق دون انتظار",
-  },
-  {
-    icon: Bell,
-    title: "إشعارات لحظية",
-    desc: "تنبيهات لحظية بأي تغيير في استثماراتك",
-  },
-  {
-    icon: FileText,
-    title: "عقود شراكة",
-    desc: "أنشئ عقود مع مستثمرين آخرين بنسب محددة",
-  },
-  {
-    icon: Heart,
-    title: "متابعة المشاريع",
-    desc: "تابع المشاريع المفضلة وكن أول من يعرف بالتحديثات",
-  },
-  {
-    icon: Users,
-    title: "مجتمع نشط",
-    desc: "تواصل مع مستثمرين آخرين وتعلم من تجاربهم",
-  },
-]
+const PF_META = [
+  { icon: BarChart3 }, { icon: ArrowLeftRight }, { icon: Bell },
+  { icon: FileText }, { icon: Heart }, { icon: Users },
+] as const
+
+type LText = { title: string; desc: string; tips: string[] }
+type LSimple = { title: string; desc: string }
+type LLevel = { level: string; badge: string; limit: string; limitUnit: string; desc: string; requirements: string[]; perks: string[] }
+type LExample = { title: string; members: string; result: string; note: string }
+type LSector = { name: string; desc: string }
+type LTip = { title: string; body: string }
 
 // مستويات المستثمرين — مُحدَّث مع نظام الترقية الشامل (Volume + Trades + Disputes + Reports + Rating)
 // المصدر: lib/mock-data/levels.ts (LEVEL_SETTINGS_STORE) — قابل للتعديل من الأدمن
-const INVESTOR_LEVELS = [
-  {
-    level: "أساسي",
-    color: "blue",
-    icon: "🌱",
-    badge: "للمبتدئين",
-    limit: "10 مليون",
-    limitUnit: "د.ع / شهر",
-    desc: "نقطة البداية لكل مستثمر جديد — اكتشف وتعلم بأمان",
-    requirements: [
-      "تسجيل حساب جديد",
-      "توثيق KYC أساسي (هوية)",
-      "بدون رسوم تسجيل",
-    ],
-    perks: [
-      "الدخول الكامل للسوق",
-      "شراء وبيع الحصص",
-      "الوصول لمحفظتك الشخصية",
-      "خاصية البيع السريع",
-      "الدخول في الصفقات العادية",
-      "دعم فني خلال 24-48 ساعة",
-    ],
-  },
-  {
-    level: "متقدّم",
-    color: "green",
-    icon: "⚡",
-    badge: "للنشطين",
-    limit: "50 مليون",
-    limitUnit: "د.ع / شهر",
-    desc: "للمستثمر الذي أثبت نشاطه واستقراره على المنصة",
-    requirements: [
-      "توثيق KYC متقدم (هوية + إثبات سكن)",
-      "حجم تداول 100 مليون د.ع",
-      "50 صفقة ناجحة على الأقل",
-      "30 يوم نشاط متواصل",
-      "نسبة نجاح ≥ 90%",
-      "تقييم 4.0+ نجوم",
-      "أقل من 2 نزاع خاسر",
-    ],
-    perks: [
-      "كل صلاحيات المستوى الأساسي",
-      "إنشاء عقود شراكة",
-      "أولوية في فرص استثمارية",
-      "وصول مبكر للمشاريع الجديدة",
-      "أدوات تحليل أوسع",
-      "شارة \"متقدّم\" على ملفك",
-      "دعم فني خلال 12 ساعة",
-    ],
-  },
-  {
-    level: "محترف",
-    color: "purple",
-    icon: "💎",
-    badge: "للنخبة",
-    limit: "250 مليون",
-    limitUnit: "د.ع / شهر",
-    desc: "مستثمر متمرّس — وصول حصري لأفضل الفرص",
-    requirements: [
-      "توثيق KYC احترافي (إثبات دخل + سجل تجاري)",
-      "حجم تداول 250 مليون د.ع",
-      "200 صفقة ناجحة على الأقل",
-      "90 يوم نشاط متواصل",
-      "نسبة نجاح ≥ 95%",
-      "تقييم 4.5+ نجوم",
-      "أقل من 1 نزاع خاسر",
-    ],
-    perks: [
-      "كل صلاحيات المستوى المتقدّم",
-      "وصول حصري لمزادات VIP",
-      "وصول مبكر للفرص (48 ساعة قبل العامة)",
-      "مدير حساب شخصي",
-      "تقارير تحليلية متقدمة",
-      "دعوات لزيارات ميدانية للمشاريع",
-    ],
-  },
-  {
-    level: "النخبة",
-    color: "yellow",
-    icon: "👑",
-    badge: "VIP",
-    limit: "1 مليار",
-    limitUnit: "د.ع / شهر",
-    desc: "أعلى مستوى — مستثمرون موثّقون من النخبة",
-    requirements: [
-      "توثيق KYC احترافي + توثيق إضافي",
-      "حجم تداول 500 مليون د.ع",
-      "500 صفقة ناجحة على الأقل",
-      "180 يوم نشاط متواصل",
-      "نسبة نجاح ≥ 98%",
-      "تقييم 4.8+ نجوم",
-      "صفر نزاعات خاسرة + صفر بلاغات",
-    ],
-    perks: [
-      "كل صلاحيات المستوى المحترف",
-      "حد تداول حتى 1 مليار د.ع شهرياً",
-      "شارة \"النخبة\" الذهبية الحصرية",
-      "مدير حساب VIP مخصّص",
-      "دعوات حصرية للفعاليات",
-      "وصول مبكر لكل المنتجات الجديدة",
-      "أولوية مطلقة في الدعم",
-    ],
-  },
-]
+const LEVEL_META = [
+  { color: "blue",   icon: "🌱" },
+  { color: "green",  icon: "⚡" },
+  { color: "purple", icon: "💎" },
+  { color: "yellow", icon: "👑" },
+] as const
 
-const CONTRACT_LIMIT_EXAMPLES = [
-  {
-    title: "4 مستثمرين أساسيين",
-    icon: "🌱",
-    color: "blue",
-    members: "4 × أساسي",
-    calculation: "(4 × 10M) + 25%",
-    result: "50M / شهر",
-    note: "بدلاً من 10M فردياً",
-  },
-  {
-    title: "3 مستثمرين متقدّمين",
-    icon: "⚡",
-    color: "green",
-    members: "3 × متقدّم",
-    calculation: "(3 × 50M) + 25%",
-    result: "187.5M / شهر",
-    note: "بدلاً من 50M فردياً",
-  },
-  {
-    title: "2 مستثمرين محترفين",
-    icon: "💎",
-    color: "purple",
-    members: "2 × محترف",
-    calculation: "(2 × 250M) + 25%",
-    result: "625M / شهر",
-    note: "بدلاً من 250M فردياً",
-  },
-  {
-    title: "2 من النخبة",
-    icon: "👑",
-    color: "yellow",
-    members: "2 × النخبة",
-    calculation: "(2 × 1B) + 25%",
-    result: "2.5B / شهر",
-    note: "أعلى حد ممكن — للعقود الكبرى",
-  },
-]
+// calculation is a language-neutral formula → stays here.
+const EXAMPLE_META = [
+  { icon: "🌱", color: "blue",   calculation: "(4 × 10M) + 25%" },
+  { icon: "⚡", color: "green",  calculation: "(3 × 50M) + 25%" },
+  { icon: "💎", color: "purple", calculation: "(2 × 250M) + 25%" },
+  { icon: "👑", color: "yellow", calculation: "(2 × 1B) + 25%" },
+] as const
 
-// قطاعات الاستثمار
-const SECTORS = [
-  { icon: "🌾", name: "الزراعة", desc: "محاصيل، بيوت زجاجية، مناحل" },
-  { icon: "🐄", name: "الثروة الحيوانية", desc: "مواشي، دواجن، ألبان" },
-  { icon: "🏭", name: "الصناعة", desc: "مواد خام، صناعات غذائية" },
-  { icon: "⛏️", name: "التعدين والطاقة", desc: "نفط، غاز، طاقة متجددة" },
-  { icon: "🏗️", name: "العقارات", desc: "تطوير عقاري، بيع، تأجير" },
-  { icon: "🏪", name: "التجارة", desc: "استيراد وتصدير، تجزئة" },
-  { icon: "💻", name: "التقنية", desc: "برمجيات، تطبيقات، AI" },
-  { icon: "💰", name: "المالية", desc: "تأمين، تقنية مالية" },
-]
-
-// نصائح ذهبية
-const TIPS = [
-  { icon: "📊", title: "نوّع استثماراتك", body: "لا تضع كل أموالك في مشروع واحد. التنويع بين قطاعات مختلفة يقلل المخاطر بشكل كبير." },
-  { icon: "📖", title: "اقرأ قبل الاستثمار", body: "راجع دراسة الجدوى وخطة العمل وسجل الشركة قبل أي قرار. المعلومة هي مفتاح القرار الصائب." },
-  { icon: "⏳", title: "فكّر طويل الأمد", body: "المشاريع الجيدة تحتاج وقتاً لتنمو. لا تتخذ قرارات بناءً على تقلبات قصيرة المدى." },
-  { icon: "🔍", title: "راقب الأداء", body: "تابع نسب التمويل وتقارير المشاريع بانتظام للحفاظ على قرارات مدروسة." },
-  { icon: "⚠️", title: "افهم المخاطر", body: "كل استثمار ينطوي على مخاطر. استثمر فقط ما تستطيع تحمل خسارته." },
-  { icon: "💎", title: "اصبر على الجواهر", body: "أفضل الاستثمارات تأتي من الصبر. لا تبع بسبب تذبذب مؤقت في السعر." },
-]
+const SECTOR_ICONS = ["🌾", "🐄", "🏭", "⛏️", "🏗️", "🏪", "💻", "💰"] as const
+const TIP_ICONS = ["📊", "📖", "⏳", "🔍", "⚠️", "💎"] as const
 
 const colorMap: Record<string, { bg: string; border: string; text: string; bgLight: string }> = {
   green: { bg: "bg-green-400/[0.08]", border: "border-green-400/30", text: "text-green-400", bgLight: "bg-green-400/[0.04]" },
@@ -324,7 +68,22 @@ const colorMap: Record<string, { bg: string; border: string; text: string; bgLig
 
 export default function InvestmentGuidePage() {
   const router = useRouter()
+  const t = useTranslations("guides")
   const [openStep, setOpenStep] = useState<number | null>(1)
+  const igSteps = t.raw("igSteps") as LText[]
+  const igBenefits = t.raw("igBenefits") as LSimple[]
+  const igPf = t.raw("igPf") as LSimple[]
+  const igLevels = t.raw("igLevels") as LLevel[]
+  const igExamples = t.raw("igExamples") as LExample[]
+  const igSectors = t.raw("igSectors") as LSector[]
+  const igTips = t.raw("igTips") as LTip[]
+  const STEPS = STEP_META.map((m, i) => ({ ...m, ...igSteps[i] }))
+  const BENEFITS = BENEFIT_META.map((m, i) => ({ ...m, ...igBenefits[i] }))
+  const PLATFORM_FEATURES = PF_META.map((m, i) => ({ ...m, ...igPf[i] }))
+  const INVESTOR_LEVELS = LEVEL_META.map((m, i) => ({ ...m, ...igLevels[i] }))
+  const CONTRACT_LIMIT_EXAMPLES = EXAMPLE_META.map((m, i) => ({ ...m, ...igExamples[i] }))
+  const SECTORS = SECTOR_ICONS.map((icon, i) => ({ icon, ...igSectors[i] }))
+  const TIPS = TIP_ICONS.map((icon, i) => ({ icon, ...igTips[i] }))
 
   return (
     <AppLayout>
@@ -332,23 +91,23 @@ export default function InvestmentGuidePage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-4xl mx-auto">
 
           <PageHeader
-            title="دليل الاستثمار"
-            subtitle="رحلتك من المبتدئ إلى المستثمر الذكي"
+            title={t("igTitle")}
+            subtitle={t("igSubtitle")}
           />
 
           {/* Hero */}
           <div className="bg-gradient-to-br from-purple-400/[0.1] to-blue-400/[0.04] border border-purple-400/20 rounded-2xl p-5 mb-6">
             <TrendingUp className="w-9 h-9 text-purple-400 mb-3" strokeWidth={1.5} />
-            <div className="text-base font-bold text-white mb-1">كيف تستثمر في رايلوس؟</div>
+            <div className="text-base font-bold text-white mb-1">{t("igHeroTitle")}</div>
             <div className="text-xs text-neutral-300 leading-relaxed">
-              هذا الدليل يأخذك خطوة بخطوة من اكتشاف الفرص حتى البيع وتحقيق العوائد. ستفهم كل ميزات التطبيق وكيف تستفيد منها لتحقيق أقصى استفادة من استثماراتك.
+              {t("igHeroDesc")}
             </div>
           </div>
 
           {/* خطوات الاستثمار */}
           <div className="mb-7">
-            <div className="text-base font-bold text-white mb-1">📋 خطوات الاستثمار في رايلوس</div>
-            <div className="text-xs text-neutral-500 mb-4">6 خطوات بسيطة من البداية حتى تحقيق العوائد</div>
+            <div className="text-base font-bold text-white mb-1">{t("igStepsTitle")}</div>
+            <div className="text-xs text-neutral-500 mb-4">{t("igStepsSub")}</div>
 
             <div className="space-y-3">
               {STEPS.map((step) => {
@@ -377,7 +136,7 @@ export default function InvestmentGuidePage() {
                         </div>
                         <div className="flex-1 min-w-0 text-right">
                           <div className={cn("text-[10px] font-bold uppercase tracking-wider mb-0.5", c.text)}>
-                            خطوة {step.n}
+                            {t("igStepWord")} {step.n}
                           </div>
                           <div className="text-sm font-bold text-white">{step.title}</div>
                         </div>
@@ -397,7 +156,7 @@ export default function InvestmentGuidePage() {
                         <div className={cn("rounded-xl p-3 border", c.bgLight, c.border)}>
                           <div className={cn("text-[11px] font-bold mb-2 flex items-center gap-1.5", c.text)}>
                             <Lightbulb className="w-3.5 h-3.5" strokeWidth={1.5} />
-                            نصائح لهذه الخطوة
+                            {t("igStepTipsLabel")}
                           </div>
                           <ul className="space-y-1.5">
                             {step.tips.map((tip, i) => (
@@ -418,8 +177,8 @@ export default function InvestmentGuidePage() {
 
           {/* الفوائد */}
           <div className="mb-7">
-            <div className="text-base font-bold text-white mb-1">💎 ماذا تستفيد من رايلوس؟</div>
-            <div className="text-xs text-neutral-500 mb-4">الفوائد الحقيقية للمستثمر في المنصة</div>
+            <div className="text-base font-bold text-white mb-1">{t("igBenefitsTitle")}</div>
+            <div className="text-xs text-neutral-500 mb-4">{t("igBenefitsSub")}</div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {BENEFITS.map((b, i) => {
@@ -438,8 +197,8 @@ export default function InvestmentGuidePage() {
 
           {/* ميزات المنصة */}
           <div className="mb-7">
-            <div className="text-base font-bold text-white mb-1">🛠 الأدوات اللي تساعدك</div>
-            <div className="text-xs text-neutral-500 mb-4">ميزات رايلوس التي تجعل الاستثمار أسهل وأذكى</div>
+            <div className="text-base font-bold text-white mb-1">{t("igPfTitle")}</div>
+            <div className="text-xs text-neutral-500 mb-4">{t("igPfSub")}</div>
 
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5">
               {PLATFORM_FEATURES.map((f, i) => {
@@ -457,9 +216,9 @@ export default function InvestmentGuidePage() {
 
           {/* === القسم 1: مستويات المستثمرين === */}
           <div className="mb-7">
-            <div className="text-base font-bold text-white mb-1">📈 مستويات المستثمرين</div>
+            <div className="text-base font-bold text-white mb-1">{t("igLevelsTitle")}</div>
             <div className="text-xs text-neutral-500 mb-4">
-              ابدأ بالأساسي وارتقِ تلقائياً مع نشاطك على المنصة
+              {t("igLevelsSub")}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -491,7 +250,7 @@ export default function InvestmentGuidePage() {
                     {/* Requirements */}
                     <div className="mb-4">
                       <div className={cn("text-[10px] font-bold uppercase tracking-wider mb-2", c.text)}>
-                        متطلبات الوصول
+                        {t("igReqLabel")}
                       </div>
                       <ul className="space-y-1.5">
                         {lvl.requirements.map((req, i) => (
@@ -506,7 +265,7 @@ export default function InvestmentGuidePage() {
                     {/* Perks */}
                     <div>
                       <div className={cn("text-[10px] font-bold uppercase tracking-wider mb-2", c.text)}>
-                        المزايا
+                        {t("igPerksLabel")}
                       </div>
                       <ul className="space-y-1.5">
                         {lvl.perks.map((p, i) => (
@@ -527,9 +286,9 @@ export default function InvestmentGuidePage() {
             <div className="bg-yellow-400/[0.06] border border-yellow-400/25 rounded-xl p-4 mt-4 flex gap-3 items-start">
               <Info className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" strokeWidth={2} />
               <div>
-                <div className="text-xs font-bold text-yellow-400 mb-1.5">عمولة موحّدة لجميع المستويات</div>
+                <div className="text-xs font-bold text-yellow-400 mb-1.5">{t("igFlatFeeTitle")}</div>
                 <div className="text-[11px] text-neutral-300 leading-relaxed">
-                  رايلوس تطبّق عمولة ثابتة <span className="font-bold text-yellow-400 font-mono">2%</span> على كل صفقة ناجحة بغض النظر عن مستوى المستثمر. لا توجد خصومات أو فروقات في الرسوم بين المستويات. الترقية تمنحك حدوداً أعلى ومزايا حصرية - وليس خصومات على العمولة.
+                  {t("igFlatFeePre")}<span className="font-bold text-yellow-400 font-mono">2%</span>{t("igFlatFeePost")}
                 </div>
               </div>
             </div>
@@ -537,9 +296,9 @@ export default function InvestmentGuidePage() {
 
           {/* === القسم 2: شروط الترقية والنزول === */}
           <div className="mb-7">
-            <div className="text-base font-bold text-white mb-1">⬆️ كيف تترقى بين المستويات؟</div>
+            <div className="text-base font-bold text-white mb-1">{t("igUpgradeTitle")}</div>
             <div className="text-xs text-neutral-500 mb-4">
-              نظام ترقية تلقائي يكافئ النشاط ويحمي المنصة
+              {t("igUpgradeSub")}
             </div>
 
             {/* شرح آلية الترقية */}
@@ -549,9 +308,9 @@ export default function InvestmentGuidePage() {
                   <TrendingUp className="w-5 h-5 text-blue-400" strokeWidth={1.5} />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-white mb-1.5">الترقية تلقائية</div>
+                  <div className="text-sm font-bold text-white mb-1.5">{t("igAutoUpTitle")}</div>
                   <div className="text-xs text-neutral-300 leading-relaxed">
-                    عندما تستوفي شروط المستوى التالي، يقوم النظام بترقيتك تلقائياً خلال 24 ساعة. ستتلقى إشعاراً فورياً بترقيتك وستكتسب جميع المزايا الجديدة فوراً.
+                    {t("igAutoUpDesc")}
                   </div>
                 </div>
               </div>
@@ -566,21 +325,13 @@ export default function InvestmentGuidePage() {
                   <span className="text-2xl">🌱</span>
                   <ChevronLeft className="w-4 h-4 text-neutral-500" strokeWidth={1.5} />
                   <span className="text-2xl">⚡</span>
-                  <span className="text-sm font-bold text-white mr-2">الترقية لـ متقدّم</span>
+                  <span className="text-sm font-bold text-white mr-2">{t("igUpTo1")}</span>
                 </div>
                 <ul className="space-y-2">
-                  {[
-                    { icon: "📋", text: "إكمال توثيق KYC المتقدم" },
-                    { icon: "💰", text: "حجم تداول 100 مليون د.ع" },
-                    { icon: "🎯", text: "50 صفقة ناجحة" },
-                    { icon: "📅", text: "30 يوم نشاط" },
-                    { icon: "✨", text: "نسبة نجاح ≥ 90%" },
-                    { icon: "⭐", text: "تقييم 4.0+ نجوم" },
-                    { icon: "⚖️", text: "أقل من 2 نزاع خاسر" },
-                  ].map((item, i) => (
+                  {(t.raw("igUp1") as [string, string][]).map((item, i) => (
                     <li key={i} className="flex items-start gap-2 text-[11px] text-neutral-300 leading-relaxed">
-                      <span className="flex-shrink-0">{item.icon}</span>
-                      <span>{item.text}</span>
+                      <span className="flex-shrink-0">{item[0]}</span>
+                      <span>{item[1]}</span>
                     </li>
                   ))}
                 </ul>
@@ -592,21 +343,13 @@ export default function InvestmentGuidePage() {
                   <span className="text-2xl">⚡</span>
                   <ChevronLeft className="w-4 h-4 text-neutral-500" strokeWidth={1.5} />
                   <span className="text-2xl">💎</span>
-                  <span className="text-sm font-bold text-white mr-2">الترقية لـ محترف</span>
+                  <span className="text-sm font-bold text-white mr-2">{t("igUpTo2")}</span>
                 </div>
                 <ul className="space-y-2">
-                  {[
-                    { icon: "📋", text: "KYC احترافي (إثبات دخل + سجل تجاري)" },
-                    { icon: "💰", text: "حجم تداول 250 مليون د.ع" },
-                    { icon: "🎯", text: "200 صفقة ناجحة" },
-                    { icon: "📅", text: "90 يوم نشاط" },
-                    { icon: "✨", text: "نسبة نجاح ≥ 95%" },
-                    { icon: "⭐", text: "تقييم 4.5+ نجوم" },
-                    { icon: "⚖️", text: "أقل من 1 نزاع خاسر" },
-                  ].map((item, i) => (
+                  {(t.raw("igUp2") as [string, string][]).map((item, i) => (
                     <li key={i} className="flex items-start gap-2 text-[11px] text-neutral-300 leading-relaxed">
-                      <span className="flex-shrink-0">{item.icon}</span>
-                      <span>{item.text}</span>
+                      <span className="flex-shrink-0">{item[0]}</span>
+                      <span>{item[1]}</span>
                     </li>
                   ))}
                 </ul>
@@ -618,21 +361,13 @@ export default function InvestmentGuidePage() {
                   <span className="text-2xl">💎</span>
                   <ChevronLeft className="w-4 h-4 text-neutral-500" strokeWidth={1.5} />
                   <span className="text-2xl">👑</span>
-                  <span className="text-sm font-bold text-yellow-400 mr-2">الترقية لـ النخبة</span>
+                  <span className="text-sm font-bold text-yellow-400 mr-2">{t("igUpTo3")}</span>
                 </div>
                 <ul className="space-y-2">
-                  {[
-                    { icon: "📋", text: "KYC احترافي + توثيق إضافي" },
-                    { icon: "💰", text: "حجم تداول 500 مليون د.ع" },
-                    { icon: "🎯", text: "500 صفقة ناجحة" },
-                    { icon: "📅", text: "180 يوم نشاط" },
-                    { icon: "✨", text: "نسبة نجاح ≥ 98%" },
-                    { icon: "⭐", text: "تقييم 4.8+ نجوم" },
-                    { icon: "⚖️", text: "صفر نزاعات + صفر بلاغات" },
-                  ].map((item, i) => (
+                  {(t.raw("igUp3") as [string, string][]).map((item, i) => (
                     <li key={i} className="flex items-start gap-2 text-[11px] text-neutral-300 leading-relaxed">
-                      <span className="flex-shrink-0">{item.icon}</span>
-                      <span>{item.text}</span>
+                      <span className="flex-shrink-0">{item[0]}</span>
+                      <span>{item[1]}</span>
                     </li>
                   ))}
                 </ul>
@@ -647,20 +382,14 @@ export default function InvestmentGuidePage() {
                   <span className="text-base">📊</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold text-blue-400 mb-1.5">معايير الترقية الشاملة</div>
+                  <div className="text-sm font-bold text-blue-400 mb-1.5">{t("igCriteriaTitle")}</div>
                   <div className="text-xs text-neutral-300 leading-relaxed mb-2">
-                    نظام الترقية الجديد يعتمد على <span className="text-white font-bold">9 معايير</span> بدلاً من 4:
+                    {t("igCriteriaPre")}<span className="text-white font-bold">{t("igCriteriaBold")}</span>{t("igCriteriaPost")}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] text-neutral-300">
-                    <div>• <span className="text-white">حجم التداول الإجمالي</span> (Volume)</div>
-                    <div>• <span className="text-white">عدد الصفقات الناجحة</span></div>
-                    <div>• <span className="text-white">نسبة النجاح</span> (Success Rate)</div>
-                    <div>• <span className="text-white">أيام النشاط</span> المتراكمة</div>
-                    <div>• <span className="text-white">عدد النزاعات الخاسرة</span></div>
-                    <div>• <span className="text-white">عدد البلاغات</span> المُستلمة</div>
-                    <div>• <span className="text-white">نسبة النزاعات</span> من الصفقات</div>
-                    <div>• <span className="text-white">متوسط التقييم</span> من المستخدمين</div>
-                    <div>• <span className="text-white">مستوى KYC</span> المطلوب</div>
+                    {(t.raw("igCriteria") as string[]).map((cr, i) => (
+                      <div key={i}>• <span className="text-white">{cr}</span></div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -673,19 +402,12 @@ export default function InvestmentGuidePage() {
                   <AlertTriangle className="w-4 h-4 text-orange-400" strokeWidth={1.5} />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-orange-400 mb-1.5">النزول التلقائي عند الإهمال</div>
+                  <div className="text-sm font-bold text-orange-400 mb-1.5">{t("igDownTitle")}</div>
                   <div className="text-xs text-neutral-300 leading-relaxed mb-3">
-                    للحفاظ على نشاط المنصة وعدالة الترقيات، يطبّق النظام مراجعة دورية:
+                    {t("igDownDesc")}
                   </div>
                   <ul className="space-y-1.5">
-                    {[
-                      "النزول يحدث عند انخفاض معايير الترقية (نزاعات خاسرة، بلاغات، تقييم منخفض، نسبة نجاح منخفضة)",
-                      "إذا تجاوز عدد النزاعات الخاسرة الحد المسموح للمستوى الحالي → نزول تلقائي",
-                      "إذا انخفض التقييم تحت الحد الأدنى (4.0/4.5/4.8 حسب المستوى) → نزول تلقائي",
-                      "ستتلقى إشعاراً تحذيرياً عند الاقتراب من حدود النزول",
-                      "استرجاع المستوى السابق ممكن فور استيفاء جميع الشروط مرة أخرى",
-                      "في حالات استثنائية، الأدمن يستطيع تطبيق تجاوز يدوي (Manual Override) وقفل المستوى",
-                    ].map((item, i) => (
+                    {(t.raw("igDown") as string[]).map((item, i) => (
                       <li key={i} className="flex items-start gap-2 text-[11px] text-neutral-300 leading-relaxed">
                         <span className="text-orange-400 flex-shrink-0">•</span>
                         <span>{item}</span>
@@ -700,13 +422,13 @@ export default function InvestmentGuidePage() {
           {/* === القسم 3: ميزة جمع الحدود في العقود === */}
           <div className="mb-7">
             <div className="flex items-center gap-2 mb-1">
-              <div className="text-base font-bold text-white">🤝 ميزة جمع الحدود في العقود</div>
+              <div className="text-base font-bold text-white">{t("igContractTitle")}</div>
               <span className="bg-purple-400/[0.12] border border-purple-400/30 text-purple-400 text-[9px] font-bold px-2 py-0.5 rounded">
-                جديد
+                {t("igNewBadge")}
               </span>
             </div>
             <div className="text-xs text-neutral-500 mb-4">
-              عندما تشترك في عقد جماعي، تتضاعف قدرتك الاستثمارية الشهرية
+              {t("igContractSub")}
             </div>
 
             {/* الشرح المفاهيمي */}
@@ -716,11 +438,9 @@ export default function InvestmentGuidePage() {
                   <Sparkles className="w-5 h-5 text-purple-400" strokeWidth={1.5} />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-white mb-1.5">كيف تعمل الميزة؟</div>
+                  <div className="text-sm font-bold text-white mb-1.5">{t("igHowTitle")}</div>
                   <div className="text-xs text-neutral-300 leading-relaxed">
-                    عند إنشاء عقد شراكة بين عدة مستثمرين، تُجمع حدودهم الشهرية ويُضاف عليها{" "}
-                    <span className="font-bold text-purple-400">25% مكافأة إضافية</span>{" "}
-                    من المنصة لتشجيع الاستثمار الجماعي.
+                    {t("igHowPre")}<span className="font-bold text-purple-400">{t("igHowBold")}</span>{t("igHowPost")}
                   </div>
                 </div>
               </div>
@@ -729,17 +449,17 @@ export default function InvestmentGuidePage() {
               <div className="bg-black/40 border border-white/[0.08] rounded-lg p-3 text-center mb-3">
                 <div className="text-[10px] text-neutral-500 font-mono mb-1.5 tracking-wider">FORMULA</div>
                 <div className="text-sm text-white font-mono font-bold">
-                  حد العقد = (مجموع حدود الأعضاء) × 1.25
+                  {t("igFormula")}
                 </div>
               </div>
 
               <div className="text-[11px] text-neutral-400 leading-relaxed">
-                الحد الجماعي يُحسب شهرياً ويُقسم على الأعضاء حسب نسبة شراكتهم في العقد.
+                {t("igFormulaNote")}
               </div>
             </div>
 
             {/* أمثلة عملية */}
-            <div className="text-xs text-neutral-500 mb-3 font-bold">📊 أمثلة عملية:</div>
+            <div className="text-xs text-neutral-500 mb-3 font-bold">{t("igExamplesLabel")}</div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
               {CONTRACT_LIMIT_EXAMPLES.map((ex, i) => {
                 const c = colorMap[ex.color]
@@ -771,12 +491,11 @@ export default function InvestmentGuidePage() {
             <div className="bg-yellow-400/[0.04] border border-yellow-400/20 rounded-xl p-3.5 mt-4 flex gap-3 items-start">
               <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" strokeWidth={2} />
               <div className="text-[11px] leading-relaxed">
-                <div className="font-bold text-yellow-400 mb-1">ملاحظة مهمة</div>
+                <div className="font-bold text-yellow-400 mb-1">{t("igImportantTitle")}</div>
                 <ul className="space-y-1 text-neutral-300">
-                  <li>• الحد الشهري يتجدد في أول كل شهر ميلادي</li>
-                  <li>• الحد الجماعي مستقل عن الحد الفردي لكل عضو</li>
-                  <li>• عند فسخ العقد، يعود كل عضو لحده الفردي</li>
-                  <li>• استخدام الحد يُحسب من المجموع الكلي، وليس على كل عضو</li>
+                  {(t.raw("igImportant") as string[]).map((it, i) => (
+                    <li key={i}>• {it}</li>
+                  ))}
                 </ul>
               </div>
             </div>
@@ -784,8 +503,8 @@ export default function InvestmentGuidePage() {
 
           {/* القطاعات */}
           <div className="mb-7">
-            <div className="text-base font-bold text-white mb-1">🏢 قطاعات الاستثمار المتاحة</div>
-            <div className="text-xs text-neutral-500 mb-4">اختر القطاع الذي تفهمه أو يناسب اهتماماتك</div>
+            <div className="text-base font-bold text-white mb-1">{t("igSectorsTitle")}</div>
+            <div className="text-xs text-neutral-500 mb-4">{t("igSectorsSub")}</div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {SECTORS.map((s, i) => (
@@ -800,18 +519,18 @@ export default function InvestmentGuidePage() {
 
           {/* النصائح الذهبية */}
           <div className="mb-7">
-            <div className="text-base font-bold text-white mb-1">💡 نصائح ذهبية للمستثمر</div>
-            <div className="text-xs text-neutral-500 mb-4">قواعد ذهبية تعلّمناها من تجارب آلاف المستثمرين</div>
+            <div className="text-base font-bold text-white mb-1">{t("igTipsTitle")}</div>
+            <div className="text-xs text-neutral-500 mb-4">{t("igTipsSub")}</div>
 
             <div className="space-y-2.5">
-              {TIPS.map((t, i) => (
+              {TIPS.map((tp, i) => (
                 <div key={i} className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4 flex gap-3 items-start">
                   <div className="w-9 h-9 rounded-lg bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-lg flex-shrink-0">
-                    {t.icon}
+                    {tp.icon}
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-white mb-1">{t.title}</div>
-                    <div className="text-xs text-neutral-400 leading-relaxed">{t.body}</div>
+                    <div className="text-sm font-bold text-white mb-1">{tp.title}</div>
+                    <div className="text-xs text-neutral-400 leading-relaxed">{tp.body}</div>
                   </div>
                 </div>
               ))}
@@ -822,31 +541,31 @@ export default function InvestmentGuidePage() {
           <div className="bg-red-400/[0.06] border border-red-400/20 rounded-2xl p-4 mb-6 flex gap-3 items-start">
             <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" strokeWidth={1.5} />
             <div>
-              <div className="text-sm font-bold text-red-400 mb-1">إخلاء مسؤولية</div>
+              <div className="text-sm font-bold text-red-400 mb-1">{t("igDisclaimerTitle")}</div>
               <div className="text-xs text-neutral-300 leading-relaxed">
-                هذا الدليل لأغراض تعليمية فقط ولا يُعتبر نصيحة استثمارية. قراراتك الاستثمارية مسؤوليتك الكاملة. منصة رايلوس تنظم التواصل بين الأطراف ولا تقدم ضمانات على العوائد.
+                {t("igDisclaimerDesc")}
               </div>
             </div>
           </div>
 
           {/* CTA */}
           <div className="bg-gradient-to-br from-white/[0.06] to-transparent border border-white/[0.1] rounded-2xl p-5 text-center mb-6">
-            <div className="text-base font-bold text-white mb-2">جاهز للبدء؟</div>
+            <div className="text-base font-bold text-white mb-2">{t("igCtaTitle")}</div>
             <div className="text-xs text-neutral-400 mb-4">
-              اكتشف الفرص الاستثمارية المتاحة الآن
+              {t("igCtaDesc")}
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => router.push("/market")}
                 className="flex-1 bg-neutral-100 text-black py-3 rounded-xl text-xs font-bold hover:bg-neutral-200 transition-colors"
               >
-                استكشف السوق
+                {t("igExploreMarket")}
               </button>
               <button
                 onClick={() => router.push("/auctions")}
                 className="flex-1 bg-white/[0.05] border border-white/[0.08] text-white py-3 rounded-xl text-xs font-bold hover:bg-white/[0.08] transition-colors"
               >
-                المزادات
+                {t("igAuctions")}
               </button>
             </div>
           </div>
