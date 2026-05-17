@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 import { Bell, X } from "lucide-react"
 import { usePushNotifications } from "@/hooks/usePushNotifications"
 
@@ -20,6 +21,7 @@ const APPEAR_DELAY_MS = 3000
  *   - within 7 days of a previous dismissal
  */
 export function PushPermissionPrompt() {
+  const t = useTranslations("notifyUI")
   const [open, setOpen] = useState(false)
   const { supported, permission, subscribe, loading } = usePushNotifications()
 
@@ -70,12 +72,12 @@ export function PushPermissionPrompt() {
                    bg-[rgba(15,15,15,0.95)] backdrop-blur-2xl border border-white/[0.08]
                    rounded-2xl shadow-2xl overflow-hidden"
         role="dialog"
-        aria-label="فعّل الإشعارات"
+        aria-label={t("enableNotifs")}
       >
         <button
           onClick={handleDismiss}
           className="absolute top-3 left-3 p-1.5 rounded-lg hover:bg-white/[0.05] text-neutral-400 transition-colors"
-          aria-label="إغلاق"
+          aria-label={t("close")}
         >
           <X className="w-4 h-4" strokeWidth={1.75} />
         </button>
@@ -85,20 +87,14 @@ export function PushPermissionPrompt() {
             <Bell className="w-7 h-7 text-blue-400" strokeWidth={1.75} />
           </div>
 
-          <h3 className="text-lg font-bold text-white mb-2">فعّل الإشعارات</h3>
+          <h3 className="text-lg font-bold text-white mb-2">{t("enableNotifs")}</h3>
 
           <p className="text-sm text-neutral-400 leading-relaxed mb-5">
-            اسمح لنا بإرسال إشعارات لتبقى على اطلاع بصفقاتك ومشاريعك حتى عند
-            عدم استخدامك للتطبيق.
+            {t("promptBody")}
           </p>
 
           <ul className="space-y-2 mb-5">
-            {[
-              "صفقات جديدة وتحديثاتها",
-              "نتائج المزادات",
-              "قرارات مجلس السوق",
-              "يمكنك إيقافها متى شئت من الإعدادات",
-            ].map((line) => (
+            {(t.raw("promptList") as string[]).map((line) => (
               <li
                 key={line}
                 className="flex items-center gap-2 text-xs text-neutral-400"
@@ -115,13 +111,13 @@ export function PushPermissionPrompt() {
               disabled={loading}
               className="flex-1 px-4 py-2.5 bg-neutral-100 hover:bg-neutral-200 text-black font-bold text-sm rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? "جاري التفعيل..." : "فعّل الإشعارات"}
+              {loading ? t("enabling") : t("enableNotifs")}
             </button>
             <button
               onClick={handleDismiss}
               className="px-4 py-2.5 bg-white/[0.05] border border-white/[0.1] text-white text-sm rounded-lg hover:bg-white/[0.08] transition-colors"
             >
-              لاحقاً
+              {t("later")}
             </button>
           </div>
         </div>

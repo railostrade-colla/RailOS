@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 import { Bell, BellOff, Moon } from "lucide-react"
 import { usePushNotifications } from "@/hooks/usePushNotifications"
 import {
@@ -10,21 +11,21 @@ import {
 } from "@/lib/data/notification-preferences"
 import { cn } from "@/lib/utils/cn"
 
-/** Per-category toggles with Arabic labels + descriptions. */
+/** Per-category toggles; label/desc resolve via i18n keys. */
 const NOTIFICATION_TYPES: ReadonlyArray<{
   key: keyof NotificationPreferences
-  label: string
-  desc: string
+  labelKey: string
+  descKey: string
 }> = [
-  { key: "deals_enabled",     label: "الصفقات",                desc: "إنشاء، إكمال، إلغاء الصفقات" },
-  { key: "projects_enabled",  label: "المشاريع",               desc: "موافقة أو رفض المشاريع" },
-  { key: "kyc_enabled",       label: "التحقق من الهوية (KYC)", desc: "حالة التحقق" },
-  { key: "level_enabled",     label: "المستوى",                desc: "ترقية المستوى الاستثماري" },
-  { key: "auctions_enabled",  label: "المزادات",               desc: "الفوز والمزايدات الجديدة" },
-  { key: "council_enabled",   label: "مجلس السوق",             desc: "إعلانات وقرارات المجلس" },
-  { key: "support_enabled",   label: "الدعم الفني",             desc: "الردود على تذاكرك" },
-  { key: "disputes_enabled",  label: "النزاعات",               desc: "فتح وحل النزاعات" },
-  { key: "system_enabled",    label: "النظام",                 desc: "تحديثات وإعلانات النظام" },
+  { key: "deals_enabled",     labelKey: "typeDeals",     descKey: "typeDealsDesc" },
+  { key: "projects_enabled",  labelKey: "typeProjects",  descKey: "typeProjectsDesc" },
+  { key: "kyc_enabled",       labelKey: "typeKyc",       descKey: "typeKycDesc" },
+  { key: "level_enabled",     labelKey: "typeLevel",     descKey: "typeLevelDesc" },
+  { key: "auctions_enabled",  labelKey: "typeAuctions",  descKey: "typeAuctionsDesc" },
+  { key: "council_enabled",   labelKey: "typeCouncil",   descKey: "typeCouncilDesc" },
+  { key: "support_enabled",   labelKey: "typeSupport",   descKey: "typeSupportDesc" },
+  { key: "disputes_enabled",  labelKey: "typeDisputes",  descKey: "typeDisputesDesc" },
+  { key: "system_enabled",    labelKey: "typeSystem",    descKey: "typeSystemDesc" },
 ]
 
 interface ToggleProps {
@@ -58,6 +59,7 @@ function Toggle({ on, onChange, disabled }: ToggleProps) {
 }
 
 export function NotificationSettings() {
+  const t = useTranslations("notifyUI")
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -100,7 +102,7 @@ export function NotificationSettings() {
   if (loading || !prefs) {
     return (
       <div className="p-6 text-center text-sm text-neutral-400">
-        جاري التحميل...
+        {t("loading")}
       </div>
     )
   }
@@ -109,17 +111,17 @@ export function NotificationSettings() {
     <div className="space-y-6">
       {/* ─── Push (browser-level) ─────────────────────────── */}
       <section className="bg-white/[0.05] border border-white/[0.06] rounded-2xl p-5">
-        <h2 className="text-base font-bold text-white mb-3">الإشعارات الخارجية</h2>
+        <h2 className="text-base font-bold text-white mb-3">{t("externalNotifs")}</h2>
 
         {!supported && (
           <div className="p-3 bg-yellow-400/10 border border-yellow-400/20 rounded-xl text-xs text-yellow-400 mb-3">
-            ⚠ متصفحك لا يدعم الإشعارات الخارجية
+            {t("browserUnsupported")}
           </div>
         )}
 
         {supported && permission === "denied" && (
           <div className="p-3 bg-red-400/10 border border-red-400/20 rounded-xl text-xs text-red-400 mb-3">
-            ❌ تم حظر الإشعارات. فعّلها من إعدادات المتصفح ثم عُد إلى هنا.
+            {t("blocked")}
           </div>
         )}
 
@@ -133,10 +135,10 @@ export function NotificationSettings() {
               )}
               <div className="min-w-0">
                 <div className="text-sm font-bold text-white">
-                  إشعارات حتى عند إغلاق التطبيق
+                  {t("evenWhenClosed")}
                 </div>
                 <div className="text-[11px] text-neutral-400 mt-0.5">
-                  {subscribed ? "مفعّل ✓" : "غير مفعّل"}
+                  {subscribed ? t("enabledCheck") : t("notEnabled")}
                 </div>
               </div>
             </div>
@@ -147,13 +149,13 @@ export function NotificationSettings() {
 
       {/* ─── Master push/email ───────────────────────────── */}
       <section className="bg-white/[0.05] border border-white/[0.06] rounded-2xl p-5">
-        <h2 className="text-base font-bold text-white mb-3">القنوات</h2>
+        <h2 className="text-base font-bold text-white mb-3">{t("channels")}</h2>
         <div className="space-y-1">
           <div className="flex items-center justify-between p-3 hover:bg-white/[0.02] rounded-xl">
             <div className="min-w-0">
-              <div className="text-sm font-bold text-white">دفعات Web</div>
+              <div className="text-sm font-bold text-white">{t("webPush")}</div>
               <div className="text-[11px] text-neutral-400 mt-0.5">
-                يتطلّب تفعيل الإذن أعلاه
+                {t("requiresPermissionAbove")}
               </div>
             </div>
             <Toggle
@@ -164,9 +166,9 @@ export function NotificationSettings() {
           </div>
           <div className="flex items-center justify-between p-3 hover:bg-white/[0.02] rounded-xl">
             <div className="min-w-0">
-              <div className="text-sm font-bold text-white">البريد الإلكتروني</div>
+              <div className="text-sm font-bold text-white">{t("email")}</div>
               <div className="text-[11px] text-neutral-400 mt-0.5">
-                ملخّص يومي وتنبيهات مهمّة
+                {t("emailDesc")}
               </div>
             </div>
             <Toggle
@@ -180,22 +182,22 @@ export function NotificationSettings() {
 
       {/* ─── Per-category toggles ───────────────────────── */}
       <section className="bg-white/[0.05] border border-white/[0.06] rounded-2xl p-5">
-        <h2 className="text-base font-bold text-white mb-3">أنواع الإشعارات</h2>
+        <h2 className="text-base font-bold text-white mb-3">{t("notifTypes")}</h2>
         <div className="space-y-1">
-          {NOTIFICATION_TYPES.map((t) => (
+          {NOTIFICATION_TYPES.map((nt) => (
             <div
-              key={String(t.key)}
+              key={String(nt.key)}
               className="flex items-center justify-between p-3 hover:bg-white/[0.02] rounded-xl"
             >
               <div className="min-w-0">
-                <div className="text-sm font-bold text-white">{t.label}</div>
+                <div className="text-sm font-bold text-white">{t(nt.labelKey)}</div>
                 <div className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">
-                  {t.desc}
+                  {t(nt.descKey)}
                 </div>
               </div>
               <Toggle
-                on={Boolean(prefs[t.key])}
-                onChange={() => toggle(t.key)}
+                on={Boolean(prefs[nt.key])}
+                onChange={() => toggle(nt.key)}
                 disabled={saving}
               />
             </div>
@@ -207,14 +209,14 @@ export function NotificationSettings() {
       <section className="bg-white/[0.05] border border-white/[0.06] rounded-2xl p-5">
         <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
           <Moon className="w-5 h-5" strokeWidth={1.75} />
-          ساعات الهدوء
+          {t("quietHours")}
         </h2>
         <div className="flex items-center justify-between p-3 bg-black/40 rounded-xl">
           <div className="min-w-0">
-            <div className="text-sm font-bold text-white">إيقاف الإشعارات ليلاً</div>
+            <div className="text-sm font-bold text-white">{t("disableAtNight")}</div>
             <div className="text-[11px] text-neutral-400 mt-0.5">
-              من <span className="font-mono">{shortTime(prefs.quiet_hours_start)}</span>{" "}
-              إلى <span className="font-mono">{shortTime(prefs.quiet_hours_end)}</span>
+              {t("quietFromPre")}<span className="font-mono">{shortTime(prefs.quiet_hours_start)}</span>{" "}
+              {t("quietToPre")}<span className="font-mono">{shortTime(prefs.quiet_hours_end)}</span>
             </div>
           </div>
           <Toggle
@@ -227,10 +229,10 @@ export function NotificationSettings() {
 
       {/* ─── Sound + vibration ──────────────────────────── */}
       <section className="bg-white/[0.05] border border-white/[0.06] rounded-2xl p-5">
-        <h2 className="text-base font-bold text-white mb-3">الصوت والاهتزاز</h2>
+        <h2 className="text-base font-bold text-white mb-3">{t("soundVibration")}</h2>
         <div className="space-y-1">
           <div className="flex items-center justify-between p-3 hover:bg-white/[0.02] rounded-xl">
-            <div className="text-sm font-bold text-white">الصوت</div>
+            <div className="text-sm font-bold text-white">{t("sound")}</div>
             <Toggle
               on={prefs.sound_enabled}
               onChange={() => toggle("sound_enabled")}
@@ -238,7 +240,7 @@ export function NotificationSettings() {
             />
           </div>
           <div className="flex items-center justify-between p-3 hover:bg-white/[0.02] rounded-xl">
-            <div className="text-sm font-bold text-white">الاهتزاز</div>
+            <div className="text-sm font-bold text-white">{t("vibration")}</div>
             <Toggle
               on={prefs.vibration_enabled}
               onChange={() => toggle("vibration_enabled")}

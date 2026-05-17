@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useTranslations } from "next-intl"
 import {
   AlertTriangle,
   Award,
@@ -69,6 +70,7 @@ interface Props {
 }
 
 export function NotificationItem({ notification, onAction, onDelete }: Props) {
+  const t = useTranslations("notifyUI")
   const Icon = TYPE_ICONS[notification.notification_type] ?? Bell
   const colorClass = PRIORITY_COLOR[notification.priority] ?? PRIORITY_COLOR.normal
   const unread = !notification.is_read
@@ -113,7 +115,7 @@ export function NotificationItem({ notification, onAction, onDelete }: Props) {
           {unread && (
             <span
               className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-400 mt-1.5"
-              aria-label="غير مقروء"
+              aria-label={t("unread")}
             />
           )}
         </div>
@@ -124,7 +126,7 @@ export function NotificationItem({ notification, onAction, onDelete }: Props) {
 
         <div className="flex items-center justify-between mt-2 gap-2">
           <span className="text-[11px] text-neutral-500">
-            {formatTime(notification.created_at)}
+            {formatTime(notification.created_at, t)}
           </span>
 
           {notification.action_label && (
@@ -153,7 +155,7 @@ export function NotificationItem({ notification, onAction, onDelete }: Props) {
           type="button"
           onClick={handleDeleteClick}
           className="absolute top-3 left-3 w-7 h-7 rounded-md bg-white/[0.04] border border-white/[0.06] text-neutral-500 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20 transition-colors opacity-0 group-hover:opacity-100 flex items-center justify-center"
-          aria-label="حذف الإشعار"
+          aria-label={t("deleteNotif")}
         >
           <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
         </button>
@@ -162,7 +164,9 @@ export function NotificationItem({ notification, onAction, onDelete }: Props) {
   )
 }
 
-function formatTime(date: string): string {
+type TFn = (key: string, values?: Record<string, string | number>) => string
+
+function formatTime(date: string, t: TFn): string {
   const now = new Date()
   const then = new Date(date)
   const diffMs = now.getTime() - then.getTime()
@@ -170,9 +174,9 @@ function formatTime(date: string): string {
   const hours = Math.floor(diffMs / 3_600_000)
   const days = Math.floor(diffMs / 86_400_000)
 
-  if (minutes < 1) return "الآن"
-  if (minutes < 60) return `منذ ${minutes} دقيقة`
-  if (hours < 24) return `منذ ${hours} ساعة`
-  if (days < 7) return `منذ ${days} يوم`
-  return then.toLocaleDateString("ar-IQ")
+  if (minutes < 1) return t("now")
+  if (minutes < 60) return t("minAgo", { n: minutes })
+  if (hours < 24) return t("hrAgo", { n: hours })
+  if (days < 7) return t("dayAgo", { n: days })
+  return then.toLocaleDateString("en-GB")
 }
