@@ -27,6 +27,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from "react"
+import { useTranslations } from "next-intl"
 import { Send, MessageCircle, AlertCircle } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -59,6 +60,7 @@ interface Props {
 }
 
 export function DealChat({ dealId, currentUserId, className }: Props) {
+  const t = useTranslations("deals")
   const [messages, setMessages] = useState<ChatItem[]>([])
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
@@ -175,7 +177,7 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
       id: tempId,
       deal_id: dealId,
       sender_id: currentUserId ?? "",
-      sender_name: "أنت",
+      sender_name: t("you"),
       message_type: "text",
       content: text,
       attachment_url: null,
@@ -206,14 +208,14 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
       ),
     )
     const map: Record<string, string> = {
-      unauthenticated: "سجّل دخولك أولاً",
-      empty_message: "اكتب رسالة قبل الإرسال",
-      deal_not_found: "الصفقة غير موجودة",
-      not_party: "لست طرفاً في هذه الصفقة",
+      unauthenticated: t("errUnauthenticated"),
+      empty_message: t("errEmptyMessage"),
+      deal_not_found: t("errDealNotFound"),
+      not_party: t("errNotParty"),
     }
-    showError(map[result.error ?? ""] ?? "تعذّر إرسال الرسالة — انقر للمحاولة مجدداً")
+    showError(map[result.error ?? ""] ?? t("errSendMessage"))
     return false
-  }, [dealId, currentUserId])
+  }, [dealId, currentUserId, t])
 
   const handleSend = async () => {
     const text = input.trim()
@@ -248,7 +250,7 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
       {/* Header */}
       <div className="px-4 py-3 border-b border-white/[0.06] flex items-center gap-2">
         <MessageCircle className="w-4 h-4 text-blue-400" strokeWidth={1.75} />
-        <div className="text-sm text-white font-bold">دردشة الصفقة</div>
+        <div className="text-sm text-white font-bold">{t("chatTitle")}</div>
         {messages.length > 0 && (
           <span className="text-[10px] text-neutral-500 font-mono">
             ({messages.length})
@@ -263,11 +265,11 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
       >
         {loading ? (
           <div className="text-center py-6 text-xs text-neutral-500">
-            جاري التحميل...
+            {t("loading")}
           </div>
         ) : messages.length === 0 ? (
           <div className="text-center py-6 text-xs text-neutral-500">
-            لا رسائل بعد — ابدأ بالكتابة لتنسيق التفاصيل
+            {t("noMessages")}
           </div>
         ) : (
           messages.map((m) => {
@@ -283,18 +285,18 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
                 )}
               >
                 <div className="text-[10px] text-neutral-500 px-1 flex items-center gap-1.5">
-                  <span>{isMe ? "أنت" : m.sender_name}</span>
+                  <span>{isMe ? t("you") : m.sender_name}</span>
                   <span className="text-neutral-700" dir="ltr">
                     {m.created_at.replace("T", " ").slice(0, 16)}
                   </span>
                   {isPending && (
                     <span className="text-blue-400 text-[9px] font-mono animate-pulse">
-                      جاري الإرسال…
+                      {t("msgSending")}
                     </span>
                   )}
                   {isFailed && (
                     <span className="text-red-400 text-[9px] font-mono flex items-center gap-1">
-                      <AlertCircle className="w-2.5 h-2.5" /> فشل — انقر للإعادة
+                      <AlertCircle className="w-2.5 h-2.5" /> {t("msgFailed")}
                     </span>
                   )}
                 </div>
@@ -321,7 +323,7 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
                       className="block text-[10px] text-blue-400 underline mt-1"
                       dir="ltr"
                     >
-                      📎 مرفق
+                      {t("attachment")}
                     </a>
                   )}
                 </button>
@@ -338,7 +340,7 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="اكتب رسالة..."
+          placeholder={t("msgPlaceholder")}
           className="flex-1 bg-white/[0.04] border border-white/[0.06] rounded-xl px-3 py-2 text-xs text-white placeholder:text-neutral-500 outline-none focus:border-white/20"
           disabled={sending}
         />
@@ -353,7 +355,7 @@ export function DealChat({ dealId, currentUserId, className }: Props) {
           )}
         >
           <Send className="w-3.5 h-3.5" />
-          إرسال
+          {t("send")}
         </button>
       </div>
     </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { X, ShoppingCart, AlertTriangle, Loader2 } from "lucide-react"
 import { useRealtime } from "@/lib/realtime/RealtimeProvider"
 import { submitDirectBuyRequest, submitPaymentProof, type PaymentMethod } from "@/lib/data/direct-buy"
@@ -16,13 +17,15 @@ import { IntegerInput } from "@/components/ui/IntegerInput"
 // Phase 10.99f — let the user pick the actual payment method used.
 // Stored on payment_proofs so admin sees it in the share-requests
 // table and on the printed invoice/ownership contract.
-const PAYMENT_METHODS: { id: PaymentMethod; label: string; icon: string }[] = [
+// Brand names (Master Card / Zain Cash / Asia Hawala / Ki Card) are
+// identical in both locales; only bank_transfer / other are localized.
+const PAYMENT_METHODS: { id: PaymentMethod; label: string; labelKey?: string; icon: string }[] = [
   { id: "master_card",   label: "Master Card",     icon: "💳" },
   { id: "zain_cash",     label: "Zain Cash",       icon: "💰" },
   { id: "asia_hawala",   label: "Asia Hawala",     icon: "🏧" },
-  { id: "bank_transfer", label: "تحويل بنكي",       icon: "🏦" },
+  { id: "bank_transfer", label: "Bank transfer",   labelKey: "pmBankTransfer", icon: "🏦" },
   { id: "ki_card",       label: "Ki Card",         icon: "💳" },
-  { id: "other",         label: "أخرى",            icon: "💵" },
+  { id: "other",         label: "Other",           labelKey: "pmOther", icon: "💵" },
 ]
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
@@ -44,6 +47,7 @@ interface Props {
 
 export function CreateDealModal({ open, onClose, project, seller }: Props) {
   const router = useRouter()
+  const t = useTranslations("deals")
   const { createDeal } = useRealtime()
   const [shares, setShares] = useState("1")
   const [agreed, setAgreed] = useState(false)
@@ -63,10 +67,10 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
 
   const handleSubmit = async () => {
     if (!isValid) {
-      if (sharesNum < 1) return showError("أدخل عدد حصص صحيح")
-      if (sharesNum > project.available_shares) return showError("لا يوجد عدد كافٍ من الحصص")
-      if (!proofDataUrl) return showError("يجب رفع صورة إثبات الدفع")
-      if (!agreed) return showError("يجب الموافقة على القوانين")
+      if (sharesNum < 1) return showError(t("errSharesValid"))
+      if (sharesNum > project.available_shares) return showError(t("errNotEnoughShares"))
+      if (!proofDataUrl) return showError(t("errProofImageRequired"))
+      if (!agreed) return showError(t("errAgreeRules"))
       return
     }
 
@@ -83,24 +87,24 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
         // Phase 10.93: suspension errors carry a `reason` field from the RPC
         const suspReason = dbResult.reason
         const map: Record<string, string> = {
-          unauthenticated: "سجّل دخولك أولاً",
-          invalid_amount: "أدخل عدد حصص صحيح",
-          invalid_share_price: "سعر الحصة غير صالح — راجع بيانات المشروع",
-          project_not_found: "المشروع غير موجود",
-          project_not_active: "المشروع ليس نشطاً للشراء حالياً",
-          insufficient_offering_shares: "الحصص المتاحة في عَرض المشروع غير كافية",
-          cannot_buy_own_project: "لا يمكنك شراء مشروعك الخاص",
-          deal_insert_failed: "فشل تسجيل الصفقة — طبّق Migration 10.99d في Supabase",
+          unauthenticated: t("errUnauthenticated"),
+          invalid_amount: t("errSharesValid"),
+          invalid_share_price: t("errInvalidSharePrice"),
+          project_not_found: t("errProjectNotFound"),
+          project_not_active: t("errProjectNotActive"),
+          insufficient_offering_shares: t("errInsufficientOffering"),
+          cannot_buy_own_project: t("errCannotBuyOwn"),
+          deal_insert_failed: t("errDealInsertFailed"),
           trading_suspended: suspReason
-            ? `⏸️ التداول معلق مؤقتاً: ${suspReason}`
-            : "⏸️ تم تعليق التداول على هذا المشروع مؤقتاً",
+            ? t("errTradingSuspendedReason", { reason: suspReason })
+            : t("errTradingSuspended"),
           offering_suspended: suspReason
-            ? `🔒 شراء الحصص معلق مؤقتاً: ${suspReason}`
-            : "🔒 تم تعليق شراء الحصص الجديدة مؤقتاً",
+            ? t("errOfferingSuspendedReason", { reason: suspReason })
+            : t("errOfferingSuspended"),
         }
         // eslint-disable-next-line no-console
         console.warn("[direct-buy] failure:", dbResult)
-        return showError(map[dbResult.error ?? ""] ?? `تعذّر إرسال الطلب — ${dbResult.error}`)
+        return showError(map[dbResult.error ?? ""] ?? t("errSubmitRequestGeneric", { error: dbResult.error ?? "" }))
       }
 
       // Mirror to legacy realtime mock for the chat/notif simulation
@@ -108,7 +112,7 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
         await createDeal({
           buyer_id: "me",
           seller_id: seller.id,
-          buyer_name: "أنا",
+          buyer_name: t("me"),
           seller_name: seller.name,
           project_id: project.id,
           project_name: project.name,
@@ -137,30 +141,30 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
             // eslint-disable-next-line no-console
             console.warn("[direct-buy] proof upload failed:", proofResult)
             const proofErrorMap: Record<string, string> = {
-              invalid_payment_method: "طريقة الدفع غير مدعومة في DB — طبّق Migration 11.02",
-              insert_failed: "تعذّر حفظ صورة الإثبات — قد تكون كبيرة جداً (>1MB)",
-              proof_required: "صورة الإثبات مطلوبة",
-              not_buyer: "الصلاحيات لا تسمح",
-              invalid_status: "حالة الصفقة لا تسمح برفع إثبات",
+              invalid_payment_method: t("errInvalidPaymentMethod"),
+              insert_failed: t("errInsertFailedProof"),
+              proof_required: t("errProofRequired"),
+              not_buyer: t("errNotBuyer"),
+              invalid_status: t("errInvalidStatus"),
             }
             showError(
-              "✅ تم إنشاء الطلب لكن فشل رفع الإثبات: " +
-                (proofErrorMap[proofResult.error ?? ""] ?? proofResult.error ?? "خطأ غير معروف")
+              t("proofUploadFailedPrefix") +
+                (proofErrorMap[proofResult.error ?? ""] ?? proofResult.error ?? t("unknownError"))
             )
           }
         } catch (err) {
           // eslint-disable-next-line no-console
           console.error("[direct-buy] proof upload threw:", err)
-          showError("تم إنشاء الطلب لكن تعذّر رفع الإثبات — حاول رفعه من صفحة الصفقة")
+          showError(t("proofUploadThrew"))
         }
       }
 
       setSubmitting(false)
       setWaiting(true)
-      showSuccess("✅ تم إرسال الطلب + إثبات الدفع — الإدارة ستراجعه")
+      showSuccess(t("requestSentOk"))
     } catch (error) {
       setSubmitting(false)
-      showError("فشل إرسال الطلب، حاول مرة أخرى")
+      showError(t("requestFailedRetry"))
     }
   }
 
@@ -172,23 +176,22 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
           <div className="w-20 h-20 rounded-full bg-blue-400/10 border-2 border-blue-400/30 flex items-center justify-center mx-auto mb-5 animate-pulse">
             <Loader2 className="w-10 h-10 text-blue-400 animate-spin" strokeWidth={1.5} />
           </div>
-          <div className="text-lg font-bold text-white mb-2">بانتظار رد البائع...</div>
+          <div className="text-lg font-bold text-white mb-2">{t("waitingSellerReply")}</div>
           <div className="text-xs text-neutral-400 leading-relaxed mb-5">
-            تم إرسال طلبك إلى <span className="text-white font-bold">{seller.name}</span>.
-            ستحصل على إشعار فور رده على الطلب.
+            {t("requestSentToPre")}<span className="text-white font-bold">{seller.name}</span>{t("requestSentToPost")}
           </div>
           <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 mb-4 space-y-1.5">
             <div className="flex justify-between text-xs">
-              <span className="text-neutral-500">المشروع</span>
+              <span className="text-neutral-500">{t("project")}</span>
               <span className="text-white font-bold">{project.name}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-neutral-500">الحصص</span>
+              <span className="text-neutral-500">{t("sharesLabel")}</span>
               <span className="text-green-400 font-bold font-mono">{sharesNum}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-neutral-500">الإجمالي</span>
-              <span className="text-yellow-400 font-bold font-mono">{fmtNum(total)} د.ع</span>
+              <span className="text-neutral-500">{t("total")}</span>
+              <span className="text-yellow-400 font-bold font-mono">{fmtNum(total)} {t("iqd")}</span>
             </div>
           </div>
           <button
@@ -198,11 +201,11 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
               setAgreed(false)
               setProofDataUrl(null)
               onClose()
-              showInfo("يمكنك متابعة التطبيق، سنُعلمك بالرد")
+              showInfo(t("canFollowApp"))
             }}
             className="w-full py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm font-bold hover:bg-white/[0.08]"
           >
-            متابعة التصفح
+            {t("keepBrowsing")}
           </button>
         </div>
       </div>
@@ -215,8 +218,8 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
 
         <div className="flex justify-between items-start mb-4">
           <div>
-            <div className="text-lg font-bold text-white mb-1">طلب شراء حصص</div>
-            <div className="text-xs text-neutral-500">{project.name} • من {seller.name}</div>
+            <div className="text-lg font-bold text-white mb-1">{t("buySharesRequest")}</div>
+            <div className="text-xs text-neutral-500">{t("projectFromSeller", { project: project.name, seller: seller.name })}</div>
           </div>
           <button onClick={onClose} className="text-neutral-500 hover:text-white">
             <X className="w-5 h-5" />
@@ -229,12 +232,12 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
         {/* Shares input */}
         <div className="mb-4">
           <div className="flex justify-between mb-2">
-            <label className="text-xs text-neutral-400 font-bold">عدد الحصص</label>
+            <label className="text-xs text-neutral-400 font-bold">{t("sharesCount")}</label>
             <button
               onClick={() => setShares(String(Math.min(project.available_shares, 10)))}
               className="text-[11px] text-blue-400 hover:text-blue-300"
             >
-              الأقصى المتاح
+              {t("maxAvailable")}
             </button>
           </div>
           <IntegerInput
@@ -249,7 +252,7 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
             )}
           />
           <div className="text-[10px] text-neutral-500 text-center mt-1.5">
-            متاح: <span className="font-mono">{project.available_shares.toLocaleString("en-US")}</span> حصة
+            {t("availablePre")}<span className="font-mono">{project.available_shares.toLocaleString("en-US")}</span> {t("sharesUnit")}
           </div>
         </div>
 
@@ -257,17 +260,17 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
         {sharesNum > 0 && (
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-4 mb-4 space-y-2">
             <div className="flex justify-between text-xs">
-              <span className="text-neutral-500">سعر الحصة</span>
-              <span className="text-white font-mono">{fmtNum(project.share_price)} د.ع</span>
+              <span className="text-neutral-500">{t("sharePrice")}</span>
+              <span className="text-white font-mono">{fmtNum(project.share_price)} {t("iqd")}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-neutral-500">عدد الحصص</span>
+              <span className="text-neutral-500">{t("sharesCount")}</span>
               <span className="text-white font-mono">× {sharesNum}</span>
             </div>
             <div className="h-px bg-white/[0.05]" />
             <div className="flex justify-between">
-              <span className="text-sm font-bold text-yellow-400">الإجمالي</span>
-              <span className="text-base font-bold text-yellow-400 font-mono">{fmtNum(total)} د.ع</span>
+              <span className="text-sm font-bold text-yellow-400">{t("total")}</span>
+              <span className="text-base font-bold text-yellow-400 font-mono">{fmtNum(total)} {t("iqd")}</span>
             </div>
           </div>
         )}
@@ -277,7 +280,7 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
           <div className="bg-red-400/[0.06] border border-red-400/20 rounded-xl p-3 mb-4 flex gap-2 items-start">
             <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
             <div className="text-[11px] text-red-400">
-              العدد المطلوب أكبر من المتاح ({project.available_shares} حصة فقط)
+              {t("exceedsAvailable", { n: project.available_shares })}
             </div>
           </div>
         )}
@@ -286,7 +289,7 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
         {sharesNum > 0 && sharesNum <= project.available_shares && (
           <div className="mb-4">
             <label className="text-xs text-neutral-400 font-bold mb-2 block">
-              طريقة الدفع <span className="text-red-400">*</span>
+              {t("paymentMethod")} <span className="text-red-400">*</span>
             </label>
             <div className="grid grid-cols-3 gap-1.5">
               {PAYMENT_METHODS.map((m) => (
@@ -302,7 +305,7 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
                   )}
                 >
                   <span className="text-base">{m.icon}</span>
-                  <span>{m.label}</span>
+                  <span>{m.labelKey ? t(m.labelKey) : m.label}</span>
                 </button>
               ))}
             </div>
@@ -315,8 +318,8 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
             <PaymentInstructionsBlock
               proofDataUrl={proofDataUrl}
               onProofChange={setProofDataUrl}
-              title="💳 معلومات تحويل المبلغ"
-              subtitle={`حوّل ${fmtNum(total)} د.ع وارفع صورة الإثبات`}
+              title={t("payInfoTitle")}
+              subtitle={t("payInfoSubtitle", { amount: fmtNum(total) })}
               required
               compact
             />
@@ -340,7 +343,7 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
             {agreed && <span className="text-black text-xs font-bold">✓</span>}
           </div>
           <span className={cn("text-[11px] leading-relaxed", agreed ? "text-green-400" : "text-neutral-400")}>
-            أوافق على قوانين الصفقة. مدة الصفقة 15 دقيقة بعد قبول البائع. الإلغاء يؤثر على تقييمي.
+            {t("agreeRules")}
           </span>
         </button>
 
@@ -351,7 +354,7 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
             disabled={submitting}
             className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
           >
-            إلغاء
+            {t("cancel")}
           </button>
           <button
             onClick={handleSubmit}
@@ -366,12 +369,12 @@ export function CreateDealModal({ open, onClose, project, seller }: Props) {
             {submitting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                جاري الإرسال...
+                {t("sending")}
               </>
             ) : (
               <>
                 <ShoppingCart className="w-4 h-4" strokeWidth={2} />
-                إرسال الطلب
+                {t("submitRequest")}
               </>
             )}
           </button>

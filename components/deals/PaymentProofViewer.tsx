@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 import { ZoomIn, X, Receipt, AlertTriangle, Loader2 } from "lucide-react"
 import {
   getLatestDealProof,
@@ -20,11 +21,12 @@ import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
-const METHOD_LABEL: Record<string, string> = {
-  zain_cash: "📱 زين كاش",
-  master_card: "💳 ماستركارد",
-  bank_transfer: "🏦 حوالة بنكية",
-  other: "🔗 أخرى",
+// payment_method is DB-canonical; resolve display label via i18n key.
+const METHOD_KEY: Record<string, string> = {
+  zain_cash: "methodViewZainCash",
+  master_card: "methodViewMasterCard",
+  bank_transfer: "methodViewBankTransfer",
+  other: "methodViewOther",
 }
 
 interface Props {
@@ -38,8 +40,9 @@ interface Props {
 export function PaymentProofViewer({
   dealId,
   expectedAmount,
-  title = "🧾 إثبات الدفع المُرفَق",
+  title,
 }: Props) {
+  const t = useTranslations("deals")
   const [proof, setProof] = useState<DealPaymentProof | null>(null)
   const [loading, setLoading] = useState(true)
   const [zoomed, setZoomed] = useState(false)
@@ -59,7 +62,7 @@ export function PaymentProofViewer({
     return (
       <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 flex items-center justify-center text-xs text-neutral-500">
         <Loader2 className="w-4 h-4 animate-spin ml-2" />
-        جاري تحميل الإثبات...
+        {t("loadingProof")}
       </div>
     )
   }
@@ -70,8 +73,7 @@ export function PaymentProofViewer({
         <div className="flex items-start gap-2.5">
           <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
           <div className="text-[11px] text-yellow-200/80 leading-relaxed">
-            لم يتم العثور على إثبات الدفع. ربما أُرسلت الصفقة مباشرة بدون
-            إرفاق إثبات — راجع البيانات قبل تحرير الحصص.
+            {t("noProof")}
           </div>
         </div>
       </div>
@@ -79,14 +81,16 @@ export function PaymentProofViewer({
   }
 
   const amountMatch = proof.amount_paid === expectedAmount
-  const methodLabel = METHOD_LABEL[proof.payment_method] ?? proof.payment_method
+  const methodLabel = METHOD_KEY[proof.payment_method]
+    ? t(METHOD_KEY[proof.payment_method])
+    : proof.payment_method
 
   return (
     <>
       <div className="bg-gradient-to-br from-blue-400/[0.05] to-green-400/[0.05] border border-blue-400/20 rounded-xl p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Receipt className="w-4 h-4 text-blue-400" strokeWidth={2} />
-          <div className="text-xs font-bold text-white">{title}</div>
+          <div className="text-xs font-bold text-white">{title ?? t("proofTitle")}</div>
         </div>
 
         {/* Image */}
@@ -97,7 +101,7 @@ export function PaymentProofViewer({
           >
             <img
               src={proof.proof_image_url}
-              alt="إثبات الدفع"
+              alt={t("proofImageAlt")}
               className="w-full h-auto max-h-72 object-contain mx-auto"
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100">
@@ -108,31 +112,31 @@ export function PaymentProofViewer({
 
         {/* Details */}
         <div className="bg-black/40 border border-white/[0.06] rounded-lg p-3 space-y-2">
-          <Row label="طريقة الدفع" value={methodLabel} />
+          <Row label={t("rowMethod")} value={methodLabel} />
           <Row
-            label="المبلغ المُرفَق"
-            value={`${fmtNum(proof.amount_paid)} د.ع`}
+            label={t("rowAmountAttached")}
+            value={`${fmtNum(proof.amount_paid)} ${t("iqd")}`}
             valueColor={amountMatch ? "text-green-400" : "text-yellow-400"}
             mono
           />
           {!amountMatch && (
             <div className="bg-yellow-400/[0.06] border border-yellow-400/20 rounded p-2 text-[10px] text-yellow-300 leading-relaxed">
-              ⚠ المبلغ المُرفَق يختلف عن المتوقَّع (
-              <span className="font-mono">{fmtNum(expectedAmount)}</span>{" "}
-              د.ع). راجع قبل تحرير الحصص.
+              {t("amountMismatchPre")}
+              <span className="font-mono">{fmtNum(expectedAmount)}</span>
+              {t("amountMismatchPost")}
             </div>
           )}
           {proof.transaction_reference && (
-            <Row label="رقم العملية" value={proof.transaction_reference} mono dirLtr />
+            <Row label={t("txnNumber")} value={proof.transaction_reference} mono dirLtr />
           )}
           {proof.notes && (
             <div className="pt-2 border-t border-white/[0.06]">
-              <div className="text-[10px] text-neutral-500 mb-1">ملاحظة المشتري:</div>
+              <div className="text-[10px] text-neutral-500 mb-1">{t("buyerNote")}</div>
               <div className="text-xs text-neutral-200 leading-relaxed">{proof.notes}</div>
             </div>
           )}
           <Row
-            label="وقت الإرسال"
+            label={t("rowSentTime")}
             value={new Date(proof.submitted_at).toLocaleString("en-GB", {
               day: "2-digit",
               month: "2-digit",
@@ -161,7 +165,7 @@ export function PaymentProofViewer({
           </button>
           <img
             src={proof.proof_image_url}
-            alt="إثبات الدفع"
+            alt={t("proofImageAlt")}
             className="max-w-full max-h-full object-contain rounded-lg"
             onClick={(e) => e.stopPropagation()}
           />

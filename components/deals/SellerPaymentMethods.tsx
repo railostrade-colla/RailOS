@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 import { Copy, CheckCircle2, AlertTriangle, Star } from "lucide-react"
 import {
   PAYMENT_METHOD_META,
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function SellerPaymentMethods({ dealId, title, compact = false }: Props) {
+  const t = useTranslations("deals")
   const [methods, setMethods] = useState<PaymentMethod[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -54,7 +56,7 @@ export function SellerPaymentMethods({ dealId, title, compact = false }: Props) 
   if (loading) {
     return (
       <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 text-center">
-        <div className="text-xs text-neutral-500">جاري تحميل طرق الدفع...</div>
+        <div className="text-xs text-neutral-500">{t("loadingMethods")}</div>
       </div>
     )
   }
@@ -66,10 +68,10 @@ export function SellerPaymentMethods({ dealId, title, compact = false }: Props) 
           <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
           <div>
             <div className="text-xs font-bold text-yellow-300 mb-1">
-              البائع لم يُسجِّل طرق الدفع بعد
+              {t("sellerNoMethods")}
             </div>
             <div className="text-[11px] text-yellow-200/70 leading-relaxed">
-              تواصل معه عبر الدردشة أدناه لتحديد طريقة التحويل.
+              {t("contactViaChat")}
             </div>
           </div>
         </div>
@@ -81,11 +83,11 @@ export function SellerPaymentMethods({ dealId, title, compact = false }: Props) 
     <div className="bg-gradient-to-br from-blue-400/[0.05] to-green-400/[0.05] border border-blue-400/20 rounded-xl p-4 space-y-3">
       <div>
         <div className="text-xs font-bold text-white">
-          {title ?? "💳 طرق دفع البائع"}
+          {title ?? t("sellerMethodsTitle")}
         </div>
         {!compact && (
           <div className="text-[10px] text-neutral-500 mt-1 leading-relaxed">
-            انسخ الرقم وحوّل المبلغ خارج التطبيق ثم ارفع الإثبات.
+            {t("copyHint")}
           </div>
         )}
       </div>
@@ -100,6 +102,7 @@ export function SellerPaymentMethods({ dealId, title, compact = false }: Props) 
 }
 
 function PaymentMethodChip({ method }: { method: PaymentMethod }) {
+  const t = useTranslations("deals")
   const [copied, setCopied] = useState(false)
   const meta = PAYMENT_METHOD_META[method.type]
 
@@ -107,10 +110,10 @@ function PaymentMethodChip({ method }: { method: PaymentMethod }) {
     try {
       await navigator.clipboard.writeText(method.value)
       setCopied(true)
-      showSuccess(`تم نسخ ${method.label}`)
+      showSuccess(t("copied", { label: method.label }))
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      showError("تعذّر النسخ — انسخ يدوياً")
+      showError(t("copyFailed"))
     }
   }
 

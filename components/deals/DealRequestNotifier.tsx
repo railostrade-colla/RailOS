@@ -23,6 +23,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import {
   Bell,
   Check,
@@ -62,6 +63,7 @@ type ActionMode = "view" | "rejecting"
 
 export function DealRequestNotifier() {
   const router = useRouter()
+  const t = useTranslations("deals")
   const [queue, setQueue] = useState<PendingDealRequest[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [mode, setMode] = useState<ActionMode>("view")
@@ -217,11 +219,11 @@ export function DealRequestNotifier() {
     const r = await acceptDealRequest(head.id)
     setSubmitting(false)
     if (!r.success) {
-      showError(r.error ?? "تعذّر الموافقة")
+      showError(r.error ?? t("errApprove"))
       return
     }
     playApproval()
-    showSuccess(`✅ وافقت على صفقة ${head.buyer_name}`)
+    showSuccess(t("approvedDeal", { name: head.buyer_name }))
     // Phase 12.8: redirect the seller straight to the deal page so
     // they can see the buyer's payment proof when it lands. The buyer
     // is already there waiting (the realtime status flip + toast tells
@@ -234,18 +236,18 @@ export function DealRequestNotifier() {
   const handleReject = async () => {
     if (!head || submitting) return
     if (!reason.trim() || reason.trim().length < 5) {
-      showError("اكتب سببَ رفضٍ موجز (٥ أحرف على الأقل)")
+      showError(t("errRejectReason"))
       return
     }
     setSubmitting(true)
     const r = await rejectDealRequest(head.id, reason.trim())
     setSubmitting(false)
     if (!r.success) {
-      showError(r.error ?? "تعذّر الرفض")
+      showError(r.error ?? t("errReject"))
       return
     }
     playRejection()
-    showSuccess("❌ تم رفض الطلب")
+    showSuccess(t("requestRejectedX"))
     popHead()
   }
 
@@ -263,7 +265,7 @@ export function DealRequestNotifier() {
       className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
-      aria-label="طلب فتح صفقة"
+      aria-label={t("dialogLabel")}
     >
       <div className="w-full max-w-md bg-[#0f0f0f] border border-blue-400/30 rounded-2xl shadow-2xl overflow-hidden">
         {/* Header strip */}
@@ -272,9 +274,9 @@ export function DealRequestNotifier() {
             <Bell className="w-4.5 h-4.5" strokeWidth={2} />
           </div>
           <div className="flex-1">
-            <div className="text-sm font-bold text-white">🛒 طلب فتح صفقة جديد</div>
+            <div className="text-sm font-bold text-white">{t("newOpenDeal")}</div>
             <div className="text-[10px] text-blue-300 mt-0.5">
-              يطلب منك مشترٍ إكمال صفقة على إعلانك
+              {t("buyerWantsComplete")}
             </div>
           </div>
           {queue.length > 1 && (
@@ -308,16 +310,16 @@ export function DealRequestNotifier() {
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 text-center">
-                  <Stat label="الكمية" value={`${fmtNum(head.shares)}`} unit="حصة" />
+                  <Stat label={t("qty")} value={`${fmtNum(head.shares)}`} unit={t("sharesUnit")} />
                   <Stat
-                    label="السعر/الحصة"
+                    label={t("pricePerShare")}
                     value={fmtNum(head.price_per_share)}
-                    unit="د.ع"
+                    unit={t("iqd")}
                   />
                   <Stat
-                    label="الإجمالي"
+                    label={t("total")}
                     value={fmtNum(head.total_amount)}
-                    unit="د.ع"
+                    unit={t("iqd")}
                     highlight="green"
                   />
                 </div>
@@ -331,7 +333,7 @@ export function DealRequestNotifier() {
                     strokeWidth={2}
                   />
                   <span className="text-[10px] text-blue-300">
-                    عمولة المشتري (٢٪) — وحدات رسوم
+                    {t("buyerCommission")}
                   </span>
                 </div>
                 <span className="text-sm font-bold font-mono text-blue-400">
@@ -347,8 +349,7 @@ export function DealRequestNotifier() {
                     strokeWidth={2}
                   />
                   <p className="text-[10px] text-yellow-200 leading-relaxed">
-                    <strong>مشترٍ جديد</strong> — لم يكمل أي صفقة من قبل. تأكّد من
-                    التحقّق منه عبر الدردشة قبل تحرير الحصص.
+                    <strong>{t("newBuyerStrong")}</strong>{t("newBuyerWarn")}
                   </p>
                 </div>
               )}
@@ -358,25 +359,25 @@ export function DealRequestNotifier() {
           {mode === "rejecting" && (
             <div>
               <div className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-3 mb-3">
-                <div className="text-[10px] text-neutral-500 mb-0.5">رفض طلب من</div>
+                <div className="text-[10px] text-neutral-500 mb-0.5">{t("rejectRequestFrom")}</div>
                 <div className="text-sm font-bold text-white">
                   {head.buyer_name}
                 </div>
               </div>
               <label className="block text-xs text-neutral-400 mb-2">
-                سبب الرفض <span className="text-red-400">*</span>
+                {t("rejectReason")} <span className="text-red-400">*</span>
               </label>
               <textarea
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 rows={4}
-                placeholder="مثلاً: السعر تغيّر / لا أرغب بالبيع الآن / المشتري غير موثوق"
+                placeholder={t("rejectReasonPlaceholder")}
                 maxLength={300}
                 autoFocus
                 className="w-full bg-black/40 border border-white/[0.08] rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-neutral-600 outline-none focus:border-red-400/30 resize-none"
               />
               <div className="text-[10px] text-neutral-500 mt-1.5 leading-relaxed">
-                سيُرسَل هذا السبب للمشتري ويُحفَظ في سجل الصفقة.
+                {t("rejectReasonNote")}
               </div>
             </div>
           )}
@@ -393,7 +394,7 @@ export function DealRequestNotifier() {
                   className="py-2.5 rounded-xl bg-red-500/[0.1] border border-red-500/30 text-red-400 text-sm font-bold hover:bg-red-500/[0.18] transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
                   <X className="w-4 h-4" strokeWidth={2.5} />
-                  رفض
+                  {t("reject")}
                 </button>
                 <button
                   onClick={handleAccept}
@@ -405,7 +406,7 @@ export function DealRequestNotifier() {
                   ) : (
                     <Check className="w-4 h-4" strokeWidth={2.5} />
                   )}
-                  {submitting ? "جاري..." : "موافقة + فتح"}
+                  {submitting ? t("working") : t("approveOpen")}
                 </button>
               </div>
               <button
@@ -414,7 +415,7 @@ export function DealRequestNotifier() {
                 className="w-full py-2 rounded-lg text-[11px] text-neutral-400 hover:text-white hover:bg-white/[0.04] transition-colors flex items-center justify-center gap-1.5"
               >
                 <ArrowLeft className="w-3 h-3" strokeWidth={2} />
-                عرض في صفحة الصفقة (تأجيل القرار)
+                {t("openInDealPage")}
               </button>
             </>
           ) : (
@@ -427,7 +428,7 @@ export function DealRequestNotifier() {
                 disabled={submitting}
                 className="py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
               >
-                رجوع
+                {t("back")}
               </button>
               <button
                 onClick={handleReject}
@@ -439,7 +440,7 @@ export function DealRequestNotifier() {
                 ) : (
                   <X className="w-4 h-4" strokeWidth={2.5} />
                 )}
-                {submitting ? "جاري الرفض..." : "تأكيد الرفض"}
+                {submitting ? t("rejecting") : t("confirmReject")}
               </button>
             </div>
           )}
@@ -454,6 +455,7 @@ export function DealRequestNotifier() {
 // ─────────────────────────────────────────────────────────────────
 
 function BuyerCard({ request }: { request: PendingDealRequest }) {
+  const t = useTranslations("deals")
   const stars = Math.max(0, Math.min(5, Math.round(request.buyer_rating_average)))
 
   return (
@@ -489,7 +491,7 @@ function BuyerCard({ request }: { request: PendingDealRequest }) {
             {request.buyer_is_ambassador && (
               <span className="bg-purple-400/[0.12] border border-purple-400/30 text-purple-300 px-1.5 py-px rounded text-[9px] font-bold flex items-center gap-0.5">
                 <Sparkles className="w-2.5 h-2.5" strokeWidth={2} />
-                سفير
+                {t("ambassador")}
               </span>
             )}
           </div>
@@ -503,7 +505,7 @@ function BuyerCard({ request }: { request: PendingDealRequest }) {
           {/* Stats line */}
           <div className="mt-2 flex items-center gap-3 flex-wrap">
             {/* Rating */}
-            <div className="flex items-center gap-0.5" title={`متوسّط التقييم: ${request.buyer_rating_average.toFixed(1)}/5`}>
+            <div className="flex items-center gap-0.5" title={t("ratingTitle", { avg: request.buyer_rating_average.toFixed(1) })}>
               {Array.from({ length: 5 }).map((_, i) => (
                 <Star
                   key={i}
@@ -532,7 +534,7 @@ function BuyerCard({ request }: { request: PendingDealRequest }) {
               <span className="text-white font-bold font-mono">
                 {fmtNum(request.buyer_trades_completed)}
               </span>{" "}
-              صفقة
+              {t("dealsUnit")}
             </span>
           </div>
 
@@ -551,18 +553,19 @@ function KycBadge({
 }: {
   status: PendingDealRequest["buyer_kyc_status"]
 }) {
+  const t = useTranslations("deals")
   if (status === "verified") {
     return (
       <span className="bg-green-400/[0.12] border border-green-400/30 text-green-400 px-1.5 py-px rounded text-[9px] font-bold flex items-center gap-0.5">
         <ShieldCheck className="w-2.5 h-2.5" strokeWidth={2.5} />
-        موثّق
+        {t("kycVerified")}
       </span>
     )
   }
   if (status === "pending") {
     return (
       <span className="bg-yellow-400/[0.10] border border-yellow-400/30 text-yellow-400 px-1.5 py-px rounded text-[9px] font-bold">
-        قيد التوثيق
+        {t("kycPending")}
       </span>
     )
   }
@@ -570,13 +573,13 @@ function KycBadge({
     return (
       <span className="bg-red-400/[0.10] border border-red-400/30 text-red-400 px-1.5 py-px rounded text-[9px] font-bold flex items-center gap-0.5">
         <ShieldAlert className="w-2.5 h-2.5" strokeWidth={2.5} />
-        توثيق مرفوض
+        {t("kycRejected")}
       </span>
     )
   }
   return (
     <span className="bg-neutral-500/[0.10] border border-neutral-500/30 text-neutral-400 px-1.5 py-px rounded text-[9px] font-bold">
-      غير موثّق
+      {t("kycNone")}
     </span>
   )
 }

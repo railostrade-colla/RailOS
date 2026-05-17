@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useTranslations } from "next-intl"
 import { Bell, X, Check, Clock, User, Package, DollarSign } from "lucide-react"
 import { useRealtime } from "@/lib/realtime/RealtimeProvider"
 import { showSuccess, showInfo } from "@/lib/utils/toast"
@@ -10,6 +11,7 @@ const fmtNum = (n: number) => n.toLocaleString("en-US")
 
 export function DealRequestModal() {
   const { pendingDealAsSeller, acceptDeal, rejectDeal } = useRealtime()
+  const t = useTranslations("deals")
   const [timeLeft, setTimeLeft] = useState(0)
   const [processing, setProcessing] = useState(false)
 
@@ -29,7 +31,7 @@ export function DealRequestModal() {
   useEffect(() => {
     if (pendingDealAsSeller && timeLeft === 0 && !processing) {
       rejectDeal(pendingDealAsSeller.id)
-      showInfo("انتهى وقت الرد على الطلب")
+      showInfo(t("timeExpired"))
     }
   }, [timeLeft, pendingDealAsSeller, rejectDeal, processing])
 
@@ -42,7 +44,7 @@ export function DealRequestModal() {
 
   const handleAccept = async () => {
     setProcessing(true)
-    showSuccess("✅ تمت الموافقة! جارٍ فتح الدردشة...")
+    showSuccess(t("approvedOpeningChat"))
     await acceptDeal(pendingDealAsSeller.id)
     setProcessing(false)
   }
@@ -50,7 +52,7 @@ export function DealRequestModal() {
   const handleReject = async () => {
     setProcessing(true)
     await rejectDeal(pendingDealAsSeller.id)
-    showInfo("تم رفض الطلب")
+    showInfo(t("requestRejected"))
     setProcessing(false)
   }
 
@@ -65,8 +67,8 @@ export function DealRequestModal() {
               <Bell className="w-5 h-5 text-yellow-400" strokeWidth={2} />
             </div>
             <div>
-              <div className="text-base font-bold text-white">طلب صفقة جديد!</div>
-              <div className="text-[11px] text-neutral-500">يحتاج ردك خلال 5 دقائق</div>
+              <div className="text-base font-bold text-white">{t("newDealRequest")}</div>
+              <div className="text-[11px] text-neutral-500">{t("replyWithin5")}</div>
             </div>
           </div>
           <div className={cn(
@@ -86,7 +88,7 @@ export function DealRequestModal() {
             {pendingDealAsSeller.buyer_name.charAt(0)}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] text-blue-400 font-bold mb-0.5">المشتري</div>
+            <div className="text-[10px] text-blue-400 font-bold mb-0.5">{t("buyer")}</div>
             <div className="text-sm font-bold text-white truncate">{pendingDealAsSeller.buyer_name}</div>
           </div>
           <User className="w-5 h-5 text-blue-400 flex-shrink-0" strokeWidth={1.5} />
@@ -97,7 +99,7 @@ export function DealRequestModal() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Package className="w-3.5 h-3.5 text-neutral-500" strokeWidth={1.5} />
-              <span className="text-xs text-neutral-500">المشروع</span>
+              <span className="text-xs text-neutral-500">{t("project")}</span>
             </div>
             <span className="text-sm font-bold text-white">{pendingDealAsSeller.project_name}</span>
           </div>
@@ -106,14 +108,14 @@ export function DealRequestModal() {
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-neutral-500">عدد الحصص</span>
+              <span className="text-xs text-neutral-500">{t("sharesCount")}</span>
             </div>
-            <span className="text-sm font-bold text-green-400 font-mono">{pendingDealAsSeller.shares} حصة</span>
+            <span className="text-sm font-bold text-green-400 font-mono">{t("sharesWithCount", { n: pendingDealAsSeller.shares })}</span>
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="text-xs text-neutral-500">سعر الحصة</span>
-            <span className="text-sm font-bold text-white font-mono">{fmtNum(pendingDealAsSeller.price_per_share)} د.ع</span>
+            <span className="text-xs text-neutral-500">{t("sharePrice")}</span>
+            <span className="text-sm font-bold text-white font-mono">{fmtNum(pendingDealAsSeller.price_per_share)} {t("iqd")}</span>
           </div>
 
           <div className="h-px bg-white/[0.05]" />
@@ -121,17 +123,17 @@ export function DealRequestModal() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <DollarSign className="w-3.5 h-3.5 text-yellow-400" strokeWidth={1.5} />
-              <span className="text-xs font-bold text-yellow-400">الإجمالي</span>
+              <span className="text-xs font-bold text-yellow-400">{t("total")}</span>
             </div>
             <span className="text-base font-bold text-yellow-400 font-mono">
-              {fmtNum(pendingDealAsSeller.total)} د.ع
+              {fmtNum(pendingDealAsSeller.total)} {t("iqd")}
             </span>
           </div>
         </div>
 
         {/* Info note */}
         <div className="bg-blue-400/[0.04] border border-blue-400/15 rounded-lg p-2.5 mb-4 text-[11px] text-neutral-400 leading-relaxed">
-          💡 إذا وافقت، ستُفتح غرفة دردشة مدتها 15 دقيقة للتفاوض وإتمام الصفقة.
+          {t("chatRoomNote")}
         </div>
 
         {/* Actions */}
@@ -142,7 +144,7 @@ export function DealRequestModal() {
             className="flex-1 py-3.5 rounded-xl bg-white/[0.05] border border-white/[0.1] text-neutral-300 text-sm font-bold hover:bg-white/[0.08] hover:text-white transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <X className="w-4 h-4" strokeWidth={2} />
-            رفض
+            {t("reject")}
           </button>
           <button
             onClick={handleAccept}
@@ -150,7 +152,7 @@ export function DealRequestModal() {
             className="flex-[2] py-3.5 rounded-xl bg-gradient-to-r from-green-500 to-green-600 text-white text-sm font-bold hover:from-green-600 hover:to-green-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-green-500/20"
           >
             <Check className="w-4 h-4" strokeWidth={2.5} />
-            {processing ? "جاري المعالجة..." : "موافقة وفتح الدردشة"}
+            {processing ? t("processing") : t("approveOpenChat")}
           </button>
         </div>
       </div>

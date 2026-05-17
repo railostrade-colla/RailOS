@@ -18,6 +18,7 @@
  */
 
 import { useState, useRef } from "react"
+import { useTranslations } from "next-intl"
 import { ImagePlus, X, AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
 import { Modal } from "@/components/ui"
 import {
@@ -33,11 +34,11 @@ import { cn } from "@/lib/utils/cn"
 
 const fmtNum = (n: number) => n.toLocaleString("en-US")
 
-const METHODS: { id: ExchangePaymentMethod; label: string; icon: string }[] = [
-  { id: "zain_cash",     label: "زين كاش",       icon: "📱" },
-  { id: "bank_transfer", label: "حوالة بنكية",   icon: "🏦" },
-  { id: "master_card",   label: "ماستركارد",     icon: "💳" },
-  { id: "other",         label: "طريقة أخرى",    icon: "🔗" },
+const METHODS: { id: ExchangePaymentMethod; labelKey: string; icon: string }[] = [
+  { id: "zain_cash",     labelKey: "methodZainCash",     icon: "📱" },
+  { id: "bank_transfer", labelKey: "methodBankTransfer", icon: "🏦" },
+  { id: "master_card",   labelKey: "methodMasterCard",   icon: "💳" },
+  { id: "other",         labelKey: "methodOther",        icon: "🔗" },
 ]
 
 interface Props {
@@ -59,6 +60,7 @@ export function PaymentProofModal({
   sellerName,
   onSubmitted,
 }: Props) {
+  const t = useTranslations("deals")
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [method, setMethod] = useState<ExchangePaymentMethod>("zain_cash")
   const [amount, setAmount] = useState<string>(String(expectedAmount))
@@ -91,11 +93,11 @@ export function PaymentProofModal({
     const f = e.target.files?.[0]
     if (!f) return
     if (!f.type.startsWith("image/")) {
-      showError("اختر صورة فقط (JPG/PNG/WEBP)")
+      showError(t("errImageOnly"))
       return
     }
     if (f.size > 10 * 1024 * 1024) {
-      showError("حجم الصورة يتجاوز 10MB")
+      showError(t("errImageSize"))
       return
     }
     setFile(f)
@@ -113,16 +115,16 @@ export function PaymentProofModal({
 
   const handleSubmit = async () => {
     if (!file) {
-      showError("صورة الإثبات مطلوبة")
+      showError(t("errProofRequired"))
       return
     }
     const amt = parseInt(amount.replace(/[^0-9]/g, ""), 10)
     if (!Number.isFinite(amt) || amt <= 0) {
-      showError("أدخل مبلغاً صحيحاً")
+      showError(t("errValidAmount"))
       return
     }
     if (!agreed) {
-      showError("يجب الإقرار بصحة الإثبات")
+      showError(t("errPledge"))
       return
     }
 
@@ -138,12 +140,12 @@ export function PaymentProofModal({
     setSubmitting(false)
 
     if (!result.success) {
-      showError(result.error ?? "تعذّر إرسال الإثبات")
+      showError(result.error ?? t("errSubmitProof"))
       return
     }
 
     playPaymentSubmitted()
-    showSuccess("✅ تم إرسال الإثبات — البائع سيتحقّق ويُحرِّر الحصص")
+    showSuccess(t("okProofSent"))
     reset()
     onSubmitted()
   }
@@ -154,8 +156,8 @@ export function PaymentProofModal({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="🧾 رفع إثبات الدفع"
-      subtitle={`بعد تحويل المبلغ لـ ${sellerName} خارج التطبيق`}
+      title={t("ppmTitle")}
+      subtitle={t("ppmSubtitle", { seller: sellerName })}
       size="md"
       footer={
         <>
@@ -164,7 +166,7 @@ export function PaymentProofModal({
             disabled={submitting}
             className="flex-1 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] disabled:opacity-50"
           >
-            إلغاء
+            {t("cancel")}
           </button>
           <button
             onClick={handleSubmit}
@@ -179,12 +181,12 @@ export function PaymentProofModal({
             {submitting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                جاري الإرسال...
+                {t("sending")}
               </>
             ) : (
               <>
                 <CheckCircle2 className="w-4 h-4" strokeWidth={2.5} />
-                إرسال الإثبات
+                {t("submitProof")}
               </>
             )}
           </button>
@@ -197,7 +199,7 @@ export function PaymentProofModal({
         {/* Payment method picker */}
         <div>
           <label className="block text-[11px] text-neutral-400 mb-1.5">
-            طريقة الدفع المستخدمة
+            {t("methodUsedLabel")}
           </label>
           <div className="grid grid-cols-2 gap-1.5">
             {METHODS.map((m) => (
@@ -212,7 +214,7 @@ export function PaymentProofModal({
                 )}
               >
                 <span>{m.icon}</span>
-                <span>{m.label}</span>
+                <span>{t(m.labelKey)}</span>
               </button>
             ))}
           </div>
@@ -221,9 +223,9 @@ export function PaymentProofModal({
         {/* Amount */}
         <div>
           <label className="block text-[11px] text-neutral-400 mb-1.5">
-            المبلغ المُحوَّل (د.ع){" "}
+            {t("amountTransferredLabel")}{" "}
             <span className="text-neutral-600">
-              · المتوقَّع: {fmtNum(expectedAmount)}
+              {t("expectedAmount", { amount: fmtNum(expectedAmount) })}
             </span>
           </label>
           <input
@@ -240,14 +242,14 @@ export function PaymentProofModal({
         {/* Reference (optional) */}
         <div>
           <label className="block text-[11px] text-neutral-400 mb-1.5">
-            رقم العملية{" "}
-            <span className="text-neutral-600">(اختياري)</span>
+            {t("txnNumber")}{" "}
+            <span className="text-neutral-600">{t("optional")}</span>
           </label>
           <input
             type="text"
             value={reference}
             onChange={(e) => setReference(e.target.value)}
-            placeholder="رقم المرجع من البنك أو المحفظة"
+            placeholder={t("refPlaceholder")}
             maxLength={60}
             dir="ltr"
             className="w-full bg-black/40 border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white font-mono placeholder:text-neutral-600 outline-none focus:border-white/20"
@@ -257,7 +259,7 @@ export function PaymentProofModal({
         {/* Image picker */}
         <div>
           <label className="block text-[11px] text-neutral-400 mb-1.5">
-            صورة الإثبات <span className="text-red-400">*</span>
+            {t("proofImageLabel")} <span className="text-red-400">*</span>
           </label>
           <input
             ref={fileInputRef}
@@ -273,10 +275,10 @@ export function PaymentProofModal({
             >
               <ImagePlus className="w-6 h-6 text-neutral-400" strokeWidth={2} />
               <div className="text-xs text-neutral-300">
-                اضغط لاختيار صورة الإيصال
+                {t("pickReceipt")}
               </div>
               <div className="text-[10px] text-neutral-600">
-                JPG / PNG / WEBP — حتى 10MB
+                {t("imageFormats")}
               </div>
             </button>
           ) : (
@@ -289,7 +291,7 @@ export function PaymentProofModal({
               <button
                 onClick={removeFile}
                 className="absolute top-2 left-2 w-8 h-8 rounded-full bg-black/70 hover:bg-red-500/80 text-white flex items-center justify-center transition-colors"
-                aria-label="إزالة"
+                aria-label={t("remove")}
               >
                 <X className="w-4 h-4" strokeWidth={2.5} />
               </button>
@@ -303,13 +305,13 @@ export function PaymentProofModal({
         {/* Notes */}
         <div>
           <label className="block text-[11px] text-neutral-400 mb-1.5">
-            ملاحظة للبائع <span className="text-neutral-600">(اختياري)</span>
+            {t("noteToSeller")} <span className="text-neutral-600">{t("optional")}</span>
           </label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
-            placeholder="مثلاً: التحويل من حساب أخي بالخطأ — تأكّد من اسم المُرسِل"
+            placeholder={t("notePlaceholder")}
             maxLength={300}
             className="w-full bg-black/40 border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white placeholder:text-neutral-600 outline-none focus:border-white/20 resize-none"
           />
@@ -324,16 +326,15 @@ export function PaymentProofModal({
             className="mt-0.5 w-4 h-4"
           />
           <span className="text-[11px] text-neutral-300 leading-relaxed">
-            أُقرّ بصحّة هذا الإثبات وبأنّني فعلاً حوّلتُ المبلغ إلى{" "}
-            <span className="text-white font-bold">{sellerName}</span>. الإثبات
-            الكاذب أو المُعدَّل يُعرِّضني للحظر الفوري.
+            {t("pledgePre")}
+            <span className="text-white font-bold">{sellerName}</span>{t("pledgePost")}
           </span>
         </label>
 
         <div className="flex items-start gap-2 px-2.5 py-2 bg-blue-400/[0.06] border border-blue-400/20 rounded-lg">
           <AlertCircle className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
           <p className="text-[10px] text-blue-300 leading-relaxed">
-            بعد الإرسال ينتقل البائع لمراجعة الإثبات وتحرير الحصص. المهلة 15 دقيقة.
+            {t("afterSubmitNote")}
           </p>
         </div>
       </div>
