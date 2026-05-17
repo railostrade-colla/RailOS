@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { ChevronDown, BookOpen, Smartphone, Wallet, ShoppingCart, BarChart3, Shield, Users, ArrowLeftRight, Gavel, FileText, Bell, Search, Star } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -103,156 +104,26 @@ const SVG_SECURITY = (
   </svg>
 )
 
-const SECTIONS = [
-  {
-    id: "start",
-    icon: Smartphone,
-    iconEmoji: "🚀",
-    title: "البداية مع رايلوس",
-    color: "blue",
-    description: "تعرّف على أساسيات التطبيق وكيفية البدء بأول تجربة استثمارية لك",
-    illustration: SVG_ONBOARDING,
-    items: [
-      {
-        q: "ما هي منصة رايلوس؟",
-        a: "رايلوس منصة تقنية لإدارة وتنظيم الفرص الاستثمارية، تربط المستثمرين بالشركات وأصحاب المشاريع. تتيح لك تداول الحصص الاستثمارية، متابعة المشاريع، والتواصل مع المستثمرين الآخرين بطريقة آمنة ومنظمة.",
-      },
-      {
-        q: "كيف أسجل في المنصة؟",
-        a: "افتح التطبيق واضغط على \"إنشاء حساب\". أدخل رقم هاتفك والاسم الكامل، أكمل التحقق برمز OTP، ثم استكمل ملفك الشخصي. بعدها يمكنك استخدام جميع ميزات المنصة.",
-      },
-      {
-        q: "هل التسجيل مجاني؟",
-        a: "نعم، التسجيل مجاني تماماً. تُفرض عمولة بنسبة 2% فقط على عمليات إرسال الحصص، وعمولات بسيطة على الصفقات المكتملة (يتم الإعلان عنها بوضوح قبل تأكيد أي عملية).",
-      },
-    ],
-  },
-  {
-    id: "kyc",
-    icon: Shield,
-    iconEmoji: "🪪",
-    title: "التوثيق (KYC)",
-    color: "yellow",
-    description: "خطوات التحقق من الهوية لرفع سقف الاستثمار وتفعيل ميزات متقدمة",
-    illustration: SVG_KYC,
-    items: [
-      {
-        q: "لماذا التوثيق مطلوب؟",
-        a: "التوثيق يحمي جميع المستخدمين ويضمن بيئة استثمارية آمنة وموثوقة. يُطلب لرفع سقف المعاملات والوصول لميزات متقدمة مثل المزادات الحصرية والاستثمار في المشاريع الكبيرة.",
-      },
-      {
-        q: "ما المستندات المطلوبة للتوثيق؟",
-        a: "صورة واضحة من الهوية الوطنية أو جواز السفر، وصورة شخصية (سيلفي) أثناء حمل الهوية. قد تُطلب مستندات إضافية للحسابات التجارية أو الاستثمارية الكبيرة.",
-      },
-      {
-        q: "كم تستغرق مراجعة التوثيق؟",
-        a: "عادةً من 24-72 ساعة عمل. ستتلقى إشعاراً فورياً بنتيجة المراجعة، وفي حالة الرفض ستحصل على سبب واضح وفرصة لإعادة التقديم.",
-      },
-    ],
-  },
-  {
-    id: "wallet",
-    icon: Wallet,
-    iconEmoji: "💼",
-    title: "المحفظة والحصص",
-    color: "green",
-    description: "كيف تدير حصصك وترسلها وتستلمها بأمان كامل",
-    illustration: SVG_WALLET,
-    items: [
-      {
-        q: "ما هي الحصة الاستثمارية؟",
-        a: "الحصة (SHR) هي وحدة الاستثمار في مشروع معين داخل رايلوس. كل حصة لها سعر محدد ونسبة في المشروع، وتمنحك حق الحصول على عوائد المشروع بنسبة حصصك من إجمالي الحصص.",
-      },
-      {
-        q: "كيف أرسل حصصاً لمستخدم آخر؟",
-        a: "من صفحة المحفظة → \"إرسال حصص\"، أدخل ID المستلم أو امسح باركود محفظته، اختر الحصة والكمية، ثم أكد العملية. يستلم المستلم الكمية كاملةً بدون أي خصم بالحصص — رسوم التحويل تُخصم فقط من رصيد وحدات الرسوم.",
-      },
-      {
-        q: "ما هو البيع السريع؟",
-        a: "ميزة تتيح نشر حصصك للبيع في السوق فوراً بسعر مخفض 15% من السعر الحالي، مما يزيد احتمالية البيع السريع. مفيد عندما تحتاج سيولة فورية. السعر يُحدد تلقائياً من النظام.",
-      },
-    ],
-  },
-  {
-    id: "market",
-    icon: ShoppingCart,
-    iconEmoji: "📊",
-    title: "السوق والتداول",
-    color: "purple",
-    description: "تعلم كيف تشتري حصصاً وتفاوض مع البائعين وتغتنم الفرص",
-    illustration: SVG_MARKET,
-    items: [
-      {
-        q: "كيف أشتري حصصاً في مشروع؟",
-        a: "يتوفر خياران: (1) الشراء المباشر من المنصة بالسعر الرسمي، أو (2) الشراء من المستثمرين عبر صفحة التبادل. يمكنك أيضاً من صفحة المشروع طلب الشراء المباشر من المنصة.",
-      },
-      {
-        q: "ما الفرق بين عروض النظام وعروض المستثمرين؟",
-        a: "عروض النظام تُضاف من إدارة رايلوس وتمثل فرصاً مميزة مباشرة بأسعار رسمية. عروض المستثمرين هي حصص يبيعها مستخدمون آخرون من محافظهم - قد تجد أسعاراً أفضل أو فرصاً للتفاوض.",
-      },
-      {
-        q: "هل يمكنني التفاوض على السعر؟",
-        a: "نعم، في صفحة التبادل يمكنك التفاوض مع البائع عبر المحادثة الخاصة بالصفقة قبل إتمامها. لديك 15 دقيقة من فتح الصفقة للوصول إلى اتفاق.",
-      },
-    ],
-  },
-  {
-    id: "projects",
-    icon: BarChart3,
-    iconEmoji: "🏢",
-    title: "المشاريع والمتابعة",
-    color: "orange",
-    description: "تابع أداء استثماراتك وافهم مستويات المخاطرة",
-    illustration: SVG_PROJECTS,
-    items: [
-      {
-        q: "كيف أتابع مشروعاً أو شركة؟",
-        a: "افتح صفحة المشروع أو الشركة واضغط زر \"متابعة\". ستجد قائمة متابعتك في القائمة الرئيسية → \"المتابعة\"، وستتلقى إشعارات عند أي تحديث مهم في المشروع.",
-      },
-      {
-        q: "كيف أعرف مستوى مخاطرة المشروع؟",
-        a: "كل مشروع لديه تصنيف واضح: منخفض (أخضر) للمشاريع المستقرة، متوسط (أصفر) للمشاريع متوسطة الخطر، مرتفع (أحمر) للمشاريع الواعدة لكنها مخاطرة. تجد التصنيف في صفحة تفاصيل المشروع.",
-      },
-      {
-        q: "ما هي مستويات المستثمرين؟",
-        a: "ثلاثة مستويات: أساسي (حتى 10 مليون/شهر) للمستثمرين الجدد، متقدم (حتى 50 مليون/شهر)، محترف (حتى 250 مليون/شهر) لكبار المستثمرين. تُرقّى تلقائياً بناءً على نشاطك وتوثيقك.",
-      },
-    ],
-  },
-  {
-    id: "security",
-    icon: Shield,
-    iconEmoji: "🔒",
-    title: "الأمان والخصوصية",
-    color: "red",
-    description: "كيف نحمي بياناتك وأموالك بأعلى معايير الأمان",
-    illustration: SVG_SECURITY,
-    items: [
-      {
-        q: "هل بياناتي آمنة؟",
-        a: "نعم، نستخدم تشفير SSL لجميع البيانات. كلمات المرور مشفرة ومحمية. لا يمكن لأي موظف الاطلاع على رمز مرورك. نلتزم بأعلى معايير الخصوصية وفق التشريعات العراقية.",
-      },
-      {
-        q: "ماذا أفعل إذا نسيت كلمة المرور؟",
-        a: "اضغط \"نسيت كلمة المرور\" في صفحة الدخول، وأدخل رقم هاتفك المسجل لاستقبال رمز إعادة التعيين عبر SMS. اتبع التعليمات لإنشاء كلمة مرور جديدة قوية.",
-      },
-      {
-        q: "هل يمكن حذف حسابي؟",
-        a: "نعم، من الإعدادات → \"حذف الحساب\". يجب إتمام أو إلغاء جميع الصفقات الجارية قبل الحذف. بعض البيانات قد تُحفظ لأغراض قانونية وفق القانون العراقي.",
-      },
-    ],
-  },
-]
+// id/icon/emoji/color/illustration stay here; text resolved via t()
+// in-component (keys: s_<id>_title / _desc / _q{n} / _a{n}).
+const SECTION_META = [
+  { id: "start",    icon: Smartphone, iconEmoji: "🚀", color: "blue",   illustration: SVG_ONBOARDING },
+  { id: "kyc",      icon: Shield,     iconEmoji: "🪪", color: "yellow", illustration: SVG_KYC },
+  { id: "wallet",   icon: Wallet,     iconEmoji: "💼", color: "green",  illustration: SVG_WALLET },
+  { id: "market",   icon: ShoppingCart, iconEmoji: "📊", color: "purple", illustration: SVG_MARKET },
+  { id: "projects", icon: BarChart3,  iconEmoji: "🏢", color: "orange", illustration: SVG_PROJECTS },
+  { id: "security", icon: Shield,     iconEmoji: "🔒", color: "red",    illustration: SVG_SECURITY },
+] as const
 
 const FEATURES = [
-  { icon: Search, label: "بحث متقدم", color: "text-blue-400" },
-  { icon: ArrowLeftRight, label: "تبادل فوري", color: "text-green-400" },
-  { icon: Gavel, label: "مزادات نشطة", color: "text-yellow-400" },
-  { icon: FileText, label: "عقود شراكة", color: "text-purple-400" },
-  { icon: Bell, label: "إشعارات لحظية", color: "text-orange-400" },
-  { icon: Users, label: "مجتمع مستثمرين", color: "text-pink-400" },
-  { icon: Star, label: "تقييمات شفافة", color: "text-cyan-400" },
-  { icon: Shield, label: "حماية كاملة", color: "text-red-400" },
+  { icon: Search, labelKey: "feat1", color: "text-blue-400" },
+  { icon: ArrowLeftRight, labelKey: "feat2", color: "text-green-400" },
+  { icon: Gavel, labelKey: "feat3", color: "text-yellow-400" },
+  { icon: FileText, labelKey: "feat4", color: "text-purple-400" },
+  { icon: Bell, labelKey: "feat5", color: "text-orange-400" },
+  { icon: Users, labelKey: "feat6", color: "text-pink-400" },
+  { icon: Star, labelKey: "feat7", color: "text-cyan-400" },
+  { icon: Shield, labelKey: "feat8", color: "text-red-400" },
 ]
 
 const colorMap: Record<string, { bg: string; border: string; text: string }> = {
@@ -266,8 +137,18 @@ const colorMap: Record<string, { bg: string; border: string; text: string }> = {
 
 export default function AppGuidePage() {
   const router = useRouter()
+  const t = useTranslations("guides")
   const [openSection, setOpenSection] = useState<string | null>("start")
   const [openItem, setOpenItem] = useState<string | null>(null)
+  const SECTIONS = SECTION_META.map((m) => ({
+    ...m,
+    title: t(`s_${m.id}_title`),
+    description: t(`s_${m.id}_desc`),
+    items: [1, 2, 3].map((n) => ({
+      q: t(`s_${m.id}_q${n}`),
+      a: t(`s_${m.id}_a${n}`),
+    })),
+  }))
 
   return (
     <AppLayout>
@@ -275,8 +156,8 @@ export default function AppGuidePage() {
 <div className="relative z-10 px-3 lg:px-8 py-6 lg:py-12 max-w-3xl mx-auto">
 
           <PageHeader
-            title="دليل التطبيق"
-            subtitle="تعرّف على رايلوس وكيفية الاستفادة القصوى من ميزاته"
+            title={t("agTitle")}
+            subtitle={t("agSubtitle")}
           />
 
           {/* Hero banner */}
@@ -285,29 +166,29 @@ export default function AppGuidePage() {
               <BookOpen className="w-6 h-6 text-blue-400" strokeWidth={1.5} />
             </div>
             <div className="flex-1">
-              <div className="text-base font-bold text-white mb-1">مرحباً بك في رايلوس</div>
+              <div className="text-base font-bold text-white mb-1">{t("heroTitle")}</div>
               <div className="text-xs text-neutral-300 leading-relaxed mb-2">
-                هذا الدليل سيساعدك على فهم كل ميزات التطبيق بسرعة - من التسجيل حتى أول استثمار ناجح.
+                {t("heroDesc")}
               </div>
               <button
                 onClick={() => router.push("/support")}
                 className="text-xs text-blue-400 hover:text-blue-300 font-bold"
               >
-                لم تجد إجابتك؟ تواصل مع الدعم →
+                {t("heroCta")}
               </button>
             </div>
           </div>
 
           {/* Features grid */}
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-2xl p-5 mb-5">
-            <div className="text-sm font-bold text-white mb-3">⭐ ميزات رايلوس الرئيسية</div>
+            <div className="text-sm font-bold text-white mb-3">{t("featuresTitle")}</div>
             <div className="grid grid-cols-4 gap-2">
               {FEATURES.map((f, i) => {
                 const Icon = f.icon
                 return (
                   <div key={i} className="bg-white/[0.04] border border-white/[0.06] rounded-xl p-2.5 text-center">
                     <Icon className={cn("w-5 h-5 mx-auto mb-1.5", f.color)} strokeWidth={1.5} />
-                    <div className="text-[10px] text-neutral-400 leading-tight">{f.label}</div>
+                    <div className="text-[10px] text-neutral-400 leading-tight">{t(f.labelKey)}</div>
                   </div>
                 )
               })}
@@ -398,22 +279,22 @@ export default function AppGuidePage() {
 
           {/* CTA */}
           <div className="bg-gradient-to-br from-white/[0.06] to-transparent border border-white/[0.1] rounded-2xl p-5 text-center mt-6">
-            <div className="text-sm font-bold text-white mb-2">جاهز للبدء؟</div>
+            <div className="text-sm font-bold text-white mb-2">{t("ctaTitle")}</div>
             <div className="text-xs text-neutral-400 mb-4">
-              ابدأ رحلتك الاستثمارية الآن أو تواصل معنا لأي استفسار
+              {t("ctaDesc")}
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => router.push("/market")}
                 className="flex-1 bg-neutral-100 text-black py-3 rounded-xl text-xs font-bold hover:bg-neutral-200 transition-colors"
               >
-                استكشف السوق
+                {t("exploreMarket")}
               </button>
               <button
                 onClick={() => router.push("/support")}
                 className="flex-1 bg-white/[0.05] border border-white/[0.08] text-white py-3 rounded-xl text-xs font-bold hover:bg-white/[0.08] transition-colors"
               >
-                دعم فني
+                {t("techSupport")}
               </button>
             </div>
           </div>
