@@ -1,5 +1,6 @@
 import { ReactNode } from "react"
 import Link from "next/link"
+import { useTranslations } from "next-intl"
 import { GridBackground } from "./GridBackground"
 import { Logo } from "@/components/brand/Logo"
 
@@ -28,6 +29,7 @@ export function AuthLayout({
   subtitle,
   badge,
 }: AuthLayoutProps) {
+  const t = useTranslations("components")
   return (
     <div className="min-h-screen flex flex-col lg:flex-row" style={{ backgroundColor: "var(--bg-base)" }}>
       {/* Left side (Desktop only): Branding */}
@@ -48,27 +50,27 @@ export function AuthLayout({
             RAILOS PLATFORM
           </div>
           <h2 className="text-3xl font-medium tracking-tight mb-4 leading-tight text-white">
-            منصة استثمار ذكية للفرص الواقعية
+            {t("authHeroTitle")}
           </h2>
           <p className="text-sm text-neutral-400 leading-relaxed">
-            تداول الحصص في مشاريع حقيقية، اربح من الإحالات، وتابع استثماراتك لحظة بلحظة
+            {t("authHeroDesc")}
           </p>
         </div>
 
         <div className="relative z-10 grid grid-cols-3 gap-2">
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-lg p-2.5">
             <div className="text-base font-bold text-white font-mono">47+</div>
-            <div className="text-[9px] text-neutral-500">مشروع نشط</div>
+            <div className="text-[9px] text-neutral-500">{t("authStatProjects")}</div>
           </div>
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-lg p-2.5">
             <div className="text-base font-bold text-green-400 font-mono">
               18.4%
             </div>
-            <div className="text-[9px] text-neutral-500">متوسط العائد</div>
+            <div className="text-[9px] text-neutral-500">{t("authStatAvgReturn")}</div>
           </div>
           <div className="bg-white/[0.05] border border-white/[0.08] rounded-lg p-2.5">
             <div className="text-base font-bold text-white font-mono">12k+</div>
-            <div className="text-[9px] text-neutral-500">مستثمر</div>
+            <div className="text-[9px] text-neutral-500">{t("authStatInvestors")}</div>
           </div>
         </div>
       </div>
@@ -111,7 +113,7 @@ export function AuthLayout({
 
         <div className="relative z-10 p-6 text-center">
           <div className="text-[10px] text-neutral-600 font-mono tracking-wider">
-            RAILOS v2.0 · حماية بأحدث المعايير
+            RAILOS v2.0 · {t("authSecNote")}
           </div>
         </div>
       </div>

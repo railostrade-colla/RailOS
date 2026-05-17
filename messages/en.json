@@ -85,7 +85,8 @@
       "rights": "All rights reserved",
       "email": "Email",
       "phone": "Phone",
-      "workHours": "Working hours"
+      "workHours": "Working hours",
+      "workHoursValue": "8am - 10pm"
     },
     "aria": {
       "refreshApp": "Refresh app",
@@ -95,6 +96,17 @@
       "menu": "Main menu",
       "back": "Back"
     }
+  },
+  "components": {
+    "offline": "You're offline — showing the last saved data",
+    "authHeroTitle": "A smart investment platform for real opportunities",
+    "authHeroDesc": "Trade shares in real projects, earn from referrals, and track your investments moment by moment",
+    "authStatProjects": "Active projects",
+    "authStatAvgReturn": "Avg. return",
+    "authStatInvestors": "Investors",
+    "authSecNote": "Protected by the latest standards",
+    "close": "Close",
+    "back": "Back"
   },
   "auth": {
     "login": {

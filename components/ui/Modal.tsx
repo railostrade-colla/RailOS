@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { useTranslations } from "next-intl"
 import { X, AlertTriangle, CheckCircle } from "lucide-react"
 import { cn } from "@/lib/utils/cn"
 import type { ReactNode } from "react"
@@ -75,6 +76,7 @@ export function Modal({
   children,
   className,
 }: ModalProps) {
+  const t = useTranslations("components")
   // ESC key + body scroll lock
   useEffect(() => {
     if (!isOpen) return
@@ -128,7 +130,7 @@ export function Modal({
           {showCloseButton && (
             <button
               onClick={onClose}
-              aria-label="إغلاق"
+              aria-label={t("close")}
               className="text-neutral-500 hover:text-white transition-colors flex-shrink-0"
             >
               <X className="w-5 h-5" strokeWidth={2} />

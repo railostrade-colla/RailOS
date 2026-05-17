@@ -173,7 +173,7 @@ export function Footer({ compact = false }: { compact?: boolean }) {
           </div>
           <div className="text-[10px] text-neutral-500 mb-0.5">{t("footer.workHours")}</div>
           <div className="text-[10px] lg:text-[11px] font-bold text-white leading-tight">
-            8 ص - 10 م
+            {t("footer.workHoursValue")}
           </div>
         </div>
       </div>

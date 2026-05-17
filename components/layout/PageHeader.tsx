@@ -2,6 +2,7 @@
 
 import { ArrowRight } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { ReactNode } from "react"
 
 interface PageHeaderProps {
@@ -28,6 +29,7 @@ export function PageHeader({
   rightAction,
 }: PageHeaderProps) {
   const router = useRouter()
+  const t = useTranslations("components")
   const finalSubtitle = subtitle || description
 
   const handleBack = () => {
@@ -53,7 +55,7 @@ export function PageHeader({
               <button
                 onClick={handleBack}
                 className="w-9 h-9 rounded-full bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.08] flex items-center justify-center transition-colors flex-shrink-0"
-                aria-label="رجوع"
+                aria-label={t("back")}
               >
                 <ArrowRight className="w-4 h-4 text-neutral-300" strokeWidth={1.5} />
               </button>

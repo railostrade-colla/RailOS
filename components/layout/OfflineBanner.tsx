@@ -1,6 +1,7 @@
 "use client"
 
 import { WifiOff } from "lucide-react"
+import { useTranslations } from "next-intl"
 import { useOnlineStatus } from "@/hooks/useOnlineStatus"
 
 /**
@@ -13,6 +14,7 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus"
  */
 export function OfflineBanner() {
   const { isOnline } = useOnlineStatus()
+  const t = useTranslations("components")
 
   if (isOnline) return null
 
@@ -27,7 +29,7 @@ export function OfflineBanner() {
           <WifiOff className="w-4 h-4 animate-pulse flex-shrink-0" strokeWidth={2.5} />
           <span className="flex items-center gap-1.5">
             <span>⚠️</span>
-            <span>غير متّصل بالإنترنت — يتم عرض البيانات المحفوظة الأخيرة</span>
+            <span>{t("offline")}</span>
           </span>
         </div>
       </div>
