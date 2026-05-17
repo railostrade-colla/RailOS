@@ -2,6 +2,7 @@
 
 import { memo, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Heart, Check, ChevronLeft, Star, TrendingUp } from "lucide-react"
 import { showSuccess } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
@@ -29,6 +30,13 @@ const riskColor = (r: string) => {
   return { bg: "bg-red-400/[0.06]", border: "border-red-400/15", text: "text-red-400" }
 }
 
+// risk_level is DB-canonical Arabic; resolve display label via i18n key.
+const RISK_KEY: Record<string, string> = {
+  "منخفض": "riskLow",
+  "متوسط": "riskMedium",
+  "مرتفع": "riskHigh",
+}
+
 export interface CompanyCardData {
   id: string
   name: string
@@ -54,6 +62,7 @@ interface CompanyCardProps {
 // grid usage, stable `company` reference from cached arrays).
 function CompanyCardImpl({ company, variant = "full" }: CompanyCardProps) {
   const router = useRouter()
+  const t = useTranslations("cards")
   const [following, setFollowing] = useState(false)
 
   const c = sectorColor(company.sector)
@@ -61,15 +70,15 @@ function CompanyCardImpl({ company, variant = "full" }: CompanyCardProps) {
 
   const formatPrice = (p: number) => {
     const trim = (s: string) => (s.endsWith(".0") ? s.slice(0, -2) : s)
-    if (p >= 1_000_000) return `${trim((p / 1_000_000).toFixed(p % 1_000_000 === 0 ? 0 : 1))} مليون`
-    if (p >= 1_000) return `${(p / 1_000).toFixed(0)} ألف`
+    if (p >= 1_000_000) return `${trim((p / 1_000_000).toFixed(p % 1_000_000 === 0 ? 0 : 1))} ${t("millionSuffix")}`
+    if (p >= 1_000) return `${(p / 1_000).toFixed(0)} ${t("thousandSuffix")}`
     return p.toLocaleString("en-US")
   }
 
   const handleFollow = (e: React.MouseEvent) => {
     e.stopPropagation()
     setFollowing(!following)
-    showSuccess(following ? "تم إلغاء المتابعة" : "تمت المتابعة ❤️")
+    showSuccess(following ? t("followRemoved") : t("followAdded"))
   }
 
   const handleViewCompany = () => {
@@ -98,12 +107,12 @@ function CompanyCardImpl({ company, variant = "full" }: CompanyCardProps) {
               <span className="text-sm font-bold text-white truncate">{company.name}</span>
               {company.is_new && (
                 <span className="bg-green-400/[0.12] border border-green-400/30 text-green-400 text-[8px] font-bold px-1.5 py-0.5 rounded font-mono flex-shrink-0">
-                  جديد
+                  {t("new")}
                 </span>
               )}
             </div>
             <div className="text-[10px] text-neutral-500 truncate">
-              {company.sector} · {company.city} · انضمت قبل {company.joined_days_ago} أيام
+              {t("companyMeta", { sector: company.sector, city: company.city, days: company.joined_days_ago })}
             </div>
           </div>
         </div>
@@ -126,20 +135,20 @@ function CompanyCardImpl({ company, variant = "full" }: CompanyCardProps) {
       {/* Stats grid */}
       <div className="grid grid-cols-4 gap-1.5 mb-3">
         <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2 text-center">
-          <div className="text-[9px] text-neutral-500 mb-1">سعر الحصة</div>
+          <div className="text-[9px] text-neutral-500 mb-1">{t("sharePrice")}</div>
           <div className="text-xs font-bold text-yellow-400 font-mono">{formatPrice(company.share_price)}</div>
         </div>
         <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2 text-center">
-          <div className="text-[9px] text-neutral-500 mb-1">المشاريع</div>
+          <div className="text-[9px] text-neutral-500 mb-1">{t("projects")}</div>
           <div className="text-xs font-bold text-white font-mono">{company.projects_count}</div>
         </div>
         <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2 text-center">
-          <div className="text-[9px] text-neutral-500 mb-1">المساهمون</div>
+          <div className="text-[9px] text-neutral-500 mb-1">{t("shareholders")}</div>
           <div className="text-xs font-bold text-white font-mono">{company.shareholders_count}</div>
         </div>
         <div className={cn("rounded-lg p-2 text-center border", r.bg, r.border)}>
-          <div className={cn("text-[9px] mb-1", r.text, "opacity-70")}>المخاطر</div>
-          <div className={cn("text-[11px] font-bold", r.text)}>{company.risk_level}</div>
+          <div className={cn("text-[9px] mb-1", r.text, "opacity-70")}>{t("risk")}</div>
+          <div className={cn("text-[11px] font-bold", r.text)}>{t(RISK_KEY[company.risk_level] ?? "riskMedium")}</div>
         </div>
       </div>
 
@@ -149,7 +158,7 @@ function CompanyCardImpl({ company, variant = "full" }: CompanyCardProps) {
           {company.is_verified && (
             <span className="bg-white/[0.04] border border-white/[0.08] text-neutral-300 text-[9px] px-2 py-0.5 rounded flex items-center gap-1">
               <Check className="w-2 h-2 text-green-400" strokeWidth={3} />
-              موثقة
+              {t("verified")}
             </span>
           )}
           <span className="bg-white/[0.04] border border-white/[0.08] text-neutral-300 text-[9px] px-2 py-0.5 rounded flex items-center gap-1">
@@ -158,7 +167,7 @@ function CompanyCardImpl({ company, variant = "full" }: CompanyCardProps) {
           </span>
           {company.is_trending && (
             <span className="bg-purple-400/[0.06] border border-purple-400/20 text-purple-400 text-[9px] px-2 py-0.5 rounded">
-              🔥 رائجة
+              {t("hot")}
             </span>
           )}
         </div>
@@ -173,13 +182,13 @@ function CompanyCardImpl({ company, variant = "full" }: CompanyCardProps) {
           }}
           className="flex-1 bg-white/[0.05] border border-white/[0.1] text-white py-2 rounded-lg text-[11px] font-bold hover:bg-white/[0.08] transition-colors"
         >
-          عرض الشركة
+          {t("viewCompany")}
         </button>
         <button
           onClick={handleViewProjects}
           className="flex-1 bg-neutral-100 text-black py-2 rounded-lg text-[11px] font-bold hover:bg-neutral-200 transition-colors flex items-center justify-center gap-1"
         >
-          عرض المشاريع
+          {t("viewProjects")}
           <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
         </button>
       </div>

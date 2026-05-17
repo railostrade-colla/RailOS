@@ -2,6 +2,7 @@
 
 import { memo, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { Heart, ChevronLeft, TrendingUp, Clock, Users, Calendar } from "lucide-react"
 import { showSuccess } from "@/lib/utils/toast"
 import { getMarketStateByProject } from "@/lib/mock-data/market"
@@ -28,6 +29,13 @@ const riskColor = (r: string) => {
   if (r === "منخفض") return { bg: "bg-green-400/[0.06]", border: "border-green-400/15", text: "text-green-400" }
   if (r === "متوسط") return { bg: "bg-yellow-400/[0.06]", border: "border-yellow-400/15", text: "text-yellow-400" }
   return { bg: "bg-red-400/[0.06]", border: "border-red-400/15", text: "text-red-400" }
+}
+
+// risk_level is DB-canonical Arabic; resolve display label via i18n key.
+const RISK_KEY: Record<string, string> = {
+  "منخفض": "riskLow",
+  "متوسط": "riskMedium",
+  "مرتفع": "riskHigh",
 }
 
 export interface ProjectCardData {
@@ -85,6 +93,7 @@ interface ProjectCardProps {
 // changed — big win on large grids.
 function ProjectCardImpl({ project, variant = "full" }: ProjectCardProps) {
   const router = useRouter()
+  const t = useTranslations("cards")
   const [following, setFollowing] = useState(false)
 
   const c = sectorColor(project.sector)
@@ -124,7 +133,7 @@ function ProjectCardImpl({ project, variant = "full" }: ProjectCardProps) {
   const handleFollow = (e: React.MouseEvent) => {
     e.stopPropagation()
     setFollowing(!following)
-    showSuccess(following ? "تم إلغاء المتابعة" : "تمت المتابعة ❤️")
+    showSuccess(following ? t("followRemoved") : t("followAdded"))
   }
 
   const handleDetails = (e: React.MouseEvent) => {
@@ -165,19 +174,19 @@ function ProjectCardImpl({ project, variant = "full" }: ProjectCardProps) {
             {showFrozen && (
               <div className="flex items-center gap-1 bg-blue-400/[0.12] border border-blue-400/30 px-2 py-0.5 rounded-full">
                 <span className="text-[10px]">⏸️</span>
-                <span className="text-[9px] font-bold text-blue-400">مجمد</span>
+                <span className="text-[9px] font-bold text-blue-400">{t("frozen")}</span>
               </div>
             )}
             {showRising && !showFrozen && (
               <div className="flex items-center gap-1 bg-orange-400/[0.12] border border-orange-400/30 px-2 py-0.5 rounded-full">
                 <span className="text-[10px]">🔥</span>
-                <span className="text-[9px] font-bold text-orange-400">صاعد</span>
+                <span className="text-[9px] font-bold text-orange-400">{t("rising")}</span>
               </div>
             )}
             {isHotProject && !showFrozen && (
               <div className="flex items-center gap-1 bg-red-400/[0.12] border border-red-400/30 px-2 py-0.5 rounded-full">
                 <span className="text-[10px]">🔥</span>
-                <span className="text-[9px] font-bold text-red-400">رائج</span>
+                <span className="text-[9px] font-bold text-red-400">{t("trending")}</span>
               </div>
             )}
           </div>
@@ -213,7 +222,7 @@ function ProjectCardImpl({ project, variant = "full" }: ProjectCardProps) {
               <span className="text-sm font-bold text-white truncate">{project.name}</span>
               {project.is_new && (
                 <span className="bg-green-400/[0.12] border border-green-400/30 text-green-400 text-[8px] font-bold px-1.5 py-0.5 rounded font-mono flex-shrink-0">
-                  جديد
+                  {t("new")}
                 </span>
               )}
             </div>
@@ -226,7 +235,7 @@ function ProjectCardImpl({ project, variant = "full" }: ProjectCardProps) {
         {project.status === "open" && (
           <div className="flex items-center gap-1 bg-green-400/[0.06] border border-green-400/15 px-2 py-1 rounded-full flex-shrink-0">
             <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-[9px] text-green-400 font-bold">مفتوح</span>
+            <span className="text-[9px] text-green-400 font-bold">{t("open")}</span>
           </div>
         )}
       </div>
@@ -248,16 +257,16 @@ function ProjectCardImpl({ project, variant = "full" }: ProjectCardProps) {
                   : "bg-red-400/[0.08] border-red-400/20 text-red-400"
               )}
             >
-              {project.quality === "high" ? "🟢 جودة عالية"
-                : project.quality === "medium" ? "🟡 جودة متوسطة" : "🔴 جودة منخفضة"}
+              {project.quality === "high" ? t("qualityHigh")
+                : project.quality === "medium" ? t("qualityMedium") : t("qualityLow")}
             </span>
           )}
           {project.distribution_type && (
             <span className="bg-white/[0.04] border border-white/[0.08] text-neutral-300 px-2 py-0.5 rounded-md text-[10px]">
-              توزيع{" "}
-              {project.distribution_type === "monthly" ? "شهري"
-                : project.distribution_type === "quarterly" ? "ربعي"
-                : project.distribution_type === "semi_annual" ? "نصف سنوي" : "سنوي"}
+              {t("distributionLabel")}{" "}
+              {project.distribution_type === "monthly" ? t("distMonthly")
+                : project.distribution_type === "quarterly" ? t("distQuarterly")
+                : project.distribution_type === "semi_annual" ? t("distSemiAnnual") : t("distAnnual")}
             </span>
           )}
         </div>
@@ -266,26 +275,26 @@ function ProjectCardImpl({ project, variant = "full" }: ProjectCardProps) {
       {/* Price + Returns */}
       <div className="flex items-end justify-between mb-3 pb-3 border-b border-white/[0.05]">
         <div>
-          <div className="text-[10px] text-neutral-500 mb-0.5">سعر الحصة</div>
+          <div className="text-[10px] text-neutral-500 mb-0.5">{t("sharePrice")}</div>
           <div className="text-xl font-bold text-white font-mono leading-none">
             {project.share_price.toLocaleString("en-US")}
           </div>
           <div className="text-[9px] text-neutral-500 font-mono mt-0.5">IQD</div>
         </div>
         <div className="text-left">
-          <div className="text-[10px] text-green-400/70 mb-0.5">العائد المتوقع</div>
+          <div className="text-[10px] text-green-400/70 mb-0.5">{t("expectedReturn")}</div>
           <div className="text-base font-bold text-green-400 font-mono flex items-baseline gap-1 justify-end">
             <span>{project.expected_return_min}-{project.expected_return_max}%</span>
             <TrendingUp className="w-2.5 h-2.5 mb-0.5" strokeWidth={2.5} />
           </div>
-          <div className="text-[9px] text-green-400/50 mt-0.5">سنوياً</div>
+          <div className="text-[9px] text-green-400/50 mt-0.5">{t("annually")}</div>
         </div>
       </div>
 
       {/* Funding progress */}
       <div className="mb-3">
         <div className="flex justify-between mb-1.5">
-          <span className="text-[10px] text-neutral-500">نسبة التمويل</span>
+          <span className="text-[10px] text-neutral-500">{t("fundingRatio")}</span>
           <span className="text-[11px] text-white font-bold font-mono">{fundedPercent}%</span>
         </div>
         <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden mb-1.5">
@@ -297,7 +306,7 @@ function ProjectCardImpl({ project, variant = "full" }: ProjectCardProps) {
         {/* Phase 11.06 — sub-line now shows sold/offering, not sold/total */}
         <div className="flex justify-between text-[9px] text-neutral-600 font-mono">
           <span>{fundedShares.toLocaleString("en-US")} / {offeringTotal.toLocaleString("en-US")} SHR</span>
-          <span>{project.available_shares.toLocaleString("en-US")} متبقية</span>
+          <span>{project.available_shares.toLocaleString("en-US")} {t("remaining")}</span>
         </div>
       </div>
 
@@ -313,22 +322,22 @@ function ProjectCardImpl({ project, variant = "full" }: ProjectCardProps) {
         return (
           <div className={cn("grid gap-1.5 mb-3", cols)}>
             <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2 text-center">
-              <div className="text-[9px] text-neutral-500 mb-1">المستثمرون</div>
+              <div className="text-[9px] text-neutral-500 mb-1">{t("investors")}</div>
               <div className="text-xs font-bold text-white font-mono">{project.investors_count}</div>
             </div>
             {showDuration && (
               <div className="bg-white/[0.03] border border-white/[0.05] rounded-lg p-2 text-center">
-                <div className="text-[9px] text-neutral-500 mb-1">المدة</div>
-                <div className="text-xs font-bold text-white font-mono">{project.duration_months} ش</div>
+                <div className="text-[9px] text-neutral-500 mb-1">{t("duration")}</div>
+                <div className="text-xs font-bold text-white font-mono">{t("durationMonths", { n: project.duration_months })}</div>
               </div>
             )}
             <div className={cn("rounded-lg p-2 text-center border", r.bg, r.border)}>
-              <div className={cn("text-[9px] mb-1 opacity-70", r.text)}>المخاطر</div>
-              <div className={cn("text-[11px] font-bold", r.text)}>{project.risk_level}</div>
+              <div className={cn("text-[9px] mb-1 opacity-70", r.text)}>{t("risk")}</div>
+              <div className={cn("text-[11px] font-bold", r.text)}>{t(RISK_KEY[project.risk_level] ?? "riskMedium")}</div>
             </div>
             <div className="bg-blue-400/[0.06] border border-blue-400/15 rounded-lg p-2 text-center">
-              <div className="text-[9px] text-blue-400/70 mb-1">يغلق خلال</div>
-              <div className="text-[11px] text-blue-400 font-bold font-mono">{project.closes_in_days} يوم</div>
+              <div className="text-[9px] text-blue-400/70 mb-1">{t("closesIn")}</div>
+              <div className="text-[11px] text-blue-400 font-bold font-mono">{t("daysValue", { n: project.closes_in_days })}</div>
             </div>
           </div>
         )
@@ -354,13 +363,13 @@ function ProjectCardImpl({ project, variant = "full" }: ProjectCardProps) {
           onClick={handleDetails}
           className="flex-1 bg-white/[0.05] border border-white/[0.1] text-white py-2 rounded-lg text-[11px] font-bold hover:bg-white/[0.08] transition-colors"
         >
-          التفاصيل
+          {t("details")}
         </button>
         <button
           onClick={handleInvest}
           className="flex-[2] bg-neutral-100 text-black py-2 rounded-lg text-[11px] font-bold hover:bg-neutral-200 transition-colors flex items-center justify-center gap-1"
         >
-          استثمر الآن
+          {t("investNow")}
           <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
         </button>
       </div>
