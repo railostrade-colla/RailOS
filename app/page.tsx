@@ -36,7 +36,11 @@ export default function HomePage() {
     <main className="relative min-h-screen flex items-center justify-center px-6 py-10 overflow-hidden">
 <div className="relative z-10 w-full max-w-sm flex flex-col items-center text-center animate-[fadeIn_0.8s_ease-out]">
 
-        {/* Logo */}
+        {/* Logo — dual mark: logo.png in Dark, logo1.png in Light.
+            The single white logo.png was invisible on the white
+            light-mode surface. Render both and let the existing
+            [data-theme="light"] .logo-img-* rules in globals.css
+            toggle which one shows (same pattern as <Logo/>). */}
         <div className="w-32 h-32 lg:w-40 lg:h-40 overflow-hidden flex items-center justify-center mb-6 animate-[bounceIn_1s_ease-out]">
           <Image
             src="/logo.png"
@@ -44,7 +48,15 @@ export default function HomePage() {
             width={160}
             height={160}
             priority
-            className="w-full h-full object-contain"
+            className="logo-img-dark w-full h-full object-contain"
+          />
+          <Image
+            src="/logo1.png"
+            alt={APP_NAME}
+            width={160}
+            height={160}
+            priority
+            className="logo-img-light w-full h-full object-contain"
           />
         </div>
 
