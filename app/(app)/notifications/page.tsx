@@ -152,6 +152,8 @@ export default function NotificationsPage() {
               {unreadCount > 0 && (
                 <button
                   onClick={handleMarkAllRead}
+                  title={t("markAllReadTip")}
+                  aria-label={t("markAllReadTip")}
                   className="text-[11px] text-neutral-400 hover:text-white transition-colors flex items-center gap-1"
                 >
                   <CheckCheck className="w-3 h-3" strokeWidth={1.75} />
@@ -160,6 +162,8 @@ export default function NotificationsPage() {
               )}
               <button
                 onClick={() => setShowClearAll(true)}
+                title={t("clearAllTip")}
+                aria-label={t("clearAllTip")}
                 className="text-[11px] text-red-400 hover:text-red-300 transition-colors flex items-center gap-1"
               >
                 <Trash2 className="w-3 h-3" strokeWidth={1.75} />

@@ -2372,6 +2372,8 @@
     "clearFailed": "Couldn't clear notifications — try again",
     "markAllRead": "Mark all as read",
     "clearAll": "Clear all",
+    "markAllReadTip": "Mark all notifications as read",
+    "clearAllTip": "Delete all notifications",
     "loading": "Loading...",
     "noNotifs": "No notifications yet",
     "noInCategory": "No notifications in this category",
