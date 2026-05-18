@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { FileText, Download, Share2, ChevronLeft } from "lucide-react"
 import { Card, Badge } from "@/components/ui"
 import { INVOICE_TYPE_META, type Invoice } from "@/lib/data/invoices"
@@ -23,6 +24,7 @@ interface Props {
  */
 export function InvoiceCard({ invoice, variant = "banner" }: Props) {
   const router = useRouter()
+  const t = useTranslations("extrasUI")
   const meta = INVOICE_TYPE_META[invoice.type]
 
   if (variant === "compact") {
@@ -42,7 +44,7 @@ export function InvoiceCard({ invoice, variant = "banner" }: Props) {
             {invoice.project_name}
           </div>
           <div className="text-xs font-mono text-yellow-400 font-bold flex-shrink-0">
-            {fmtNum(invoice.total_amount)} د.ع
+            {fmtNum(invoice.total_amount)} {t("iqd")}
           </div>
         </div>
         <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/[0.04]">
@@ -50,7 +52,7 @@ export function InvoiceCard({ invoice, variant = "banner" }: Props) {
             {new Date(invoice.completed_at).toLocaleDateString("en-GB")}
           </span>
           <span className="text-[10px] text-blue-400 font-bold flex items-center gap-1">
-            عرض الفاتورة
+            {t("icViewInvoice")}
             <ChevronLeft className="w-3 h-3" strokeWidth={2.5} />
           </span>
         </div>
@@ -67,11 +69,11 @@ export function InvoiceCard({ invoice, variant = "banner" }: Props) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="text-sm font-bold text-white">📄 الفاتورة الرسمية</span>
-            <Badge color="green">عقد ساري</Badge>
+            <span className="text-sm font-bold text-white">{t("icOfficialInvoice")}</span>
+            <Badge color="green">{t("icActiveContract")}</Badge>
           </div>
           <div className="text-[11px] text-neutral-300 leading-relaxed mb-2">
-            هذه الفاتورة عقد رسمي يثبت ملكيتك للحصص. احتفظ بنسخة منها لسجلاتك.
+            {t("icInvoiceDesc")}
           </div>
           <div className="text-[10px] font-mono text-blue-400 mb-2" dir="ltr">
             {invoice.id}
@@ -81,12 +83,12 @@ export function InvoiceCard({ invoice, variant = "banner" }: Props) {
 
       {/* Quick details */}
       <div className="grid grid-cols-2 gap-2 mb-3">
-        <DetailItem label="المشروع" value={invoice.project_name} />
-        <DetailItem label="الكمية" value={`${fmtNum(invoice.shares_amount)} حصة`} mono />
-        <DetailItem label="السعر للحصة" value={`${fmtNum(invoice.price_per_share)} د.ع`} mono />
+        <DetailItem label={t("icProject")} value={invoice.project_name} />
+        <DetailItem label={t("icQuantity")} value={`${fmtNum(invoice.shares_amount)} ${t("icSharesUnit")}`} mono />
+        <DetailItem label={t("icPricePerShare")} value={`${fmtNum(invoice.price_per_share)} ${t("iqd")}`} mono />
         <DetailItem
-          label="الإجمالي"
-          value={`${fmtNum(invoice.total_amount)} د.ع`}
+          label={t("icTotal")}
+          value={`${fmtNum(invoice.total_amount)} ${t("iqd")}`}
           mono
           highlight
         />
@@ -95,11 +97,11 @@ export function InvoiceCard({ invoice, variant = "banner" }: Props) {
       {/* Parties */}
       <div className="bg-white/[0.04] border border-white/[0.06] rounded-lg p-2.5 mb-3 text-[11px]">
         <div className="flex justify-between gap-2 mb-1">
-          <span className="text-neutral-500">من</span>
+          <span className="text-neutral-500">{t("icFrom")}</span>
           <span className="text-white font-bold truncate">{invoice.from.name}</span>
         </div>
         <div className="flex justify-between gap-2">
-          <span className="text-neutral-500">إلى</span>
+          <span className="text-neutral-500">{t("icTo")}</span>
           <span className="text-white font-bold truncate">{invoice.to.name}</span>
         </div>
       </div>
@@ -111,21 +113,21 @@ export function InvoiceCard({ invoice, variant = "banner" }: Props) {
           className="bg-neutral-100 hover:bg-neutral-200 text-black py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
         >
           <FileText className="w-3.5 h-3.5" strokeWidth={2.5} />
-          عرض كاملة
+          {t("icViewFull")}
         </button>
         <button
           onClick={() => router.push(`/invoices/${invoice.id}?print=1`)}
           className="bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] text-white py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
         >
           <Download className="w-3.5 h-3.5" strokeWidth={2.5} />
-          تنزيل
+          {t("icDownload")}
         </button>
         <button
           onClick={() => router.push(`/invoices/${invoice.id}?share=1`)}
           className="bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] text-white py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
         >
           <Share2 className="w-3.5 h-3.5" strokeWidth={2.5} />
-          مشاركة
+          {t("icShare")}
         </button>
       </div>
     </Card>

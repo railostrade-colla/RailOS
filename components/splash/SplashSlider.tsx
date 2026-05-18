@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslations } from "next-intl"
 import { ArrowRight, ChevronLeft } from "lucide-react"
 import { GridBackground } from "@/components/layout/GridBackground"
 import {
@@ -13,8 +14,10 @@ import {
 import { cn } from "@/lib/utils/cn"
 
 interface KPI {
-  label: string
+  labelKey: string
   value: string
+  /** When set, the value itself is localized (Arabic text values). */
+  valueKey?: string
   trend?: string
 }
 
@@ -22,8 +25,8 @@ interface Slide {
   id: number
   badge: string
   badgeColor: string
-  title: string
-  description: string
+  titleKey: string
+  descKey: string
   Illustration: typeof InvestmentIllustration
   kpis: KPI[]
 }
@@ -33,58 +36,59 @@ const slides: Slide[] = [
     id: 1,
     badge: "AI-POWERED INVESTMENT",
     badgeColor: "border-green-400/30 text-green-400 bg-green-400/[0.06]",
-    title: "ابدأ استثمارك بثقة مع رايلوس",
-    description: "منصة ذكية لإدارة وامتلاك حصص في مشاريع واقعية، بعيدًا عن المخاطر وتقلبات الأسواق",
+    titleKey: "ssSlide1Title",
+    descKey: "ssSlide1Desc",
     Illustration: InvestmentIllustration,
     kpis: [
-      { label: "مشروع نشط", value: "47+" },
-      { label: "متوسط العائد", value: "18.4%", trend: "+2.3%" },
-      { label: "مستثمر", value: "12k+" },
+      { labelKey: "ssSlide1Kpi1", value: "47+" },
+      { labelKey: "ssSlide1Kpi2", value: "18.4%", trend: "+2.3%" },
+      { labelKey: "ssSlide1Kpi3", value: "12k+" },
     ],
   },
   {
     id: 2,
     badge: "LIVE MARKET",
     badgeColor: "border-blue-400/30 text-blue-400 bg-blue-400/[0.06]",
-    title: "تداول حي ولحظي",
-    description: "بيع واشترِ الحصص في سوق مفتوح وشفاف بين المستثمرين على مدار الساعة",
+    titleKey: "ssSlide2Title",
+    descKey: "ssSlide2Desc",
     Illustration: TradingIllustration,
     kpis: [
-      { label: "صفقة اليوم", value: "1,247" },
-      { label: "حجم التداول", value: "2.4M" },
-      { label: "أدنى سعر", value: "85k" },
+      { labelKey: "ssSlide2Kpi1", value: "1,247" },
+      { labelKey: "ssSlide2Kpi2", value: "2.4M" },
+      { labelKey: "ssSlide2Kpi3", value: "85k" },
     ],
   },
   {
     id: 3,
     badge: "AMBASSADOR PROGRAM",
     badgeColor: "border-purple-400/30 text-purple-400 bg-purple-400/[0.06]",
-    title: "كن سفيراً واكسب حصصاً",
-    description: "ادعُ أصدقاءك واكسب حصصاً مجانية من المشاريع - مكافآت بالأسهم على كل إحالة ناجحة",
+    titleKey: "ssSlide3Title",
+    descKey: "ssSlide3Desc",
     Illustration: AmbassadorIllustration,
     kpis: [
-      { label: "نسبة المكافأة", value: "حتى 2%" },
-      { label: "صلاحية الرابط", value: "30 يوم" },
-      { label: "عدد الدعوات", value: "∞" },
+      { labelKey: "ssSlide3Kpi1", value: "", valueKey: "ssSlide3Kpi1Val" },
+      { labelKey: "ssSlide3Kpi2", value: "", valueKey: "ssSlide3Kpi2Val" },
+      { labelKey: "ssSlide3Kpi3", value: "∞" },
     ],
   },
   {
     id: 4,
     badge: "REAL-TIME ANALYTICS",
     badgeColor: "border-yellow-400/30 text-yellow-400 bg-yellow-400/[0.06]",
-    title: "تابع أرباحك لحظة بلحظة",
-    description: "تقارير وإحصائيات محدثة عن أداء مشاريعك مع رسوم بيانية تفاعلية",
+    titleKey: "ssSlide4Title",
+    descKey: "ssSlide4Desc",
     Illustration: AnalyticsIllustration,
     kpis: [
-      { label: "محفظتك", value: "2.4M" },
-      { label: "العائد", value: "+18.4%", trend: "" },
-      { label: "أسهمك", value: "247" },
+      { labelKey: "ssSlide4Kpi1", value: "2.4M" },
+      { labelKey: "ssSlide4Kpi2", value: "+18.4%", trend: "" },
+      { labelKey: "ssSlide4Kpi3", value: "247" },
     ],
   },
 ]
 
 export function SplashSlider() {
   const router = useRouter()
+  const t = useTranslations("extrasUI")
   const [current, setCurrent] = useState(0)
   const touchStartX = useRef(0)
   const isDragging = useRef(false)
@@ -137,7 +141,7 @@ export function SplashSlider() {
           onClick={skip}
           className="absolute top-6 left-6 lg:top-8 lg:left-8 z-20 text-xs text-neutral-500 hover:text-white transition-colors"
         >
-          تخطي
+          {t("ssSkip")}
         </button>
       )}
 
@@ -196,13 +200,13 @@ export function SplashSlider() {
           {/* Title */}
           <h1 className="text-2xl lg:text-4xl font-medium tracking-tight text-center mb-4 leading-tight">
             <span className="bg-gradient-to-b from-white to-neutral-500 bg-clip-text text-transparent">
-              {slide.title}
+              {t(slide.titleKey)}
             </span>
           </h1>
 
           {/* Description */}
           <p className="text-sm lg:text-base text-neutral-400 text-center mb-8 max-w-xl mx-auto leading-relaxed">
-            {slide.description}
+            {t(slide.descKey)}
           </p>
 
           {/* KPIs */}
@@ -212,9 +216,9 @@ export function SplashSlider() {
                 key={i}
                 className="bg-white/[0.05] border border-white/[0.08] rounded-xl p-3 lg:p-4 text-center"
               >
-                <div className="text-[10px] text-neutral-500 mb-1">{kpi.label}</div>
+                <div className="text-[10px] text-neutral-500 mb-1">{t(kpi.labelKey)}</div>
                 <div className="text-base lg:text-xl font-bold text-white font-mono">
-                  {kpi.value}
+                  {kpi.valueKey ? t(kpi.valueKey) : kpi.value}
                 </div>
                 {kpi.trend && (
                   <div className="text-[9px] text-green-400 font-mono mt-1">{kpi.trend}</div>
@@ -235,7 +239,7 @@ export function SplashSlider() {
             onClick={goNext}
             className="flex items-center gap-2 bg-white text-black hover:bg-neutral-200 px-5 py-2.5 rounded-full font-medium text-sm transition-colors"
           >
-            <span>{isLast ? "ابدأ الآن" : "التالي"}</span>
+            <span>{isLast ? t("ssStartNow") : t("ssNext")}</span>
             <ChevronLeft className="w-4 h-4" strokeWidth={2} />
           </button>
 
@@ -251,7 +255,7 @@ export function SplashSlider() {
                     ? "w-8 bg-white"
                     : "w-1.5 bg-white/30 hover:bg-white/50"
                 )}
-                aria-label={`الذهاب للسلايد ${i + 1}`}
+                aria-label={t("ssGoToSlide", { n: i + 1 })}
               />
             ))}
           </div>
@@ -266,7 +270,7 @@ export function SplashSlider() {
                 ? "border-white/[0.04] text-white/20 cursor-not-allowed"
                 : "border-white/[0.08] text-white hover:bg-white/[0.05]"
             )}
-            aria-label="السابق"
+            aria-label={t("ssPrev")}
           >
             <ArrowRight className="w-4 h-4" strokeWidth={1.5} />
           </button>

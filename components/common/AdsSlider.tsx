@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useTranslations } from "next-intl"
 import { cn } from "@/lib/utils/cn"
 
 interface Ad {
@@ -29,6 +30,7 @@ interface AdsSliderProps {
 }
 
 export function AdsSlider({ ads, onAdClick, autoPlayInterval = 4000 }: AdsSliderProps) {
+  const t = useTranslations("extrasUI")
   const [current, setCurrent] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const touchStartX = useRef(0)
@@ -95,7 +97,7 @@ export function AdsSlider({ ads, onAdClick, autoPlayInterval = 4000 }: AdsSlider
               )}
             >
               <div>
-                <div className="text-[11px] text-white/45 mb-1">{ad.icon || "🎯"} إعلان</div>
+                <div className="text-[11px] text-white/45 mb-1">{ad.icon || "🎯"} {t("adsAd")}</div>
                 {ad.subtitle && <div className="text-[10px] text-white/55 mb-2">{ad.subtitle}</div>}
                 {ad.title && <div className="text-base lg:text-lg font-bold text-white mb-1">{ad.title}</div>}
                 {ad.description && <div className="text-[12px] text-white/70 leading-relaxed">{ad.description}</div>}
@@ -125,7 +127,7 @@ export function AdsSlider({ ads, onAdClick, autoPlayInterval = 4000 }: AdsSlider
                 "h-1.5 rounded-full transition-all",
                 idx === current ? "w-6 bg-white" : "w-1.5 bg-white/30 hover:bg-white/50"
               )}
-              aria-label={`الإعلان ${idx + 1}`}
+              aria-label={t("adsAriaLabel", { n: idx + 1 })}
             />
           ))}
         </div>

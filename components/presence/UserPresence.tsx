@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 import {
   getUserPresence,
   formatPresence,
@@ -89,6 +90,7 @@ export function UserPresenceDot({
   className?: string
 }) {
   const isOnline = useIsOnline(userId)
+  const t = useTranslations("extrasUI")
   const sizes = {
     xs: "w-1.5 h-1.5",
     sm: "w-2 h-2",
@@ -96,14 +98,14 @@ export function UserPresenceDot({
   }
   return (
     <span
-      title={isOnline ? "متّصل الآن" : "غير متصل"}
+      title={isOnline ? t("upOnline") : t("upOffline")}
       className={cn(
         "inline-block rounded-full ring-2 ring-[#0f0f0f] transition-colors",
         sizes[size],
         isOnline ? "bg-green-400" : "bg-neutral-600",
         className,
       )}
-      aria-label={isOnline ? "متّصل الآن" : "غير متصل"}
+      aria-label={isOnline ? t("upOnline") : t("upOffline")}
     />
   )
 }

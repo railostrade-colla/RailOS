@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useTranslations } from "next-intl"
 import { Download } from "lucide-react"
 import { Modal } from "@/components/ui"
 
@@ -15,6 +16,7 @@ const DISMISS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 const SHOW_DELAY_MS = 30_000 // 30 seconds
 
 export function PWAInstallPrompt() {
+  const t = useTranslations("extrasUI")
   const [showPrompt, setShowPrompt] = useState(false)
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isIOS, setIsIOS] = useState(false)
@@ -77,38 +79,38 @@ export function PWAInstallPrompt() {
     <Modal
       isOpen={showPrompt}
       onClose={handleDismiss}
-      title="📱 ثبّت تطبيق رايلوس"
+      title={t("pwaTitle")}
       size="sm"
     >
       <div className="space-y-4">
         <div className="text-5xl text-center mb-2">📲</div>
 
         <p className="text-sm text-neutral-300 text-center leading-relaxed">
-          ثبّت التطبيق على جهازك للحصول على أفضل تجربة استخدام
+          {t("pwaBody")}
         </p>
 
         <div className="space-y-2 bg-white/[0.04] border border-white/[0.06] rounded-lg p-3">
           <div className="flex items-center gap-2 text-xs text-neutral-300">
             <span className="text-green-400">✓</span>
-            <span>وصول سريع من الشاشة الرئيسية</span>
+            <span>{t("pwaFeat1")}</span>
           </div>
           <div className="flex items-center gap-2 text-xs text-neutral-300">
             <span className="text-green-400">✓</span>
-            <span>إشعارات فورية</span>
+            <span>{t("pwaFeat2")}</span>
           </div>
           <div className="flex items-center gap-2 text-xs text-neutral-300">
             <span className="text-green-400">✓</span>
-            <span>يعمل بدون إنترنت أحياناً</span>
+            <span>{t("pwaFeat3")}</span>
           </div>
         </div>
 
         {isIOS ? (
           <div className="bg-blue-400/[0.06] border border-blue-400/25 rounded-xl p-4">
-            <p className="text-xs text-white mb-2 font-bold">للتثبيت على iOS:</p>
+            <p className="text-xs text-white mb-2 font-bold">{t("pwaIosTitle")}</p>
             <ol className="text-[11px] text-neutral-300 space-y-1.5 list-decimal list-inside leading-relaxed">
-              <li>اضغط زر المشاركة (مربع مع سهم)</li>
-              <li>اختر &quot;إضافة إلى الشاشة الرئيسية&quot;</li>
-              <li>اضغط &quot;إضافة&quot;</li>
+              <li>{t("pwaIos1")}</li>
+              <li>{t("pwaIos2")}</li>
+              <li>{t("pwaIos3")}</li>
             </ol>
           </div>
         ) : (
@@ -117,7 +119,7 @@ export function PWAInstallPrompt() {
             className="w-full bg-neutral-100 text-black font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-neutral-200 transition-colors"
           >
             <Download className="w-4 h-4" strokeWidth={2.5} />
-            تثبيت الآن
+            {t("pwaInstallNow")}
           </button>
         )}
 
@@ -125,7 +127,7 @@ export function PWAInstallPrompt() {
           onClick={handleDismiss}
           className="w-full text-xs text-neutral-500 hover:text-neutral-300 py-2 transition-colors"
         >
-          تذكيري لاحقاً
+          {t("pwaRemindLater")}
         </button>
       </div>
     </Modal>

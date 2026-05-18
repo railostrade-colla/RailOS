@@ -10,6 +10,7 @@
  */
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import { Star, X, Send, Sparkles, Trophy, BarChart3, Award } from "lucide-react"
 import { showError } from "@/lib/utils/toast"
 import { cn } from "@/lib/utils/cn"
@@ -30,48 +31,51 @@ const SOCIAL_PLATFORMS = [
   { id: "snapchat",  icon: "👻", label: "Snapchat" },
 ] as const
 
-// Q1 — predefined reasons (dropdown options)
+// Q1 — predefined reasons. `value` is DB-canonical Arabic (stored on
+// the application + read by the admin panel); the display label is
+// localized via `key`.
 const REASON_OPTIONS = [
-  "أحب نشر فرص الاستثمار في العراق",
-  "لدي شبكة معارف واسعة وأود الاستفادة منها",
-  "أبحث عن دخل إضافي من المكافآت",
-  "أريد المساهمة في نمو منصة عراقية",
-  "لخبرتي في الإقناع والتسويق",
-  "كل ما سبق",
+  { value: "أحب نشر فرص الاستثمار في العراق",          key: "afReason1" },
+  { value: "لدي شبكة معارف واسعة وأود الاستفادة منها", key: "afReason2" },
+  { value: "أبحث عن دخل إضافي من المكافآت",            key: "afReason3" },
+  { value: "أريد المساهمة في نمو منصة عراقية",         key: "afReason4" },
+  { value: "لخبرتي في الإقناع والتسويق",               key: "afReason5" },
+  { value: "كل ما سبق",                                key: "afReason6" },
 ] as const
 
-// Q2 — predefined experience levels
+// Q2 — predefined experience levels (same canonical-value pattern).
 const EXPERIENCE_OPTIONS = [
-  "خبرة عملية في التسويق الرقمي",
-  "مستثمر شخصي بخبرة سنوات",
-  "عملت في المبيعات أو إقناع العملاء",
-  "صانع محتوى على وسائل التواصل",
-  "خبرة قليلة لكن لدي حماس عالٍ",
-  "بدون خبرة سابقة لكن مستعد للتعلم",
+  { value: "خبرة عملية في التسويق الرقمي",        key: "afExp1" },
+  { value: "مستثمر شخصي بخبرة سنوات",             key: "afExp2" },
+  { value: "عملت في المبيعات أو إقناع العملاء",   key: "afExp3" },
+  { value: "صانع محتوى على وسائل التواصل",        key: "afExp4" },
+  { value: "خبرة قليلة لكن لدي حماس عالٍ",         key: "afExp5" },
+  { value: "بدون خبرة سابقة لكن مستعد للتعلم",     key: "afExp6" },
 ] as const
 
 const FOLLOWER_RANGES = [
-  { value: "<1k",      label: "أقل من 1,000 متابع" },
-  { value: "1k-10k",   label: "1,000 - 10,000 متابع" },
-  { value: "10k-100k", label: "10,000 - 100,000 متابع" },
-  { value: ">100k",    label: "أكثر من 100,000 متابع" },
+  { value: "<1k",      labelKey: "afFollow1" },
+  { value: "1k-10k",   labelKey: "afFollow2" },
+  { value: "10k-100k", labelKey: "afFollow3" },
+  { value: ">100k",    labelKey: "afFollow4" },
 ] as const
 
 const EXPECTED_REFERRALS = [
-  { value: "1-5",   label: "1-5 إحالات" },
-  { value: "5-20",  label: "5-20 إحالة" },
-  { value: "20-50", label: "20-50 إحالة" },
-  { value: ">50",   label: "أكثر من 50 إحالة" },
+  { value: "1-5",   labelKey: "afRef1" },
+  { value: "5-20",  labelKey: "afRef2" },
+  { value: "20-50", labelKey: "afRef3" },
+  { value: ">50",   labelKey: "afRef4" },
 ] as const
 
 const BENEFITS = [
-  { icon: Sparkles,   label: "2% من رسوم المُحالين", color: "text-yellow-400", bg: "bg-yellow-400/[0.08]", border: "border-yellow-400/[0.25]" },
-  { icon: Trophy,     label: "مكافآت milestones",     color: "text-orange-400", bg: "bg-orange-400/[0.08]", border: "border-orange-400/[0.25]" },
-  { icon: BarChart3,  label: "لوحة تحكّم متقدّمة",   color: "text-blue-400",   bg: "bg-blue-400/[0.08]",   border: "border-blue-400/[0.25]" },
-  { icon: Award,      label: "شارة سفير مميّزة",       color: "text-purple-400", bg: "bg-purple-400/[0.08]", border: "border-purple-400/[0.25]" },
+  { icon: Sparkles,   labelKey: "afBenefit1", color: "text-yellow-400", bg: "bg-yellow-400/[0.08]", border: "border-yellow-400/[0.25]" },
+  { icon: Trophy,     labelKey: "afBenefit2", color: "text-orange-400", bg: "bg-orange-400/[0.08]", border: "border-orange-400/[0.25]" },
+  { icon: BarChart3,  labelKey: "afBenefit3", color: "text-blue-400",   bg: "bg-blue-400/[0.08]",   border: "border-blue-400/[0.25]" },
+  { icon: Award,      labelKey: "afBenefit4", color: "text-purple-400", bg: "bg-purple-400/[0.08]", border: "border-purple-400/[0.25]" },
 ]
 
 export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
+  const t = useTranslations("extrasUI")
   // Q1/Q2 are dropdowns now — empty string until admin picks.
   const [reason, setReason] = useState("")
   const [experience, setExperience] = useState("")
@@ -106,12 +110,12 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
   }
 
   const handleClickSubmit = () => {
-    if (!reason) return showError("اختر سبباً للانضمام")
-    if (!experience) return showError("اختر مستوى الخبرة")
-    if (checkedPlatforms.length < 1) return showError("اختر حساب تواصل اجتماعي واحد على الأقل")
-    if (!followers) return showError("اختر شريحة المتابعين")
-    if (!referrals) return showError("اختر عدد الإحالات المتوقّعة")
-    if (!acceptTerms || !acceptCommit) return showError("الموافقة على الشروط والتعهّد إجبارية")
+    if (!reason) return showError(t("afErrReason"))
+    if (!experience) return showError(t("afErrExp"))
+    if (checkedPlatforms.length < 1) return showError(t("afErrSocial"))
+    if (!followers) return showError(t("afErrFollowers"))
+    if (!referrals) return showError(t("afErrReferrals"))
+    if (!acceptTerms || !acceptCommit) return showError(t("afErrTerms"))
     setShowConfirm(true)
   }
 
@@ -130,7 +134,7 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
       setShowConfirm(false)
       setShowSubmitted(true)
     } else {
-      showError(result.error || "تعذّر إرسال الطلب — حاول لاحقاً")
+      showError(result.error || t("afErrSubmit"))
     }
   }
 
@@ -143,8 +147,8 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
             <Star className="w-6 h-6 text-purple-300" fill="currentColor" strokeWidth={1} />
           </div>
           <div>
-            <div className="text-base font-bold text-white">كن سفير رايلوس</div>
-            <div className="text-xs text-neutral-400">مكافآت + لوحة تحكّم متقدّمة + شارة مميّزة</div>
+            <div className="text-base font-bold text-white">{t("afHeroTitle")}</div>
+            <div className="text-xs text-neutral-400">{t("afHeroSub")}</div>
           </div>
         </div>
 
@@ -154,7 +158,7 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
             return (
               <div key={i} className={cn("flex items-center gap-2 rounded-lg p-2.5 border", b.bg, b.border)}>
                 <Icon className={cn("w-4 h-4 flex-shrink-0", b.color)} strokeWidth={1.5} />
-                <span className="text-[11px] text-neutral-200 font-medium">{b.label}</span>
+                <span className="text-[11px] text-neutral-200 font-medium">{t(b.labelKey)}</span>
               </div>
             )
           })}
@@ -164,17 +168,17 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
       {/* Q1 — dropdown */}
       <Question
         n={1}
-        title="لماذا تريد أن تكون سفيراً؟"
-        helper="اختر السبب الأقرب لدافعك"
+        title={t("afQ1Title")}
+        helper={t("afQ1Helper")}
       >
         <select
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
         >
-          <option value="">— اختر سبباً —</option>
+          <option value="">{t("afChooseReason")}</option>
           {REASON_OPTIONS.map((r) => (
-            <option key={r} value={r}>{r}</option>
+            <option key={r.value} value={r.value}>{t(r.key)}</option>
           ))}
         </select>
       </Question>
@@ -182,17 +186,17 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
       {/* Q2 — dropdown */}
       <Question
         n={2}
-        title="ما خبرتك في التسويق أو الاستثمار؟"
-        helper="اختر مستوى خبرتك الأقرب"
+        title={t("afQ2Title")}
+        helper={t("afQ2Helper")}
       >
         <select
           value={experience}
           onChange={(e) => setExperience(e.target.value)}
           className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
         >
-          <option value="">— اختر مستوى الخبرة —</option>
+          <option value="">{t("afChooseExp")}</option>
           {EXPERIENCE_OPTIONS.map((x) => (
-            <option key={x} value={x}>{x}</option>
+            <option key={x.value} value={x.value}>{t(x.key)}</option>
           ))}
         </select>
       </Question>
@@ -200,8 +204,8 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
       {/* Q3 — checkboxes only (no URL needed) */}
       <Question
         n={3}
-        title="حسابات التواصل الاجتماعي"
-        helper={`أشّر على المنصّات التي تملك فيها حساباً (المُحدَّد: ${checkedPlatforms.length})`}
+        title={t("afQ3Title")}
+        helper={t("afQ3Helper", { n: checkedPlatforms.length })}
       >
         <div className="grid grid-cols-2 gap-2">
           {SOCIAL_PLATFORMS.map((p) => {
@@ -237,31 +241,31 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
       </Question>
 
       {/* Q4 */}
-      <Question n={4} title="عدد المتابعين الإجمالي تقريباً">
+      <Question n={4} title={t("afQ4Title")}>
         <select
           value={followers}
           onChange={(e) => setFollowers(e.target.value as SubmitApplicationInput["follower_range"] | "")}
           className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
         >
-          <option value="">— اختر —</option>
-          {FOLLOWER_RANGES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          <option value="">{t("afChooseGeneric")}</option>
+          {FOLLOWER_RANGES.map((r) => <option key={r.value} value={r.value}>{t(r.labelKey)}</option>)}
         </select>
       </Question>
 
       {/* Q5 */}
-      <Question n={5} title="كم إحالة تتوقّع تحقيقها شهرياً؟">
+      <Question n={5} title={t("afQ5Title")}>
         <select
           value={referrals}
           onChange={(e) => setReferrals(e.target.value as SubmitApplicationInput["expected_referrals"] | "")}
           className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-white/20"
         >
-          <option value="">— اختر —</option>
-          {EXPECTED_REFERRALS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          <option value="">{t("afChooseGeneric")}</option>
+          {EXPECTED_REFERRALS.map((r) => <option key={r.value} value={r.value}>{t(r.labelKey)}</option>)}
         </select>
       </Question>
 
       {/* Q6 */}
-      <Question n={6} title="شروط البرنامج">
+      <Question n={6} title={t("afQ6Title")}>
         <div className="space-y-3">
           <label className="flex items-start gap-2.5 cursor-pointer">
             <input
@@ -271,9 +275,9 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
               className="mt-0.5 w-4 h-4"
             />
             <span className="text-xs text-neutral-300 leading-relaxed">
-              أوافق على{" "}
+              {t("afAgreePre")}
               <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
-                شروط برنامج السفراء
+                {t("afTermsLink")}
               </a>
             </span>
           </label>
@@ -285,7 +289,7 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
               className="mt-0.5 w-4 h-4"
             />
             <span className="text-xs text-neutral-300 leading-relaxed">
-              أتعهّد بترويج المنصة بطريقة احترافية وشفّافة دون تضليل أو ادّعاءات مبالغ فيها
+              {t("afCommit")}
             </span>
           </label>
         </div>
@@ -300,7 +304,7 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
           }}
           className="flex-1 py-3.5 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08] transition-colors"
         >
-          إلغاء
+          {t("cancel")}
         </button>
         <button
           onClick={handleClickSubmit}
@@ -313,7 +317,7 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
           )}
         >
           <Send className="w-4 h-4" strokeWidth={2} />
-          📤 تقديم الطلب
+          {t("afSubmit")}
         </button>
       </div>
 
@@ -322,16 +326,16 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#0a0a0a] border border-white/[0.1] rounded-2xl p-6 w-full max-w-sm">
             <div className="flex justify-between items-start mb-4">
-              <div className="text-base font-bold text-white">📤 تأكيد التقديم</div>
+              <div className="text-base font-bold text-white">{t("afConfirmTitle")}</div>
               <button onClick={() => setShowConfirm(false)} className="text-neutral-500 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="bg-purple-400/[0.05] border border-purple-400/[0.2] rounded-xl p-3 mb-4 text-xs text-purple-300">
-              سيتم إرسال طلبك للمراجعة. ستصلك النتيجة خلال <span className="font-bold">3-5 أيام عمل</span>.
+              {t("afConfirmBodyPre")}<span className="font-bold">{t("afDays")}</span>{t("afConfirmBodyPost")}
             </div>
             <div className="text-xs text-neutral-400 mb-4">
-              تم اختيار <span className="text-white font-bold">{checkedPlatforms.length}</span> حساب اجتماعي.
+              {t("afSelectedPre")}<span className="text-white font-bold">{checkedPlatforms.length}</span>{t("afSelectedPost")}
             </div>
             <div className="flex gap-2">
               <button
@@ -339,14 +343,14 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
                 disabled={submitting}
                 className="flex-1 py-3 rounded-xl bg-white/[0.05] border border-white/[0.08] text-white text-sm hover:bg-white/[0.08]"
               >
-                إلغاء
+                {t("cancel")}
               </button>
               <button
                 onClick={handleConfirmSubmit}
                 disabled={submitting}
                 className="flex-1 py-3 rounded-xl bg-purple-500/[0.15] border border-purple-500/[0.3] text-purple-400 text-sm font-bold hover:bg-purple-500/[0.2] disabled:opacity-50"
               >
-                {submitting ? "جاري الإرسال..." : "تأكيد التقديم"}
+                {submitting ? t("afSubmitting") : t("afConfirmSubmit")}
               </button>
             </div>
           </div>
@@ -360,10 +364,9 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
             <div className="w-16 h-16 rounded-full bg-green-400/[0.1] border-2 border-green-400/[0.3] flex items-center justify-center mx-auto mb-4">
               <Send className="w-7 h-7 text-green-400" strokeWidth={2} />
             </div>
-            <div className="text-base font-bold text-white mb-2">✅ تم تقديم طلبك بنجاح!</div>
+            <div className="text-base font-bold text-white mb-2">{t("afSuccessTitle")}</div>
             <div className="text-xs text-neutral-300 leading-relaxed mb-4">
-              ستصلك نتيجة المراجعة خلال <span className="text-white font-bold">3-5 أيام عمل</span>.
-              يمكنك متابعة الحالة من هذه الصفحة.
+              {t("afSuccessBodyPre")}<span className="text-white font-bold">{t("afDays")}</span>{t("afSuccessBodyPost")}
             </div>
             <button
               onClick={() => {
@@ -372,7 +375,7 @@ export function ApplicationForm({ onSubmitted }: { onSubmitted: () => void }) {
               }}
               className="w-full py-3 rounded-xl bg-green-500/[0.15] border border-green-500/[0.3] text-green-400 text-sm font-bold hover:bg-green-500/[0.2]"
             >
-              متابعة الحالة
+              {t("afFollowStatus")}
             </button>
           </div>
         </div>

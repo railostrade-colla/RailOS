@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useRef, useState } from "react"
+import { useTranslations } from "next-intl"
 import { Copy, Check, Upload, X, AlertCircle } from "lucide-react"
 import { getPaymentSettings, type PaymentSettings, EMPTY_PAYMENT_SETTINGS } from "@/lib/data/payment-settings"
 import { showSuccess, showError } from "@/lib/utils/toast"
@@ -39,11 +40,12 @@ const MAX_BYTES = 3 * 1024 * 1024  // 3 MB
 export function PaymentInstructionsBlock({
   proofDataUrl,
   onProofChange,
-  title = "💳 معلومات الدفع",
+  title,
   subtitle,
   required = true,
   compact = false,
 }: Props) {
+  const t = useTranslations("extrasUI")
   const [settings, setSettings] = useState<PaymentSettings>(EMPTY_PAYMENT_SETTINGS)
   const [loading, setLoading] = useState(true)
   const [copiedField, setCopiedField] = useState<string | null>(null)
@@ -64,10 +66,10 @@ export function PaymentInstructionsBlock({
     try {
       await navigator.clipboard.writeText(value)
       setCopiedField(field)
-      showSuccess(`✓ تم نسخ ${field === "card" ? "رقم البطاقة" : "رقم الهاتف"}`)
+      showSuccess(field === "card" ? t("pibCopiedCard") : t("pibCopiedPhone"))
       setTimeout(() => setCopiedField(null), 2000)
     } catch {
-      showError("فشل النسخ")
+      showError(t("pibCopyFailed"))
     }
   }
 
@@ -75,11 +77,11 @@ export function PaymentInstructionsBlock({
     const file = e.target.files?.[0]
     if (!file) return
     if (!file.type.startsWith("image/")) {
-      showError("الرجاء اختيار صورة فقط")
+      showError(t("pibImageOnly"))
       return
     }
     if (file.size > MAX_BYTES) {
-      showError("حجم الصورة يجب ألا يتجاوز 3 ميجابايت")
+      showError(t("pibImageTooLarge"))
       return
     }
     const reader = new FileReader()
@@ -87,7 +89,7 @@ export function PaymentInstructionsBlock({
       const result = reader.result
       if (typeof result === "string") onProofChange(result)
     }
-    reader.onerror = () => showError("فشل قراءة الصورة")
+    reader.onerror = () => showError(t("pibReadFailed"))
     reader.readAsDataURL(file)
   }
 
@@ -100,7 +102,7 @@ export function PaymentInstructionsBlock({
     )}>
       <div>
         <div className={cn("font-bold text-white", compact ? "text-xs" : "text-sm")}>
-          {title}
+          {title ?? t("pibTitle")}
         </div>
         {subtitle && (
           <div className="text-[10px] text-neutral-500 mt-0.5">{subtitle}</div>
@@ -109,13 +111,13 @@ export function PaymentInstructionsBlock({
 
       {loading ? (
         <div className="text-[11px] text-neutral-500 text-center py-3">
-          جارٍ تحميل معلومات الدفع...
+          {t("pibLoading")}
         </div>
       ) : noPaymentMethod ? (
         <div className="bg-yellow-400/[0.05] border border-yellow-400/[0.2] rounded-lg p-2.5 flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
           <div className="text-[11px] text-yellow-300 leading-relaxed">
-            لم تقم الإدارة بتعيين معلومات الدفع بعد. يرجى التواصل مع الدعم.
+            {t("pibNoMethod")}
           </div>
         </div>
       ) : (
@@ -123,15 +125,15 @@ export function PaymentInstructionsBlock({
           {settings.master_card_number && (
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-lg p-2.5">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] text-neutral-500">رقم الماستر كارد</span>
+                <span className="text-[10px] text-neutral-500">{t("pibCardLabel")}</span>
                 <button
                   onClick={() => copy(settings.master_card_number!, "card")}
                   className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1"
                 >
                   {copiedField === "card" ? (
-                    <><Check className="w-3 h-3" /> تم النسخ</>
+                    <><Check className="w-3 h-3" /> {t("pibCopied")}</>
                   ) : (
-                    <><Copy className="w-3 h-3" /> نسخ</>
+                    <><Copy className="w-3 h-3" /> {t("pibCopy")}</>
                   )}
                 </button>
               </div>
@@ -140,7 +142,7 @@ export function PaymentInstructionsBlock({
               </div>
               {settings.master_card_holder && (
                 <div className="text-[10px] text-neutral-500 mt-1">
-                  باسم: {settings.master_card_holder}
+                  {t("pibHolderPre")}{settings.master_card_holder}
                 </div>
               )}
             </div>
@@ -149,15 +151,15 @@ export function PaymentInstructionsBlock({
           {settings.transfer_phone && (
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-lg p-2.5">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] text-neutral-500">رقم التحويل (Zain Cash / Asia Hawala)</span>
+                <span className="text-[10px] text-neutral-500">{t("pibTransferLabel")}</span>
                 <button
                   onClick={() => copy(settings.transfer_phone!, "phone")}
                   className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1"
                 >
                   {copiedField === "phone" ? (
-                    <><Check className="w-3 h-3" /> تم النسخ</>
+                    <><Check className="w-3 h-3" /> {t("pibCopied")}</>
                   ) : (
-                    <><Copy className="w-3 h-3" /> نسخ</>
+                    <><Copy className="w-3 h-3" /> {t("pibCopy")}</>
                   )}
                 </button>
               </div>
@@ -179,7 +181,7 @@ export function PaymentInstructionsBlock({
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-[11px] text-neutral-400">
-            صورة إثبات الدفع {required && <span className="text-red-400">*</span>}
+            {t("pibProofLabel")} {required && <span className="text-red-400">*</span>}
           </span>
           {settings.support_phone && (
             <span className="text-[10px] text-neutral-500" dir="ltr">
@@ -191,18 +193,18 @@ export function PaymentInstructionsBlock({
         {proofDataUrl ? (
           <div className="relative bg-white/[0.04] border border-green-400/[0.3] rounded-lg overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={proofDataUrl} alt="إثبات الدفع" className="w-full max-h-48 object-contain" />
+            <img src={proofDataUrl} alt={t("pibProofAlt")} className="w-full max-h-48 object-contain" />
             <button
               type="button"
               onClick={() => onProofChange(null)}
               className="absolute top-2 right-2 w-7 h-7 bg-black/70 hover:bg-black/90 rounded-full flex items-center justify-center"
-              aria-label="حذف الصورة"
+              aria-label={t("pibDeleteImage")}
             >
               <X className="w-3.5 h-3.5 text-white" />
             </button>
             <div className="absolute bottom-2 left-2 bg-green-400/[0.15] border border-green-400/[0.3] rounded-md px-2 py-0.5">
               <span className="text-[10px] text-green-400 flex items-center gap-1">
-                <Check className="w-3 h-3" /> جاهزة للإرسال
+                <Check className="w-3 h-3" /> {t("pibReadyToSend")}
               </span>
             </div>
           </div>
@@ -213,8 +215,8 @@ export function PaymentInstructionsBlock({
             className="w-full py-6 bg-white/[0.04] hover:bg-white/[0.06] border-2 border-dashed border-white/[0.1] hover:border-white/[0.2] rounded-lg flex flex-col items-center gap-1.5 transition-colors"
           >
             <Upload className="w-5 h-5 text-neutral-400" strokeWidth={1.5} />
-            <span className="text-[11px] text-neutral-400">رفع صورة وصل التحويل</span>
-            <span className="text-[9px] text-neutral-600">PNG / JPG • حتى 3MB</span>
+            <span className="text-[11px] text-neutral-400">{t("pibUploadReceipt")}</span>
+            <span className="text-[9px] text-neutral-600">{t("pibImageFormats")}</span>
           </button>
         )}
         <input

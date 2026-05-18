@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 import { Plus, Trash2, Star, Save, Loader2 } from "lucide-react"
 import { Card } from "@/components/ui"
 import { showSuccess, showError } from "@/lib/utils/toast"
@@ -36,6 +37,7 @@ const empty = (): PaymentMethod => ({
 })
 
 export function PaymentMethodsEditor() {
+  const t = useTranslations("extrasUI")
   const [items, setItems] = useState<PaymentMethod[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -81,10 +83,10 @@ export function PaymentMethodsEditor() {
     const res = await saveMyPaymentMethods(items)
     setSaving(false)
     if (!res.success) {
-      showError(res.error ?? "تعذّر الحفظ")
+      showError(res.error ?? t("pmeSaveFailed"))
       return
     }
-    showSuccess("✅ تمّ حفظ طرق الدفع")
+    showSuccess(t("pmeSaved"))
     setDirty(false)
     // Re-read to get the canonical sanitised list (empties stripped).
     const fresh = await getMyPaymentMethods()
@@ -95,9 +97,9 @@ export function PaymentMethodsEditor() {
     <Card>
       <div className="flex items-center justify-between mb-3">
         <div>
-          <div className="text-xs font-bold text-white">💳 طرق الدفع</div>
+          <div className="text-xs font-bold text-white">{t("pmeTitle")}</div>
           <div className="text-[11px] text-neutral-500 mt-0.5 leading-relaxed">
-            هذه الأرقام تظهر للمشتري بعد فتح الصفقة ليحوّل لك المبلغ خارج التطبيق.
+            {t("pmeDesc")}
           </div>
         </div>
       </div>
@@ -105,19 +107,19 @@ export function PaymentMethodsEditor() {
       {loading ? (
         <div className="py-6 flex items-center justify-center text-neutral-500 text-xs">
           <Loader2 className="w-4 h-4 animate-spin ml-2" />
-          جاري التحميل...
+          {t("pmeLoading")}
         </div>
       ) : items.length === 0 ? (
         <div className="py-6 text-center">
           <p className="text-xs text-neutral-500 mb-3">
-            لا توجد طرق دفع بعد. أضف رقم حساب أو هاتف ليرى المشتري.
+            {t("pmeEmpty")}
           </p>
           <button
             onClick={addRow}
             className="bg-blue-400/[0.12] border border-blue-400/30 text-blue-400 px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-400/[0.18] transition-colors inline-flex items-center gap-1.5"
           >
             <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
-            إضافة طريقة دفع
+            {t("pmeAddMethod")}
           </button>
         </div>
       ) : (
@@ -143,7 +145,7 @@ export function PaymentMethodsEditor() {
             )}
           >
             <Plus className="w-3.5 h-3.5" strokeWidth={2} />
-            {items.length >= 10 ? "بلغت الحد الأقصى (10)" : "إضافة طريقة أخرى"}
+            {items.length >= 10 ? t("pmeMaxReached") : t("pmeAddAnother")}
           </button>
         </div>
       )}
@@ -163,12 +165,12 @@ export function PaymentMethodsEditor() {
           {saving ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              جاري الحفظ...
+              {t("pmeSaving")}
             </>
           ) : (
             <>
               <Save className="w-4 h-4" strokeWidth={2.5} />
-              حفظ التغييرات
+              {t("pmeSaveChanges")}
             </>
           )}
         </button>
@@ -188,6 +190,7 @@ function PaymentMethodRow({
   onRemove: () => void
   onMakePrimary: () => void
 }) {
+  const t = useTranslations("extrasUI")
   const meta = PAYMENT_METHOD_META[method.type]
 
   return (
@@ -211,7 +214,7 @@ function PaymentMethodRow({
 
         <button
           onClick={onMakePrimary}
-          aria-label="جعلها الافتراضية"
+          aria-label={t("pmeMakePrimary")}
           className={cn(
             "w-9 h-9 rounded-lg flex items-center justify-center transition-colors border",
             method.is_primary
@@ -228,7 +231,7 @@ function PaymentMethodRow({
 
         <button
           onClick={onRemove}
-          aria-label="حذف"
+          aria-label={t("pmeRemove")}
           className="w-9 h-9 rounded-lg bg-white/[0.04] border border-white/[0.06] text-neutral-500 hover:text-red-400 hover:bg-red-400/[0.08] hover:border-red-400/30 flex items-center justify-center transition-colors"
         >
           <Trash2 className="w-4 h-4" strokeWidth={2} />
@@ -241,7 +244,7 @@ function PaymentMethodRow({
           type="text"
           value={method.label ?? ""}
           onChange={(e) => onChange({ label: e.target.value })}
-          placeholder="مسمّى الطريقة (مثلاً: USDT TRC20)"
+          placeholder={t("pmeCustomLabelPlaceholder")}
           maxLength={30}
           className="w-full bg-black/40 border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
         />
@@ -249,7 +252,7 @@ function PaymentMethodRow({
 
       {/* Value (the actual number) */}
       <div>
-        <label className="block text-[10px] text-neutral-500 mb-1">الرقم</label>
+        <label className="block text-[10px] text-neutral-500 mb-1">{t("pmeNumberLabel")}</label>
         <input
           type="text"
           inputMode="numeric"
@@ -265,13 +268,13 @@ function PaymentMethodRow({
       {/* Holder name (optional) */}
       <div>
         <label className="block text-[10px] text-neutral-500 mb-1">
-          اسم صاحب الحساب <span className="text-neutral-700">(اختياري)</span>
+          {t("pmeHolderLabel")} <span className="text-neutral-700">{t("pmeOptional")}</span>
         </label>
         <input
           type="text"
           value={method.holder_name ?? ""}
           onChange={(e) => onChange({ holder_name: e.target.value })}
-          placeholder="مثلاً: علي محمد"
+          placeholder={t("pmeHolderPlaceholder")}
           maxLength={40}
           className="w-full bg-black/40 border border-white/[0.08] rounded-lg px-3 py-2 text-xs text-white placeholder:text-neutral-600 outline-none focus:border-white/20"
         />

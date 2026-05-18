@@ -13,6 +13,7 @@
  */
 
 import Link from "next/link"
+import { useTranslations } from "next-intl"
 import { Info } from "lucide-react"
 
 export function OffPlatformPaymentNotice({
@@ -20,6 +21,7 @@ export function OffPlatformPaymentNotice({
 }: {
   className?: string
 }) {
+  const t = useTranslations("extrasUI")
   return (
     <div
       className={
@@ -33,16 +35,14 @@ export function OffPlatformPaymentNotice({
         strokeWidth={2}
       />
       <div className="text-[11px] text-neutral-300 leading-relaxed">
-        <span className="font-bold text-yellow-300">تذكير:</span>{" "}
-        الدفع يتمّ <span className="font-bold">خارج المنصّة</span> مباشرةً
-        بينك وبين الطرف الآخر (Zain Cash، آسيا حوالة، تحويل بنكي).
-        RailOS تحمي الحصص عبر Escrow وتوثّق الصفقة فقط — ولا تتعامل
-        بالأموال.{" "}
+        <span className="font-bold text-yellow-300">{t("offReminder")}</span>
+        {t("offBodyPre")}<span className="font-bold">{t("offOffPlatform")}</span>
+        {t("offBodyMid")}
         <Link
           href="/disclaimer"
           className="text-yellow-300 hover:text-yellow-200 underline underline-offset-2"
         >
-          اقرأ إخلاء المسؤولية
+          {t("offDisclaimerLink")}
         </Link>
       </div>
     </div>
