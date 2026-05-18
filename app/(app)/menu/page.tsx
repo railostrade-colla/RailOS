@@ -4,7 +4,7 @@ import Link from "next/link"
 import {
   Coins, Zap, Star, Shield, Settings, Newspaper,
   HelpCircle, BookOpen, TrendingUp, FileText, Lock, Info, Heart, Building2,
-  HeartPulse, Users, Gift,
+  HeartPulse, Gift,
 } from "lucide-react"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { PageHeader } from "@/components/layout/PageHeader"
@@ -91,6 +91,10 @@ const menuItems: MenuItem[] = [
     iconBg: "bg-red-400/10",
     iconBorder: "border-red-400/30",
   },
+  /* Phase A T3 — orphan-care program temporarily hidden from the UI
+     until it's ready to launch. The /orphans route is intentionally
+     LEFT INTACT (not deleted) — just remove this comment wrapper to
+     re-enable the menu entry.
   {
     label: "رعاية الأيتام",
     description: "كفالة طفل ودعم تعليمه",
@@ -100,6 +104,7 @@ const menuItems: MenuItem[] = [
     iconBg: "bg-blue-400/10",
     iconBorder: "border-blue-400/30",
   },
+  */
   {
     label: "الخصومات",
     description: "خصومات حصرية في الماركات",
