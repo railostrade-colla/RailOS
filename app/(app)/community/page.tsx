@@ -383,9 +383,14 @@ export default function CommunityPage() {
 
           <PageHeader
             title={t("title")}
-            subtitle={users.length > 0
-              ? t("subtitle", { n: users.length.toLocaleString("en-US") })
-              : t("subtitleEmpty")}
+            /* Phase A T4 — registered-users count hidden temporarily.
+               Early on the number is small and reads badly; show the
+               count-free generic subtitle until we cross ~1000 users.
+               TODO: restore the dynamic count when ready:
+               subtitle={users.length > 0
+                 ? t("subtitle", { n: users.length.toLocaleString("en-US") })
+                 : t("subtitleEmpty")} */
+            subtitle={t("subtitleEmpty")}
             showBack={false}
           />
 
