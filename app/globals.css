@@ -353,6 +353,28 @@ body {
   background-color: #F8F9FA !important;
   border-color: rgba(0, 0, 0, 0.08) !important;
 }
+/* Phase A — admin form fields (search box, setting-card control
+ * rows, numeric inputs) use bg-black/40 | bg-black/30. The generic
+ * theme layer deliberately does NOT flip bg-black/NN (modal scrims
+ * must stay dim), so these stayed dark in light mode. Flip only the
+ * dedicated .admin-input hook to a white surface that matches the
+ * setting cards. */
+[data-theme="light"] .admin-input {
+  background-color: #FFFFFF !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+/* Phase A — sidebar ACTIVE item was bg-white/[0.08] (→ #F1F3F5 in
+ * light) on the #F8F9FA sidebar = near-invisible selection, and the
+ * accent bar was bg-white (invisible on light). Give the active
+ * pill a clearly darker slate fill + a dark accent so the current
+ * page is unmistakable in light mode. */
+[data-theme="light"] .admin-nav-active {
+  background-color: #E2E8F0 !important;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+}
+[data-theme="light"] .admin-nav-accent {
+  background-color: #0F172A !important;
+}
 /* Stage 7 — remaining stray dark surfaces that bypassed the theme
  * (kept narrow; bg-black/NN overlays are intentionally NOT flipped
  * so modal scrims stay dim). */

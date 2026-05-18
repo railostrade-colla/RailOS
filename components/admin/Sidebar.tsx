@@ -309,11 +309,11 @@ function AdminSidebarImpl({
                       so the active item feels integrated with the panel
                       edge but doesn't draw a sharp 2-px line. */}
                   {active && (
-                    <span className="absolute inset-y-0.5 inset-x-1.5 rounded-lg bg-white/[0.08] border border-white/[0.08]" />
+                    <span className="admin-nav-active absolute inset-y-0.5 inset-x-1.5 rounded-lg bg-white/[0.08] border border-white/[0.08]" />
                   )}
                   {/* Active accent dot on the right (RTL) */}
                   {active && (
-                    <span className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-l-full bg-white" />
+                    <span className="admin-nav-accent absolute right-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-l-full bg-white" />
                   )}
                   <span className="relative text-base flex-shrink-0 leading-none">
                     {item.icon}

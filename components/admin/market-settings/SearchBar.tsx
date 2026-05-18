@@ -62,7 +62,7 @@ export function SearchBar({
   return (
     <div
       className={cn(
-        "relative bg-black/40 border border-white/[0.08] rounded-xl focus-within:border-white/20 transition-colors",
+        "admin-input relative bg-black/40 border border-white/[0.08] rounded-xl focus-within:border-white/20 transition-colors",
         className,
       )}
     >

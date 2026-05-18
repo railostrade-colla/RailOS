@@ -243,7 +243,7 @@ export function SettingCard({
 
         {/* Control row */}
         {isBool ? (
-          <div className="flex items-center justify-between gap-3 bg-black/30 border border-white/[0.05] rounded-xl p-3">
+          <div className="admin-input flex items-center justify-between gap-3 bg-black/30 border border-white/[0.05] rounded-xl p-3">
             <BooleanToggle
               value={setting.value}
               onToggle={handleBoolClick}
@@ -282,7 +282,7 @@ export function SettingCard({
                 disabled={savingNumeric || resetting}
                 dir="ltr"
                 className={cn(
-                  "flex-1 bg-black/40 border rounded-lg px-3 py-2 text-sm text-white font-mono outline-none disabled:opacity-60",
+                  "admin-input flex-1 bg-black/40 border rounded-lg px-3 py-2 text-sm text-white font-mono outline-none disabled:opacity-60",
                   !validation.valid && parsed !== null
                     ? "border-red-400/40 focus:border-red-400/60"
                     : hasChange
