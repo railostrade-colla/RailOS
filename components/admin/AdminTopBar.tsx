@@ -20,11 +20,12 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import {
   Bell, MessageCircle, Package, Shield, ChevronDown,
-  User, Sun, LogOut,
+  User, Sun, Moon, LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils/cn"
 import { createClient } from "@/lib/supabase/client"
 import { signOut } from "@/lib/supabase/auth-helpers"
+import { useTheme } from "@/lib/theme/ThemeProvider"
 import { showSuccess } from "@/lib/utils/toast"
 // Phase 11.34 — direct-source fetchers so each dropdown renders real
 // items from its queue table, not a filtered slice of the notifications
@@ -362,6 +363,15 @@ type DropdownId = null | "notifications" | "messages" | "orders" | "kyc" | "prof
 
 export function AdminTopBar() {
   const router = useRouter()
+  // Phase A — admin light/dark switch. ThemeProvider wraps the whole
+  // app (root layout) incl. /admin, and globals.css already carries
+  // the full [data-theme="light"] override set, so flipping the
+  // attribute here re-themes every admin panel. setTheme persists the
+  // explicit choice to localStorage.
+  const { resolved: resolvedTheme, setTheme } = useTheme()
+  const toggleTheme = useCallback(() => {
+    setTheme(resolvedTheme === "light" ? "dark" : "light")
+  }, [resolvedTheme, setTheme])
   const [open, setOpen] = useState<DropdownId>(null)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -566,6 +576,26 @@ export function AdminTopBar() {
           onClick={() => setOpen(open === "kyc" ? null : "kyc")}
           ariaLabel="طلبات التوثيق"
         />
+
+        {/* 5. Theme toggle (Phase A — admin light/dark). Shows the
+            mode you'll switch TO: Sun while dark, Moon while light. */}
+        <IconBtn
+          icon={
+            resolvedTheme === "light" ? (
+              <Moon className="w-4 h-4" strokeWidth={1.5} />
+            ) : (
+              <Sun className="w-4 h-4" strokeWidth={1.5} />
+            )
+          }
+          badge={0}
+          active={false}
+          onClick={toggleTheme}
+          ariaLabel={
+            resolvedTheme === "light"
+              ? "التبديل إلى الوضع الداكن"
+              : "التبديل إلى الوضع الفاتح"
+          }
+        />
       </div>
 
       {/* Left side (RTL): admin profile — Phase 13.2 polished pill */}
@@ -752,9 +782,22 @@ export function AdminTopBar() {
               onClick={() => handleNavigate("/admin?tab=admin_users")}
             />
             <DropdownMenuItem
-              icon={<Sun className="w-3.5 h-3.5" />}
-              label="تبديل الوضع"
-              onClick={() => showSuccess("🌗 تبديل الوضع (قريباً)")}
+              icon={
+                resolvedTheme === "light" ? (
+                  <Moon className="w-3.5 h-3.5" />
+                ) : (
+                  <Sun className="w-3.5 h-3.5" />
+                )
+              }
+              label={
+                resolvedTheme === "light"
+                  ? "الوضع الداكن"
+                  : "الوضع الفاتح"
+              }
+              onClick={() => {
+                toggleTheme()
+                setOpen(null)
+              }}
             />
             <DropdownMenuItem
               icon={<LogOut className="w-3.5 h-3.5" />}

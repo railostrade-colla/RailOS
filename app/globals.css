@@ -336,6 +336,13 @@ body {
 /* Deep panels: modals / dropdowns / popovers */
 [data-theme="light"] .bg-\[\#0a0a0a\] { background-color: #FFFFFF !important; }
 [data-theme="light"] .bg-\[\#0f0f0f\] { background-color: #FFFFFF !important; }
+/* Phase A — admin chrome: the sticky AdminTopBar uses the opacity
+ * variant `bg-[#0a0a0a]/95` (a different class than the exact one
+ * above), so it was staying black in light mode. Flip it to a
+ * translucent white so the blur still reads. */
+[data-theme="light"] .bg-\[\#0a0a0a\]\/95 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
 /* Stage 7 — remaining stray dark surfaces that bypassed the theme
  * (kept narrow; bg-black/NN overlays are intentionally NOT flipped
  * so modal scrims stay dim). */
