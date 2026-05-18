@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { LogIn, UserPlus } from "lucide-react"
 import { showError } from "@/lib/utils/toast"
-import { createClient } from "@/lib/supabase/client"
+import { signInWithGoogle } from "@/lib/supabase/auth-helpers"
 import { APP_NAME, APP_DESCRIPTION } from "@/lib/utils/version"
 import { cn } from "@/lib/utils/cn"
 
@@ -17,13 +17,13 @@ export default function HomePage() {
   const handleGoogleLogin = async () => {
     setLoadingGoogle(true)
     try {
-      const supabase = createClient()
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: typeof window !== "undefined" ? window.location.origin + "/auth/callback" : undefined,
-        },
-      })
+      // Phase A T2 — was redirecting to a non-existent `/auth/callback`
+      // route → Google bounced back to a 404 "الصفحة غير موجودة".
+      // Use the canonical helper which targets the real
+      // `/api/auth/callback?next=/dashboard` handler (exchanges the
+      // code, attaches referrals, routes new users to /profile-setup,
+      // existing users straight to /dashboard).
+      const { error } = await signInWithGoogle("/dashboard")
       if (error) showError("فشل تسجيل الدخول بـ Google")
     } catch {
       showError("فشل تسجيل الدخول بـ Google")
