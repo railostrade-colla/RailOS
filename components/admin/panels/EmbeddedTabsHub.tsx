@@ -74,8 +74,15 @@ export function EmbeddedTabsHub({ title, subtitle, tabs }: EmbeddedTabsHubProps)
           {activeTab?.hint || subtitle}
         </div>
 
-        {/* Horizontal-scroll tab strip */}
-        <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-1">
+        {/* Tab strip — unified with the user-app pill tab-bar design
+            (community/portfolio/etc.): a contained pill strip
+            (bg-white/[0.05] + border + rounded-xl + p-1) with a soft
+            elevated active tab (bg-white/[0.08] + border). Kept
+            horizontally scrollable because admin hubs can have many
+            tabs (unlike the 4–5 user tabs which use flex-1). All
+            classes are theme-covered so it renders correctly in
+            light + dark. */}
+        <div className="flex gap-1 bg-white/[0.05] border border-white/[0.08] rounded-xl p-1 overflow-x-auto no-scrollbar">
           {tabs.map((t) => {
             const isActive = t.key === active
             return (
@@ -83,10 +90,10 @@ export function EmbeddedTabsHub({ title, subtitle, tabs }: EmbeddedTabsHubProps)
                 key={t.key}
                 onClick={() => setActive(t.key)}
                 className={
-                  "px-3.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition-colors flex-shrink-0 border " +
+                  "px-3.5 py-2 rounded-lg text-xs whitespace-nowrap transition-colors flex-shrink-0 " +
                   (isActive
-                    ? "bg-white text-black border-transparent font-bold"
-                    : "bg-white/[0.05] border-white/[0.08] text-neutral-400 hover:text-white")
+                    ? "bg-white/[0.08] text-white font-bold border border-white/[0.1]"
+                    : "text-neutral-500 hover:text-white")
                 }
               >
                 {t.label}
