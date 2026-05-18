@@ -382,6 +382,47 @@ export default function ProjectDetailPage() {
     showSuccess(next ? t("followedToast") : t("unfollowedToast"))
   }
 
+  // ─── Phase 14.07.1 — period filter for real timeline ────────────
+  // Window the loaded timeline based on the user's period selection.
+  // "كل" returns everything; the others cap relative to "now".
+  //
+  // ⚠️ Phase A T1 — this useMemo MUST run on every render, so it lives
+  // ABOVE the `loading || !project` early-return below. Previously it
+  // sat after the guard, which made React see a different hook count
+  // between the loading render (guard returns early) and the loaded
+  // render (guard passes, useMemo runs) → "Rendered more hooks than
+  // during the previous render" → caught by app/error.tsx as the
+  // generic "حدث خطأ غير متوقّع" the founder reported. Hoisting it
+  // here keeps the hook order stable across renders.
+  const chartData = useMemo(() => {
+    if (priceTimeline.length === 0) return [] as Array<{ ts: number; price: number; label: string }>
+    const now = Date.now()
+    const windowMs: Record<typeof period, number> = {
+      "1D": 86_400_000,
+      "7D": 7 * 86_400_000,
+      "30D": 30 * 86_400_000,
+      "كل": Number.POSITIVE_INFINITY,
+    }
+    const cutoff = now - (windowMs[period] ?? Number.POSITIVE_INFINITY)
+    const filtered = priceTimeline.filter((p) => {
+      const t = new Date(p.recorded_at).getTime()
+      return Number.isFinite(t) && t >= cutoff
+    })
+    // Ensure chart still renders even when the window is empty — we
+    // anchor on the latest known point so the user sees the live price.
+    const points = filtered.length > 0 ? filtered : priceTimeline.slice(-1)
+    return points.map((p) => ({
+      ts: new Date(p.recorded_at).getTime(),
+      price: Math.round(Number(p.new_price) || 0),
+      label: new Date(p.recorded_at).toLocaleString("ar-IQ", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    }))
+  }, [priceTimeline, period])
+
   if (loading || !project) {
     return (
       <AppLayout>
@@ -448,38 +489,6 @@ export default function ProjectDetailPage() {
       ? (((livePrice - project.share_price) / project.share_price) * 100).toFixed(2)
       : "0.00"
   const isUp = parseFloat(priceChange) >= 0
-
-  // ─── Phase 14.07.1 — period filter for real timeline ────────────
-  // Window the loaded timeline based on the user's period selection.
-  // "كل" returns everything; the others cap relative to "now".
-  const chartData = useMemo(() => {
-    if (priceTimeline.length === 0) return [] as Array<{ ts: number; price: number; label: string }>
-    const now = Date.now()
-    const windowMs: Record<typeof period, number> = {
-      "1D": 86_400_000,
-      "7D": 7 * 86_400_000,
-      "30D": 30 * 86_400_000,
-      "كل": Number.POSITIVE_INFINITY,
-    }
-    const cutoff = now - (windowMs[period] ?? Number.POSITIVE_INFINITY)
-    const filtered = priceTimeline.filter((p) => {
-      const t = new Date(p.recorded_at).getTime()
-      return Number.isFinite(t) && t >= cutoff
-    })
-    // Ensure chart still renders even when the window is empty — we
-    // anchor on the latest known point so the user sees the live price.
-    const points = filtered.length > 0 ? filtered : priceTimeline.slice(-1)
-    return points.map((p) => ({
-      ts: new Date(p.recorded_at).getTime(),
-      price: Math.round(Number(p.new_price) || 0),
-      label: new Date(p.recorded_at).toLocaleString("ar-IQ", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    }))
-  }, [priceTimeline, period])
 
   return (
     <AppLayout>
