@@ -196,7 +196,7 @@ function AdminSidebarImpl({
         // Phase 13.2 — slightly narrower (200 vs 220) so more horizontal
         // space is left for the main panel; subtle gradient bg + softer
         // left border for a more polished look.
-        "fixed top-0 right-0 bottom-0 z-40 bg-gradient-to-b from-[#0a0a0a] to-[#070707] border-l border-white/[0.05] transition-all duration-200 flex flex-col",
+        "admin-sidebar fixed top-0 right-0 bottom-0 z-40 bg-gradient-to-b from-[#0a0a0a] to-[#070707] border-l border-white/[0.05] transition-all duration-200 flex flex-col",
         open ? "w-[200px]" : "w-[56px]"
       )}
     >
@@ -209,12 +209,21 @@ function AdminSidebarImpl({
             role="button"
           >
             <div className="w-8 h-8 overflow-hidden flex-shrink-0">
+              {/* Dual mark: logo.png in dark, logo1.png in light —
+                  globals.css toggles .logo-img-* by [data-theme]. */}
               <Image
                 src="/logo.png"
                 alt="RailOS"
                 width={32}
                 height={32}
-                className="w-full h-full object-contain"
+                className="logo-img-dark w-full h-full object-contain"
+              />
+              <Image
+                src="/logo1.png"
+                alt="RailOS"
+                width={32}
+                height={32}
+                className="logo-img-light w-full h-full object-contain"
               />
             </div>
             <div className="min-w-0">
@@ -233,7 +242,14 @@ function AdminSidebarImpl({
               alt="RailOS"
               width={32}
               height={32}
-              className="w-full h-full object-contain"
+              className="logo-img-dark w-full h-full object-contain"
+            />
+            <Image
+              src="/logo1.png"
+              alt="RailOS"
+              width={32}
+              height={32}
+              className="logo-img-light w-full h-full object-contain"
             />
           </button>
         )}

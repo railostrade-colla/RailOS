@@ -343,6 +343,16 @@ body {
 [data-theme="light"] .bg-\[\#0a0a0a\]\/95 {
   background-color: rgba(255, 255, 255, 0.95) !important;
 }
+/* Phase A — admin sidebar uses a Tailwind GRADIENT
+ * (bg-gradient-to-b from-[#0a0a0a] to-[#070707]); the generic
+ * solid-bg overrides don't touch gradient stops, so it stayed
+ * black. Override the whole layer with a flat light surface +
+ * matching border via the dedicated .admin-sidebar hook. */
+[data-theme="light"] .admin-sidebar {
+  background-image: none !important;
+  background-color: #F8F9FA !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
 /* Stage 7 — remaining stray dark surfaces that bypassed the theme
  * (kept narrow; bg-black/NN overlays are intentionally NOT flipped
  * so modal scrims stay dim). */
