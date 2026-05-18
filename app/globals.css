@@ -917,6 +917,22 @@ html[data-density="comfortable"] {
   border-color: #16A34A !important;
 }
 
+/* ──────────────────────────────────────────────────────────────
+ * Phase A T9 — generic light-mode primary-button affordance.
+ *
+ * Solid neutral/white primary buttons (bg-neutral-100) sit edge-less
+ * on the white light surface. .lm-primary-btn adds a subtle black
+ * border + shadow in light mode so they read as a real button
+ * (e.g. /exchange "إنشاء الإعلان"). Dark mode untouched.
+ * ────────────────────────────────────────────────────────────── */
+[data-theme="light"] .lm-primary-btn {
+  border: 1px solid rgba(0, 0, 0, 0.15) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1) !important;
+}
+[data-theme="light"] .lm-primary-btn:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14) !important;
+}
+
 /* ── Animations toggle ── kill all motion when off. */
 html[data-animations="off"] *,
 html[data-animations="off"] *::before,

@@ -414,7 +414,7 @@ function MyListingsPanel({
         <div className="text-[11px] text-neutral-600 mb-5">{t("postFirstListing")}</div>
         <button
           onClick={onCreate}
-          className="bg-neutral-100 text-black px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-neutral-200 transition-colors"
+          className="lm-primary-btn bg-neutral-100 text-black px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-neutral-200 transition-colors"
         >
           {t("createListing")}
         </button>
@@ -917,7 +917,7 @@ function ExchangeContent() {
                 </button>
                 <button
                   onClick={() => router.push("/exchange/create")}
-                  className="bg-neutral-100 text-black px-3.5 py-2 rounded-lg text-xs font-bold hover:bg-neutral-200 flex items-center gap-1.5 transition-colors"
+                  className="lm-primary-btn bg-neutral-100 text-black px-3.5 py-2 rounded-lg text-xs font-bold hover:bg-neutral-200 flex items-center gap-1.5 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   {t("createListing")}
@@ -1074,7 +1074,7 @@ function ExchangeContent() {
               <div className="text-[11px] text-neutral-600 mb-5">{t("tryChangeFilters")}</div>
               <button
                 onClick={() => router.push("/exchange/create")}
-                className="bg-neutral-100 text-black px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-neutral-200 transition-colors"
+                className="lm-primary-btn bg-neutral-100 text-black px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-neutral-200 transition-colors"
               >
                 {t("createListing")}
               </button>
