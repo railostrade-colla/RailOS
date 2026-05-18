@@ -390,9 +390,9 @@ export default function ProfileSetupPage() {
                     key={g.id}
                     onClick={() => setGender(g.id)}
                     className={cn(
-                      "py-3 rounded-xl border flex items-center justify-center gap-2 transition-colors text-sm",
+                      "ps-opt py-3 rounded-xl border flex items-center justify-center gap-2 transition-colors text-sm",
                       gender === g.id
-                        ? "bg-white text-black border-transparent font-bold"
+                        ? "ps-opt-on bg-white text-black border-transparent font-bold"
                         : "bg-white/[0.04] border-white/[0.08] text-neutral-300 hover:bg-white/[0.06]",
                     )}
                   >
@@ -512,9 +512,9 @@ export default function ProfileSetupPage() {
                     key={ti.id}
                     onClick={() => setIncomeTier(ti.id)}
                     className={cn(
-                      "py-2.5 px-3 rounded-xl border text-sm transition-colors flex items-center justify-between",
+                      "ps-opt py-2.5 px-3 rounded-xl border text-sm transition-colors flex items-center justify-between",
                       incomeTier === ti.id
-                        ? "bg-white text-black border-transparent font-bold"
+                        ? "ps-opt-on bg-white text-black border-transparent font-bold"
                         : `bg-white/[0.04] ${ti.border} ${ti.color} hover:bg-white/[0.06]`,
                     )}
                   >
@@ -554,9 +554,9 @@ export default function ProfileSetupPage() {
                       key={g.id}
                       onClick={() => toggleGoal(g.id)}
                       className={cn(
-                        "py-2.5 px-3 rounded-xl border text-xs transition-colors flex items-center gap-2",
+                        "ps-opt py-2.5 px-3 rounded-xl border text-xs transition-colors flex items-center gap-2",
                         selected
-                          ? "bg-green-400/[0.08] border-green-400/40 text-green-400 font-bold"
+                          ? "ps-opt-on bg-green-400/[0.08] border-green-400/40 text-green-400 font-bold"
                           : "bg-white/[0.04] border-white/[0.08] text-neutral-300 hover:bg-white/[0.06]",
                       )}
                     >
@@ -576,9 +576,9 @@ export default function ProfileSetupPage() {
                     key={l.id}
                     onClick={() => setExperience(l.id)}
                     className={cn(
-                      "w-full p-3 rounded-xl border text-right transition-colors flex items-center gap-3",
+                      "ps-opt w-full p-3 rounded-xl border text-right transition-colors flex items-center gap-3",
                       experience === l.id
-                        ? "bg-white text-black border-transparent"
+                        ? "ps-opt-on bg-white text-black border-transparent"
                         : "bg-white/[0.04] border-white/[0.08] text-neutral-300 hover:bg-white/[0.06]",
                     )}
                   >
@@ -602,9 +602,9 @@ export default function ProfileSetupPage() {
                       key={s.id}
                       onClick={() => toggleSector(s.id)}
                       className={cn(
-                        "px-3 py-1.5 rounded-full text-[11px] border flex items-center gap-1 transition-colors",
+                        "ps-opt px-3 py-1.5 rounded-full text-[11px] border flex items-center gap-1 transition-colors",
                         selected
-                          ? "bg-white text-black border-transparent font-bold"
+                          ? "ps-opt-on bg-white text-black border-transparent font-bold"
                           : "bg-white/[0.04] border-white/[0.08] text-neutral-300 hover:bg-white/[0.06]",
                       )}
                     >
@@ -804,9 +804,9 @@ function Checkbox({
         type="button"
         onClick={() => onChange(!checked)}
         className={cn(
-          "w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors mt-0.5",
+          "ps-check w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors mt-0.5",
           checked
-            ? "bg-green-400 border-green-400"
+            ? "ps-check-on bg-green-400 border-green-400"
             : "bg-white/[0.04] border-white/[0.2] group-hover:border-white/[0.35]",
         )}
       >

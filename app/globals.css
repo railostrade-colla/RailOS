@@ -883,6 +883,40 @@ html[data-density="comfortable"] {
 [data-theme="light"] .auth-eye-btn { color: #475569 !important; }
 [data-theme="light"] .auth-eye-btn:hover { color: #0F172A !important; }
 
+/* ──────────────────────────────────────────────────────────────
+ * Phase A T7 — /profile-setup light-mode visible selections.
+ *
+ * Selected option chips used `bg-white text-black border-transparent`
+ * → on the white light surface that's white-on-white with no edge,
+ * so the user couldn't tell what was selected (gender / income /
+ * goals / experience / sectors). And the agree/confirm checkboxes
+ * used bg-white/[0.04] border-white/[0.2] → an invisible box on
+ * white. Force a high-contrast slate fill for the selected state,
+ * a visible border for the unselected chips, and a clearly outlined
+ * checkbox. Dark mode untouched (scoped to [data-theme="light"]).
+ * ────────────────────────────────────────────────────────────── */
+[data-theme="light"] .ps-opt {
+  border-color: #CBD5E1 !important;
+}
+[data-theme="light"] .ps-opt-on,
+[data-theme="light"] .ps-opt-on:hover {
+  background: #0F172A !important;
+  color: #FFFFFF !important;
+  border-color: #0F172A !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16) !important;
+}
+/* keep nested helper text readable on the dark selected fill */
+[data-theme="light"] .ps-opt-on * { color: #FFFFFF !important; }
+
+[data-theme="light"] .ps-check {
+  background: #FFFFFF !important;
+  border-color: #94A3B8 !important;
+}
+[data-theme="light"] .ps-check-on {
+  background: #16A34A !important;
+  border-color: #16A34A !important;
+}
+
 /* ── Animations toggle ── kill all motion when off. */
 html[data-animations="off"] *,
 html[data-animations="off"] *::before,
