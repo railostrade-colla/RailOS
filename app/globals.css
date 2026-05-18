@@ -854,6 +854,35 @@ html[data-density="comfortable"] {
   --card-padding: 20px; --card-padding-sm: 16px;
 }
 
+/* ──────────────────────────────────────────────────────────────
+ * Phase A T5/T6 — Auth (login/register/forgot) light-mode polish.
+ *
+ * The decorative grid + concentric circles + corner markers use
+ * dark strokes/glow tuned for the black theme. On the white light
+ * surface they read as muddy grey blobs. Dim them hard in light
+ * mode (≈0.08) so the auth screen stays clean. Dark mode untouched.
+ *
+ * Primary auth buttons (bg-neutral-100 / bg-white) sit edge-less on
+ * the white light background — add a subtle border + shadow so they
+ * read as a button. The password-eye toggle used hover:text-white
+ * which is invisible on white — force a dark, clearly-visible icon
+ * in light mode.
+ * ────────────────────────────────────────────────────────────── */
+[data-theme="light"] .auth-deco-grid { opacity: 0.05 !important; }
+[data-theme="light"] .auth-deco-circles { opacity: 0.06 !important; }
+[data-theme="light"] .auth-deco-corner { opacity: 0.05 !important; }
+
+[data-theme="light"] .auth-primary-btn {
+  border: 1px solid rgba(0, 0, 0, 0.15) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+}
+[data-theme="light"] .auth-primary-btn:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
+}
+
+[data-theme="light"] .auth-eye-btn { color: #475569 !important; }
+[data-theme="light"] .auth-eye-btn:hover { color: #0F172A !important; }
+
 /* ── Animations toggle ── kill all motion when off. */
 html[data-animations="off"] *,
 html[data-animations="off"] *::before,

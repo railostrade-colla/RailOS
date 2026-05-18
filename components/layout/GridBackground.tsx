@@ -46,7 +46,7 @@ export function GridBackground({
       {/* Grid Background - خطوط + نقاط */}
       <svg
         className={cn(
-          "absolute inset-0 w-full h-full pointer-events-none z-0",
+          "auth-deco-grid absolute inset-0 w-full h-full pointer-events-none z-0",
           className
         )}
         style={{ opacity: gridOpacity / 100, zIndex: 0 }}
@@ -83,7 +83,7 @@ export function GridBackground({
       {/* Concentric circles + Radial glow */}
       {showCircles && (
         <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+          className="auth-deco-circles absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
           aria-hidden="true"
         >
           <svg width="500" height="500" viewBox="0 0 500 500">
@@ -135,7 +135,7 @@ export function GridBackground({
       {showCornerMarkers && (
         <>
           <svg
-            className="absolute top-8 left-8 w-6 h-6 opacity-[0.12] pointer-events-none"
+            className="absolute top-8 left-8 auth-deco-corner w-6 h-6 opacity-[0.12] pointer-events-none"
             viewBox="0 0 24 24"
             fill="none"
             stroke="white"
@@ -145,7 +145,7 @@ export function GridBackground({
             <path d="M 0 8 L 0 0 L 8 0" />
           </svg>
           <svg
-            className="absolute top-8 right-8 w-6 h-6 opacity-[0.12] pointer-events-none"
+            className="absolute top-8 right-8 auth-deco-corner w-6 h-6 opacity-[0.12] pointer-events-none"
             viewBox="0 0 24 24"
             fill="none"
             stroke="white"
@@ -155,7 +155,7 @@ export function GridBackground({
             <path d="M 16 0 L 24 0 L 24 8" />
           </svg>
           <svg
-            className="absolute bottom-8 left-8 w-6 h-6 opacity-[0.12] pointer-events-none"
+            className="absolute bottom-8 left-8 auth-deco-corner w-6 h-6 opacity-[0.12] pointer-events-none"
             viewBox="0 0 24 24"
             fill="none"
             stroke="white"
@@ -165,7 +165,7 @@ export function GridBackground({
             <path d="M 0 16 L 0 24 L 8 24" />
           </svg>
           <svg
-            className="absolute bottom-8 right-8 w-6 h-6 opacity-[0.12] pointer-events-none"
+            className="absolute bottom-8 right-8 auth-deco-corner w-6 h-6 opacity-[0.12] pointer-events-none"
             viewBox="0 0 24 24"
             fill="none"
             stroke="white"

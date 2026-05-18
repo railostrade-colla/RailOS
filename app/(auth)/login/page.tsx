@@ -194,7 +194,7 @@ function LoginPageInner() {
       <button
         onClick={handleGoogleLogin}
         disabled={googleLoading || loading || bioLoading}
-        className="w-full bg-white text-black hover:bg-neutral-100 disabled:opacity-50 py-3 rounded-xl font-medium text-sm transition-colors flex items-center justify-center gap-2 mb-4"
+        className="auth-primary-btn w-full bg-white text-black hover:bg-neutral-100 disabled:opacity-50 py-3 rounded-xl font-medium text-sm transition-colors flex items-center justify-center gap-2 mb-4"
       >
         {googleLoading ? (
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -257,7 +257,7 @@ function LoginPageInner() {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
+              className="auth-eye-btn absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white"
               aria-label={showPassword ? t("hidePwd") : t("showPwd")}
             >
               {showPassword ? (
@@ -272,7 +272,7 @@ function LoginPageInner() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-neutral-100 text-black hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed py-3 rounded-xl font-medium text-sm transition-colors flex items-center justify-center gap-2"
+          className="auth-primary-btn w-full bg-neutral-100 text-black hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed py-3 rounded-xl font-medium text-sm transition-colors flex items-center justify-center gap-2"
         >
           {loading ? (
             <Loader2 className="w-4 h-4 animate-spin" />
