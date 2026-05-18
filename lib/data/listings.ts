@@ -240,7 +240,6 @@ export async function getExchangeListings(): Promise<ExchangeListingRow[]> {
         `id, seller_id, project_id, shares_offered, shares_sold,
          price_per_share, notes, is_quick_sell, status, type, created_at,
          expires_at,
-         seller:profiles!seller_id ( full_name, username ),
          project:projects!project_id ( name, project_type, share_price )`,
       )
       .eq("status", "active")
@@ -261,22 +260,48 @@ export async function getExchangeListings(): Promise<ExchangeListingRow[]> {
       type: string | null
       created_at: string
       expires_at: string | null
-      seller?: ProfileRef | ProfileRef[] | null
       project?: ProjectRef | ProjectRef[] | null
     }
 
-    return (data as Row[]).map((r): ExchangeListingRow => {
-      const seller = unwrap(r.seller)
+    const rows = data as Row[]
+
+    // Phase A — resolve listing-creator display names via the
+    // RLS-safe `profiles_public` view. The previous embedded
+    // `seller:profiles!seller_id` join returned NULL for every
+    // listing NOT owned by the viewer (strict RLS on `profiles`
+    // only exposes the caller's own row), so other users' listings
+    // rendered with a blank name + blank avatar. profiles_public is
+    // readable by all authenticated users (Phase 13.52 lesson —
+    // same split-query pattern the project page uses for deals).
+    const sellerIds = Array.from(
+      new Set(rows.map((r) => r.seller_id).filter(Boolean) as string[]),
+    )
+    const nameMap: Record<string, string> = {}
+    if (sellerIds.length > 0) {
+      const { data: ppl } = await supabase
+        .from("profiles_public")
+        .select("id, full_name, username")
+        .in("id", sellerIds)
+      if (Array.isArray(ppl)) {
+        for (const p of ppl as Array<{
+          id: string
+          full_name?: string | null
+          username?: string | null
+        }>) {
+          nameMap[p.id] =
+            p.full_name?.trim() || p.username?.trim() || "—"
+        }
+      }
+    }
+
+    return rows.map((r): ExchangeListingRow => {
       const project = unwrap(r.project)
       const offered = num(r.shares_offered)
       const sold = num(r.shares_sold)
       return {
         id: r.id,
         seller_id: r.seller_id,
-        seller_name:
-          seller?.full_name?.trim() ||
-          seller?.username?.trim() ||
-          "—",
+        seller_name: nameMap[r.seller_id] || "—",
         project_id: r.project_id,
         project_name: project?.name?.trim() || "—",
         project_sector: mapSector(project?.project_type) || null,
